@@ -3,7 +3,7 @@ import 'package:glimpr/main.dart';
 
 void main() {
   testWidgets('app builds and shows the Capture button', (tester) async {
-    await tester.pumpWidget(const GlimprApp());
+    await tester.pumpWidget(const GlimprDebugApp());
     expect(find.text('Capture'), findsOneWidget);
   });
 }
