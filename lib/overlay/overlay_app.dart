@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import 'export.dart';
 import 'overlay_canvas.dart';
 
 class OverlayApp extends StatefulWidget {
@@ -42,8 +43,11 @@ class _OverlayAppState extends State<OverlayApp> {
           : OverlayCanvas(
               display: d,
               onCancel: _dismiss,
-              onCommit: (_) {
-                // Export wiring lands in Task 11; for now just dismiss.
+              onCommit: (Rect r) async {
+                final d = _display;
+                if (d != null) {
+                  await exportSelection(display: d, selection: r);
+                }
                 _dismiss();
               },
             ),
