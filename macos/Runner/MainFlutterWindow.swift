@@ -12,7 +12,10 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
-    captureChannel = CaptureChannel(messenger: flutterViewController.engine.binaryMessenger)
+    captureChannel = CaptureChannel(
+      messenger: flutterViewController.engine.binaryMessenger,
+      manager: { (NSApp.delegate as? AppDelegate)?.overlayManager }
+    )
 
     super.awakeFromNib()
   }
