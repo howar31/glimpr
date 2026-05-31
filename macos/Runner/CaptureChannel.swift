@@ -30,9 +30,7 @@ final class CaptureChannel {
   /// Trigger the overlay: capture all displays, then hand the frames to the
   /// manager to distribute + show. Failures are reported to the debug window.
   private func beginCapture() {
-    glog("beginCapture; managerFound=\(manager() != nil)")
     guard capturer.hasPermissionOrRequest() else {
-      glog("beginCapture: permission denied")
       overlay.invokeMethod("onCaptureFailed", arguments: [
         "reason": "permissionDenied",
         "message": "Screen Recording permission is required. Enable it in System Settings > Privacy & Security > Screen Recording, then relaunch.",
@@ -42,15 +40,14 @@ final class CaptureChannel {
     Task { @MainActor in
       do {
         let frames = try await self.capturer.captureAll()
-        glog("captured \(frames.count) frame(s)")
-        // Single-window overlay (proven render path): show the cursor display's
-        // frozen frame in THIS window via onCaptureReady.
-        let cursor = frames.first(where: { ($0["isCursorDisplay"] as? Bool) == true }) ?? frames.first
-        if let f = cursor {
-          self.overlay.invokeMethod("onCaptureReady", arguments: ["display": f])
-        } else {
-          self.overlay.invokeMethod("onCaptureFailed", arguments: ["reason": "noDisplays", "message": "No displays found"])
+        // Multi-display overlay: hand every display's frozen frame to the
+        // manager, which fans each one out to that display's own overlay engine
+        // + window. The per-display engines reveal their windows via overlayReady.
+        guard let manager = self.manager() else {
+          self.overlay.invokeMethod("onCaptureFailed", arguments: ["reason": "noManager", "message": "Overlay manager not ready"])
+          return
         }
+        manager.presentFrames(frames)
       } catch ScreenCapturer.CaptureError.noDisplays {
         self.overlay.invokeMethod("onCaptureFailed", arguments: ["reason": "noDisplays", "message": "No displays found"])
       } catch {

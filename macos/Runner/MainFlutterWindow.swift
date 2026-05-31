@@ -27,10 +27,13 @@ class MainFlutterWindow: NSWindow {
     }
     self.roleChannel = roleChannel
 
-    // NOTE: separate per-display overlay windows (OverlayManager) do not render
-    // on this macOS/Flutter combo. For now the overlay is shown inside THIS
-    // window (single display). Multi-display overlay is a follow-up.
-
     super.awakeFromNib()
+
+    // Build + warm the per-display overlay windows/engines now (applicationDid-
+    // FinishLaunching isn't reliably called in this nib setup). Each unit warms
+    // its engine on-screen at alpha 0; a capture reveals the matching window.
+    let manager = OverlayManager()
+    manager.startObservingScreens()
+    self.overlayManager = manager
   }
 }

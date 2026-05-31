@@ -3,7 +3,6 @@ import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
 import 'export.dart';
 import 'overlay_canvas.dart';
-import '../debug_log.dart';
 
 class OverlayApp extends StatefulWidget {
   const OverlayApp({super.key});
@@ -18,30 +17,25 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   void initState() {
     super.initState();
-    glog('OverlayApp.initState: registering overlay handlers');
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d) async {
-        glog('onCaptureReady display=${d.displayId} ${d.width.toInt()}x${d.height.toInt()}');
-        // Best-effort image warm, BOUNDED: a hidden engine may never resolve the
-        // decode, so cap it so we can't stall here.
+        // Decode the frozen image before we reveal the window. The engine is
+        // already warm (its window is on-screen at alpha 0), so this resolves;
+        // still BOUNDED so a decode hiccup can't stall the reveal.
         try {
           await precacheImage(MemoryImage(d.pngBytes), context)
               .timeout(const Duration(milliseconds: 300));
-        } catch (e) {
-          glog('precacheImage skipped: $e');
+        } catch (_) {
+          // Bounded best-effort decode; reveal anyway on failure/timeout.
         }
         if (!mounted) return;
         setState(() => _display = d);
-        // The overlay engine has no on-screen view yet — it renders nothing
-        // until native attaches the view controller to the window. So signal
-        // ready immediately after the state is set; native then attaches the
-        // view + reveals the window, which triggers the first render of the
-        // (now set) frozen frame.
-        glog('overlayReady() -> native, display=${d.displayId}');
+        // The frozen frame is now built (painted into the alpha-0 window). Tell
+        // native to reveal this display's window (alpha 1 + makeKey) so the
+        // already-rasterized frame appears with no blank flash.
         _bridge.overlayReady();
       },
       onCaptureFailed: (reason, msg) {
-        glog('onCaptureFailed: $reason $msg');
         if (mounted) setState(() => _display = null);
       },
     );
@@ -59,13 +53,9 @@ class _OverlayAppState extends State<OverlayApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),
       home: d == null
-          ? const ColoredBox(
-              color: Color(0xFFFF0000),
-              child: Center(
-                child: Text('OVERLAY RENDERS',
-                    style: TextStyle(color: Colors.white, fontSize: 48)),
-              ),
-            ) // TEMP render test: opaque red proves the overlay view paints.
+          // Idle: fully transparent so the warm, on-screen overlay window shows
+          // nothing until a capture sets the frozen frame.
+          ? const SizedBox.shrink()
           : OverlayCanvas(
               display: d,
               onCancel: _dismiss,
