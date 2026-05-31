@@ -60,7 +60,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       scaleFactor: d.scaleFactor,
       selection: logical,
     );
-    final dir = Directory('${Platform.environment['HOME']}/Desktop/Screenshots');
+    final dir = Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
     final path = await saveBytes(
       dir: dir,
       fileName: screenshotFilename(DateTime.now(), 'png'),

@@ -4,8 +4,9 @@
 // future. If not, the values below would default to using the project name when this becomes a
 // 'flutter create' template.
 
-// The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = glimpr
+// The application's name (user-facing display name). Lowercase package name / bundle id
+// stay as-is; this is the brand-cased display name.
+PRODUCT_NAME = Glimpr
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.howar31.glimpr
