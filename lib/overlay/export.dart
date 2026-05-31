@@ -2,27 +2,31 @@ import 'dart:io';
 import 'dart:ui' show Rect;
 import '../capture/captured_display.dart';
 import '../imaging/crop.dart';
-import '../output/filename.dart';
-import '../output/saver.dart';
+import '../output/deliver.dart';
 
-/// Crops [display]'s frozen PNG to the display-local logical [selection] and
-/// saves a timestamped PNG into [saveDir] (default ~/Pictures/Glimpr). Returns
-/// the written path. Off the freeze path: encoding happens here, on commit.
-Future<String> exportSelection({
+/// Crops [display]'s frozen PNG to the display-local logical [selection], then
+/// delivers it: save to [saveDir] (default ~/Pictures/Glimpr), copy to the
+/// clipboard, and play the shutter sound. Encoding happens ONCE here (off the
+/// freeze path) and the same bytes feed both file and clipboard. Returns the
+/// per-leg [DeliveryResult].
+Future<DeliveryResult> exportSelection({
   required CapturedDisplay display,
   required Rect selection,
   Directory? saveDir,
+  SaveFn? saveFn,
+  ClipboardFn? clipboardFn,
+  SoundFn? soundFn,
 }) async {
   final png = cropToSelection(
     pngBytes: display.pngBytes,
     scaleFactor: display.scaleFactor,
     selection: selection,
   );
-  final dir = saveDir ??
-      Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
-  return saveBytes(
-    dir: dir,
-    fileName: screenshotFilename(DateTime.now(), 'png'),
-    bytes: png,
+  return deliverCapture(
+    pngBytes: png,
+    saveDir: saveDir,
+    saveFn: saveFn,
+    clipboardFn: clipboardFn,
+    soundFn: soundFn,
   );
 }

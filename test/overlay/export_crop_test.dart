@@ -21,11 +21,14 @@ void main() {
   test('crops display-local selection to native pixels and saves', () async {
     final tmp = await Directory.systemTemp.createTemp('glimpr_export_');
     final d = displayWith(solid());
-    // Select logical 0,0 50x25 -> native 0,0 100x50.
-    final path = await exportSelection(
+    // Select logical 0,0 50x25 -> native 0,0 100x50. No-op clipboard/sound so
+    // the test exercises only the crop + file-save legs (no real plugins).
+    final result = await exportSelection(
       display: d, selection: const Rect.fromLTWH(0, 0, 50, 25), saveDir: tmp,
+      clipboardFn: (b) async {}, soundFn: () async {},
     );
-    final decoded = img.decodePng(await File(path).readAsBytes())!;
+    expect(result.savedOk, isTrue);
+    final decoded = img.decodePng(await File(result.savedPath!).readAsBytes())!;
     expect(decoded.width, 100);
     expect(decoded.height, 50);
     await tmp.delete(recursive: true);

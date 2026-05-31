@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'capture/capture_bridge.dart';
 import 'overlay/overlay_app.dart';
+import 'shell/hotkey.dart';
 
 /// Every engine runs this same main(). The native side answers `glimpr/role`
 /// with 'overlay' for the per-display overlay engines and 'debug' for the main
@@ -9,7 +10,18 @@ import 'overlay/overlay_app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final role = await _getRole();
-  runApp(role == 'overlay' ? const OverlayApp() : const GlimprApp());
+  if (role == 'overlay') {
+    runApp(const OverlayApp());
+    return;
+  }
+  // Control engine only: register the global capture hotkey (⌘⌥1). The
+  // per-display overlay engines must NOT also register it (one system hotkey).
+  try {
+    await CaptureHotkey.register(() => CaptureBridge().beginCapture());
+  } catch (_) {
+    // A hotkey failure must not block the app; the Capture button still works.
+  }
+  runApp(const GlimprApp());
 }
 
 /// Resolves this engine's role. The native handler is registered synchronously

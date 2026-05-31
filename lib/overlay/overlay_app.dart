@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import '../output/deliver.dart';
 import 'export.dart';
 import 'overlay_canvas.dart';
 
@@ -13,6 +14,7 @@ class OverlayApp extends StatefulWidget {
 class _OverlayAppState extends State<OverlayApp> {
   final _bridge = CaptureBridge();
   CapturedDisplay? _display;
+  String? _toast; // shown briefly only when a delivery leg failed
 
   @override
   void initState() {
@@ -29,7 +31,10 @@ class _OverlayAppState extends State<OverlayApp> {
           // Bounded best-effort decode; reveal anyway on failure/timeout.
         }
         if (!mounted) return;
-        setState(() => _display = d);
+        setState(() {
+          _toast = null;
+          _display = d;
+        });
         // The frozen frame is now built (painted into the alpha-0 window). Tell
         // native to reveal this display's window (alpha 1 + makeKey) so the
         // already-rasterized frame appears with no blank flash.
@@ -42,8 +47,37 @@ class _OverlayAppState extends State<OverlayApp> {
   }
 
   void _dismiss() {
-    setState(() => _display = null);
+    setState(() {
+      _display = null;
+      _toast = null;
+    });
     _bridge.dismissOverlay();
+  }
+
+  Future<void> _onCommit(Rect selection) async {
+    final d = _display;
+    if (d == null) {
+      _dismiss();
+      return;
+    }
+    final result = await exportSelection(display: d, selection: selection);
+    // Save + clipboard are the legs that matter; a sound-only failure still
+    // dismisses (the capture succeeded where it counts).
+    final critical = !result.savedOk || !result.copiedToClipboard;
+    if (!critical || !mounted) {
+      _dismiss();
+      return;
+    }
+    setState(() => _toast = _summary(result));
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) _dismiss();
+    });
+  }
+
+  String _summary(DeliveryResult r) {
+    if (r.savedOk && !r.copiedToClipboard) return 'Saved — clipboard failed';
+    if (!r.savedOk && r.copiedToClipboard) return 'Copied — file save failed';
+    return 'Capture failed — not saved or copied';
   }
 
   @override
@@ -56,16 +90,36 @@ class _OverlayAppState extends State<OverlayApp> {
           // Idle: fully transparent so the warm, on-screen overlay window shows
           // nothing until a capture sets the frozen frame.
           ? const SizedBox.shrink()
-          : OverlayCanvas(
-              display: d,
-              onCancel: _dismiss,
-              onCommit: (Rect r) async {
-                final d = _display;
-                if (d != null) {
-                  await exportSelection(display: d, selection: r);
-                }
-                _dismiss();
-              },
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                OverlayCanvas(
+                  display: d,
+                  onCancel: _dismiss,
+                  onCommit: _onCommit,
+                ),
+                if (_toast != null)
+                  Positioned(
+                    bottom: 48,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xE6B00020),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _toast!,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
     );
   }
