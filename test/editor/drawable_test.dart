@@ -11,20 +11,20 @@ void main() {
     const d = RectangleDrawable(Rect.fromLTWH(10, 20, 30, 40), style);
     expect(d.bounds, const Rect.fromLTWH(10, 20, 30, 40));
     final m = d.moved(const Offset(5, -5));
-    expect((m as RectangleDrawable).rect, const Rect.fromLTWH(15, 15, 30, 40));
+    expect(m.rect, const Rect.fromLTWH(15, 15, 30, 40));
   });
 
   test('arrow bounds is the points bounding box, move shifts both', () {
     const d = ArrowDrawable(Offset(0, 0), Offset(40, 30), style);
     expect(d.bounds, const Rect.fromLTRB(0, 0, 40, 30));
-    final m = d.moved(const Offset(10, 10)) as ArrowDrawable;
+    final m = d.moved(const Offset(10, 10));
     expect(m.start, const Offset(10, 10));
     expect(m.end, const Offset(50, 40));
   });
 
   test('rectangle resized replaces the rect', () {
     const d = RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), style);
-    final r = d.resized(const Rect.fromLTWH(0, 0, 20, 25)) as RectangleDrawable;
+    final r = d.resized(const Rect.fromLTWH(0, 0, 20, 25));
     expect(r.rect, const Rect.fromLTWH(0, 0, 20, 25));
   });
 
