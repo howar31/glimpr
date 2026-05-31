@@ -18,9 +18,13 @@ class _OverlayAppState extends State<OverlayApp> {
   void initState() {
     super.initState();
     _bridge.registerOverlayHandlers(
-      onCaptureReady: (d) {
+      onCaptureReady: (d) async {
+        // Decode the frozen image into the cache BEFORE showing, so the first
+        // built frame paints it synchronously (no flash of an unpainted frame).
+        await precacheImage(MemoryImage(d.pngBytes), context);
+        if (!mounted) return;
         setState(() => _display = d);
-        // After this frame rasterizes, tell native to show the window.
+        // After the frame with the painted image, ask native to reveal the window.
         WidgetsBinding.instance.addPostFrameCallback((_) => _bridge.overlayReady());
       },
       onCaptureFailed: (_, msg) => setState(() => _display = null),
