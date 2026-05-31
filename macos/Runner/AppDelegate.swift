@@ -3,17 +3,10 @@ import FlutterMacOS
 
 @main
 class AppDelegate: FlutterAppDelegate {
-  /// Pre-warmed per-display overlay windows + engines (created at launch).
-  var overlayManager: OverlayManager?
-
-  override func applicationDidFinishLaunching(_ notification: Notification) {
-    super.applicationDidFinishLaunching(notification)
-    let manager = OverlayManager()
-    manager.startObservingScreens()
-    overlayManager = manager
-  }
-
-  // Resident app: hiding the overlay windows must NOT quit it.
+  // NOTE: applicationDidFinishLaunching is not reliably invoked in this
+  // nib-based setup, so the per-display overlay windows/engines are pre-warmed
+  // in MainFlutterWindow.awakeFromNib instead. The resident-app override below
+  // is kept here.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return false
   }

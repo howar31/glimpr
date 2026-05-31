@@ -30,7 +30,9 @@ final class CaptureChannel {
   /// Trigger the overlay: capture all displays, then hand the frames to the
   /// manager to distribute + show. Failures are reported to the debug window.
   private func beginCapture() {
+    glog("beginCapture; managerFound=\(manager() != nil)")
     guard capturer.hasPermissionOrRequest() else {
+      glog("beginCapture: permission denied")
       overlay.invokeMethod("onCaptureFailed", arguments: [
         "reason": "permissionDenied",
         "message": "Screen Recording permission is required. Enable it in System Settings > Privacy & Security > Screen Recording, then relaunch.",
@@ -40,7 +42,15 @@ final class CaptureChannel {
     Task { @MainActor in
       do {
         let frames = try await self.capturer.captureAll()
-        self.manager()?.presentFrames(frames)
+        glog("captured \(frames.count) frame(s)")
+        // Single-window overlay (proven render path): show the cursor display's
+        // frozen frame in THIS window via onCaptureReady.
+        let cursor = frames.first(where: { ($0["isCursorDisplay"] as? Bool) == true }) ?? frames.first
+        if let f = cursor {
+          self.overlay.invokeMethod("onCaptureReady", arguments: ["display": f])
+        } else {
+          self.overlay.invokeMethod("onCaptureFailed", arguments: ["reason": "noDisplays", "message": "No displays found"])
+        }
       } catch ScreenCapturer.CaptureError.noDisplays {
         self.overlay.invokeMethod("onCaptureFailed", arguments: ["reason": "noDisplays", "message": "No displays found"])
       } catch {

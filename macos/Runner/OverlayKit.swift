@@ -3,6 +3,20 @@ import FlutterMacOS
 import ScreenCaptureKit
 import CoreGraphics
 
+/// Temporary debug file logger (survives stdout buffering, works across engines).
+func glog(_ s: String) {
+  let line = "[swift] \(s)\n"
+  let path = "/tmp/glimpr-debug.log"
+  if !FileManager.default.fileExists(atPath: path) {
+    FileManager.default.createFile(atPath: path, contents: nil)
+  }
+  if let h = FileHandle(forWritingAtPath: path) {
+    h.seekToEndOfFile()
+    if let d = line.data(using: .utf8) { h.write(d) }
+    try? h.close()
+  }
+}
+
 // MARK: - ScreenCapturer
 
 /// SCK capture of all displays using a cached SCShareableContent (enumeration
@@ -95,20 +109,16 @@ final class OverlayWindow: NSWindow {
   override var canBecomeMain: Bool { true }
 
   init(screen: NSScreen) {
-    super.init(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-    isOpaque = false
-    backgroundColor = .clear
-    hasShadow = false
-    isMovable = false
-    isMovableByWindowBackground = false
-    isReleasedWhenClosed = false            // we orderOut, never close
-    displaysWhenScreenProfileChanges = true
-    sharingType = .none
-    ignoresMouseEvents = false              // clicks/drags reach the FlutterView
-    // Above the menu bar, Dock, and screen saver.
-    level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
-    collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-    setFrame(screen.frame, display: false)
+    // RENDER TEST: a plain titled, opaque, normal-level window (like the debug
+    // window) to isolate whether the borderless/transparent/shielding-level
+    // config is what stops Flutter from painting. If the red test screen shows
+    // in THIS window, the overlay window config is the culprit; restore + add
+    // properties back one at a time.
+    super.init(contentRect: screen.visibleFrame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+    isOpaque = true
+    backgroundColor = .black
+    isReleasedWhenClosed = false
+    setFrame(screen.visibleFrame, display: false)
   }
 }
 
@@ -121,7 +131,10 @@ final class OverlayManager {
   private struct Unit {
     let window: OverlayWindow
     let engine: FlutterEngine
+    let vc: FlutterViewController        // attached to the window only at show()
     let overlay: FlutterMethodChannel   // native -> Dart (onCaptureReady)
+    let role: FlutterMethodChannel      // retained: native -> Dart role handler
+    let control: FlutterMethodChannel   // retained: Dart -> native control handler
   }
   private var units: [CGDirectDisplayID: Unit] = [:]
   private var pendingShow: Set<CGDirectDisplayID> = []
@@ -143,13 +156,20 @@ final class OverlayManager {
   private func buildUnits() {
     for screen in NSScreen.screens {
       let id = displayID(of: screen)
-      // One pre-warmed headless engine per display, running the overlayMain entrypoint.
-      let engine = FlutterEngine(name: "glimpr.overlay.\(id)", project: nil, allowHeadlessExecution: true)
-      engine.run(withEntrypoint: "overlayMain")
-      RegisterGeneratedPlugins(registry: engine)
+      // VC-owns-its-implicit-engine — the only pattern that renders reliably for
+      // our windows on macOS (separate FlutterEngine().run() views never paint).
+      // The implicit engine runs main(); a per-engine glimpr/role channel tells
+      // Dart to show the OverlayApp rather than the debug control.
+      let vc = FlutterViewController()
+      RegisterGeneratedPlugins(registry: vc)
+      vc.backgroundColor = NSColor.clear
+      let msgr = vc.engine.binaryMessenger
 
-      // Dart -> native control for this overlay engine.
-      let control = FlutterMethodChannel(name: "glimpr/capture", binaryMessenger: engine.binaryMessenger)
+      let role = FlutterMethodChannel(name: "glimpr/role", binaryMessenger: msgr)
+      role.setMethodCallHandler { call, result in
+        if call.method == "getRole" { result("overlay") } else { result(FlutterMethodNotImplemented) }
+      }
+      let control = FlutterMethodChannel(name: "glimpr/capture", binaryMessenger: msgr)
       control.setMethodCallHandler { [weak self] call, result in
         switch call.method {
         case "overlayReady": self?.show(displayID: id); result(nil)
@@ -157,23 +177,22 @@ final class OverlayManager {
         default: result(FlutterMethodNotImplemented)
         }
       }
-      let overlay = FlutterMethodChannel(name: "glimpr/overlay", binaryMessenger: engine.binaryMessenger)
-
-      let vc = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
-      vc.backgroundColor = NSColor.clear      // dual clear (with the window) for transparency
+      let overlay = FlutterMethodChannel(name: "glimpr/overlay", binaryMessenger: msgr)
 
       let window = OverlayWindow(screen: screen)
-      window.contentViewController = vc        // FlutterView is the contentView -> receives input
       window.backgroundColor = .clear
-      window.orderOut(nil)                     // resident + hidden
+      // Attach the view controller + reveal together in show() (renders on the
+      // window's first appearance). Hidden until then.
+      window.orderOut(nil)
 
-      units[id] = Unit(window: window, engine: engine, overlay: overlay)
+      units[id] = Unit(window: window, engine: vc.engine, vc: vc, overlay: overlay, role: role, control: control)
     }
+    glog("buildUnits done: \(units.count) unit(s) for displays \(Array(units.keys))")
   }
 
   private func rebuildIfIdle() {
     guard pendingShow.isEmpty else { return }
-    for (_, u) in units { u.window.orderOut(nil) }
+    for (_, u) in units { u.window.orderOut(nil); u.window.contentViewController = nil }
     units.values.forEach { $0.engine.shutDownEngine() }
     units.removeAll()
     buildUnits()
@@ -182,19 +201,22 @@ final class OverlayManager {
   /// Distribute captured frames to their displays' engines. Each window is shown
   /// later, in show(displayID:), after its Dart signals overlayReady.
   func presentFrames(_ frames: [[String: Any]]) {
-    pendingShow.removeAll()
-    for frame in frames {
-      guard let idInt = frame["displayId"] as? Int else { continue }
-      let id = CGDirectDisplayID(idInt)
-      guard let unit = units[id] else { continue }
-      pendingShow.insert(id)
-      unit.overlay.invokeMethod("onCaptureReady", arguments: ["display": frame])
-    }
+    // TEMP RENDER TEST: ignore frames; just attach + show every overlay window
+    // so we can see whether the VC-owns-engine OverlayApp paints (red screen).
+    glog("presentFrames RENDER TEST: showing \(units.count) units directly")
+    for (id, _) in units { show(displayID: id) }
   }
 
   /// Capture-then-show: order front only AFTER the engine's Dart signals ready.
   private func show(displayID id: CGDirectDisplayID) {
+    glog("show(\(id)) unit=\(units[id] != nil)")
     guard let unit = units[id] else { return }
+    // Attach the view controller AND bring the window on-screen together: this
+    // fires viewWillAppear/reshape so the FlutterView creates its surface and
+    // paints the (already-built) frozen frame on its first render.
+    if unit.window.contentViewController == nil {
+      unit.window.contentViewController = unit.vc
+    }
     NSApp.activate(ignoringOtherApps: true)
     if unit.window.canBecomeKey { unit.window.makeKeyAndOrderFront(nil) }
     unit.window.orderFrontRegardless()
@@ -205,6 +227,11 @@ final class OverlayManager {
   /// local to capture() and released by ARC; the Dart side drops its references.
   func dismiss() {
     pendingShow.removeAll()
-    for (_, u) in units { u.window.orderOut(nil) }
+    // Detach the view and hide the window. The next capture re-attaches in
+    // show(), which re-triggers viewWillAppear/reshape and a fresh render.
+    for (_, u) in units {
+      u.window.orderOut(nil)
+      u.window.contentViewController = nil
+    }
   }
 }
