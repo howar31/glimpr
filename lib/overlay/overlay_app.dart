@@ -28,6 +28,9 @@ class _OverlayAppState extends State<OverlayApp> {
   // Bumped when native reports another display became the active editor, so this
   // engine's EditorCanvas steps down (the editor follows the cursor).
   final ValueNotifier<int> _peerActivated = ValueNotifier(0);
+  // True while applying a tool/style update received from another display, so it
+  // is not re-broadcast back (avoids a sync loop).
+  bool _applyingRemote = false;
 
   @override
   void initState() {
@@ -51,6 +54,7 @@ class _OverlayAppState extends State<OverlayApp> {
           // If decode fails the export will be skipped; the overlay still shows.
         }
         if (!mounted) return;
+        _detachShared();
         _editor?.dispose();
         _frozen?.dispose();
         setState(() {
@@ -59,6 +63,7 @@ class _OverlayAppState extends State<OverlayApp> {
           _editor = EditorController(toolStyles: _toolStyles);
           _display = d;
         });
+        _attachShared(_editor!); // sync tool/style with the other displays
         // Frozen frame is built; reveal this display's window (no blank flash).
         _bridge.overlayReady();
       },
@@ -68,10 +73,12 @@ class _OverlayAppState extends State<OverlayApp> {
       onPeerActivated: () {
         if (mounted) _peerActivated.value++;
       },
+      onEditorState: _applyRemoteEditorState,
     );
   }
 
   void _resetState() {
+    _detachShared();
     _editor?.dispose();
     _frozen?.dispose();
     setState(() {
@@ -80,6 +87,53 @@ class _OverlayAppState extends State<OverlayApp> {
       _editor = null;
       _frozen = null;
     });
+  }
+
+  // ---- cross-display tool/style sync -------------------------------------
+
+  void _attachShared(EditorController e) {
+    e.tool.addListener(_broadcastEditorState);
+    e.style.addListener(_broadcastEditorState);
+  }
+
+  void _detachShared() {
+    _editor?.tool.removeListener(_broadcastEditorState);
+    _editor?.style.removeListener(_broadcastEditorState);
+  }
+
+  /// Push the active tool + style to the other displays (skipped while applying
+  /// a remote update, so the two engines don't ping-pong).
+  void _broadcastEditorState() {
+    if (_applyingRemote) return;
+    final e = _editor;
+    if (e == null) return;
+    final s = e.style.value;
+    _bridge.broadcastEditorState({
+      'tool': e.tool.value.index,
+      'color': s.color.toARGB32(),
+      'strokeWidth': s.strokeWidth,
+      'fontSize': s.fontSize,
+    });
+  }
+
+  /// Mirror a tool/style change received from another display onto this editor.
+  void _applyRemoteEditorState(Map<String, dynamic> state) {
+    final e = _editor;
+    if (e == null) return;
+    _applyingRemote = true;
+    final t = ToolKind.values[state['tool'] as int];
+    final s = DrawStyle(
+      color: Color(state['color'] as int),
+      strokeWidth: (state['strokeWidth'] as num).toDouble(),
+      fontSize: (state['fontSize'] as num).toDouble(),
+    );
+    e.tool.value = t;
+    e.phase.value =
+        t == ToolKind.crop ? EditorPhase.crop : EditorPhase.annotate;
+    e.selectedIndex.value = null;
+    e.style.value = s;
+    e.toolStyles[t] = s; // keep per-tool memory in sync too
+    _applyingRemote = false;
   }
 
   void _dismiss() {

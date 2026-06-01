@@ -146,50 +146,40 @@ int nextStepNumber(List<Drawable> drawables) {
   return maxN + 1;
 }
 
-/// A rectangular region whose underlying frozen pixels are blurred. Rendered
-/// live by the painter (re-sampling the frozen image), so moving/resizing it
-/// obscures the new pixels. The [style] is carried for API uniformity only.
+/// A rectangular region that masks the pre-blurred whole-frame image (computed
+/// once when the tool is selected). The drawable is just the rect; the painter
+/// clips the shared blurred image to it. The [style] is carried for uniformity.
 class BlurDrawable extends Drawable implements RectShaped {
   @override
   final Rect rect;
-  final double sigma; // blur radius in logical pixels
-  const BlurDrawable(this.rect, this.sigma, DrawStyle style) : super(style);
+  const BlurDrawable(this.rect, DrawStyle style) : super(style);
 
   @override
   Rect get bounds => rect;
 
   @override
-  BlurDrawable moved(Offset d) => BlurDrawable(rect.shift(d), sigma, style);
+  BlurDrawable moved(Offset d) => BlurDrawable(rect.shift(d), style);
 
   @override
-  BlurDrawable resizedTo(Rect r) => BlurDrawable(r, sigma, style);
+  BlurDrawable resizedTo(Rect r) => BlurDrawable(r, style);
 }
 
-/// A rectangular region rendered as a coarse mosaic. [mosaic] is a small,
-/// downsampled image of the frozen region (built by `pixelateRegion`); the
-/// painter upscales it blocky. Null while it is (re)computing — the painter
-/// falls back to a live blur so raw pixels are never shown.
+/// A rectangular region that masks the pre-pixelated whole-frame image. Like
+/// [BlurDrawable], the drawable is just the rect; the painter clips the shared
+/// pixelated image to it (so there is no per-region async mosaic).
 class PixelateDrawable extends Drawable implements RectShaped {
   @override
   final Rect rect;
-  final double cell; // mosaic block size in native pixels
-  final Image? mosaic;
-  const PixelateDrawable(this.rect, this.cell, this.mosaic, DrawStyle style)
-      : super(style);
+  const PixelateDrawable(this.rect, DrawStyle style) : super(style);
 
   @override
   Rect get bounds => rect;
 
   @override
-  PixelateDrawable moved(Offset d) =>
-      PixelateDrawable(rect.shift(d), cell, mosaic, style);
+  PixelateDrawable moved(Offset d) => PixelateDrawable(rect.shift(d), style);
 
   @override
-  PixelateDrawable resizedTo(Rect r) =>
-      PixelateDrawable(r, cell, mosaic, style);
-
-  PixelateDrawable withMosaic(Image m) =>
-      PixelateDrawable(rect, cell, m, style);
+  PixelateDrawable resizedTo(Rect r) => PixelateDrawable(r, style);
 }
 
 /// A pasted bitmap (from the clipboard) drawn into [rect]. Movable/resizable.

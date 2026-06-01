@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'drawable.dart';
 import 'drawable_painter.dart';
+import 'raster.dart';
 
 /// Native-pixel crop rect for [selectionLogical] (logical overlay coords), or
 /// the whole display when null. Clamped to the native image bounds.
@@ -44,15 +45,23 @@ Future<Uint8List> compositeAndCrop({
   canvas.translate(-crop.left, -crop.top);
   // Layer 1: frozen image at native pixels (1:1).
   canvas.drawImage(frozen, ui.Offset.zero, ui.Paint());
-  // Layer 2: drawables, scaled logical->native. The painter samples [frozen]
-  // for the raster regions (blur/pixelate); paste-image carries its own bitmap.
+  // Pre-compute the whole-frame blur / pixelate once (only if used) so the
+  // region drawables can just mask them — same path as on-screen.
+  final blurredFull = drawables.any((d) => d is BlurDrawable)
+      ? await blurWhole(frozen, kBlurSigmaLogical * scaleFactor)
+      : null;
+  final pixelatedFull = drawables.any((d) => d is PixelateDrawable)
+      ? await pixelateWhole(frozen, kPixelCellNative)
+      : null;
+  // Layer 2: drawables, scaled logical->native. Paste-image carries its own
+  // bitmap; blur/pixelate mask the pre-computed whole-frame images.
   canvas.save();
   canvas.scale(scaleFactor);
   DrawablePainter(
     drawables: drawables,
     selectedIndex: null,
-    frozenImage: frozen,
-    scaleFactor: scaleFactor,
+    blurredFull: blurredFull,
+    pixelatedFull: pixelatedFull,
   ).paint(canvas, logicalSize);
   canvas.restore();
   final picture = recorder.endRecording();

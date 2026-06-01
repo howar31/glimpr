@@ -33,6 +33,11 @@ class CaptureBridge {
   /// across displays; called when the cursor enters this display).
   Future<void> focusDisplay() => _channel.invokeMethod('focusDisplay');
 
+  /// Broadcast the active tool + style to the OTHER displays' editors so the
+  /// tool/colour/width/font stay in sync across displays.
+  Future<void> broadcastEditorState(Map<String, dynamic> state) =>
+      _channel.invokeMethod('broadcastEditorState', state);
+
   /// Warp the OS mouse cursor to a GLOBAL display point (top-left origin,
   /// logical points) so keyboard nudges move the real pointer, not just the
   /// selection (otherwise the next mouse move resets the nudge).
@@ -44,6 +49,7 @@ class CaptureBridge {
     required void Function(CapturedDisplay display) onCaptureReady,
     required void Function(String reason, String message) onCaptureFailed,
     void Function()? onPeerActivated,
+    void Function(Map<String, dynamic> state)? onEditorState,
   }) {
     _overlay.setMethodCallHandler((call) async {
       switch (call.method) {
@@ -62,6 +68,10 @@ class CaptureBridge {
         case 'onPeerActivated':
           // Another display became the active editor -> this engine steps down.
           onPeerActivated?.call();
+          return null;
+        case 'onEditorState':
+          // Another display changed tool/style -> mirror it here.
+          onEditorState?.call((call.arguments as Map).cast<String, dynamic>());
           return null;
         default:
           return null; // onWindowsRefreshed etc. are Phase 4 — ignore.

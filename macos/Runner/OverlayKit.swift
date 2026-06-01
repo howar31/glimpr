@@ -39,10 +39,13 @@ final class ScreenCapturer {
 
   /// Captures every display. Throws CaptureError.noDisplays or rethrows SCK errors.
   func captureAll() async throws -> [[String: Any]] {
-    // Trust the cache only while it still has displays; otherwise refetch fresh
-    // (the cache can go stale/empty across a display add/remove).
+    // Trust the cache only while its display SET still matches the current
+    // screens; otherwise refetch fresh (the cache goes stale across a display
+    // add/remove, which would drop a hot-plugged display from the capture).
+    let currentIDs = Set(NSScreen.screens.compactMap { Self.screenNumber($0) })
     var shareable = cachedContent
-    if shareable == nil || shareable!.displays.isEmpty {
+    let cachedIDs = Set((shareable?.displays ?? []).map { $0.displayID })
+    if shareable == nil || shareable!.displays.isEmpty || cachedIDs != currentIDs {
       shareable = try await SCShareableContent.current
       cachedContent = shareable
     }
@@ -163,12 +166,16 @@ final class OverlayManager {
 
   init() { buildUnits() }
 
-  /// Rebuild the window/engine set on display hot-plug (idle only — design §17
-  /// freezes topology during an active overlay).
+  /// Re-sync the window/engine set on display hot-plug (idle only — design §17
+  /// freezes topology during an active overlay; a change missed here is caught
+  /// by the safety-net sync before the next capture).
   func startObservingScreens() {
     NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification,
-      object: nil, queue: .main) { [weak self] _ in self?.rebuildIfIdle() }
+      object: nil, queue: .main) { [weak self] _ in
+        guard let self = self, self.pendingShow.isEmpty else { return }
+        self.syncUnitsToScreens()
+    }
   }
 
   private func displayID(of screen: NSScreen) -> CGDirectDisplayID {
@@ -176,7 +183,11 @@ final class OverlayManager {
   }
 
   private func buildUnits() {
-    for screen in NSScreen.screens {
+    for screen in NSScreen.screens { addUnit(for: screen) }
+  }
+
+  /// Build + warm ONE display's overlay window + engine (resident at alpha 0).
+  private func addUnit(for screen: NSScreen) {
       let id = displayID(of: screen)
       // VC-owns-its-implicit-engine — the only pattern that renders reliably for
       // our windows on macOS (separate FlutterEngine().run() views never paint).
@@ -196,6 +207,11 @@ final class OverlayManager {
         switch call.method {
         case "overlayReady": self?.show(displayID: id); result(nil)
         case "focusDisplay": self?.focus(displayID: id); result(nil)
+        case "broadcastEditorState":
+          if let a = call.arguments as? [String: Any] {
+            self?.broadcastEditorState(from: id, args: a)
+          }
+          result(nil)
         case "dismissOverlay": self?.dismiss(); result(nil)
         case "warpCursor":
           if let a = call.arguments as? [String: Any],
@@ -227,15 +243,27 @@ final class OverlayManager {
       window.ignoresMouseEvents = true
 
       units[id] = Unit(window: window, engine: vc.engine, vc: vc, overlay: overlay, role: role, control: control)
-    }
   }
 
-  private func rebuildIfIdle() {
-    guard pendingShow.isEmpty else { return }
-    for (_, u) in units { u.window.orderOut(nil); u.window.contentViewController = nil }
-    units.values.forEach { $0.engine.shutDownEngine() }
-    units.removeAll()
-    buildUnits()
+  /// Add/remove warm overlay units so there is exactly one per CURRENT display.
+  /// Incremental — existing displays' units (and their warm engines) are left
+  /// untouched; only a newly-attached display gets a fresh warm unit, and a
+  /// detached display's unit is torn down. Run on display hot-plug AND as a
+  /// safety net before each capture, so changing displays never leaves one
+  /// without an overlay (which froze the capture).
+  func syncUnitsToScreens() {
+    let currentIDs = Set(NSScreen.screens.map { displayID(of: $0) })
+    for id in Set(units.keys).subtracting(currentIDs) {
+      if let u = units[id] {
+        u.window.orderOut(nil)
+        u.window.contentViewController = nil
+        u.engine.shutDownEngine()
+      }
+      units.removeValue(forKey: id)
+    }
+    for screen in NSScreen.screens where units[displayID(of: screen)] == nil {
+      addUnit(for: screen)
+    }
   }
 
   /// Distribute captured frames to their displays' engines. Each window is
@@ -296,6 +324,14 @@ final class OverlayManager {
     }
     for (otherID, u) in units where otherID != id {
       u.overlay.invokeMethod("onPeerActivated", arguments: nil)
+    }
+  }
+
+  /// Mirror one display's editor tool/style to the OTHER displays so the active
+  /// tool + colour/width/font stay in sync across displays.
+  private func broadcastEditorState(from id: CGDirectDisplayID, args: [String: Any]) {
+    for (otherID, u) in units where otherID != id {
+      u.overlay.invokeMethod("onEditorState", arguments: args)
     }
   }
 

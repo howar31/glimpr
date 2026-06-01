@@ -38,6 +38,10 @@ final class CaptureChannel {
       return
     }
     Task { @MainActor in
+      // Safety net: make sure there is a warm overlay unit for every CURRENT
+      // display before capturing, so a display added/removed since launch (whose
+      // hot-plug re-sync was missed) still gets an overlay instead of freezing.
+      self.manager()?.syncUnitsToScreens()
       do {
         let frames = try await self.capturer.captureAll()
         // Multi-display overlay: hand every display's frozen frame to the

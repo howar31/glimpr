@@ -18,11 +18,6 @@ import 'selection_label.dart';
 import 'selection_scrim.dart';
 import 'toolbar.dart';
 
-/// Blur radius (logical px) and pixelate block size (native px) for the raster
-/// region tools. Fixed in Phase 3; a strength control is deferred to settings.
-const double _kBlurSigma = 12;
-const double _kPixelCell = 12;
-
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
 /// moves, tap edits, right-click deletes; right-click also cancels an in-progress
@@ -38,8 +33,6 @@ class EditorCanvas extends StatefulWidget {
   // window key (the editor follows the cursor across displays).
   final VoidCallback onActivate;
   // Notifies (bumps) when ANOTHER display became active, so this one steps down.
-  // Used instead of MouseRegion.onExit (which mis-fires when the cursor moves
-  // onto the toolbar that sits on top of the region).
   final Listenable deactivateOnPeer;
   const EditorCanvas({
     super.key,
@@ -71,6 +64,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Drawable? _preview;
   Offset? _dragStart;
   List<Offset>? _penPoints; // accumulated freehand points (pen tool)
+  // Whole frame pre-blurred / pre-pixelated once when the tool is selected; the
+  // blur/pixelate regions just mask these (no per-frame recompute -> no lag).
+  ui.Image? _blurredFull;
+  ui.Image? _pixelatedFull;
 
   // Move/resize an existing drawable.
   int? _editIndex;
@@ -91,6 +88,17 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   EditorController get c => widget.controller;
   bool get _inCrop => c.phase.value == EditorPhase.crop;
+
+  /// Region-selection tools that get the precision crosshair + pixel loupe (crop
+  /// plus the raster regions, where exact alignment on what you obscure matters).
+  /// The dimming scrim stays crop-only.
+  bool get _showsCrosshair {
+    final t = c.tool.value;
+    return t == ToolKind.crop ||
+        t == ToolKind.blur ||
+        t == ToolKind.pixelate;
+  }
+
 
   @override
   void initState() {
@@ -145,6 +153,32 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (_editingText) _commitText();
     // Paste is triggered by Cmd-V only; selecting the Paste tool just enters
     // paste mode (to select / move / right-click-delete already-pasted images).
+    _ensureRasterFor(c.tool.value); // pre-compute whole-frame blur/pixelate
+  }
+
+  /// Compute the whole-frame blur / pixelate ONCE when its tool is first
+  /// selected (the region drag then just masks it — no per-frame recompute).
+  Future<void> _ensureRasterFor(ToolKind t) async {
+    if (t == ToolKind.blur && _blurredFull == null) {
+      final img = await blurWhole(widget.frozenImage,
+          kBlurSigmaLogical * widget.display.scaleFactor);
+      if (mounted) setState(() => _blurredFull = img);
+    } else if (t == ToolKind.pixelate && _pixelatedFull == null) {
+      final img = await pixelateWhole(widget.frozenImage, kPixelCellNative);
+      if (mounted) setState(() => _pixelatedFull = img);
+    }
+  }
+
+  @override
+  void didUpdateWidget(EditorCanvas old) {
+    super.didUpdateWidget(old);
+    // New frozen frame (in-place re-capture) -> the pre-computed images are
+    // stale; drop them and recompute for the active tool.
+    if (old.frozenImage != widget.frozenImage) {
+      _blurredFull = null;
+      _pixelatedFull = null;
+      _ensureRasterFor(c.tool.value);
+    }
   }
 
   // ---- cross-display follow ----------------------------------------------
@@ -334,9 +368,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
       return KeyEventResult.handled;
     }
 
-    // Crop arrow-nudge: move crosshair/selection AND warp the OS cursor 1px so a
-    // subsequent physical mouse move continues from the nudged point.
-    if (_inCrop) {
+    // Arrow-nudge for the region tools (crop + blur/pixelate): move the
+    // crosshair AND warp the OS cursor 1px so a subsequent physical move
+    // continues from the nudged point. Also nudges the in-progress region's
+    // dragging corner.
+    if (_showsCrosshair) {
       Offset? delta;
       if (key == LogicalKeyboardKey.arrowLeft) delta = const Offset(-1, 0);
       if (key == LogicalKeyboardKey.arrowRight) delta = const Offset(1, 0);
@@ -347,8 +383,16 @@ class _EditorCanvasState extends State<EditorCanvas> {
           (_cursor.dx + delta.dx).clamp(0.0, widget.display.width),
           (_cursor.dy + delta.dy).clamp(0.0, widget.display.height),
         );
-        setState(() => _cursor = next);
-        if (_cropping) _crop.update(next);
+        final s = _dragStart;
+        setState(() {
+          _cursor = next;
+          if (s != null && c.tool.value == ToolKind.blur) {
+            _preview = BlurDrawable(Rect.fromPoints(s, next), c.style.value);
+          } else if (s != null && c.tool.value == ToolKind.pixelate) {
+            _preview = PixelateDrawable(Rect.fromPoints(s, next), c.style.value);
+          }
+        });
+        if (c.tool.value == ToolKind.crop && _cropping) _crop.update(next);
         _bridge.warpCursor(
             widget.display.left + next.dx, widget.display.top + next.dy);
         return KeyEventResult.handled;
@@ -507,6 +551,27 @@ class _EditorCanvasState extends State<EditorCanvas> {
     }
   }
 
+  bool _rightLatched = false; // right button currently held (handled once)
+
+  /// Fire [_onRightDown] once when the secondary button goes down, whether it
+  /// arrives as a fresh down or mid-drag as a move; reset when it releases.
+  void _onPointerButtons(PointerEvent e) {
+    final right = (e.buttons & kSecondaryButton) != 0;
+    if (right && !_rightLatched) {
+      _rightLatched = true;
+      _onRightDown(e.localPosition);
+    } else if (!right) {
+      _rightLatched = false;
+    }
+  }
+
+  /// Track the crosshair from the raw pointer stream (outermost Listener), so it
+  /// follows everywhere on the active display — over the toolbar, and while the
+  /// left button is still held after a right-click cancel.
+  void _trackCursor(PointerEvent e) {
+    if (_active && _showsCrosshair) setState(() => _cursor = e.localPosition);
+  }
+
   void _onRightDown(Offset p) {
     // Crop: right-click cancels the selection (set _cancelGesture so the
     // pending pan-end does NOT commit/export).
@@ -597,8 +662,14 @@ class _EditorCanvasState extends State<EditorCanvas> {
   }
 
   void _panUpdate(DragUpdateDetails d) {
-    if (_cancelGesture) return;
     final p = d.localPosition;
+    if (_cancelGesture) {
+      // Right-click cancelled this drag: keep the crosshair tracking the mouse
+      // while the left button is still held (no jank if the two buttons aren't
+      // released together); a new selection needs a fresh left press.
+      if (_showsCrosshair) setState(() => _cursor = p);
+      return;
+    }
     if (c.tool.value == ToolKind.crop) {
       setState(() => _cursor = p);
       _crop.update(p);
@@ -633,12 +704,16 @@ class _EditorCanvasState extends State<EditorCanvas> {
         setState(() => _preview = PenDrawable(_penPoints!, c.style.value));
         break;
       case ToolKind.blur:
-        setState(() =>
-            _preview = BlurDrawable(Rect.fromPoints(s, p), _kBlurSigma, c.style.value));
+        setState(() {
+          _cursor = p; // keep the crosshair/loupe on the dragging corner
+          _preview = BlurDrawable(Rect.fromPoints(s, p), c.style.value);
+        });
         break;
       case ToolKind.pixelate:
-        setState(() => _preview = PixelateDrawable(
-            Rect.fromPoints(s, p), _kPixelCell, null, c.style.value));
+        setState(() {
+          _cursor = p;
+          _preview = PixelateDrawable(Rect.fromPoints(s, p), c.style.value);
+        });
         break;
       case ToolKind.text:
       case ToolKind.step:
@@ -688,42 +763,14 @@ class _EditorCanvasState extends State<EditorCanvas> {
       final i = _editIndex!;
       final prev = _editPreview;
       setState(_resetEditState);
-      if (prev != null) {
-        // Replace now (one undo step = the move/resize). A moved/resized
-        // pixelate keeps its old mosaic (still obscured) until the fresh one
-        // is computed, so the region is never exposed.
-        c.document.value = c.document.value.replaceAt(i, prev);
-        if (prev is PixelateDrawable) _fillMosaicAt(i);
-      }
+      // One undo step = the move/resize. Blur/pixelate just mask the shared
+      // whole-frame image, so a moved/resized region is correct immediately.
+      if (prev != null) c.document.value = c.document.value.replaceAt(i, prev);
       return;
     }
     final prev = _preview;
     setState(_resetDrawState);
-    if (prev != null && prev.bounds.longestSide >= 3) {
-      // Commit immediately. A new pixelate has a null mosaic and renders as a
-      // live blur (already obscured) until its mosaic is backfilled.
-      c.commitDrawable(prev);
-      if (prev is PixelateDrawable) {
-        _fillMosaicAt(c.document.value.drawables.length - 1);
-      }
-    }
-  }
-
-  /// Compute the pixelate mosaic for the region at [i] and silently backfill it
-  /// (no extra undo step). Guards against the drawable changing meanwhile, so a
-  /// stale async result is dropped after an undo/edit.
-  Future<void> _fillMosaicAt(int i) async {
-    final list = c.document.value.drawables;
-    if (i < 0 || i >= list.length) return;
-    final d = list[i];
-    if (d is! PixelateDrawable || d.rect.width < 1 || d.rect.height < 1) return;
-    final m = await pixelateRegion(
-        widget.frozenImage, d.rect, widget.display.scaleFactor, d.cell);
-    if (!mounted) return;
-    final cur = c.document.value.drawables;
-    if (i < cur.length && identical(cur[i], d)) {
-      c.document.value = c.document.value.replaceAtSilent(i, d.withMosaic(m));
-    }
+    if (prev != null && prev.bounds.longestSide >= 3) c.commitDrawable(prev);
   }
 
   // ---- build -------------------------------------------------------------
@@ -775,13 +822,20 @@ class _EditorCanvasState extends State<EditorCanvas> {
   @override
   Widget build(BuildContext context) {
     final inCrop = _inCrop;
+    final showsCrosshair = _showsCrosshair;
     final loupeOrigin = _loupeOrigin();
-    return Focus(
-      focusNode: _focus,
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Stack(
-        fit: StackFit.expand,
+    // Outermost listener tracks the cursor for the crosshair from the RAW
+    // pointer stream — fires everywhere (incl. over the toolbar, and after a
+    // right-click ends the pan), so the crosshair follows continuously.
+    return Listener(
+      onPointerHover: _trackCursor,
+      onPointerMove: _trackCursor,
+      child: Focus(
+        focusNode: _focus,
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: Stack(
+          fit: StackFit.expand,
         children: [
           // Layer 1: frozen image (full color, no dim in the annotate phase).
           RepaintBoundary(
@@ -802,8 +856,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 selectedIndex: (!_active || inCrop || _editingText)
                     ? null
                     : c.selectedIndex.value,
-                frozenImage: widget.frozenImage,
-                scaleFactor: widget.display.scaleFactor,
+                blurredFull: _blurredFull,
+                pixelatedFull: _pixelatedFull,
               ),
               size: Size.infinite,
             ),
@@ -858,15 +912,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 },
               ),
             ),
-          // Crop HUD: full-screen crosshair + pixel loupe (active display only).
-          if (_active && inCrop)
+          // Precision HUD: full-screen crosshair + pixel loupe — crop and the
+          // raster region tools (blur/pixelate), active display only.
+          if (_active && showsCrosshair)
             IgnorePointer(
               child: CustomPaint(
                 size: Size.infinite,
                 painter: CrosshairPainter(_cursor),
               ),
             ),
-          if (_active && inCrop)
+          // Loupe is bound to the crosshair — shown/hidden together, so it
+          // never flickers off when hovering over an existing region.
+          if (_active && showsCrosshair)
             Positioned(
               left: loupeOrigin.dx,
               top: loupeOrigin.dy,
@@ -886,16 +943,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
           // active pan), so right-click can cancel an in-progress crop/draw.
           Positioned.fill(
             child: Listener(
-              onPointerDown: (e) {
-                // Bitwise test, not ==: during a crop drag the left button is
-                // also held (buttons = primary|secondary), so an exact ==
-                // kSecondaryButton missed the right-click and the crop committed.
-                if ((e.buttons & kSecondaryButton) != 0) {
-                  _onRightDown(e.localPosition);
-                }
-              },
+              // Watch down/move/up: a right-button press DURING a left drag
+              // arrives as a move (the pointer is already down), not a down — so
+              // the old onPointerDown-only check never saw it and the crop
+              // committed. The latch fires _onRightDown once per right press.
+              onPointerDown: _onPointerButtons,
+              onPointerMove: _onPointerButtons,
+              onPointerUp: _onPointerButtons,
               child: MouseRegion(
-                cursor: (_active && inCrop)
+                cursor: (_active && showsCrosshair)
                     ? SystemMouseCursors.none // our crosshair replaces it
                     : SystemMouseCursors.basic,
                 onEnter: (_) => _activate(), // cursor entered this display
@@ -965,7 +1021,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

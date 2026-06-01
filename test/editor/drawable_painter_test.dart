@@ -21,10 +21,10 @@ void main() {
         [Offset(10, 120), Offset(40, 140), Offset(70, 120)], style),
     TextDrawable.plain(const Offset(10, 150), 'hi', style),
     StepDrawable(const Offset(160, 40), 12, style),
-    // Raster regions with no frozen image -> the painter draws a neutral
+    // Raster regions with no pre-computed image -> the painter draws a neutral
     // placeholder (the null-source guard) rather than throwing.
-    const BlurDrawable(Rect.fromLTWH(180, 80, 50, 40), 12, style),
-    const PixelateDrawable(Rect.fromLTWH(180, 130, 50, 40), 12, null, style),
+    const BlurDrawable(Rect.fromLTWH(180, 80, 50, 40), style),
+    const PixelateDrawable(Rect.fromLTWH(180, 130, 50, 40), style),
   ];
 
   testWidgets('paints every drawable type (ellipse selected -> handles)',

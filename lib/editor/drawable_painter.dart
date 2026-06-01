@@ -6,25 +6,26 @@ import 'text_metrics.dart';
 /// Paints the drawable list (annotation layer) and, if [selectedIndex] is set,
 /// a selection rectangle + corner handles around that drawable.
 ///
-/// [frozenImage] (native pixels) + [scaleFactor] let the raster regions
-/// (blur/pixelate) re-sample the underlying screenshot; null on the vector-only
-/// paths (unit tests), where those regions fall back to a neutral placeholder.
+/// [blurredFull]/[pixelatedFull] are the whole frame pre-blurred / pre-pixelated
+/// once (computed when the tool is selected); the blur/pixelate regions just
+/// clip them to the dragged rect — no per-frame recompute. Null on the vector-
+/// only paths (unit tests), where those regions draw a neutral placeholder.
 class DrawablePainter extends CustomPainter {
   final List<Drawable> drawables;
   final int? selectedIndex;
-  final ui.Image? frozenImage;
-  final double scaleFactor;
+  final ui.Image? blurredFull;
+  final ui.Image? pixelatedFull;
   const DrawablePainter({
     required this.drawables,
     required this.selectedIndex,
-    this.frozenImage,
-    this.scaleFactor = 1,
+    this.blurredFull,
+    this.pixelatedFull,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final d in drawables) {
-      _paintOne(canvas, d);
+      _paintOne(canvas, d, size);
     }
     final i = selectedIndex;
     if (i != null && i >= 0 && i < drawables.length) {
@@ -32,7 +33,7 @@ class DrawablePainter extends CustomPainter {
     }
   }
 
-  void _paintOne(Canvas canvas, Drawable d) {
+  void _paintOne(Canvas canvas, Drawable d, Size size) {
     switch (d) {
       case RectangleDrawable():
         final paint = Paint()
@@ -82,9 +83,9 @@ class DrawablePainter extends CustomPainter {
       case StepDrawable():
         _paintStep(canvas, d);
       case BlurDrawable():
-        _paintBlur(canvas, d.rect, d.sigma);
+        _paintMasked(canvas, d.rect, size, blurredFull, nearest: false);
       case PixelateDrawable():
-        _paintPixelate(canvas, d);
+        _paintMasked(canvas, d.rect, size, pixelatedFull, nearest: true);
       case ImageDrawable():
         canvas.drawImageRect(
           d.image,
@@ -96,47 +97,26 @@ class DrawablePainter extends CustomPainter {
     }
   }
 
-  /// Draws the frozen pixels under [rect] blurred (live re-sample). Clipped so
-  /// the blur cannot bleed past the region. Placeholder when no source image.
-  void _paintBlur(Canvas canvas, Rect rect, double sigma) {
-    final frozen = frozenImage;
-    if (frozen == null) {
+  /// Clips the pre-computed whole-frame [full] image (blurred or pixelated) to
+  /// [rect], stretched across the display ([size]) so it aligns 1:1 with the
+  /// frozen frame beneath. [nearest] keeps pixelate blocks crisp. A neutral
+  /// placeholder shows while [full] is still being computed (or in unit tests).
+  void _paintMasked(Canvas canvas, Rect rect, Size size, ui.Image? full,
+      {required bool nearest}) {
+    if (full == null) {
       canvas.drawRect(rect, Paint()..color = const Color(0x33000000));
       return;
     }
-    final src = Rect.fromLTRB(rect.left * scaleFactor, rect.top * scaleFactor,
-        rect.right * scaleFactor, rect.bottom * scaleFactor);
     canvas.save();
     canvas.clipRect(rect);
     canvas.drawImageRect(
-      frozen,
-      src,
-      rect,
+      full,
+      Rect.fromLTWH(0, 0, full.width.toDouble(), full.height.toDouble()),
+      Rect.fromLTWH(0, 0, size.width, size.height),
       Paint()
-        // Clamp (not decal): the blur kernel samples edge pixels at the region
-        // border instead of transparent, so the blur reaches the rect edges
-        // (decal left a sharp, seemingly-unblurred ring around the region).
-        ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: sigma, sigmaY: sigma, tileMode: TileMode.clamp)
-        ..filterQuality = FilterQuality.medium,
+        ..filterQuality = nearest ? FilterQuality.none : FilterQuality.medium,
     );
     canvas.restore();
-  }
-
-  void _paintPixelate(Canvas canvas, PixelateDrawable d) {
-    final mosaic = d.mosaic;
-    if (mosaic != null) {
-      // Upscale the tiny averaged image blocky (no smoothing) = mosaic look.
-      canvas.drawImageRect(
-        mosaic,
-        Rect.fromLTWH(0, 0, mosaic.width.toDouble(), mosaic.height.toDouble()),
-        d.rect,
-        Paint()..filterQuality = FilterQuality.none,
-      );
-      return;
-    }
-    // Mosaic still computing -> live blur so raw pixels are never exposed.
-    _paintBlur(canvas, d.rect, 8);
   }
 
   void _paintPen(Canvas canvas, PenDrawable d) {
@@ -240,6 +220,6 @@ class DrawablePainter extends CustomPainter {
   bool shouldRepaint(DrawablePainter old) =>
       old.drawables != drawables ||
       old.selectedIndex != selectedIndex ||
-      old.frozenImage != frozenImage ||
-      old.scaleFactor != scaleFactor;
+      old.blurredFull != blurredFull ||
+      old.pixelatedFull != pixelatedFull;
 }
