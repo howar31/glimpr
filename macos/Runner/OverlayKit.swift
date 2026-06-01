@@ -51,7 +51,19 @@ final class ScreenCapturer {
     }
     let displays = content.displays
 
-    let cursor = NSEvent.mouseLocation
+    // Which display holds the cursor = the interactive editor display. Use
+    // NSScreen: NSEvent.mouseLocation and NSScreen.frame share the same Cocoa
+    // bottom-left global space, so NSMouseInRect needs NO coordinate flip (the
+    // old CG/Cocoa flip mismapped multi-display layouts, landing the editor on
+    // the wrong display). Fall back to the main, then the first, display so
+    // EXACTLY ONE display is always the cursor display — never a no-editor freeze.
+    let mouse = NSEvent.mouseLocation
+    let cursorDisplayID: CGDirectDisplayID =
+      NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+        .flatMap(Self.screenNumber)
+        ?? NSScreen.main.flatMap(Self.screenNumber)
+        ?? displays.first!.displayID
+
     var out: [[String: Any]] = []
     for d in displays {
       let scale = Self.scaleFactor(for: d.displayID)
@@ -70,13 +82,13 @@ final class ScreenCapturer {
       let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
       guard let png = Self.pngData(from: cgImage) else { continue }
       let frame = d.frame
-      let inDisplay = NSPointInRect(NSPoint(x: cursor.x, y: cursor.y), Self.flipToBottomLeft(frame))
       out.append([
         "displayId": Int(d.displayID),
         "pngBytes": FlutterStandardTypedData(bytes: png),
         "left": Double(frame.origin.x), "top": Double(frame.origin.y),
         "width": Double(frame.size.width), "height": Double(frame.size.height),
-        "scaleFactor": Double(scale), "isCursorDisplay": inDisplay,
+        "scaleFactor": Double(scale),
+        "isCursorDisplay": d.displayID == cursorDisplayID,
       ])
     }
     return out
@@ -90,10 +102,9 @@ final class ScreenCapturer {
     return 1.0
   }
 
-  static func flipToBottomLeft(_ frame: CGRect) -> NSRect {
-    let total = NSScreen.screens.map { $0.frame.maxY }.max() ?? frame.maxY
-    return NSRect(x: frame.origin.x, y: total - frame.origin.y - frame.size.height,
-                  width: frame.size.width, height: frame.size.height)
+  /// CGDirectDisplayID for an NSScreen (its "NSScreenNumber" device key).
+  static func screenNumber(_ screen: NSScreen) -> CGDirectDisplayID? {
+    (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
   }
 
   static func pngData(from cgImage: CGImage) -> Data? {
@@ -123,6 +134,10 @@ final class OverlayWindow: NSWindow {
     isReleasedWhenClosed = false
     level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
     collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+    // Deliver mouse-moved (hover) events even while this window is NOT key, so
+    // the editor can follow the cursor onto a not-yet-focused display without a
+    // click first (a non-key window gets no mouseMoved by default).
+    acceptsMouseMovedEvents = true
   }
 }
 
@@ -142,6 +157,9 @@ final class OverlayManager {
   }
   private var units: [CGDirectDisplayID: Unit] = [:]
   private var pendingShow: Set<CGDirectDisplayID> = []
+  // The display the cursor is on at capture = the interactive editor. Only its
+  // window takes key/active focus on reveal (see show()). nil = unknown.
+  private var keyDisplayID: CGDirectDisplayID?
 
   init() { buildUnits() }
 
@@ -177,6 +195,7 @@ final class OverlayManager {
       control.setMethodCallHandler { [weak self] call, result in
         switch call.method {
         case "overlayReady": self?.show(displayID: id); result(nil)
+        case "focusDisplay": self?.focus(displayID: id); result(nil)
         case "dismissOverlay": self?.dismiss(); result(nil)
         case "warpCursor":
           if let a = call.arguments as? [String: Any],
@@ -224,6 +243,15 @@ final class OverlayManager {
   /// signals overlayReady — capture-then-show, no blank flash.
   func presentFrames(_ frames: [[String: Any]]) {
     pendingShow.removeAll()
+    // Record the cursor display so only ITS overlay takes key focus on reveal —
+    // otherwise, with several displays, the last one revealed steals key and the
+    // cursor display's editor gets no hover/keyboard (the multi-display freeze).
+    keyDisplayID = nil
+    for f in frames {
+      if (f["isCursorDisplay"] as? Bool) == true, let raw = f["displayId"] as? Int {
+        keyDisplayID = CGDirectDisplayID(raw)
+      }
+    }
     for f in frames {
       guard let raw = f["displayId"] as? Int else { continue }
       let id = CGDirectDisplayID(raw)
@@ -240,12 +268,35 @@ final class OverlayManager {
   private func show(displayID id: CGDirectDisplayID) {
     guard let unit = units[id] else { return }
     unit.window.setFrame(unit.window.screen?.frame ?? unit.window.frame, display: true)
-    unit.window.ignoresMouseEvents = false
     unit.window.alphaValue = 1
-    NSApp.activate(ignoringOtherApps: true)
-    if unit.window.canBecomeKey { unit.window.makeKeyAndOrderFront(nil) }
+    // ALL displays are interactive so the editor can FOLLOW the cursor across
+    // them (each window re-keys on mouse-enter via focusDisplay). Only the cursor
+    // display takes the INITIAL key/active focus on reveal; making every overlay
+    // key in turn would let the last-revealed (often NON-cursor) display win.
+    // Unknown cursor (nil) or a missing unit -> key this one (single-display path).
+    unit.window.ignoresMouseEvents = false
+    let cursorKnown = keyDisplayID != nil && units[keyDisplayID!] != nil
+    if !cursorKnown || id == keyDisplayID {
+      NSApp.activate(ignoringOtherApps: true)
+      if unit.window.canBecomeKey { unit.window.makeKeyAndOrderFront(nil) }
+    }
     unit.window.orderFrontRegardless()
     pendingShow.remove(id)
+  }
+
+  /// Make a display's overlay the key window — called when the cursor enters it
+  /// so the editor "follows" the cursor across displays. Keyboard events go only
+  /// to the key window, so the key window must track the active display. Also
+  /// tells the OTHER displays to step down (one active editor at a time).
+  private func focus(displayID id: CGDirectDisplayID) {
+    guard let unit = units[id] else { return }
+    if !unit.window.isKeyWindow {
+      NSApp.activate(ignoringOtherApps: true)
+      if unit.window.canBecomeKey { unit.window.makeKey() }
+    }
+    for (otherID, u) in units where otherID != id {
+      u.overlay.invokeMethod("onPeerActivated", arguments: nil)
+    }
   }
 
   /// Esc-cancel or capture-fire: hide all windows atomically. Windows stay

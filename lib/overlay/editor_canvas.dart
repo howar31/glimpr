@@ -34,6 +34,13 @@ class EditorCanvas extends StatefulWidget {
   final EditorController controller;
   final Future<void> Function(Rect? selectionLogical) onExport;
   final VoidCallback onCancel;
+  // Called when the cursor enters this display, so the host can make this
+  // window key (the editor follows the cursor across displays).
+  final VoidCallback onActivate;
+  // Notifies (bumps) when ANOTHER display became active, so this one steps down.
+  // Used instead of MouseRegion.onExit (which mis-fires when the cursor moves
+  // onto the toolbar that sits on top of the region).
+  final Listenable deactivateOnPeer;
   const EditorCanvas({
     super.key,
     required this.display,
@@ -41,6 +48,8 @@ class EditorCanvas extends StatefulWidget {
     required this.controller,
     required this.onExport,
     required this.onCancel,
+    required this.onActivate,
+    required this.deactivateOnPeer,
   });
 
   @override
@@ -54,6 +63,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   late Offset _cursor; // logical cursor (crosshair/loupe/nudge + hover)
   late Offset _toolbarPos; // top-left of the draggable toolbar
+  // The cursor is over THIS display -> show the interactive HUD/toolbar here.
+  // Follows the mouse across displays; the launch (cursor) display starts active.
+  late bool _active;
 
   // New-shape preview (drag on empty).
   Drawable? _preview;
@@ -86,6 +98,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     _cursor = Offset(widget.display.width / 2, widget.display.height / 2);
     _toolbarPos =
         Offset(widget.display.width / 2 - 160, widget.display.height - 120);
+    _active = widget.display.isCursorDisplay; // launch display starts active
     c.document.addListener(_rebuild);
     c.selectedIndex.addListener(_rebuild);
     c.tool.addListener(_rebuild);
@@ -93,6 +106,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
     _textFocus.addListener(_rebuild); // repaint our selection on focus changes
+    widget.deactivateOnPeer.addListener(_deactivate); // a peer took focus
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
@@ -105,6 +119,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
     _textFocus.removeListener(_rebuild);
+    widget.deactivateOnPeer.removeListener(_deactivate);
     _richCtl?.dispose();
     _focus.dispose();
     _crop.dispose();
@@ -131,6 +146,28 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // Selecting the Paste tool pastes the clipboard image immediately (the
     // guard stops the selectTool inside _pasteImage from re-triggering this).
     if (c.tool.value == ToolKind.paste && !_pasting) _pasteImage();
+  }
+
+  // ---- cross-display follow ----------------------------------------------
+
+  /// Cursor entered this display: show the HUD/toolbar here, take keyboard focus
+  /// (Flutter) and ask native to make this window key (so Esc/shortcuts work).
+  void _activate() {
+    if (_active) return;
+    setState(() => _active = true);
+    widget.onActivate();
+    _focus.requestFocus();
+  }
+
+  /// Cursor left this display: hide the HUD/toolbar and drop any transient draw
+  /// state (a pan drag holds pointer capture, so this won't fire mid-stroke).
+  void _deactivate() {
+    if (!_active) return;
+    setState(() {
+      _active = false;
+      _resetDrawState();
+      _resetEditState();
+    });
   }
 
   bool _pasting = false; // re-entrancy guard for paste (tool-switch + ⌘V)
@@ -760,9 +797,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
           RepaintBoundary(
             child: CustomPaint(
               painter: DrawablePainter(
+                // Annotations always paint (so an inactive display still shows
+                // its drawings); only the selection highlight is gated on focus.
                 drawables: _effectiveDrawables(),
-                selectedIndex:
-                    (inCrop || _editingText) ? null : c.selectedIndex.value,
+                selectedIndex: (!_active || inCrop || _editingText)
+                    ? null
+                    : c.selectedIndex.value,
                 frozenImage: widget.frozenImage,
                 scaleFactor: widget.display.scaleFactor,
               ),
@@ -772,7 +812,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
           // Our own text-selection highlight — shown when the inline field is
           // blurred (e.g. while typing a pt value), so the selected range stays
           // visible. When the field is focused it draws its own highlight.
-          if (_editingText &&
+          if (_active &&
+              _editingText &&
               _richCtl != null &&
               _textPos != null &&
               !_textFocus.hasFocus &&
@@ -788,8 +829,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 ),
               ),
             ),
-          // Layer 3: crop scrim — only once a selection drag exists.
-          if (inCrop)
+          // Layer 3: crop scrim — only once a selection drag exists (this
+          // display's HUD only shows while the cursor is over it).
+          if (_active && inCrop)
             RepaintBoundary(
               child: ValueListenableBuilder<Rect?>(
                 valueListenable: _crop.rect,
@@ -817,15 +859,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 },
               ),
             ),
-          // Crop HUD: full-screen crosshair + pixel loupe.
-          if (inCrop)
+          // Crop HUD: full-screen crosshair + pixel loupe (active display only).
+          if (_active && inCrop)
             IgnorePointer(
               child: CustomPaint(
                 size: Size.infinite,
                 painter: CrosshairPainter(_cursor),
               ),
             ),
-          if (inCrop)
+          if (_active && inCrop)
             Positioned(
               left: loupeOrigin.dx,
               top: loupeOrigin.dy,
@@ -849,9 +891,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 if (e.buttons == kSecondaryButton) _onRightDown(e.localPosition);
               },
               child: MouseRegion(
-                cursor: inCrop
+                cursor: (_active && inCrop)
                     ? SystemMouseCursors.none // our crosshair replaces it
                     : SystemMouseCursors.basic,
+                onEnter: (_) => _activate(), // cursor entered this display
                 onHover: _onHover,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -864,7 +907,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
             ),
           ),
           // Inline multiline text editor (Enter commits, Shift+Enter newline).
-          if (_editingText && _textPos != null && _richCtl != null)
+          if (_active && _editingText && _textPos != null && _richCtl != null)
             Positioned(
               left: _textPos!.dx,
               top: _textPos!.dy,
@@ -900,22 +943,24 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 ),
               ),
             ),
-          // Draggable toolbar.
-          Positioned(
-            left: _toolbarPos.dx,
-            top: _toolbarPos.dy,
-            // Material ancestor for the toolbar's TextField (pt) + IconButtons.
-            child: Material(
-              type: MaterialType.transparency,
-              child: EditorToolbar(
-                controller: c,
-                onMove: _moveToolbar,
-                onPtEditingDone: () {
-                  if (_editingText) _textFocus.requestFocus();
-                },
+          // Draggable toolbar — only on the display the cursor is over, so it
+          // "follows" the cursor across displays.
+          if (_active)
+            Positioned(
+              left: _toolbarPos.dx,
+              top: _toolbarPos.dy,
+              // Material ancestor for the toolbar's TextField (pt) + IconButtons.
+              child: Material(
+                type: MaterialType.transparency,
+                child: EditorToolbar(
+                  controller: c,
+                  onMove: _moveToolbar,
+                  onPtEditingDone: () {
+                    if (_editingText) _textFocus.requestFocus();
+                  },
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

@@ -25,6 +25,9 @@ class _OverlayAppState extends State<OverlayApp> {
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
   String? _toast; // shown briefly only when a delivery leg failed
+  // Bumped when native reports another display became the active editor, so this
+  // engine's EditorCanvas steps down (the editor follows the cursor).
+  final ValueNotifier<int> _peerActivated = ValueNotifier(0);
 
   @override
   void initState() {
@@ -61,6 +64,9 @@ class _OverlayAppState extends State<OverlayApp> {
       },
       onCaptureFailed: (reason, msg) {
         if (mounted) _resetState();
+      },
+      onPeerActivated: () {
+        if (mounted) _peerActivated.value++;
       },
     );
   }
@@ -125,6 +131,10 @@ class _OverlayAppState extends State<OverlayApp> {
       home: (d == null || frozen == null || editor == null)
           // Idle: fully transparent until a capture sets the frozen frame.
           ? const SizedBox.shrink()
+          // Every display builds the editor; EditorCanvas shows the interactive
+          // HUD/toolbar only while the cursor is over THIS display, and asks
+          // native to make this window key on entry — so the editor follows the
+          // cursor across displays (design §7, cross-display follow).
           : Stack(
               fit: StackFit.expand,
               children: [
@@ -134,6 +144,10 @@ class _OverlayAppState extends State<OverlayApp> {
                   controller: editor,
                   onExport: _onExport,
                   onCancel: _dismiss,
+                  onActivate: () {
+                    _bridge.focusDisplay();
+                  },
+                  deactivateOnPeer: _peerActivated,
                 ),
                 if (_toast != null)
                   Positioned(

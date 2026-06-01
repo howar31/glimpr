@@ -29,6 +29,10 @@ class CaptureBridge {
   /// may order its window front (capture-then-show).
   Future<void> overlayReady() => _channel.invokeMethod('overlayReady');
 
+  /// Make THIS display's overlay the key window (the editor follows the cursor
+  /// across displays; called when the cursor enters this display).
+  Future<void> focusDisplay() => _channel.invokeMethod('focusDisplay');
+
   /// Warp the OS mouse cursor to a GLOBAL display point (top-left origin,
   /// logical points) so keyboard nudges move the real pointer, not just the
   /// selection (otherwise the next mouse move resets the nudge).
@@ -39,6 +43,7 @@ class CaptureBridge {
   void registerOverlayHandlers({
     required void Function(CapturedDisplay display) onCaptureReady,
     required void Function(String reason, String message) onCaptureFailed,
+    void Function()? onPeerActivated,
   }) {
     _overlay.setMethodCallHandler((call) async {
       switch (call.method) {
@@ -53,6 +58,10 @@ class CaptureBridge {
             args['reason'] as String,
             (args['message'] as String?) ?? '',
           );
+          return null;
+        case 'onPeerActivated':
+          // Another display became the active editor -> this engine steps down.
+          onPeerActivated?.call();
           return null;
         default:
           return null; // onWindowsRefreshed etc. are Phase 4 — ignore.
