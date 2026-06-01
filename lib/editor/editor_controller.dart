@@ -4,7 +4,17 @@ import 'draw_style.dart';
 import 'drawable.dart';
 import 'document.dart';
 
-enum ToolKind { crop, rectangle, arrow, text }
+enum ToolKind {
+  crop,
+  rectangle,
+  ellipse,
+  arrow,
+  line,
+  pen,
+  highlighter,
+  text,
+  step,
+}
 enum EditorPhase { annotate, crop }
 
 /// Mutable editor state exposed as ValueListenables so widgets rebuild narrowly.
@@ -59,10 +69,15 @@ class EditorController {
     final i = selectedIndex.value;
     if (i == null || i >= document.value.drawables.length) return;
     final d = document.value.drawables[i];
-    final restyled = switch (d) {
+    final Drawable restyled = switch (d) {
       RectangleDrawable() => d.withStyle(style.value),
+      EllipseDrawable() => d.withStyle(style.value),
       ArrowDrawable() => d.withStyle(style.value),
+      LineDrawable() => d.withStyle(style.value),
+      HighlighterDrawable() => d.withStyle(style.value),
+      PenDrawable() => d.withStyle(style.value),
       TextDrawable() => d.withStyle(style.value),
+      StepDrawable() => d.withStyle(style.value),
     };
     document.value = document.value.replaceAt(i, restyled);
   }

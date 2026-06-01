@@ -16,12 +16,19 @@ class EditorToolbar extends StatelessWidget {
     required this.onPtEditingDone,
   });
 
-  // Order == 1-based shortcut: 1=Crop, 2=Rectangle, 3=Arrow, 4=Text.
+  // Order == 1-based shortcut (mirror editor_canvas `_onKey` order):
+  // 1=Crop 2=Rectangle 3=Arrow 4=Text 5=Ellipse 6=Line 7=Pen 8=Highlighter
+  // 9=Step. (Wave-2 raster tools append after, with no digit shortcut.)
   static const tools = <(ToolKind, IconData)>[
     (ToolKind.crop, Icons.crop),
     (ToolKind.rectangle, Icons.crop_square),
     (ToolKind.arrow, Icons.north_east),
     (ToolKind.text, Icons.title),
+    (ToolKind.ellipse, Icons.circle_outlined),
+    (ToolKind.line, Icons.horizontal_rule),
+    (ToolKind.pen, Icons.gesture),
+    (ToolKind.highlighter, Icons.border_color),
+    (ToolKind.step, Icons.looks_one),
   ];
 
   @override
@@ -135,13 +142,30 @@ class _OptionsRow extends StatelessWidget {
     return ValueListenableBuilder<ToolKind>(
       valueListenable: controller.tool,
       builder: (_, tool, _) {
-        final draws = tool == ToolKind.rectangle ||
-            tool == ToolKind.arrow ||
-            tool == ToolKind.text;
-        if (!draws) return const SizedBox.shrink();
-        final showsWidth =
-            tool == ToolKind.rectangle || tool == ToolKind.arrow;
-        final showsFont = tool == ToolKind.text;
+        // Tools that carry a color (all vector draw tools; not crop/raster).
+        const colorTools = {
+          ToolKind.rectangle,
+          ToolKind.ellipse,
+          ToolKind.arrow,
+          ToolKind.line,
+          ToolKind.pen,
+          ToolKind.highlighter,
+          ToolKind.text,
+          ToolKind.step,
+        };
+        if (!colorTools.contains(tool)) return const SizedBox.shrink();
+        // Stroke-width applies to the shape/stroke tools (not text/step).
+        const widthTools = {
+          ToolKind.rectangle,
+          ToolKind.ellipse,
+          ToolKind.arrow,
+          ToolKind.line,
+          ToolKind.pen,
+          ToolKind.highlighter,
+        };
+        final showsWidth = widthTools.contains(tool);
+        // Font size = glyph size for text, badge radius for the numbered step.
+        final showsFont = tool == ToolKind.text || tool == ToolKind.step;
         return _Bar(
           child: ValueListenableBuilder<DrawStyle>(
             valueListenable: controller.style,

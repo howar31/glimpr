@@ -51,6 +51,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   // New-shape preview (drag on empty).
   Drawable? _preview;
   Offset? _dragStart;
+  List<Offset>? _penPoints; // accumulated freehand points (pen tool)
 
   // Move/resize an existing drawable.
   int? _editIndex;
@@ -128,10 +129,20 @@ class _EditorCanvasState extends State<EditorCanvas> {
     switch (c.tool.value) {
       case ToolKind.rectangle:
         return (d) => d is RectangleDrawable;
+      case ToolKind.ellipse:
+        return (d) => d is EllipseDrawable;
       case ToolKind.arrow:
         return (d) => d is ArrowDrawable;
+      case ToolKind.line:
+        return (d) => d is LineDrawable;
+      case ToolKind.pen:
+        return (d) => d is PenDrawable;
+      case ToolKind.highlighter:
+        return (d) => d is HighlighterDrawable;
       case ToolKind.text:
         return (d) => d is TextDrawable;
+      case ToolKind.step:
+        return (d) => d is StepDrawable;
       case ToolKind.crop:
         return null;
     }
@@ -181,18 +192,30 @@ class _EditorCanvasState extends State<EditorCanvas> {
       return KeyEventResult.handled;
     }
 
-    // Tool shortcuts: 1=Crop, 2=Rectangle, 3=Arrow, 4=Text.
+    // Tool shortcuts 1-9 (must mirror EditorToolbar.tools order):
+    // 1=Crop 2=Rectangle 3=Arrow 4=Text 5=Ellipse 6=Line 7=Pen 8=Highlighter
+    // 9=Step. Raster tools (blur/pixelate/paste) have no digit shortcut.
     const order = [
       ToolKind.crop,
       ToolKind.rectangle,
       ToolKind.arrow,
       ToolKind.text,
+      ToolKind.ellipse,
+      ToolKind.line,
+      ToolKind.pen,
+      ToolKind.highlighter,
+      ToolKind.step,
     ];
     const digits = [
       LogicalKeyboardKey.digit1,
       LogicalKeyboardKey.digit2,
       LogicalKeyboardKey.digit3,
       LogicalKeyboardKey.digit4,
+      LogicalKeyboardKey.digit5,
+      LogicalKeyboardKey.digit6,
+      LogicalKeyboardKey.digit7,
+      LogicalKeyboardKey.digit8,
+      LogicalKeyboardKey.digit9,
     ];
     final di = digits.indexOf(key);
     if (di != -1) {
@@ -312,8 +335,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
       [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
 
   bool _nearHandles(Drawable d, Offset p) {
-    if (d is RectangleDrawable) {
-      for (final corner in _rectCorners(d.rect.inflate(4))) {
+    if (d is RectShaped) {
+      for (final corner in _rectCorners((d as RectShaped).rect.inflate(4))) {
         if ((corner - p).distance <= 16) return true;
       }
     }
@@ -346,8 +369,23 @@ class _EditorCanvasState extends State<EditorCanvas> {
         final idx = _hitActiveType(p);
         idx != null ? _reEditText(idx) : _startText(p);
         break;
+      case ToolKind.step:
+        // Tap on empty space places a new auto-numbered badge; tap on an
+        // existing badge just selects it (drag the body to move).
+        final idx = _hitActiveType(p);
+        if (idx == null) {
+          c.commitDrawable(StepDrawable(
+              p, nextStepNumber(c.document.value.drawables), c.style.value));
+        } else {
+          c.selectedIndex.value = idx;
+        }
+        break;
       case ToolKind.rectangle:
+      case ToolKind.ellipse:
       case ToolKind.arrow:
+      case ToolKind.line:
+      case ToolKind.pen:
+      case ToolKind.highlighter:
         c.selectedIndex.value = _hitActiveType(p);
         break;
       case ToolKind.crop:
@@ -386,6 +424,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   void _resetDrawState() {
     _preview = null;
     _dragStart = null;
+    _penPoints = null;
   }
 
   void _resetEditState() {
@@ -406,18 +445,21 @@ class _EditorCanvasState extends State<EditorCanvas> {
       return;
     }
     final drawables = c.document.value.drawables;
-    // Rectangle corner-resize: check every rectangle's corners (topmost first)
-    // with a generous tolerance, independent of the current hover selection.
-    if (c.tool.value == ToolKind.rectangle) {
+    // Rect-shape corner-resize (rectangle/ellipse): check every same-type shape's
+    // corners (topmost first) with a generous tolerance, independent of the
+    // current hover selection.
+    final filter = _typeFilter();
+    if (c.tool.value == ToolKind.rectangle ||
+        c.tool.value == ToolKind.ellipse) {
       for (var idx = drawables.length - 1; idx >= 0; idx--) {
         final d = drawables[idx];
-        if (d is! RectangleDrawable) continue;
-        final corners = _rectCorners(d.rect.inflate(4));
+        if (d is! RectShaped || (filter != null && !filter(d))) continue;
+        final corners = _rectCorners((d as RectShaped).rect.inflate(4));
         for (var ci = 0; ci < corners.length; ci++) {
           if ((corners[ci] - p).distance <= 16) {
             _editIndex = idx;
-            _editOriginal = d;
-            _editPreview = d;
+            _editOriginal = drawables[idx];
+            _editPreview = drawables[idx];
             _resizeCorner = ci;
             c.selectedIndex.value = idx;
             return;
@@ -436,6 +478,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     } else {
       _dragStart = p; // start drawing a new same-type drawable (not for text)
       _preview = null;
+      // Pen accumulates the stroke's points as the drag proceeds.
+      if (c.tool.value == ToolKind.pen) _penPoints = [p];
     }
   }
 
@@ -458,10 +502,25 @@ class _EditorCanvasState extends State<EditorCanvas> {
         setState(() =>
             _preview = RectangleDrawable(Rect.fromPoints(s, p), c.style.value));
         break;
+      case ToolKind.ellipse:
+        setState(() =>
+            _preview = EllipseDrawable(Rect.fromPoints(s, p), c.style.value));
+        break;
       case ToolKind.arrow:
         setState(() => _preview = ArrowDrawable(s, p, c.style.value));
         break;
+      case ToolKind.line:
+        setState(() => _preview = LineDrawable(s, p, c.style.value));
+        break;
+      case ToolKind.highlighter:
+        setState(() => _preview = HighlighterDrawable(s, p, c.style.value));
+        break;
+      case ToolKind.pen:
+        _penPoints = [...?_penPoints, p];
+        setState(() => _preview = PenDrawable(_penPoints!, c.style.value));
+        break;
       case ToolKind.text:
+      case ToolKind.step:
       case ToolKind.crop:
         break;
     }
@@ -470,10 +529,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
   void _updateSelectDrag(Offset p) {
     final orig = _editOriginal;
     if (orig == null) return;
-    if (_resizeCorner != null && orig is RectangleDrawable) {
-      final corners = _rectCorners(orig.rect);
+    if (_resizeCorner != null && orig is RectShaped) {
+      final shape = orig as RectShaped;
+      final corners = _rectCorners(shape.rect);
       final opposite = corners[(_resizeCorner! + 2) % 4];
-      setState(() => _editPreview = orig.resized(Rect.fromPoints(opposite, p)));
+      setState(
+          () => _editPreview = shape.resizedTo(Rect.fromPoints(opposite, p)));
     } else {
       final start = _moveStart;
       if (start != null) {

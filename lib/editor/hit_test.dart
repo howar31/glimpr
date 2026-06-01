@@ -19,11 +19,45 @@ bool _hits(Drawable d, Offset p) {
   switch (d) {
     case RectangleDrawable():
       return d.rect.inflate(d.style.strokeWidth).contains(p);
+    case EllipseDrawable():
+      return _hitsEllipse(d.rect, p, d.style.strokeWidth);
     case TextDrawable():
       return d.bounds.contains(p);
     case ArrowDrawable():
-      return _distanceToSegment(p, d.start, d.end) <= _kArrowHitTolerance;
+      return _distanceToSegment(p, d.start, d.end) <= _band(d.style.strokeWidth);
+    case LineDrawable():
+      return _distanceToSegment(p, d.start, d.end) <= _band(d.style.strokeWidth);
+    case HighlighterDrawable():
+      return _distanceToSegment(p, d.start, d.end) <=
+          _band(d.style.strokeWidth * 5);
+    case PenDrawable():
+      return _hitsPolyline(d.points, p, _band(d.style.strokeWidth));
+    case StepDrawable():
+      return (p - d.center).distance <= d.radius;
   }
+}
+
+/// Grab band around a stroke: at least the base tolerance, wider for thick lines.
+double _band(double strokeWidth) =>
+    strokeWidth / 2 > _kArrowHitTolerance ? strokeWidth / 2 : _kArrowHitTolerance;
+
+/// Point inside the (stroke-inflated) ellipse inscribed in [rect].
+bool _hitsEllipse(Rect rect, Offset p, double stroke) {
+  final r = rect.inflate(stroke);
+  final rx = r.width / 2, ry = r.height / 2;
+  if (rx <= 0 || ry <= 0) return false;
+  final dx = (p.dx - r.center.dx) / rx;
+  final dy = (p.dy - r.center.dy) / ry;
+  return dx * dx + dy * dy <= 1;
+}
+
+bool _hitsPolyline(List<Offset> pts, Offset p, double tol) {
+  if (pts.isEmpty) return false;
+  if (pts.length == 1) return (p - pts.first).distance <= tol;
+  for (var i = 0; i < pts.length - 1; i++) {
+    if (_distanceToSegment(p, pts[i], pts[i + 1]) <= tol) return true;
+  }
+  return false;
 }
 
 double _distanceToSegment(Offset p, Offset a, Offset b) {
