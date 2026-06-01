@@ -1,10 +1,15 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import '../editor/editor_controller.dart';
 import '../output/deliver.dart';
+import 'editor_canvas.dart';
 import 'export.dart';
-import 'overlay_canvas.dart';
 
+/// The per-display overlay engine's app. Idle = transparent; on capture it hosts
+/// the annotation editor (EditorCanvas) over the frozen image and, on export,
+/// composites the annotations + crops + delivers (file/clipboard/sound).
 class OverlayApp extends StatefulWidget {
   const OverlayApp({super.key});
   @override
@@ -14,6 +19,8 @@ class OverlayApp extends StatefulWidget {
 class _OverlayAppState extends State<OverlayApp> {
   final _bridge = CaptureBridge();
   CapturedDisplay? _display;
+  ui.Image? _frozen; // decoded once per capture, used for export compositing
+  EditorController? _editor;
   String? _toast; // shown briefly only when a delivery leg failed
 
   @override
@@ -21,46 +28,70 @@ class _OverlayAppState extends State<OverlayApp> {
     super.initState();
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d) async {
-        // Decode the frozen image before we reveal the window. The engine is
-        // already warm (its window is on-screen at alpha 0), so this resolves;
-        // still BOUNDED so a decode hiccup can't stall the reveal.
+        // Warm-decode the image both for the on-screen Image.memory and for the
+        // export ui.Image. The engine is already warm (window on-screen at
+        // alpha 0), so these resolve; bounded so a hiccup can't stall the reveal.
         try {
           await precacheImage(MemoryImage(d.pngBytes), context)
               .timeout(const Duration(milliseconds: 300));
         } catch (_) {
           // Bounded best-effort decode; reveal anyway on failure/timeout.
         }
+        ui.Image? frozen;
+        try {
+          final codec = await ui.instantiateImageCodec(d.pngBytes);
+          frozen = (await codec.getNextFrame()).image;
+        } catch (_) {
+          // If decode fails the export will be skipped; the overlay still shows.
+        }
         if (!mounted) return;
+        _editor?.dispose();
+        _frozen?.dispose();
         setState(() {
           _toast = null;
+          _frozen = frozen;
+          _editor = EditorController();
           _display = d;
         });
-        // The frozen frame is now built (painted into the alpha-0 window). Tell
-        // native to reveal this display's window (alpha 1 + makeKey) so the
-        // already-rasterized frame appears with no blank flash.
+        // Frozen frame is built; reveal this display's window (no blank flash).
         _bridge.overlayReady();
       },
       onCaptureFailed: (reason, msg) {
-        if (mounted) setState(() => _display = null);
+        if (mounted) _resetState();
       },
     );
   }
 
-  void _dismiss() {
+  void _resetState() {
+    _editor?.dispose();
+    _frozen?.dispose();
     setState(() {
       _display = null;
       _toast = null;
+      _editor = null;
+      _frozen = null;
     });
+  }
+
+  void _dismiss() {
+    _resetState();
     _bridge.dismissOverlay();
   }
 
-  Future<void> _onCommit(Rect selection) async {
+  Future<void> _onExport(Rect? selectionLogical) async {
     final d = _display;
-    if (d == null) {
+    final frozen = _frozen;
+    final editor = _editor;
+    if (d == null || frozen == null || editor == null) {
       _dismiss();
       return;
     }
-    final result = await exportSelection(display: d, selection: selection);
+    final result = await exportAnnotated(
+      display: d,
+      frozenImage: frozen,
+      drawables: editor.document.value.drawables,
+      selectionLogical: selectionLogical,
+    );
     // Save + clipboard are the legs that matter; a sound-only failure still
     // dismisses (the capture succeeded where it counts).
     final critical = !result.savedOk || !result.copiedToClipboard;
@@ -83,24 +114,26 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   Widget build(BuildContext context) {
     final d = _display;
+    final frozen = _frozen;
+    final editor = _editor;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),
-      home: d == null
-          // Idle: fully transparent so the warm, on-screen overlay window shows
-          // nothing until a capture sets the frozen frame.
+      home: (d == null || frozen == null || editor == null)
+          // Idle: fully transparent until a capture sets the frozen frame.
           ? const SizedBox.shrink()
           : Stack(
               fit: StackFit.expand,
               children: [
-                OverlayCanvas(
+                EditorCanvas(
                   display: d,
+                  controller: editor,
+                  onExport: _onExport,
                   onCancel: _dismiss,
-                  onCommit: _onCommit,
                 ),
                 if (_toast != null)
                   Positioned(
-                    bottom: 48,
+                    bottom: 80,
                     left: 0,
                     right: 0,
                     child: Center(
