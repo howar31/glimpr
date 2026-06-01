@@ -59,6 +59,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
   // The cursor is over THIS display -> show the interactive HUD/toolbar here.
   // Follows the mouse across displays; the launch (cursor) display starts active.
   late bool _active;
+  // The pointer is over the CANVAS (not the toolbar) -> draw our reticle there
+  // and hide the system cursor; over the toolbar we let the normal click cursor
+  // show. Driven by the canvas MouseRegion's enter/exit.
+  bool _overCanvas = false;
+  bool _lastHide = false; // last system-cursor-hidden value pushed to native
 
   // New-shape preview (drag on empty).
   Drawable? _preview;
@@ -100,12 +105,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
   @override
   void initState() {
     super.initState();
-    _cursor = Offset(widget.display.width / 2, widget.display.height / 2);
+    // Seed the crosshair at the real cursor (native passes its display-local
+    // position on the cursor display), not the display centre.
+    final cx = widget.display.cursorX, cy = widget.display.cursorY;
+    _cursor = (cx != null && cy != null)
+        ? Offset(cx, cy)
+        : Offset(widget.display.width / 2, widget.display.height / 2);
     _toolbarPos = Offset(
       widget.display.width / 2 - 160,
       widget.display.height - 120,
     );
     _active = widget.display.isCursorDisplay; // launch display starts active
+    _overCanvas = widget.display.isCursorDisplay; // pointer starts over canvas
     c.document.addListener(_rebuild);
     c.selectedIndex.addListener(_rebuild);
     c.tool.addListener(_rebuild);
@@ -598,13 +609,34 @@ class _EditorCanvasState extends State<EditorCanvas> {
   /// follows everywhere on the active display — over the toolbar, and while the
   /// left button is still held after a right-click cancel.
   void _trackCursor(PointerEvent e) {
-    if (_active && _showsCrosshair) {
+    // Track for BOTH cursors: the full-screen crosshair (crop/blur/pixelate) and
+    // the small reticle (drawing tools) follow the pointer on the active display.
+    if (_active) {
       setState(() => _cursor = _clampToDisplay(e.localPosition));
     }
   }
 
-  /// True while a draw / crop / move-resize drag is running on this display.
-  bool get _dragging => _dragStart != null || _editIndex != null || _cropping;
+  /// True when our small reticle should show: an active drawing tool (not a
+  /// region tool, which uses the full crosshair) with the pointer over the canvas
+  /// and no inline text edit in progress.
+  bool get _showsReticle =>
+      _active && !_showsCrosshair && _overCanvas && !_editingText;
+
+  /// Hide the system cursor whenever we're drawing OUR own cursor (crosshair or
+  /// reticle) over the canvas, or while dragging (the drag may briefly stray off
+  /// the display before the confine warps it back). Show it over the toolbar and
+  /// while editing text. Only the active engine drives the (app-global) state;
+  /// pushed on change. Called from build so any setState reconciles it.
+  void _syncCursorHidden() {
+    final hide =
+        _active &&
+        !_editingText &&
+        (_overCanvas || _dragStart != null || _editIndex != null || _cropping);
+    if (hide != _lastHide) {
+      _lastHide = hide;
+      _bridge.setCursorHidden(hide);
+    }
+  }
 
   /// Clamp a position to this display's bounds. During a drag the (hidden)
   /// hardware cursor can wander onto another display — we freeze the cross-display
@@ -881,6 +913,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   @override
   Widget build(BuildContext context) {
+    _syncCursorHidden(); // reconcile system-cursor visibility (pushed on change)
     final inCrop = _inCrop;
     final showsCrosshair = _showsCrosshair;
     final loupeOrigin = _loupeOrigin();
@@ -1009,6 +1042,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
                   ),
                 ),
               ),
+            // Small reticle for the drawing tools (replaces the system arrow with
+            // a precise inverting cross). Region tools use the crosshair above.
+            if (_showsReticle)
+              IgnorePointer(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: ReticlePainter(_cursor),
+                ),
+              ),
             // Gesture + hover layer. A Listener catches the right button reliably
             // even mid-drag (GestureDetector's secondary-tap loses the arena to an
             // active pan), so right-click can cancel an in-progress crop/draw.
@@ -1022,12 +1064,16 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 onPointerMove: _onPointerButtons,
                 onPointerUp: _onPointerButtons,
                 child: MouseRegion(
-                  // Hidden for the crosshair tools (our crosshair replaces it)
-                  // and during ANY drag, so a drag pushed past the edge doesn't
-                  // show a system cursor escaping onto the next display.
-                  cursor: (_active && (showsCrosshair || _dragging))
+                  // Over the canvas we always draw our OWN cursor (full crosshair
+                  // for region tools, small reticle for drawing tools), so hide
+                  // the system cursor — except while editing text. Over the
+                  // toolbar this region isn't hit, so its normal click cursor
+                  // shows.
+                  cursor: (_active && !_editingText)
                       ? SystemMouseCursors.none
                       : SystemMouseCursors.basic,
+                  onEnter: (_) => setState(() => _overCanvas = true),
+                  onExit: (_) => setState(() => _overCanvas = false),
                   onHover: _onHover,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,

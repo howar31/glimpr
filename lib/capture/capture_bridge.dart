@@ -31,6 +31,12 @@ class CaptureBridge {
   /// may order its window front (capture-then-show).
   Future<void> overlayReady() => _channel.invokeMethod('overlayReady');
 
+  /// Hide / show the system cursor (the active editor engine drives this — hidden
+  /// over the canvas where we draw our own crosshair/reticle, shown over the
+  /// toolbar). Native keeps it balanced and always restores it on dismiss.
+  Future<void> setCursorHidden(bool hidden) =>
+      _channel.invokeMethod('setCursorHidden', {'hidden': hidden});
+
   /// Confine the cursor to this display while a draw/crop drag runs (and freeze
   /// the cross-display active handoff), so a stroke can't be broken by the cursor
   /// wandering onto another display. Released when the drag ends.

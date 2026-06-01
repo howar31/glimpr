@@ -35,6 +35,8 @@ class _OverlayAppState extends State<OverlayApp> {
   // True while applying a tool/style update received from another display, so it
   // is not re-broadcast back (avoids a sync loop).
   bool _applyingRemote = false;
+  // Increments each capture so EditorCanvas is rebuilt fresh (see onCaptureReady).
+  int _captureSeq = 0;
 
   @override
   void initState() {
@@ -68,6 +70,12 @@ class _OverlayAppState extends State<OverlayApp> {
           _frozen = frozen;
           _editor = EditorController(toolStyles: _toolStyles);
           _display = d;
+          // Bump so EditorCanvas gets a fresh State each capture (re-runs
+          // initState with the correct isCursorDisplay + binds the new
+          // controller). Without this, a display whose editor was NOT the one
+          // that dismissed keeps its stale State -> stale _active -> no HUD until
+          // the cursor crosses.
+          _captureSeq++;
         });
         _attachShared(_editor!); // sync tool/style with the other displays
         // Frozen frame is built; reveal this display's window (no blank flash).
@@ -200,6 +208,7 @@ class _OverlayAppState extends State<OverlayApp> {
               fit: StackFit.expand,
               children: [
                 EditorCanvas(
+                  key: ValueKey(_captureSeq),
                   display: d,
                   frozenImage: frozen,
                   controller: editor,

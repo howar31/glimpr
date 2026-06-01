@@ -11,6 +11,11 @@ class CapturedDisplay {
   final double height;
   final double scaleFactor;
   final bool isCursorDisplay;
+  // Cursor's display-local logical position at capture (top-left origin), only on
+  // the cursor display — used to seed the crosshair where the pointer actually
+  // is, instead of the display centre. Null on the non-cursor displays.
+  final double? cursorX;
+  final double? cursorY;
 
   const CapturedDisplay({
     required this.displayId,
@@ -21,16 +26,20 @@ class CapturedDisplay {
     required this.height,
     required this.scaleFactor,
     required this.isCursorDisplay,
+    this.cursorX,
+    this.cursorY,
   });
 
   factory CapturedDisplay.fromMap(Map<dynamic, dynamic> m) => CapturedDisplay(
-        displayId: m['displayId'] as int,
-        pngBytes: m['pngBytes'] as Uint8List,
-        left: (m['left'] as num).toDouble(),
-        top: (m['top'] as num).toDouble(),
-        width: (m['width'] as num).toDouble(),
-        height: (m['height'] as num).toDouble(),
-        scaleFactor: (m['scaleFactor'] as num).toDouble(),
-        isCursorDisplay: m['isCursorDisplay'] as bool,
-      );
+    displayId: m['displayId'] as int,
+    pngBytes: m['pngBytes'] as Uint8List,
+    left: (m['left'] as num).toDouble(),
+    top: (m['top'] as num).toDouble(),
+    width: (m['width'] as num).toDouble(),
+    height: (m['height'] as num).toDouble(),
+    scaleFactor: (m['scaleFactor'] as num).toDouble(),
+    isCursorDisplay: m['isCursorDisplay'] as bool,
+    cursorX: (m['cursorX'] as num?)?.toDouble(),
+    cursorY: (m['cursorY'] as num?)?.toDouble(),
+  );
 }

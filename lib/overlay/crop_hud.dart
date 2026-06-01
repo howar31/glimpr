@@ -15,13 +15,52 @@ class CrosshairPainter extends CustomPainter {
       ..strokeWidth = 1
       ..blendMode = BlendMode.difference;
     canvas.drawLine(
-        Offset(0, cursor.dy + 0.5), Offset(size.width, cursor.dy + 0.5), p);
+      Offset(0, cursor.dy + 0.5),
+      Offset(size.width, cursor.dy + 0.5),
+      p,
+    );
     canvas.drawLine(
-        Offset(cursor.dx + 0.5, 0), Offset(cursor.dx + 0.5, size.height), p);
+      Offset(cursor.dx + 0.5, 0),
+      Offset(cursor.dx + 0.5, size.height),
+      p,
+    );
   }
 
   @override
   bool shouldRepaint(CrosshairPainter old) => old.cursor != cursor;
+}
+
+/// A SMALL inverting reticle (a short plus) drawn at [cursor] — the precise-aim
+/// cursor that replaces the system arrow for the drawing tools (rectangle, arrow,
+/// pen, etc.). The region tools (crop / blur / pixelate) use the full-screen
+/// [CrosshairPainter] + loupe instead. Same inverting blend (difference with
+/// white) as the full crosshair, so it stays visible over any background.
+class ReticlePainter extends CustomPainter {
+  final Offset cursor;
+  final double arm; // half-length of each plus stroke, in logical px
+  const ReticlePainter(this.cursor, {this.arm = 9});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = const Color(0xFFFFFFFF)
+      ..strokeWidth = 1
+      ..blendMode = BlendMode.difference;
+    canvas.drawLine(
+      Offset(cursor.dx - arm, cursor.dy + 0.5),
+      Offset(cursor.dx + arm, cursor.dy + 0.5),
+      p,
+    );
+    canvas.drawLine(
+      Offset(cursor.dx + 0.5, cursor.dy - arm),
+      Offset(cursor.dx + 0.5, cursor.dy + arm),
+      p,
+    );
+  }
+
+  @override
+  bool shouldRepaint(ReticlePainter old) =>
+      old.cursor != cursor || old.arm != arm;
 }
 
 /// Paints the text-selection highlight ourselves so the selected range stays
@@ -78,9 +117,16 @@ class LoupePainter extends CustomPainter {
     final centerPx = cursorLogical * scaleFactor; // native px under the cursor
     final spanPx = size.width / zoom; // native px visible across the loupe
     final src = Rect.fromCenter(
-        center: Offset(centerPx.dx, centerPx.dy), width: spanPx, height: spanPx);
+      center: Offset(centerPx.dx, centerPx.dy),
+      width: spanPx,
+      height: spanPx,
+    );
     canvas.drawImageRect(
-        image, src, dst, Paint()..filterQuality = FilterQuality.none);
+      image,
+      src,
+      dst,
+      Paint()..filterQuality = FilterQuality.none,
+    );
 
     // Pixel grid (one cell per source pixel) — inverting blend so the lines
     // show over any magnified content.
@@ -102,19 +148,24 @@ class LoupePainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..blendMode = BlendMode.difference;
     canvas.drawRect(
-        Rect.fromCenter(
-            center: size.center(Offset.zero), width: zoom, height: zoom),
-        marker);
+      Rect.fromCenter(
+        center: size.center(Offset.zero),
+        width: zoom,
+        height: zoom,
+      ),
+      marker,
+    );
     canvas.restore();
 
     // Border (inverting blend so the loupe frame is visible on any background).
     canvas.drawRRect(
-        rrect,
-        Paint()
-          ..color = const Color(0xFFFFFFFF)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..blendMode = BlendMode.difference);
+      rrect,
+      Paint()
+        ..color = const Color(0xFFFFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..blendMode = BlendMode.difference,
+    );
   }
 
   @override

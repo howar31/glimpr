@@ -85,14 +85,24 @@ final class ScreenCapturer {
       let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
       guard let png = Self.pngData(from: cgImage) else { continue }
       let frame = d.frame
-      out.append([
+      let isCursor = d.displayID == cursorDisplayID
+      var dict: [String: Any] = [
         "displayId": Int(d.displayID),
         "pngBytes": FlutterStandardTypedData(bytes: png),
         "left": Double(frame.origin.x), "top": Double(frame.origin.y),
         "width": Double(frame.size.width), "height": Double(frame.size.height),
         "scaleFactor": Double(scale),
-        "isCursorDisplay": d.displayID == cursorDisplayID,
-      ])
+        "isCursorDisplay": isCursor,
+      ]
+      // Seed the crosshair at the real cursor (display-local, top-left origin)
+      // instead of the display centre. Same Cocoa global -> local conversion as
+      // setActiveDisplay (NSEvent.mouseLocation + NSScreen.frame, bottom-left).
+      if isCursor,
+         let s = NSScreen.screens.first(where: { Self.screenNumber($0) == d.displayID }) {
+        dict["cursorX"] = Double(mouse.x - s.frame.minX)
+        dict["cursorY"] = Double(s.frame.maxY - mouse.y)
+      }
+      out.append(dict)
     }
     return out
   }
@@ -179,6 +189,12 @@ final class OverlayManager {
   // drag event (dragMonitor, tightest) plus the poll as a backup.
   private var drawingLockID: CGDirectDisplayID?
   private var dragMonitor: Any? // local NSEvent monitor confining on each drag
+  // Owned system-cursor visibility: the active editor engine drives this (hide
+  // over the canvas where we draw our own crosshair/reticle, show over the
+  // toolbar). A single owned bool keeps NSCursor.hide/unhide balanced; always
+  // restored on dismiss. NSCursor.hide is app-global, so it also covers the
+  // instant the cursor strays onto another display mid-drag.
+  private var cursorHidden = false
 
   deinit { if let m = dragMonitor { NSEvent.removeMonitor(m) } }
 
@@ -245,6 +261,12 @@ final class OverlayManager {
           if let a = call.arguments as? [String: Any],
              let locked = a["locked"] as? Bool {
             self?.setDrawingLock(locked ? id : nil)
+          }
+          result(nil)
+        case "setCursorHidden":
+          if let a = call.arguments as? [String: Any],
+             let hidden = a["hidden"] as? Bool {
+            self?.setCursorHidden(hidden)
           }
           result(nil)
         case "warpCursor":
@@ -389,20 +411,23 @@ final class OverlayManager {
           self?.confineToDrawingDisplay()
           return e
         }
-        // App-level hide covers ALL our overlay windows (every display), so the
-        // cursor stays hidden even in the instant it strays onto another display
-        // before the confine warps it back — no flash. Balanced with unhide.
-        NSCursor.hide()
       }
       drawingLockID = id
     } else {
       if drawingLockID != nil {
         if let m = dragMonitor { NSEvent.removeMonitor(m); dragMonitor = nil }
         confineToDrawingDisplay()
-        NSCursor.unhide()
       }
       drawingLockID = nil
     }
+  }
+
+  /// Owned hide/show of the system cursor (the active editor engine drives it).
+  /// Single owned bool -> NSCursor.hide/unhide stays balanced.
+  func setCursorHidden(_ hidden: Bool) {
+    guard hidden != cursorHidden else { return }
+    cursorHidden = hidden
+    if hidden { NSCursor.hide() } else { NSCursor.unhide() }
   }
 
   /// Warp the cursor back to the drawing display's nearest edge if it strayed
@@ -476,6 +501,7 @@ final class OverlayManager {
   /// the view off-screen and risk a blank re-show.
   func dismiss() {
     stopCursorTracking()
+    setCursorHidden(false) // always restore the system cursor when the overlay closes
     pendingShow.removeAll()
     for (_, u) in units {
       u.window.alphaValue = 0
