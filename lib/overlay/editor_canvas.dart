@@ -1038,6 +1038,13 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       image: widget.frozenImage,
                       cursorLogical: _cursor,
                       scaleFactor: widget.display.scaleFactor,
+                      drawables: _effectiveDrawables(),
+                      blurredFull: _blurredFull,
+                      pixelatedFull: _pixelatedFull,
+                      logicalSize: Size(
+                        widget.display.width,
+                        widget.display.height,
+                      ),
                     ),
                   ),
                 ),

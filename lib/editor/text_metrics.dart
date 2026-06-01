@@ -16,7 +16,12 @@ TextSpan buildTextSpan(TextDrawable d) {
   if (d.runs.isEmpty || d.text.isEmpty) {
     return TextSpan(text: ' ', style: textStyleOf(d.style));
   }
+  // Root style mirrors the inline field's `style` (RichTextController.buildTextSpan
+  // wraps its runs the same way), so the painted glyphs lay out IDENTICALLY to
+  // the editor's caret/selection geometry — keeping the caret aligned even with
+  // mixed per-run sizes.
   return TextSpan(
+    style: textStyleOf(d.style),
     children: [
       for (final r in d.runs)
         TextSpan(
@@ -37,6 +42,7 @@ Size measureText(TextDrawable d) {
   final tp = TextPainter(
     text: buildTextSpan(d),
     textDirection: TextDirection.ltr,
+    strutStyle: StrutStyle.disabled, // match the inline field's layout
   )..layout();
   return tp.size;
 }

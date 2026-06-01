@@ -80,6 +80,7 @@ class DrawablePainter extends CustomPainter {
         final tp = TextPainter(
           text: buildTextSpan(d),
           textDirection: TextDirection.ltr,
+          strutStyle: StrutStyle.disabled, // match the inline field's layout
         )..layout();
         tp.paint(canvas, d.position);
       case StepDrawable():

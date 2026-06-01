@@ -1,5 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../editor/drawable.dart';
+import '../editor/drawable_painter.dart';
 
 /// Full-screen crosshair lines through [cursor] (logical coords). Uses an
 /// inverting blend (BlendMode.difference with white) so the line flips whatever
@@ -79,8 +81,11 @@ class TextSelectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (!selection.isValid || selection.isCollapsed) return;
-    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(
+      text: span,
+      textDirection: TextDirection.ltr,
+      strutStyle: StrutStyle.disabled, // match the inline field's layout
+    )..layout();
     final paint = Paint()..color = const Color(0x553A7BFF);
     for (final box in tp.getBoxesForSelection(selection)) {
       canvas.drawRect(box.toRect().shift(origin), paint);
@@ -99,11 +104,24 @@ class LoupePainter extends CustomPainter {
   final Offset cursorLogical;
   final double scaleFactor;
   final double zoom;
+  // Drawables + whole-frame blur/pixelate, so the loupe shows the COMPOSITED
+  // result (e.g. a committed blur region reads as blurred, matching the screen
+  // and the export) instead of the raw frozen pixels. [logicalSize] is the
+  // display's logical size (the painter stretches the whole-frame masks across
+  // it). Empty list = plain magnifier (e.g. unit tests).
+  final List<Drawable> drawables;
+  final ui.Image? blurredFull;
+  final ui.Image? pixelatedFull;
+  final Size logicalSize;
   const LoupePainter({
     required this.image,
     required this.cursorLogical,
     required this.scaleFactor,
     this.zoom = 8,
+    this.drawables = const [],
+    this.blurredFull,
+    this.pixelatedFull,
+    this.logicalSize = Size.zero,
   });
 
   @override
@@ -127,6 +145,24 @@ class LoupePainter extends CustomPainter {
       dst,
       Paint()..filterQuality = FilterQuality.none,
     );
+
+    // Magnify the annotation layer on top of the frozen pixels, mapped so that
+    // logical coords land 1:1 with the frozen region above (1 logical px =
+    // scaleFactor*zoom loupe px, centered on the cursor). This makes committed
+    // blur/pixelate (and other drawables) appear in the loupe as on screen.
+    if (drawables.isNotEmpty && !logicalSize.isEmpty) {
+      canvas.save();
+      canvas.translate(size.width / 2, size.height / 2);
+      canvas.scale(scaleFactor * zoom);
+      canvas.translate(-cursorLogical.dx, -cursorLogical.dy);
+      DrawablePainter(
+        drawables: drawables,
+        selectedIndex: null,
+        blurredFull: blurredFull,
+        pixelatedFull: pixelatedFull,
+      ).paint(canvas, logicalSize);
+      canvas.restore();
+    }
 
     // Pixel grid (one cell per source pixel) — inverting blend so the lines
     // show over any magnified content.
@@ -172,5 +208,8 @@ class LoupePainter extends CustomPainter {
   bool shouldRepaint(LoupePainter old) =>
       old.cursorLogical != cursorLogical ||
       old.image != image ||
-      old.zoom != zoom;
+      old.zoom != zoom ||
+      old.drawables != drawables ||
+      old.blurredFull != blurredFull ||
+      old.pixelatedFull != pixelatedFull;
 }
