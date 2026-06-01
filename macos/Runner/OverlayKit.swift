@@ -164,6 +164,24 @@ final class OverlayManager {
   // window takes key/active focus on reveal (see show()). nil = unknown.
   private var keyDisplayID: CGDirectDisplayID?
 
+  // Single-authority cross-display follow: a high-frequency poll of the GLOBAL
+  // cursor position decides which display is active (one source of truth),
+  // instead of each engine guessing from its own key-window-gated mouse events
+  // and handing off asynchronously (which raced -> flicker). Runs only while an
+  // overlay session is on screen.
+  private var cursorTimer: Timer?
+  private var activeID: CGDirectDisplayID?
+  // While a draw/crop drag is in progress this holds the drawing display. The
+  // active handoff is frozen, and the cursor is confined to the display by
+  // warping it back to the edge if it strays (coupled, so speed is unchanged;
+  // the cursor is hidden + the rendered crosshair is clamped during the drag, so
+  // the confinement is invisible and jitter-free). The confine runs on every
+  // drag event (dragMonitor, tightest) plus the poll as a backup.
+  private var drawingLockID: CGDirectDisplayID?
+  private var dragMonitor: Any? // local NSEvent monitor confining on each drag
+
+  deinit { if let m = dragMonitor { NSEvent.removeMonitor(m) } }
+
   init() { buildUnits() }
 
   /// Re-sync the window/engine set on display hot-plug (idle only — design §17
@@ -194,6 +212,14 @@ final class OverlayManager {
       // The implicit engine runs main(); a per-engine glimpr/role channel tells
       // Dart to show the OverlayApp rather than the debug control.
       let vc = FlutterViewController()
+      // Track mouse hover/enter/exit whenever the APP is active, not only when
+      // THIS window is key (Flutter's default is .inKeyWindow). The editor
+      // follows the cursor across displays via MouseRegion.onEnter -> makeKey;
+      // with the default, a non-key display can't report the cursor until it has
+      // already become key (an async round-trip), so a fast cross-display move
+      // lagged or stalled. .inActiveApp lets every overlay's view fire enter/exit
+      // immediately on cross, regardless of which window is currently key.
+      vc.mouseTrackingMode = .inActiveApp
       RegisterGeneratedPlugins(registry: vc)
       vc.backgroundColor = NSColor.clear
       let msgr = vc.engine.binaryMessenger
@@ -206,13 +232,21 @@ final class OverlayManager {
       control.setMethodCallHandler { [weak self] call, result in
         switch call.method {
         case "overlayReady": self?.show(displayID: id); result(nil)
-        case "focusDisplay": self?.focus(displayID: id); result(nil)
         case "broadcastEditorState":
           if let a = call.arguments as? [String: Any] {
             self?.broadcastEditorState(from: id, args: a)
           }
           result(nil)
         case "dismissOverlay": self?.dismiss(); result(nil)
+        case "setDrawingLock":
+          // Confine the cursor to THIS display while a draw/crop drag is in
+          // progress, and freeze the active handoff so the stroke isn't wiped if
+          // the pointer would otherwise wander onto another display.
+          if let a = call.arguments as? [String: Any],
+             let locked = a["locked"] as? Bool {
+            self?.setDrawingLock(locked ? id : nil)
+          }
+          result(nil)
         case "warpCursor":
           if let a = call.arguments as? [String: Any],
              let x = a["x"] as? Double, let y = a["y"] as? Double {
@@ -287,6 +321,8 @@ final class OverlayManager {
       pendingShow.insert(id)
       unit.overlay.invokeMethod("onCaptureReady", arguments: ["display": f])
     }
+    // One authority decides the active display from here until dismiss.
+    startCursorTracking()
   }
 
   /// Capture-then-show: the window is already on-screen + warm (alpha 0). Once
@@ -298,32 +334,131 @@ final class OverlayManager {
     unit.window.setFrame(unit.window.screen?.frame ?? unit.window.frame, display: true)
     unit.window.alphaValue = 1
     // ALL displays are interactive so the editor can FOLLOW the cursor across
-    // them (each window re-keys on mouse-enter via focusDisplay). Only the cursor
-    // display takes the INITIAL key/active focus on reveal; making every overlay
-    // key in turn would let the last-revealed (often NON-cursor) display win.
-    // Unknown cursor (nil) or a missing unit -> key this one (single-display path).
+    // them (the cursor poll re-keys the active display via setActiveDisplay).
+    // Only the cursor display takes the INITIAL key/active focus on reveal;
+    // making every overlay key in turn would let the last-revealed (often
+    // NON-cursor) display win. Unknown cursor (nil) -> key this one (single
+    // display path).
     unit.window.ignoresMouseEvents = false
     let cursorKnown = keyDisplayID != nil && units[keyDisplayID!] != nil
     if !cursorKnown || id == keyDisplayID {
-      NSApp.activate(ignoringOtherApps: true)
+      if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
       if unit.window.canBecomeKey { unit.window.makeKeyAndOrderFront(nil) }
     }
     unit.window.orderFrontRegardless()
     pendingShow.remove(id)
   }
 
-  /// Make a display's overlay the key window — called when the cursor enters it
-  /// so the editor "follows" the cursor across displays. Keyboard events go only
-  /// to the key window, so the key window must track the active display. Also
-  /// tells the OTHER displays to step down (one active editor at a time).
-  private func focus(displayID id: CGDirectDisplayID) {
+  // ---- single-authority cross-display follow -----------------------------
+
+  /// Begin polling the global cursor so ONE place decides the active display for
+  /// the lifetime of this overlay session. Seeds the active display to the
+  /// capture cursor display so the first real cross is what triggers a push.
+  private func startCursorTracking() {
+    activeID = keyDisplayID
+    cursorTimer?.invalidate()
+    // ~120 Hz on the common run-loop modes so it keeps firing during AppKit
+    // mouse-tracking loops (a drag) too. Polling NSEvent.mouseLocation is cheap
+    // and permission-free.
+    let t = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+      self?.tickCursor()
+    }
+    RunLoop.main.add(t, forMode: .common)
+    cursorTimer = t
+  }
+
+  private func stopCursorTracking() {
+    cursorTimer?.invalidate()
+    cursorTimer = nil
+    activeID = nil
+    setDrawingLock(nil) // re-couple the cursor if a drag was somehow still locked
+  }
+
+  /// Enter (id) / leave (nil) a drawing drag on a display. While locked, the poll
+  /// freezes the active handoff and a per-drag-event monitor confines the cursor
+  /// to the display. On leave, remove the monitor (a final confine snaps the
+  /// cursor in so the active editor doesn't jump away as the drag ends).
+  func setDrawingLock(_ id: CGDirectDisplayID?) {
+    if id != nil {
+      if drawingLockID == nil {
+        // Match leftMouseDragged ONLY: our own warp emits a mouseMoved, so this
+        // can't feed back into itself (which would runaway the cursor).
+        dragMonitor = NSEvent.addLocalMonitorForEvents(
+          matching: [.leftMouseDragged]
+        ) { [weak self] e in
+          self?.confineToDrawingDisplay()
+          return e
+        }
+        // App-level hide covers ALL our overlay windows (every display), so the
+        // cursor stays hidden even in the instant it strays onto another display
+        // before the confine warps it back — no flash. Balanced with unhide.
+        NSCursor.hide()
+      }
+      drawingLockID = id
+    } else {
+      if drawingLockID != nil {
+        if let m = dragMonitor { NSEvent.removeMonitor(m); dragMonitor = nil }
+        confineToDrawingDisplay()
+        NSCursor.unhide()
+      }
+      drawingLockID = nil
+    }
+  }
+
+  /// Warp the cursor back to the drawing display's nearest edge if it strayed
+  /// out. Coupled (CGAssociate stays on), so cursor speed is unchanged; with the
+  /// cursor hidden + the crosshair clamped during the drag this is invisible and
+  /// jitter-free. CGDisplayBounds + the CG cursor location are global top-left.
+  private func confineToDrawingDisplay() {
+    guard let id = drawingLockID, let loc = CGEvent(source: nil)?.location else { return }
+    let b = CGDisplayBounds(id)
+    guard b.width > 0, !b.contains(loc) else { return }
+    let x = min(max(loc.x, b.minX + 1), b.maxX - 1)
+    let y = min(max(loc.y, b.minY + 1), b.maxY - 1)
+    CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
+    CGAssociateMouseAndMouseCursorPosition(1)
+  }
+
+  /// One poll: which display holds the GLOBAL cursor right now? On a change,
+  /// hand the active role to that display (key + broadcast). NSEvent.mouseLocation
+  /// and NSScreen.frame share the Cocoa bottom-left global space, so no flip is
+  /// needed to test containment.
+  private func tickCursor() {
+    // During a draw/crop drag: confine the cursor (backup to the per-event
+    // monitor) and do NOT hand off the active role (that would wipe the stroke).
+    if drawingLockID != nil {
+      confineToDrawingDisplay()
+      return
+    }
+    let mouse = NSEvent.mouseLocation
+    guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+    else { return } // between displays / in a gap: keep the current active
+    let id = displayID(of: screen)
+    guard id != 0, units[id] != nil, id != activeID else { return }
+    setActiveDisplay(id, mouseGlobal: mouse, screenFrame: screen.frame)
+  }
+
+  /// Authoritatively move the active editor to [id]: make its window key (so the
+  /// keyboard follows) and broadcast the new active id + the cursor's
+  /// display-local logical point to EVERY engine. Each engine compares the id to
+  /// itself to show/hide its HUD, and seeds its crosshair from the point so the
+  /// cross lands without a stale frame. One synchronous fan-out, no round-trip.
+  private func setActiveDisplay(_ id: CGDirectDisplayID, mouseGlobal: NSPoint, screenFrame: NSRect) {
+    activeID = id
     guard let unit = units[id] else { return }
     if !unit.window.isKeyWindow {
-      NSApp.activate(ignoringOtherApps: true)
+      if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
       if unit.window.canBecomeKey { unit.window.makeKey() }
     }
-    for (otherID, u) in units where otherID != id {
-      u.overlay.invokeMethod("onPeerActivated", arguments: nil)
+    // Global bottom-left point -> display-local TOP-left logical point (what the
+    // Flutter editor uses): x relative to the display's left; y measured down
+    // from the display's top (screenFrame.maxY).
+    let localX = Double(mouseGlobal.x - screenFrame.minX)
+    let localY = Double(screenFrame.maxY - mouseGlobal.y)
+    for (_, u) in units {
+      u.overlay.invokeMethod(
+        "onActiveDisplay",
+        arguments: ["activeId": Int(id), "cursorX": localX, "cursorY": localY])
     }
   }
 
@@ -340,6 +475,7 @@ final class OverlayManager {
   /// the next capture re-reveals instantly — never orderOut, which would drop
   /// the view off-screen and risk a blank re-show.
   func dismiss() {
+    stopCursorTracking()
     pendingShow.removeAll()
     for (_, u) in units {
       u.window.alphaValue = 0

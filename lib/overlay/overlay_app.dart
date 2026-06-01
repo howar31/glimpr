@@ -25,9 +25,13 @@ class _OverlayAppState extends State<OverlayApp> {
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
   String? _toast; // shown briefly only when a delivery leg failed
-  // Bumped when native reports another display became the active editor, so this
-  // engine's EditorCanvas steps down (the editor follows the cursor).
-  final ValueNotifier<int> _peerActivated = ValueNotifier(0);
+  // The native cursor poll's single source of truth: which display is the active
+  // editor + the cursor's display-local point. Every engine's EditorCanvas reads
+  // this and shows its HUD only when the id matches its own display.
+  final ValueNotifier<({int id, Offset cursor})> _activeSignal = ValueNotifier((
+    id: -1,
+    cursor: Offset.zero,
+  ));
   // True while applying a tool/style update received from another display, so it
   // is not re-broadcast back (avoids a sync loop).
   bool _applyingRemote = false;
@@ -41,8 +45,10 @@ class _OverlayAppState extends State<OverlayApp> {
         // export ui.Image. The engine is already warm (window on-screen at
         // alpha 0), so these resolve; bounded so a hiccup can't stall the reveal.
         try {
-          await precacheImage(MemoryImage(d.pngBytes), context)
-              .timeout(const Duration(milliseconds: 300));
+          await precacheImage(
+            MemoryImage(d.pngBytes),
+            context,
+          ).timeout(const Duration(milliseconds: 300));
         } catch (_) {
           // Bounded best-effort decode; reveal anyway on failure/timeout.
         }
@@ -70,8 +76,8 @@ class _OverlayAppState extends State<OverlayApp> {
       onCaptureFailed: (reason, msg) {
         if (mounted) _resetState();
       },
-      onPeerActivated: () {
-        if (mounted) _peerActivated.value++;
+      onActiveDisplay: (activeId, cursor) {
+        if (mounted) _activeSignal.value = (id: activeId, cursor: cursor);
       },
       onEditorState: _applyRemoteEditorState,
     );
@@ -128,8 +134,9 @@ class _OverlayAppState extends State<OverlayApp> {
       fontSize: (state['fontSize'] as num).toDouble(),
     );
     e.tool.value = t;
-    e.phase.value =
-        t == ToolKind.crop ? EditorPhase.crop : EditorPhase.annotate;
+    e.phase.value = t == ToolKind.crop
+        ? EditorPhase.crop
+        : EditorPhase.annotate;
     e.selectedIndex.value = null;
     e.style.value = s;
     e.toolStyles[t] = s; // keep per-tool memory in sync too
@@ -198,10 +205,7 @@ class _OverlayAppState extends State<OverlayApp> {
                   controller: editor,
                   onExport: _onExport,
                   onCancel: _dismiss,
-                  onActivate: () {
-                    _bridge.focusDisplay();
-                  },
-                  deactivateOnPeer: _peerActivated,
+                  activeSignal: _activeSignal,
                 ),
                 if (_toast != null)
                   Positioned(
@@ -211,7 +215,9 @@ class _OverlayAppState extends State<OverlayApp> {
                     child: Center(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xE6B00020),
                           borderRadius: BorderRadius.circular(8),
@@ -219,7 +225,9 @@ class _OverlayAppState extends State<OverlayApp> {
                         child: Text(
                           _toast!,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ),

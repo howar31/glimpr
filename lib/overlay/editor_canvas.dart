@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,11 +30,11 @@ class EditorCanvas extends StatefulWidget {
   final EditorController controller;
   final Future<void> Function(Rect? selectionLogical) onExport;
   final VoidCallback onCancel;
-  // Called when the cursor enters this display, so the host can make this
-  // window key (the editor follows the cursor across displays).
-  final VoidCallback onActivate;
-  // Notifies (bumps) when ANOTHER display became active, so this one steps down.
-  final Listenable deactivateOnPeer;
+  // Single source of truth for cross-display follow: the native cursor poll
+  // pushes (active display id, cursor display-local point) here. This editor is
+  // active iff the id matches its own display; on becoming active it seeds the
+  // crosshair from the point so the cross lands without a stale frame.
+  final ValueListenable<({int id, Offset cursor})> activeSignal;
   const EditorCanvas({
     super.key,
     required this.display,
@@ -41,8 +42,7 @@ class EditorCanvas extends StatefulWidget {
     required this.controller,
     required this.onExport,
     required this.onCancel,
-    required this.onActivate,
-    required this.deactivateOnPeer,
+    required this.activeSignal,
   });
 
   @override
@@ -94,18 +94,17 @@ class _EditorCanvasState extends State<EditorCanvas> {
   /// The dimming scrim stays crop-only.
   bool get _showsCrosshair {
     final t = c.tool.value;
-    return t == ToolKind.crop ||
-        t == ToolKind.blur ||
-        t == ToolKind.pixelate;
+    return t == ToolKind.crop || t == ToolKind.blur || t == ToolKind.pixelate;
   }
-
 
   @override
   void initState() {
     super.initState();
     _cursor = Offset(widget.display.width / 2, widget.display.height / 2);
-    _toolbarPos =
-        Offset(widget.display.width / 2 - 160, widget.display.height - 120);
+    _toolbarPos = Offset(
+      widget.display.width / 2 - 160,
+      widget.display.height - 120,
+    );
     _active = widget.display.isCursorDisplay; // launch display starts active
     c.document.addListener(_rebuild);
     c.selectedIndex.addListener(_rebuild);
@@ -114,7 +113,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
     _textFocus.addListener(_rebuild); // repaint our selection on focus changes
-    widget.deactivateOnPeer.addListener(_deactivate); // a peer took focus
+    widget.activeSignal.addListener(
+      _onActiveSignal,
+    ); // cursor poll drives active
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
@@ -127,7 +128,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
     _textFocus.removeListener(_rebuild);
-    widget.deactivateOnPeer.removeListener(_deactivate);
+    widget.activeSignal.removeListener(_onActiveSignal);
     _richCtl?.dispose();
     _focus.dispose();
     _crop.dispose();
@@ -160,8 +161,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
   /// selected (the region drag then just masks it — no per-frame recompute).
   Future<void> _ensureRasterFor(ToolKind t) async {
     if (t == ToolKind.blur && _blurredFull == null) {
-      final img = await blurWhole(widget.frozenImage,
-          kBlurSigmaLogical * widget.display.scaleFactor);
+      final img = await blurWhole(
+        widget.frozenImage,
+        kBlurSigmaLogical * widget.display.scaleFactor,
+      );
       if (mounted) setState(() => _blurredFull = img);
     } else if (t == ToolKind.pixelate && _pixelatedFull == null) {
       final img = await pixelateWhole(widget.frozenImage, kPixelCellNative);
@@ -181,26 +184,29 @@ class _EditorCanvasState extends State<EditorCanvas> {
     }
   }
 
-  // ---- cross-display follow ----------------------------------------------
+  // ---- cross-display follow (driven by the native cursor poll) -----------
 
-  /// Cursor entered this display: show the HUD/toolbar here, take keyboard focus
-  /// (Flutter) and ask native to make this window key (so Esc/shortcuts work).
-  void _activate() {
-    if (_active) return;
-    setState(() => _active = true);
-    widget.onActivate();
-    _focus.requestFocus();
-  }
-
-  /// Cursor left this display: hide the HUD/toolbar and drop any transient draw
-  /// state (a pan drag holds pointer capture, so this won't fire mid-stroke).
-  void _deactivate() {
-    if (!_active) return;
-    setState(() {
-      _active = false;
-      _resetDrawState();
-      _resetEditState();
-    });
+  /// The native poll picked the active display for ALL engines. Become active
+  /// when it is us (show the HUD/toolbar, seed the crosshair at the pushed point,
+  /// take Flutter keyboard focus); step down when it is another display (hide the
+  /// HUD, drop transient draw state). One authoritative signal — no per-engine
+  /// guessing or async handoff, so no flicker.
+  void _onActiveSignal() {
+    final sig = widget.activeSignal.value;
+    final mine = sig.id == widget.display.displayId;
+    if (mine && !_active) {
+      setState(() {
+        _active = true;
+        _cursor = sig.cursor; // land the crosshair where the cursor crossed in
+      });
+      _focus.requestFocus();
+    } else if (!mine && _active) {
+      setState(() {
+        _active = false;
+        _resetDrawState();
+        _resetEditState();
+      });
+    }
   }
 
   bool _pasting = false; // re-entrancy guard for paste (tool-switch + ⌘V)
@@ -294,7 +300,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
   // ---- keyboard ----------------------------------------------------------
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
-    if (_editingText) return KeyEventResult.ignored; // text wrapper handles keys
+    if (_editingText) {
+      return KeyEventResult.ignored; // text wrapper handles keys
+    }
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final key = e.logicalKey;
     final meta = HardwareKeyboard.instance.isMetaPressed;
@@ -389,12 +397,17 @@ class _EditorCanvasState extends State<EditorCanvas> {
           if (s != null && c.tool.value == ToolKind.blur) {
             _preview = BlurDrawable(Rect.fromPoints(s, next), c.style.value);
           } else if (s != null && c.tool.value == ToolKind.pixelate) {
-            _preview = PixelateDrawable(Rect.fromPoints(s, next), c.style.value);
+            _preview = PixelateDrawable(
+              Rect.fromPoints(s, next),
+              c.style.value,
+            );
           }
         });
         if (c.tool.value == ToolKind.crop && _cropping) _crop.update(next);
         _bridge.warpCursor(
-            widget.display.left + next.dx, widget.display.top + next.dy);
+          widget.display.left + next.dx,
+          widget.display.top + next.dy,
+        );
         return KeyEventResult.handled;
       }
     }
@@ -422,8 +435,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   void _startText(Offset at) {
     final ctl = RichTextController(
-        color: c.style.value.color, size: c.style.value.fontSize)
-      ..addListener(_rebuild);
+      color: c.style.value.color,
+      size: c.style.value.fontSize,
+    )..addListener(_rebuild);
     setState(() {
       _richCtl = ctl;
       _editTextIndex = null;
@@ -431,16 +445,19 @@ class _EditorCanvasState extends State<EditorCanvas> {
       _editingText = true;
       c.selectedIndex.value = null;
     });
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _textFocus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _textFocus.requestFocus(),
+    );
   }
 
   void _reEditText(int idx) {
     final d = c.document.value.drawables[idx];
     if (d is! TextDrawable) return;
-    final ctl = RichTextController.fromRuns(d.runs,
-        color: c.style.value.color, size: c.style.value.fontSize)
-      ..addListener(_rebuild);
+    final ctl = RichTextController.fromRuns(
+      d.runs,
+      color: c.style.value.color,
+      size: c.style.value.fontSize,
+    )..addListener(_rebuild);
     setState(() {
       _richCtl = ctl;
       _editTextIndex = idx;
@@ -448,8 +465,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
       _editingText = true;
       c.selectedIndex.value = null;
     });
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _textFocus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _textFocus.requestFocus(),
+    );
   }
 
   void _commitText() {
@@ -486,8 +504,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   // ---- pointer gestures --------------------------------------------------
 
-  List<Offset> _rectCorners(Rect r) =>
-      [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+  List<Offset> _rectCorners(Rect r) => [
+    r.topLeft,
+    r.topRight,
+    r.bottomRight,
+    r.bottomLeft,
+  ];
 
   bool _nearHandles(Drawable d, Offset p) {
     if (d is RectShaped) {
@@ -506,7 +528,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final cur = c.selectedIndex.value;
     // Keep the current selection while hovering its handle/edge zone so the
     // handles stay visible and grabbable (they sit just outside the shape).
-    if (cur != null && cur < drawables.length && _nearHandles(drawables[cur], p)) {
+    if (cur != null &&
+        cur < drawables.length &&
+        _nearHandles(drawables[cur], p)) {
       return;
     }
     final idx = _hitActiveType(p); // highlight same-type drawable under cursor
@@ -529,8 +553,13 @@ class _EditorCanvasState extends State<EditorCanvas> {
         // existing badge just selects it (drag the body to move).
         final idx = _hitActiveType(p);
         if (idx == null) {
-          c.commitDrawable(StepDrawable(
-              p, nextStepNumber(c.document.value.drawables), c.style.value));
+          c.commitDrawable(
+            StepDrawable(
+              p,
+              nextStepNumber(c.document.value.drawables),
+              c.style.value,
+            ),
+          );
         } else {
           c.selectedIndex.value = idx;
         }
@@ -569,8 +598,22 @@ class _EditorCanvasState extends State<EditorCanvas> {
   /// follows everywhere on the active display — over the toolbar, and while the
   /// left button is still held after a right-click cancel.
   void _trackCursor(PointerEvent e) {
-    if (_active && _showsCrosshair) setState(() => _cursor = e.localPosition);
+    if (_active && _showsCrosshair) {
+      setState(() => _cursor = _clampToDisplay(e.localPosition));
+    }
   }
+
+  /// True while a draw / crop / move-resize drag is running on this display.
+  bool get _dragging => _dragStart != null || _editIndex != null || _cropping;
+
+  /// Clamp a position to this display's bounds. During a drag the (hidden)
+  /// hardware cursor can wander onto another display — we freeze the cross-display
+  /// handoff natively rather than warp the cursor each frame (which jittered), so
+  /// clamping keeps the crosshair / marquee pinned cleanly at the edge.
+  Offset _clampToDisplay(Offset p) => Offset(
+    p.dx.clamp(0.0, widget.display.width),
+    p.dy.clamp(0.0, widget.display.height),
+  );
 
   void _onRightDown(Offset p) {
     // Crop: right-click cancels the selection (set _cancelGesture so the
@@ -616,6 +659,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   void _panStart(DragStartDetails d) {
     _cancelGesture = false;
+    // A drag begins: confine the cursor to this display so the stroke can't be
+    // broken by the pointer straying onto another display (released in _panEnd /
+    // _panCancel). Spanning across displays is out of scope.
+    _bridge.setDrawingLock(true);
     final p = d.localPosition;
     if (c.tool.value == ToolKind.crop) {
       _cropping = true;
@@ -662,7 +709,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
   }
 
   void _panUpdate(DragUpdateDetails d) {
-    final p = d.localPosition;
+    // Clamp to this display so a drag that pushes past the edge keeps the
+    // marquee / shape / crosshair pinned at the boundary (the hardware cursor is
+    // free but the active handoff is frozen while dragging).
+    final p = _clampToDisplay(d.localPosition);
     if (_cancelGesture) {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
@@ -683,12 +733,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (s == null) return;
     switch (c.tool.value) {
       case ToolKind.rectangle:
-        setState(() =>
-            _preview = RectangleDrawable(Rect.fromPoints(s, p), c.style.value));
+        setState(
+          () => _preview = RectangleDrawable(
+            Rect.fromPoints(s, p),
+            c.style.value,
+          ),
+        );
         break;
       case ToolKind.ellipse:
-        setState(() =>
-            _preview = EllipseDrawable(Rect.fromPoints(s, p), c.style.value));
+        setState(
+          () =>
+              _preview = EllipseDrawable(Rect.fromPoints(s, p), c.style.value),
+        );
         break;
       case ToolKind.arrow:
         setState(() => _preview = ArrowDrawable(s, p, c.style.value));
@@ -731,7 +787,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
       final corners = _rectCorners(shape.rect);
       final opposite = corners[(_resizeCorner! + 2) % 4];
       setState(
-          () => _editPreview = shape.resizedTo(Rect.fromPoints(opposite, p)));
+        () => _editPreview = shape.resizedTo(Rect.fromPoints(opposite, p)),
+      );
     } else {
       final start = _moveStart;
       if (start != null) {
@@ -741,6 +798,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
   }
 
   void _panEnd(DragEndDetails d) {
+    _bridge.setDrawingLock(
+      false,
+    ); // drag finished -> release the cursor confine
     if (_cancelGesture) {
       _cancelGesture = false;
       setState(() {
@@ -826,7 +886,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final loupeOrigin = _loupeOrigin();
     // Outermost listener tracks the cursor for the crosshair from the RAW
     // pointer stream — fires everywhere (incl. over the toolbar, and after a
-    // right-click ends the pan), so the crosshair follows continuously.
+    // right-click ends the pan), so the crosshair follows continuously on the
+    // active display. WHICH display is active is decided by the native cursor
+    // poll (_onActiveSignal), not by enter/exit here.
     return Listener(
       onPointerHover: _trackCursor,
       onPointerMove: _trackCursor,
@@ -836,191 +898,214 @@ class _EditorCanvasState extends State<EditorCanvas> {
         onKeyEvent: _onKey,
         child: Stack(
           fit: StackFit.expand,
-        children: [
-          // Layer 1: frozen image (full color, no dim in the annotate phase).
-          RepaintBoundary(
-            child: Image.memory(
-              widget.display.pngBytes,
-              fit: BoxFit.fill,
-              gaplessPlayback: true,
-            ),
-          ),
-          // Layer 2: annotation layer (+ a highlight box on the hovered/selected
-          // drawable in the annotate phase).
-          RepaintBoundary(
-            child: CustomPaint(
-              painter: DrawablePainter(
-                // Annotations always paint (so an inactive display still shows
-                // its drawings); only the selection highlight is gated on focus.
-                drawables: _effectiveDrawables(),
-                selectedIndex: (!_active || inCrop || _editingText)
-                    ? null
-                    : c.selectedIndex.value,
-                blurredFull: _blurredFull,
-                pixelatedFull: _pixelatedFull,
+          children: [
+            // Layer 1: frozen image (full color, no dim in the annotate phase).
+            RepaintBoundary(
+              child: Image.memory(
+                widget.display.pngBytes,
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
               ),
-              size: Size.infinite,
             ),
-          ),
-          // Our own text-selection highlight — shown when the inline field is
-          // blurred (e.g. while typing a pt value), so the selected range stays
-          // visible. When the field is focused it draws its own highlight.
-          if (_active &&
-              _editingText &&
-              _richCtl != null &&
-              _textPos != null &&
-              !_textFocus.hasFocus &&
-              !_richCtl!.selection.isCollapsed)
-            IgnorePointer(
+            // Layer 2: annotation layer (+ a highlight box on the hovered/selected
+            // drawable in the annotate phase).
+            RepaintBoundary(
               child: CustomPaint(
+                painter: DrawablePainter(
+                  // Annotations always paint (so an inactive display still shows
+                  // its drawings); only the selection highlight is gated on focus.
+                  drawables: _effectiveDrawables(),
+                  selectedIndex: (!_active || inCrop || _editingText)
+                      ? null
+                      : c.selectedIndex.value,
+                  blurredFull: _blurredFull,
+                  pixelatedFull: _pixelatedFull,
+                ),
                 size: Size.infinite,
-                painter: TextSelectionPainter(
-                  span: buildTextSpan(
-                      TextDrawable(_textPos!, _richCtl!.toRuns(), c.style.value)),
-                  origin: _textPos!,
-                  selection: _richCtl!.selection,
+              ),
+            ),
+            // Our own text-selection highlight — shown when the inline field is
+            // blurred (e.g. while typing a pt value), so the selected range stays
+            // visible. When the field is focused it draws its own highlight.
+            if (_active &&
+                _editingText &&
+                _richCtl != null &&
+                _textPos != null &&
+                !_textFocus.hasFocus &&
+                !_richCtl!.selection.isCollapsed)
+              IgnorePointer(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: TextSelectionPainter(
+                    span: buildTextSpan(
+                      TextDrawable(
+                        _textPos!,
+                        _richCtl!.toRuns(),
+                        c.style.value,
+                      ),
+                    ),
+                    origin: _textPos!,
+                    selection: _richCtl!.selection,
+                  ),
                 ),
               ),
-            ),
-          // Layer 3: crop scrim — only once a selection drag exists (this
-          // display's HUD only shows while the cursor is over it).
-          if (_active && inCrop)
-            RepaintBoundary(
-              child: ValueListenableBuilder<Rect?>(
-                valueListenable: _crop.rect,
-                builder: (context, rect, _) {
-                  if (rect == null) return const SizedBox.shrink();
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CustomPaint(
-                          painter: SelectionScrimPainter(selection: rect)),
-                      Positioned(
-                        left: rect.left,
-                        top: (rect.bottom + 4).clamp(0, widget.display.height),
-                        child: Text(
-                          selectionLabel(rect),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            backgroundColor: Color(0xAA000000),
+            // Layer 3: crop scrim — only once a selection drag exists (this
+            // display's HUD only shows while the cursor is over it).
+            if (_active && inCrop)
+              RepaintBoundary(
+                child: ValueListenableBuilder<Rect?>(
+                  valueListenable: _crop.rect,
+                  builder: (context, rect, _) {
+                    if (rect == null) return const SizedBox.shrink();
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CustomPaint(
+                          painter: SelectionScrimPainter(selection: rect),
+                        ),
+                        Positioned(
+                          left: rect.left,
+                          top: (rect.bottom + 4).clamp(
+                            0,
+                            widget.display.height,
+                          ),
+                          child: Text(
+                            selectionLabel(rect),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              backgroundColor: Color(0xAA000000),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
-          // Precision HUD: full-screen crosshair + pixel loupe — crop and the
-          // raster region tools (blur/pixelate), active display only.
-          if (_active && showsCrosshair)
-            IgnorePointer(
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: CrosshairPainter(_cursor),
-              ),
-            ),
-          // Loupe is bound to the crosshair — shown/hidden together, so it
-          // never flickers off when hovering over an existing region.
-          if (_active && showsCrosshair)
-            Positioned(
-              left: loupeOrigin.dx,
-              top: loupeOrigin.dy,
-              child: IgnorePointer(
+            // Precision HUD: full-screen crosshair + pixel loupe — crop and the
+            // raster region tools (blur/pixelate), active display only.
+            if (_active && showsCrosshair)
+              IgnorePointer(
                 child: CustomPaint(
-                  size: const Size(120, 120),
-                  painter: LoupePainter(
-                    image: widget.frozenImage,
-                    cursorLogical: _cursor,
-                    scaleFactor: widget.display.scaleFactor,
+                  size: Size.infinite,
+                  painter: CrosshairPainter(_cursor),
+                ),
+              ),
+            // Loupe is bound to the crosshair — shown/hidden together, so it
+            // never flickers off when hovering over an existing region.
+            if (_active && showsCrosshair)
+              Positioned(
+                left: loupeOrigin.dx,
+                top: loupeOrigin.dy,
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    size: const Size(120, 120),
+                    painter: LoupePainter(
+                      image: widget.frozenImage,
+                      cursorLogical: _cursor,
+                      scaleFactor: widget.display.scaleFactor,
+                    ),
+                  ),
+                ),
+              ),
+            // Gesture + hover layer. A Listener catches the right button reliably
+            // even mid-drag (GestureDetector's secondary-tap loses the arena to an
+            // active pan), so right-click can cancel an in-progress crop/draw.
+            Positioned.fill(
+              child: Listener(
+                // Watch down/move/up: a right-button press DURING a left drag
+                // arrives as a move (the pointer is already down), not a down — so
+                // the old onPointerDown-only check never saw it and the crop
+                // committed. The latch fires _onRightDown once per right press.
+                onPointerDown: _onPointerButtons,
+                onPointerMove: _onPointerButtons,
+                onPointerUp: _onPointerButtons,
+                child: MouseRegion(
+                  // Hidden for the crosshair tools (our crosshair replaces it)
+                  // and during ANY drag, so a drag pushed past the edge doesn't
+                  // show a system cursor escaping onto the next display.
+                  cursor: (_active && (showsCrosshair || _dragging))
+                      ? SystemMouseCursors.none
+                      : SystemMouseCursors.basic,
+                  onHover: _onHover,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: _onTapUp,
+                    onPanStart: _panStart,
+                    onPanUpdate: _panUpdate,
+                    onPanEnd: _panEnd,
+                    // Safety net: if the pan is cancelled (never reaches
+                    // onPanEnd), still release the cursor confine + transient
+                    // state so the cursor is never stranded on one display.
+                    onPanCancel: () {
+                      _bridge.setDrawingLock(false);
+                      _cancelGesture = false;
+                      setState(() {
+                        _resetDrawState();
+                        _resetEditState();
+                        _cropping = false;
+                      });
+                    },
                   ),
                 ),
               ),
             ),
-          // Gesture + hover layer. A Listener catches the right button reliably
-          // even mid-drag (GestureDetector's secondary-tap loses the arena to an
-          // active pan), so right-click can cancel an in-progress crop/draw.
-          Positioned.fill(
-            child: Listener(
-              // Watch down/move/up: a right-button press DURING a left drag
-              // arrives as a move (the pointer is already down), not a down — so
-              // the old onPointerDown-only check never saw it and the crop
-              // committed. The latch fires _onRightDown once per right press.
-              onPointerDown: _onPointerButtons,
-              onPointerMove: _onPointerButtons,
-              onPointerUp: _onPointerButtons,
-              child: MouseRegion(
-                cursor: (_active && showsCrosshair)
-                    ? SystemMouseCursors.none // our crosshair replaces it
-                    : SystemMouseCursors.basic,
-                onEnter: (_) => _activate(), // cursor entered this display
-                onHover: _onHover,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: _onTapUp,
-                  onPanStart: _panStart,
-                  onPanUpdate: _panUpdate,
-                  onPanEnd: _panEnd,
-                ),
-              ),
-            ),
-          ),
-          // Inline multiline text editor (Enter commits, Shift+Enter newline).
-          if (_active && _editingText && _textPos != null && _richCtl != null)
-            Positioned(
-              left: _textPos!.dx,
-              top: _textPos!.dy,
-              child: Material(
-                type: MaterialType.transparency,
-                child: Focus(
-                  onKeyEvent: _onTextKey,
-                  child: IntrinsicWidth(
-                    child: TextField(
-                      controller: _richCtl,
-                      focusNode: _textFocus,
-                      autofocus: true,
-                      maxLines: null,
-                      // Don't auto-unfocus when tapping the toolbar: that's how
-                      // style controls adjust the selected text WHILE editing.
-                      // Canvas taps still commit explicitly (_onTapUp/_panStart);
-                      // switching tools commits via focus loss.
-                      onTapOutside: (_) {},
-                      cursorColor: c.style.value.color,
-                      // The controller renders transparent per-run spans (the
-                      // painter draws the visible rich text). Disable strut so
-                      // line metrics follow the (mixed-size) glyphs like the
-                      // painter does.
-                      style: textStyleOf(c.style.value),
-                      strutStyle: StrutStyle.disabled,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+            // Inline multiline text editor (Enter commits, Shift+Enter newline).
+            if (_active && _editingText && _textPos != null && _richCtl != null)
+              Positioned(
+                left: _textPos!.dx,
+                top: _textPos!.dy,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Focus(
+                    onKeyEvent: _onTextKey,
+                    child: IntrinsicWidth(
+                      child: TextField(
+                        controller: _richCtl,
+                        focusNode: _textFocus,
+                        autofocus: true,
+                        maxLines: null,
+                        // Don't auto-unfocus when tapping the toolbar: that's how
+                        // style controls adjust the selected text WHILE editing.
+                        // Canvas taps still commit explicitly (_onTapUp/_panStart);
+                        // switching tools commits via focus loss.
+                        onTapOutside: (_) {},
+                        cursorColor: c.style.value.color,
+                        // The controller renders transparent per-run spans (the
+                        // painter draws the visible rich text). Disable strut so
+                        // line metrics follow the (mixed-size) glyphs like the
+                        // painter does.
+                        style: textStyleOf(c.style.value),
+                        strutStyle: StrutStyle.disabled,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          // Draggable toolbar — only on the display the cursor is over, so it
-          // "follows" the cursor across displays.
-          if (_active)
-            Positioned(
-              left: _toolbarPos.dx,
-              top: _toolbarPos.dy,
-              // Material ancestor for the toolbar's TextField (pt) + IconButtons.
-              child: Material(
-                type: MaterialType.transparency,
-                child: EditorToolbar(
-                  controller: c,
-                  onMove: _moveToolbar,
-                  onPtEditingDone: () {
-                    if (_editingText) _textFocus.requestFocus();
-                  },
+            // Draggable toolbar — only on the display the cursor is over, so it
+            // "follows" the cursor across displays.
+            if (_active)
+              Positioned(
+                left: _toolbarPos.dx,
+                top: _toolbarPos.dy,
+                // Material ancestor for the toolbar's TextField (pt) + IconButtons.
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: EditorToolbar(
+                    controller: c,
+                    onMove: _moveToolbar,
+                    onPtEditingDone: () {
+                      if (_editingText) _textFocus.requestFocus();
+                    },
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

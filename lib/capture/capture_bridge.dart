@@ -8,7 +8,9 @@ class CaptureBridge {
 
   Future<List<CapturedDisplay>> captureAllDisplays() async {
     try {
-      final result = await _channel.invokeMethod<List<dynamic>>('captureAllDisplays');
+      final result = await _channel.invokeMethod<List<dynamic>>(
+        'captureAllDisplays',
+      );
       if (result == null) return const [];
       return result
           .cast<Map<dynamic, dynamic>>()
@@ -29,9 +31,11 @@ class CaptureBridge {
   /// may order its window front (capture-then-show).
   Future<void> overlayReady() => _channel.invokeMethod('overlayReady');
 
-  /// Make THIS display's overlay the key window (the editor follows the cursor
-  /// across displays; called when the cursor enters this display).
-  Future<void> focusDisplay() => _channel.invokeMethod('focusDisplay');
+  /// Confine the cursor to this display while a draw/crop drag runs (and freeze
+  /// the cross-display active handoff), so a stroke can't be broken by the cursor
+  /// wandering onto another display. Released when the drag ends.
+  Future<void> setDrawingLock(bool locked) =>
+      _channel.invokeMethod('setDrawingLock', {'locked': locked});
 
   /// Broadcast the active tool + style to the OTHER displays' editors so the
   /// tool/colour/width/font stay in sync across displays.
@@ -48,7 +52,7 @@ class CaptureBridge {
   void registerOverlayHandlers({
     required void Function(CapturedDisplay display) onCaptureReady,
     required void Function(String reason, String message) onCaptureFailed,
-    void Function()? onPeerActivated,
+    void Function(int activeId, Offset cursor)? onActiveDisplay,
     void Function(Map<String, dynamic> state)? onEditorState,
   }) {
     _overlay.setMethodCallHandler((call) async {
@@ -65,9 +69,17 @@ class CaptureBridge {
             (args['message'] as String?) ?? '',
           );
           return null;
-        case 'onPeerActivated':
-          // Another display became the active editor -> this engine steps down.
-          onPeerActivated?.call();
+        case 'onActiveDisplay':
+          // The cursor poll picked the active display for ALL engines. This one
+          // shows its HUD only when activeId == its own display id.
+          final a = (call.arguments as Map);
+          onActiveDisplay?.call(
+            a['activeId'] as int,
+            Offset(
+              (a['cursorX'] as num).toDouble(),
+              (a['cursorY'] as num).toDouble(),
+            ),
+          );
           return null;
         case 'onEditorState':
           // Another display changed tool/style -> mirror it here.
