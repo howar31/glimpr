@@ -44,11 +44,16 @@ Future<Uint8List> compositeAndCrop({
   canvas.translate(-crop.left, -crop.top);
   // Layer 1: frozen image at native pixels (1:1).
   canvas.drawImage(frozen, ui.Offset.zero, ui.Paint());
-  // Layer 2: drawables, scaled logical->native.
+  // Layer 2: drawables, scaled logical->native. The painter samples [frozen]
+  // for the raster regions (blur/pixelate); paste-image carries its own bitmap.
   canvas.save();
   canvas.scale(scaleFactor);
-  DrawablePainter(drawables: drawables, selectedIndex: null)
-      .paint(canvas, logicalSize);
+  DrawablePainter(
+    drawables: drawables,
+    selectedIndex: null,
+    frozenImage: frozen,
+    scaleFactor: scaleFactor,
+  ).paint(canvas, logicalSize);
   canvas.restore();
   final picture = recorder.endRecording();
   final outW = crop.width.round();

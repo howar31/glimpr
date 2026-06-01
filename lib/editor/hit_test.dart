@@ -34,6 +34,12 @@ bool _hits(Drawable d, Offset p) {
       return _hitsPolyline(d.points, p, _band(d.style.strokeWidth));
     case StepDrawable():
       return (p - d.center).distance <= d.radius;
+    case BlurDrawable():
+      return d.rect.contains(p);
+    case PixelateDrawable():
+      return d.rect.contains(p);
+    case ImageDrawable():
+      return d.rect.contains(p);
   }
 }
 

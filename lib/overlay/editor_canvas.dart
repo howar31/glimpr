@@ -2,12 +2,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pasteboard/pasteboard.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
 import '../editor/drawable.dart';
 import '../editor/drawable_painter.dart';
 import '../editor/editor_controller.dart';
 import '../editor/hit_test.dart';
+import '../editor/raster.dart';
 import '../editor/text_metrics.dart';
 import 'crop_hud.dart';
 import 'rich_text_controller.dart';
@@ -15,6 +17,11 @@ import 'selection_controller.dart';
 import 'selection_label.dart';
 import 'selection_scrim.dart';
 import 'toolbar.dart';
+
+/// Blur radius (logical px) and pixelate block size (native px) for the raster
+/// region tools. Fixed in Phase 3; a strength control is deferred to settings.
+const double _kBlurSigma = 12;
+const double _kPixelCell = 12;
 
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
@@ -121,6 +128,52 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // Switching tools commits any in-progress text (its tool is gone). Blur no
     // longer commits, so the pt field can take focus without ending editing.
     if (_editingText) _commitText();
+    // Selecting the Paste tool pastes the clipboard image immediately (the
+    // guard stops the selectTool inside _pasteImage from re-triggering this).
+    if (c.tool.value == ToolKind.paste && !_pasting) _pasteImage();
+  }
+
+  bool _pasting = false; // re-entrancy guard for paste (tool-switch + ⌘V)
+
+  /// Paste a clipboard image as a movable/resizable [ImageDrawable]. No-op when
+  /// the clipboard holds no decodable image.
+  Future<void> _pasteImage() async {
+    if (_pasting) return;
+    _pasting = true;
+    try {
+      final bytes = await Pasteboard.image;
+      if (bytes == null || !mounted) return;
+      final ui.Image img;
+      try {
+        final codec = await ui.instantiateImageCodec(bytes);
+        img = (await codec.getNextFrame()).image;
+      } catch (_) {
+        return; // not a decodable image
+      }
+      if (!mounted) return;
+      final sf = widget.display.scaleFactor;
+      var w = img.width / sf;
+      var h = img.height / sf;
+      if (w <= 0 || h <= 0) return;
+      // Fit within ~half the display, preserving aspect; never upscale.
+      final fit = [
+        1.0,
+        widget.display.width * 0.5 / w,
+        widget.display.height * 0.5 / h,
+      ].reduce((a, b) => a < b ? a : b);
+      w *= fit;
+      h *= fit;
+      final rect = Rect.fromCenter(
+        center: Offset(widget.display.width / 2, widget.display.height / 2),
+        width: w,
+        height: h,
+      );
+      c.commitDrawable(ImageDrawable(rect, img, c.style.value));
+      c.selectTool(ToolKind.paste); // so it can be dragged/resized at once
+      c.selectedIndex.value = c.document.value.drawables.length - 1;
+    } finally {
+      _pasting = false;
+    }
   }
 
   // ---- type filter -------------------------------------------------------
@@ -143,10 +196,27 @@ class _EditorCanvasState extends State<EditorCanvas> {
         return (d) => d is TextDrawable;
       case ToolKind.step:
         return (d) => d is StepDrawable;
+      case ToolKind.blur:
+        return (d) => d is BlurDrawable;
+      case ToolKind.pixelate:
+        return (d) => d is PixelateDrawable;
+      case ToolKind.paste:
+        return (d) => d is ImageDrawable;
       case ToolKind.crop:
         return null;
     }
   }
+
+  // Tools whose drawable is a RectShaped region (corner-resizable + drag-create
+  // a rectangle): rectangle/ellipse and the raster regions. Paste places via
+  // ⌘V rather than a drag, but its drawable is still RectShaped (resizable).
+  static const _rectShapeTools = {
+    ToolKind.rectangle,
+    ToolKind.ellipse,
+    ToolKind.blur,
+    ToolKind.pixelate,
+    ToolKind.paste,
+  };
 
   int? _hitActiveType(Offset p) =>
       hitTestTop(c.document.value.drawables, p, where: _typeFilter());
@@ -175,6 +245,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (meta && key == LogicalKeyboardKey.keyZ) {
       shift ? c.redo() : c.undo();
       c.selectedIndex.value = null;
+      return KeyEventResult.handled;
+    }
+
+    if (meta && key == LogicalKeyboardKey.keyV) {
+      _pasteImage();
       return KeyEventResult.handled;
     }
 
@@ -386,6 +461,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
       case ToolKind.line:
       case ToolKind.pen:
       case ToolKind.highlighter:
+      case ToolKind.blur:
+      case ToolKind.pixelate:
+      case ToolKind.paste:
         c.selectedIndex.value = _hitActiveType(p);
         break;
       case ToolKind.crop:
@@ -449,8 +527,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // corners (topmost first) with a generous tolerance, independent of the
     // current hover selection.
     final filter = _typeFilter();
-    if (c.tool.value == ToolKind.rectangle ||
-        c.tool.value == ToolKind.ellipse) {
+    if (_rectShapeTools.contains(c.tool.value)) {
       for (var idx = drawables.length - 1; idx >= 0; idx--) {
         final d = drawables[idx];
         if (d is! RectShaped || (filter != null && !filter(d))) continue;
@@ -519,8 +596,17 @@ class _EditorCanvasState extends State<EditorCanvas> {
         _penPoints = [...?_penPoints, p];
         setState(() => _preview = PenDrawable(_penPoints!, c.style.value));
         break;
+      case ToolKind.blur:
+        setState(() =>
+            _preview = BlurDrawable(Rect.fromPoints(s, p), _kBlurSigma, c.style.value));
+        break;
+      case ToolKind.pixelate:
+        setState(() => _preview = PixelateDrawable(
+            Rect.fromPoints(s, p), _kPixelCell, null, c.style.value));
+        break;
       case ToolKind.text:
       case ToolKind.step:
+      case ToolKind.paste:
       case ToolKind.crop:
         break;
     }
@@ -565,15 +651,43 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (_editIndex != null) {
       final i = _editIndex!;
       final prev = _editPreview;
-      if (prev != null) c.document.value = c.document.value.replaceAt(i, prev);
       setState(_resetEditState);
+      if (prev != null) {
+        // Replace now (one undo step = the move/resize). A moved/resized
+        // pixelate keeps its old mosaic (still obscured) until the fresh one
+        // is computed, so the region is never exposed.
+        c.document.value = c.document.value.replaceAt(i, prev);
+        if (prev is PixelateDrawable) _fillMosaicAt(i);
+      }
       return;
     }
     final prev = _preview;
-    if (prev != null && prev.bounds.longestSide >= 3) {
-      c.commitDrawable(prev);
-    }
     setState(_resetDrawState);
+    if (prev != null && prev.bounds.longestSide >= 3) {
+      // Commit immediately. A new pixelate has a null mosaic and renders as a
+      // live blur (already obscured) until its mosaic is backfilled.
+      c.commitDrawable(prev);
+      if (prev is PixelateDrawable) {
+        _fillMosaicAt(c.document.value.drawables.length - 1);
+      }
+    }
+  }
+
+  /// Compute the pixelate mosaic for the region at [i] and silently backfill it
+  /// (no extra undo step). Guards against the drawable changing meanwhile, so a
+  /// stale async result is dropped after an undo/edit.
+  Future<void> _fillMosaicAt(int i) async {
+    final list = c.document.value.drawables;
+    if (i < 0 || i >= list.length) return;
+    final d = list[i];
+    if (d is! PixelateDrawable || d.rect.width < 1 || d.rect.height < 1) return;
+    final m = await pixelateRegion(
+        widget.frozenImage, d.rect, widget.display.scaleFactor, d.cell);
+    if (!mounted) return;
+    final cur = c.document.value.drawables;
+    if (i < cur.length && identical(cur[i], d)) {
+      c.document.value = c.document.value.replaceAtSilent(i, d.withMosaic(m));
+    }
   }
 
   // ---- build -------------------------------------------------------------
@@ -649,6 +763,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 drawables: _effectiveDrawables(),
                 selectedIndex:
                     (inCrop || _editingText) ? null : c.selectedIndex.value,
+                frozenImage: widget.frozenImage,
+                scaleFactor: widget.display.scaleFactor,
               ),
               size: Size.infinite,
             ),

@@ -28,6 +28,16 @@ class EditorDocument {
     return _commit(next);
   }
 
+  /// Replace [i] in the CURRENT state WITHOUT creating an undo step. For async
+  /// cosmetic backfills (e.g. a pixelate mosaic finishing after the region was
+  /// already committed) that must not become a separate undo entry.
+  EditorDocument replaceAtSilent(int i, Drawable d) {
+    if (i < 0 || i >= drawables.length) return this;
+    final next = [...drawables]..[i] = d;
+    final past = [..._past]..[_past.length - 1] = next;
+    return EditorDocument._(past, _future);
+  }
+
   EditorDocument undo() {
     if (!canUndo) return this;
     final past = [..._past];

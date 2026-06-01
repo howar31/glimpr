@@ -29,6 +29,9 @@ class EditorToolbar extends StatelessWidget {
     (ToolKind.pen, Icons.gesture),
     (ToolKind.highlighter, Icons.border_color),
     (ToolKind.step, Icons.looks_one),
+    (ToolKind.blur, Icons.blur_on),
+    (ToolKind.pixelate, Icons.grid_on),
+    (ToolKind.paste, Icons.content_paste),
   ];
 
   @override
@@ -60,7 +63,7 @@ class EditorToolbar extends StatelessWidget {
                   controller: controller,
                   kind: tools[i].$1,
                   icon: tools[i].$2,
-                  shortcut: i + 1,
+                  shortcut: i < 9 ? i + 1 : null, // digit shortcuts only 1-9
                 ),
             ],
           ),
@@ -75,7 +78,7 @@ class _ToolButton extends StatelessWidget {
   final EditorController controller;
   final ToolKind kind;
   final IconData icon;
-  final int shortcut;
+  final int? shortcut; // null = no digit shortcut (tools past the 9th)
   const _ToolButton({
     required this.controller,
     required this.kind,
@@ -97,18 +100,19 @@ class _ToolButton extends StatelessWidget {
               color: on ? Colors.lightBlueAccent : Colors.white,
               onPressed: () => controller.selectTool(kind),
             ),
-            Positioned(
-              right: 2,
-              bottom: 2,
-              child: Text(
-                '$shortcut',
-                style: TextStyle(
-                  fontSize: 9,
-                  height: 1,
-                  color: on ? Colors.lightBlueAccent : Colors.white54,
+            if (shortcut != null)
+              Positioned(
+                right: 2,
+                bottom: 2,
+                child: Text(
+                  '$shortcut',
+                  style: TextStyle(
+                    fontSize: 9,
+                    height: 1,
+                    color: on ? Colors.lightBlueAccent : Colors.white54,
+                  ),
                 ),
               ),
-            ),
           ],
         );
       },

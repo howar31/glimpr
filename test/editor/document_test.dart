@@ -43,4 +43,20 @@ void main() {
     doc = doc.removeAt(0);
     expect(doc.drawables, isEmpty);
   });
+
+  test('replaceAtSilent edits in place without adding an undo step', () {
+    var doc = const EditorDocument().add(rect(0)).add(rect(1));
+    doc = doc.replaceAtSilent(1, rect(9)); // e.g. a pixelate mosaic backfill
+    expect((doc.drawables[1] as RectangleDrawable).rect.left, 9);
+    // One undo goes straight back to the single-drawable state -> the silent
+    // replace added no history entry of its own.
+    doc = doc.undo();
+    expect(doc.drawables.length, 1);
+    expect((doc.drawables[0] as RectangleDrawable).rect.left, 0);
+  });
+
+  test('replaceAtSilent out of range is a no-op', () {
+    final doc = const EditorDocument().add(rect(0));
+    expect(doc.replaceAtSilent(5, rect(9)).drawables.length, 1);
+  });
 }

@@ -146,6 +146,69 @@ int nextStepNumber(List<Drawable> drawables) {
   return maxN + 1;
 }
 
+/// A rectangular region whose underlying frozen pixels are blurred. Rendered
+/// live by the painter (re-sampling the frozen image), so moving/resizing it
+/// obscures the new pixels. The [style] is carried for API uniformity only.
+class BlurDrawable extends Drawable implements RectShaped {
+  @override
+  final Rect rect;
+  final double sigma; // blur radius in logical pixels
+  const BlurDrawable(this.rect, this.sigma, DrawStyle style) : super(style);
+
+  @override
+  Rect get bounds => rect;
+
+  @override
+  BlurDrawable moved(Offset d) => BlurDrawable(rect.shift(d), sigma, style);
+
+  @override
+  BlurDrawable resizedTo(Rect r) => BlurDrawable(r, sigma, style);
+}
+
+/// A rectangular region rendered as a coarse mosaic. [mosaic] is a small,
+/// downsampled image of the frozen region (built by `pixelateRegion`); the
+/// painter upscales it blocky. Null while it is (re)computing — the painter
+/// falls back to a live blur so raw pixels are never shown.
+class PixelateDrawable extends Drawable implements RectShaped {
+  @override
+  final Rect rect;
+  final double cell; // mosaic block size in native pixels
+  final Image? mosaic;
+  const PixelateDrawable(this.rect, this.cell, this.mosaic, DrawStyle style)
+      : super(style);
+
+  @override
+  Rect get bounds => rect;
+
+  @override
+  PixelateDrawable moved(Offset d) =>
+      PixelateDrawable(rect.shift(d), cell, mosaic, style);
+
+  @override
+  PixelateDrawable resizedTo(Rect r) =>
+      PixelateDrawable(r, cell, mosaic, style);
+
+  PixelateDrawable withMosaic(Image m) =>
+      PixelateDrawable(rect, cell, m, style);
+}
+
+/// A pasted bitmap (from the clipboard) drawn into [rect]. Movable/resizable.
+class ImageDrawable extends Drawable implements RectShaped {
+  @override
+  final Rect rect;
+  final Image image;
+  const ImageDrawable(this.rect, this.image, DrawStyle style) : super(style);
+
+  @override
+  Rect get bounds => rect;
+
+  @override
+  ImageDrawable moved(Offset d) => ImageDrawable(rect.shift(d), image, style);
+
+  @override
+  ImageDrawable resizedTo(Rect r) => ImageDrawable(r, image, style);
+}
+
 Rect _segmentBounds(Offset a, Offset b) => Rect.fromLTRB(
       a.dx < b.dx ? a.dx : b.dx,
       a.dy < b.dy ? a.dy : b.dy,

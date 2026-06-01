@@ -7,7 +7,7 @@ import 'package:glimpr/overlay/toolbar.dart';
 /// and rebuild the contextual options row for EVERY tool without throwing
 /// (exercises each ToolKind branch in the options row, incl. text/step font).
 void main() {
-  testWidgets('builds 9 tools and every tool options row', (tester) async {
+  testWidgets('builds every tool and every tool options row', (tester) async {
     final c = EditorController();
     addTearDown(c.dispose);
 
@@ -21,8 +21,8 @@ void main() {
       ),
     ));
 
-    expect(EditorToolbar.tools.length, 9);
-    expect(find.byType(IconButton), findsNWidgets(9));
+    expect(EditorToolbar.tools.length, 12);
+    expect(find.byType(IconButton), findsNWidgets(12));
 
     for (final (kind, _) in EditorToolbar.tools) {
       c.selectTool(kind);

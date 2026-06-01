@@ -14,6 +14,9 @@ enum ToolKind {
   highlighter,
   text,
   step,
+  blur,
+  pixelate,
+  paste,
 }
 enum EditorPhase { annotate, crop }
 
@@ -78,6 +81,10 @@ class EditorController {
       PenDrawable() => d.withStyle(style.value),
       TextDrawable() => d.withStyle(style.value),
       StepDrawable() => d.withStyle(style.value),
+      // Raster regions carry no editable style (no color/width in their options).
+      BlurDrawable() => d,
+      PixelateDrawable() => d,
+      ImageDrawable() => d,
     };
     document.value = document.value.replaceAt(i, restyled);
   }
