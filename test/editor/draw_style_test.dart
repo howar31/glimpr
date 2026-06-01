@@ -3,10 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/draw_style.dart';
 
 void main() {
-  test('default style is red, width 3, font 18', () {
+  test('default style is red, medium width 4, font 18', () {
     const s = DrawStyle();
     expect(s.color, const Color(0xFFFF3B30));
-    expect(s.strokeWidth, 3);
+    expect(s.strokeWidth, 4); // medium preset
     expect(s.fontSize, 18);
   });
   test('copyWith overrides only given fields', () {

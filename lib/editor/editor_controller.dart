@@ -4,27 +4,68 @@ import 'draw_style.dart';
 import 'drawable.dart';
 import 'document.dart';
 
-enum ToolKind { select, rectangle, arrow, text, crop }
+enum ToolKind { crop, rectangle, arrow, text }
 enum EditorPhase { annotate, crop }
 
 /// Mutable editor state exposed as ValueListenables so widgets rebuild narrowly.
+/// Defaults to the Crop tool — most captures are a plain crop; annotation tools
+/// are opt-in (Flow B: draw first if you want, then crop).
 class EditorController {
-  final tool = ValueNotifier<ToolKind>(ToolKind.select);
+  /// Last-used style per tool, remembered across tool switches (and, when the
+  /// same map instance is reused, across captures). Owned externally so it
+  /// survives the controller being recreated for a new capture.
+  final Map<ToolKind, DrawStyle> toolStyles;
+
+  final tool = ValueNotifier<ToolKind>(ToolKind.crop);
   final style = ValueNotifier<DrawStyle>(const DrawStyle());
   final document = ValueNotifier<EditorDocument>(const EditorDocument());
   final selectedIndex = ValueNotifier<int?>(null);
-  final phase = ValueNotifier<EditorPhase>(EditorPhase.annotate);
+  final phase = ValueNotifier<EditorPhase>(EditorPhase.crop);
+
+  EditorController({Map<ToolKind, DrawStyle>? toolStyles})
+      : toolStyles = toolStyles ?? {} {
+    // Seed the active style from any remembered tool so a fresh capture keeps
+    // the user's last look instead of resetting to defaults.
+    final seed = this.toolStyles[ToolKind.rectangle] ??
+        this.toolStyles[ToolKind.arrow] ??
+        this.toolStyles[ToolKind.text];
+    if (seed != null) style.value = seed;
+  }
 
   void selectTool(ToolKind t) {
     tool.value = t;
     phase.value = t == ToolKind.crop ? EditorPhase.crop : EditorPhase.annotate;
-    if (t != ToolKind.select) selectedIndex.value = null;
+    selectedIndex.value = null; // switching tools drops the per-type selection
+    if (t != ToolKind.crop) {
+      final saved = toolStyles[t];
+      if (saved != null) style.value = saved; // restore this tool's last style
+    }
   }
 
-  void setColor(Color c) => style.value = style.value.copyWith(color: c);
+  void setColor(Color c) => _updateStyle(style.value.copyWith(color: c));
   void setStrokeWidth(double w) =>
-      style.value = style.value.copyWith(strokeWidth: w);
-  void setFontSize(double s) => style.value = style.value.copyWith(fontSize: s);
+      _updateStyle(style.value.copyWith(strokeWidth: w));
+  void setFontSize(double s) => _updateStyle(style.value.copyWith(fontSize: s));
+
+  void _updateStyle(DrawStyle s) {
+    style.value = s;
+    if (tool.value != ToolKind.crop) toolStyles[tool.value] = s; // remember it
+    _restyleSelected();
+  }
+
+  /// "Edit": when a drawable is selected (hovered/clicked), a style change also
+  /// updates that drawable, not just the style for future ones.
+  void _restyleSelected() {
+    final i = selectedIndex.value;
+    if (i == null || i >= document.value.drawables.length) return;
+    final d = document.value.drawables[i];
+    final restyled = switch (d) {
+      RectangleDrawable() => d.withStyle(style.value),
+      ArrowDrawable() => d.withStyle(style.value),
+      TextDrawable() => d.withStyle(style.value),
+    };
+    document.value = document.value.replaceAt(i, restyled);
+  }
 
   void commitDrawable(Drawable d) =>
       document.value = document.value.add(d);

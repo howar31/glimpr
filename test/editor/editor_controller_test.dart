@@ -5,10 +5,17 @@ import 'package:glimpr/editor/drawable.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 
 void main() {
-  test('starts in annotate phase with Select tool', () {
+  test('starts in crop phase with the Crop tool (crop is the default)', () {
     final c = EditorController();
+    expect(c.phase.value, EditorPhase.crop);
+    expect(c.tool.value, ToolKind.crop);
+    c.dispose();
+  });
+
+  test('switching to an annotation tool enters the annotate phase', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.rectangle);
     expect(c.phase.value, EditorPhase.annotate);
-    expect(c.tool.value, ToolKind.select);
     c.dispose();
   });
 
@@ -26,6 +33,17 @@ void main() {
     final c = EditorController();
     c.setColor(const Color(0xFF007AFF));
     expect(c.style.value.color, const Color(0xFF007AFF));
+    c.dispose();
+  });
+
+  test('setColor also restyles the selected drawable (edit)', () {
+    final c = EditorController();
+    c.commitDrawable(
+        const RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), DrawStyle()));
+    c.selectedIndex.value = 0;
+    c.setColor(const Color(0xFF34C759));
+    final d = c.document.value.drawables[0] as RectangleDrawable;
+    expect(d.style.color, const Color(0xFF34C759));
     c.dispose();
   });
 

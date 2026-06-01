@@ -21,7 +21,7 @@ class DrawStyle {
   final double fontSize;
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
-    this.strokeWidth = 3,
+    this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
     this.fontSize = 18,
   });
 

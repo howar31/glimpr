@@ -1,28 +1,36 @@
+import 'dart:ui' as ui;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
 import '../editor/drawable.dart';
 import '../editor/drawable_painter.dart';
 import '../editor/editor_controller.dart';
 import '../editor/hit_test.dart';
+import '../editor/text_metrics.dart';
+import 'crop_hud.dart';
+import 'rich_text_controller.dart';
 import 'selection_controller.dart';
 import 'selection_label.dart';
 import 'selection_scrim.dart';
 import 'toolbar.dart';
 
-/// In-overlay annotation editor for ONE display. Layers: (1) frozen image,
-/// (2) annotation layer, (3) crop scrim (crop phase only). Flow B: annotate with
-/// NO dim, then the Crop tool drag-commits an export; Return exports the whole
-/// display. Local gesture coords == display-local logical coords (window is
-/// sized to the display's logical frame, image is fit: fill).
+/// In-overlay annotation editor for ONE display. Default tool is Crop; each
+/// annotation tool manages only its OWN drawable type (hover highlights, drag
+/// moves, tap edits, right-click deletes; right-click also cancels an in-progress
+/// draw/crop). Crop dims only once a drag exists and shows a full-screen
+/// crosshair + pixel loupe. Local gesture coords == display-local logical coords.
 class EditorCanvas extends StatefulWidget {
   final CapturedDisplay display;
+  final ui.Image frozenImage; // native pixels — used by the loupe
   final EditorController controller;
   final Future<void> Function(Rect? selectionLogical) onExport;
   final VoidCallback onCancel;
   const EditorCanvas({
     super.key,
     required this.display,
+    required this.frozenImage,
     required this.controller,
     required this.onExport,
     required this.onCancel,
@@ -35,38 +43,48 @@ class EditorCanvas extends StatefulWidget {
 class _EditorCanvasState extends State<EditorCanvas> {
   final _focus = FocusNode();
   final _crop = SelectionController();
+  final _bridge = CaptureBridge();
 
-  // In-progress shape/arrow preview (annotate phase).
+  late Offset _cursor; // logical cursor (crosshair/loupe/nudge + hover)
+  late Offset _toolbarPos; // top-left of the draggable toolbar
+
+  // New-shape preview (drag on empty).
   Drawable? _preview;
   Offset? _dragStart;
 
-  // Select-tool edit (move or rectangle-corner resize) preview.
+  // Move/resize an existing drawable.
   int? _editIndex;
   Drawable? _editOriginal;
   Drawable? _editPreview;
   Offset? _moveStart;
-  int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable, else null
+  int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable
 
-  // Crop drag state (for arrow-key nudge while the mouse is held).
   bool _cropping = false;
-  Offset _cropPointer = Offset.zero;
+  bool _cancelGesture = false; // right-click cancelled the active drag
 
-  // Inline text editing.
-  final _textCtl = TextEditingController();
+  // Inline rich-text editing.
   final _textFocus = FocusNode();
+  RichTextController? _richCtl;
   Offset? _textPos;
+  int? _editTextIndex; // re-editing an existing text drawable
   bool _editingText = false;
 
   EditorController get c => widget.controller;
+  bool get _inCrop => c.phase.value == EditorPhase.crop;
 
   @override
   void initState() {
     super.initState();
+    _cursor = Offset(widget.display.width / 2, widget.display.height / 2);
+    _toolbarPos =
+        Offset(widget.display.width / 2 - 160, widget.display.height - 120);
     c.document.addListener(_rebuild);
     c.selectedIndex.addListener(_rebuild);
     c.tool.addListener(_rebuild);
+    c.tool.addListener(_onToolChanged);
     c.phase.addListener(_rebuild);
-    _textFocus.addListener(_onTextFocusChange);
+    c.style.addListener(_onStyleChanged);
+    _textFocus.addListener(_rebuild); // repaint our selection on focus changes
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
@@ -75,41 +93,68 @@ class _EditorCanvasState extends State<EditorCanvas> {
     c.document.removeListener(_rebuild);
     c.selectedIndex.removeListener(_rebuild);
     c.tool.removeListener(_rebuild);
+    c.tool.removeListener(_onToolChanged);
     c.phase.removeListener(_rebuild);
-    _textFocus.removeListener(_onTextFocusChange);
+    c.style.removeListener(_onStyleChanged);
+    _textFocus.removeListener(_rebuild);
+    _richCtl?.dispose();
     _focus.dispose();
     _crop.dispose();
-    _textCtl.dispose();
     _textFocus.dispose();
     super.dispose();
+  }
+
+  /// While editing, a toolbar style change applies to the selected text range
+  /// (or sets the style for subsequent typing) instead of the whole object.
+  void _onStyleChanged() {
+    if (_editingText) {
+      _richCtl?.applyStyle(c.style.value.color, c.style.value.fontSize);
+    }
   }
 
   void _rebuild() {
     if (mounted) setState(() {});
   }
 
-  void _onTextFocusChange() {
-    // Clicking away from the text field commits it.
-    if (_editingText && !_textFocus.hasFocus) _commitText();
+  void _onToolChanged() {
+    // Switching tools commits any in-progress text (its tool is gone). Blur no
+    // longer commits, so the pt field can take focus without ending editing.
+    if (_editingText) _commitText();
   }
+
+  // ---- type filter -------------------------------------------------------
+
+  bool Function(Drawable)? _typeFilter() {
+    switch (c.tool.value) {
+      case ToolKind.rectangle:
+        return (d) => d is RectangleDrawable;
+      case ToolKind.arrow:
+        return (d) => d is ArrowDrawable;
+      case ToolKind.text:
+        return (d) => d is TextDrawable;
+      case ToolKind.crop:
+        return null;
+    }
+  }
+
+  int? _hitActiveType(Offset p) =>
+      hitTestTop(c.document.value.drawables, p, where: _typeFilter());
 
   // ---- keyboard ----------------------------------------------------------
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (_editingText) return KeyEventResult.ignored; // text wrapper handles keys
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final key = e.logicalKey;
     final meta = HardwareKeyboard.instance.isMetaPressed;
     final shift = HardwareKeyboard.instance.isShiftPressed;
 
     if (key == LogicalKeyboardKey.escape) {
-      if (_editingText) {
-        _cancelText();
-        return KeyEventResult.handled;
-      }
-      if (c.phase.value == EditorPhase.crop) {
-        _crop.clear();
-        _cropping = false;
-        c.selectTool(ToolKind.select); // crop -> back to annotate
+      if (_inCrop && _cropping) {
+        setState(() {
+          _crop.clear();
+          _cropping = false;
+        });
         return KeyEventResult.handled;
       }
       widget.onCancel();
@@ -124,33 +169,73 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
     if ((key == LogicalKeyboardKey.enter ||
             key == LogicalKeyboardKey.numpadEnter) &&
-        c.phase.value == EditorPhase.annotate &&
-        !_editingText) {
-      widget.onExport(null); // no crop -> whole display
+        !_inCrop) {
+      widget.onExport(null); // annotate phase, no crop -> whole display
       return KeyEventResult.handled;
     }
 
     if ((key == LogicalKeyboardKey.delete ||
             key == LogicalKeyboardKey.backspace) &&
-        c.tool.value == ToolKind.select &&
-        c.selectedIndex.value != null &&
-        !_editingText) {
+        c.selectedIndex.value != null) {
       c.deleteSelected();
       return KeyEventResult.handled;
     }
 
-    // Arrow-nudge the crop pointer by 1px while the mouse is held.
-    if (_cropping) {
+    // Tool shortcuts: 1=Crop, 2=Rectangle, 3=Arrow, 4=Text.
+    const order = [
+      ToolKind.crop,
+      ToolKind.rectangle,
+      ToolKind.arrow,
+      ToolKind.text,
+    ];
+    const digits = [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+    ];
+    final di = digits.indexOf(key);
+    if (di != -1) {
+      c.selectTool(order[di]);
+      return KeyEventResult.handled;
+    }
+
+    // Crop arrow-nudge: move crosshair/selection AND warp the OS cursor 1px so a
+    // subsequent physical mouse move continues from the nudged point.
+    if (_inCrop) {
       Offset? delta;
       if (key == LogicalKeyboardKey.arrowLeft) delta = const Offset(-1, 0);
       if (key == LogicalKeyboardKey.arrowRight) delta = const Offset(1, 0);
       if (key == LogicalKeyboardKey.arrowUp) delta = const Offset(0, -1);
       if (key == LogicalKeyboardKey.arrowDown) delta = const Offset(0, 1);
       if (delta != null) {
-        _cropPointer += delta;
-        _crop.update(_cropPointer);
+        final next = Offset(
+          (_cursor.dx + delta.dx).clamp(0.0, widget.display.width),
+          (_cursor.dy + delta.dy).clamp(0.0, widget.display.height),
+        );
+        setState(() => _cursor = next);
+        if (_cropping) _crop.update(next);
+        _bridge.warpCursor(
+            widget.display.left + next.dx, widget.display.top + next.dy);
         return KeyEventResult.handled;
       }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _onTextKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e.logicalKey == LogicalKeyboardKey.enter ||
+        e.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        return KeyEventResult.ignored; // Shift+Enter -> newline
+      }
+      _commitText();
+      return KeyEventResult.handled;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.escape) {
+      _cancelText();
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -158,10 +243,32 @@ class _EditorCanvasState extends State<EditorCanvas> {
   // ---- text editing ------------------------------------------------------
 
   void _startText(Offset at) {
+    final ctl = RichTextController(
+        color: c.style.value.color, size: c.style.value.fontSize)
+      ..addListener(_rebuild);
     setState(() {
+      _richCtl = ctl;
+      _editTextIndex = null;
       _textPos = at;
       _editingText = true;
-      _textCtl.text = '';
+      c.selectedIndex.value = null;
+    });
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _textFocus.requestFocus());
+  }
+
+  void _reEditText(int idx) {
+    final d = c.document.value.drawables[idx];
+    if (d is! TextDrawable) return;
+    final ctl = RichTextController.fromRuns(d.runs,
+        color: c.style.value.color, size: c.style.value.fontSize)
+      ..addListener(_rebuild);
+    setState(() {
+      _richCtl = ctl;
+      _editTextIndex = idx;
+      _textPos = d.position;
+      _editingText = true;
+      c.selectedIndex.value = null;
     });
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _textFocus.requestFocus());
@@ -169,19 +276,33 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   void _commitText() {
     final pos = _textPos;
-    final text = _textCtl.text;
-    if (pos != null && text.trim().isNotEmpty) {
-      c.commitDrawable(TextDrawable(pos, text, c.style.value));
+    final ctl = _richCtl;
+    final idx = _editTextIndex;
+    if (pos != null && ctl != null) {
+      if (ctl.text.trim().isNotEmpty) {
+        final d = TextDrawable(pos, ctl.toRuns(), c.style.value);
+        c.document.value = idx != null
+            ? c.document.value.replaceAt(idx, d)
+            : c.document.value.add(d);
+      } else if (idx != null) {
+        c.document.value = c.document.value.removeAt(idx); // edited to empty
+      }
     }
     _cancelText();
   }
 
   void _cancelText() {
+    final old = _richCtl;
+    old?.removeListener(_rebuild);
     setState(() {
       _editingText = false;
       _textPos = null;
-      _textCtl.clear();
+      _editTextIndex = null;
+      _richCtl = null;
     });
+    // Dispose after this frame so the now-removed TextField doesn't touch a
+    // disposed controller.
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
     _focus.requestFocus();
   }
 
@@ -189,6 +310,30 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   List<Offset> _rectCorners(Rect r) =>
       [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+
+  bool _nearHandles(Drawable d, Offset p) {
+    if (d is RectangleDrawable) {
+      for (final corner in _rectCorners(d.rect.inflate(4))) {
+        if ((corner - p).distance <= 16) return true;
+      }
+    }
+    return d.bounds.inflate(8).contains(p);
+  }
+
+  void _onHover(PointerHoverEvent e) {
+    final p = e.localPosition;
+    setState(() => _cursor = p);
+    if (_inCrop) return;
+    final drawables = c.document.value.drawables;
+    final cur = c.selectedIndex.value;
+    // Keep the current selection while hovering its handle/edge zone so the
+    // handles stay visible and grabbable (they sit just outside the shape).
+    if (cur != null && cur < drawables.length && _nearHandles(drawables[cur], p)) {
+      return;
+    }
+    final idx = _hitActiveType(p); // highlight same-type drawable under cursor
+    if (cur != idx) c.selectedIndex.value = idx;
+  }
 
   void _onTapUp(TapUpDetails d) {
     if (_editingText) {
@@ -198,92 +343,126 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final p = d.localPosition;
     switch (c.tool.value) {
       case ToolKind.text:
-        _startText(p);
+        final idx = _hitActiveType(p);
+        idx != null ? _reEditText(idx) : _startText(p);
         break;
-      case ToolKind.select:
-        c.selectedIndex.value = hitTestTop(c.document.value.drawables, p);
+      case ToolKind.rectangle:
+      case ToolKind.arrow:
+        c.selectedIndex.value = _hitActiveType(p);
         break;
-      default:
+      case ToolKind.crop:
         break;
     }
+  }
+
+  void _onRightDown(Offset p) {
+    // Crop: right-click cancels the selection (set _cancelGesture so the
+    // pending pan-end does NOT commit/export).
+    if (c.tool.value == ToolKind.crop) {
+      setState(() {
+        _crop.clear();
+        _cropping = false;
+        _cancelGesture = true;
+      });
+      return;
+    }
+    // Cancel an in-progress draw / move / resize.
+    if (_preview != null || _dragStart != null || _editIndex != null) {
+      setState(() {
+        _cancelGesture = true;
+        _resetDrawState();
+        _resetEditState();
+      });
+      return;
+    }
+    // Otherwise delete the same-type drawable under the cursor.
+    final idx = _hitActiveType(p);
+    if (idx != null) {
+      c.document.value = c.document.value.removeAt(idx);
+      c.selectedIndex.value = null;
+    }
+  }
+
+  void _resetDrawState() {
+    _preview = null;
+    _dragStart = null;
+  }
+
+  void _resetEditState() {
+    _editIndex = null;
+    _editOriginal = null;
+    _editPreview = null;
+    _moveStart = null;
+    _resizeCorner = null;
   }
 
   void _panStart(DragStartDetails d) {
+    _cancelGesture = false;
     final p = d.localPosition;
-    switch (c.tool.value) {
-      case ToolKind.rectangle:
-      case ToolKind.arrow:
-        _dragStart = p;
-        _preview = null;
-        break;
-      case ToolKind.crop:
-        _cropping = true;
-        _cropPointer = p;
-        _crop.begin(p);
-        break;
-      case ToolKind.select:
-        _beginSelectDrag(p);
-        break;
-      case ToolKind.text:
-        break;
+    if (c.tool.value == ToolKind.crop) {
+      _cropping = true;
+      setState(() => _cursor = p);
+      _crop.begin(p);
+      return;
     }
-  }
-
-  void _beginSelectDrag(Offset p) {
     final drawables = c.document.value.drawables;
-    final selIdx = c.selectedIndex.value;
-    // Rectangle corner resize when the press lands on a handle of the selection.
-    if (selIdx != null && selIdx < drawables.length) {
-      final sel = drawables[selIdx];
-      if (sel is RectangleDrawable) {
-        final corners = _rectCorners(sel.rect.inflate(4));
-        for (var i = 0; i < corners.length; i++) {
-          if ((corners[i] - p).distance <= 12) {
-            _editIndex = selIdx;
-            _editOriginal = sel;
-            _editPreview = sel;
-            _resizeCorner = i;
+    // Rectangle corner-resize: check every rectangle's corners (topmost first)
+    // with a generous tolerance, independent of the current hover selection.
+    if (c.tool.value == ToolKind.rectangle) {
+      for (var idx = drawables.length - 1; idx >= 0; idx--) {
+        final d = drawables[idx];
+        if (d is! RectangleDrawable) continue;
+        final corners = _rectCorners(d.rect.inflate(4));
+        for (var ci = 0; ci < corners.length; ci++) {
+          if ((corners[ci] - p).distance <= 16) {
+            _editIndex = idx;
+            _editOriginal = d;
+            _editPreview = d;
+            _resizeCorner = ci;
+            c.selectedIndex.value = idx;
             return;
           }
         }
       }
     }
-    // Otherwise hit-test to select + move.
-    final i = hitTestTop(drawables, p);
-    c.selectedIndex.value = i;
-    if (i != null) {
-      _editIndex = i;
-      _editOriginal = drawables[i];
-      _editPreview = drawables[i];
+    final hit = _hitActiveType(p);
+    if (hit != null) {
+      _editIndex = hit;
+      _editOriginal = drawables[hit];
+      _editPreview = drawables[hit];
       _moveStart = p;
       _resizeCorner = null;
+      c.selectedIndex.value = hit;
+    } else {
+      _dragStart = p; // start drawing a new same-type drawable (not for text)
+      _preview = null;
     }
   }
 
   void _panUpdate(DragUpdateDetails d) {
+    if (_cancelGesture) return;
     final p = d.localPosition;
+    if (c.tool.value == ToolKind.crop) {
+      setState(() => _cursor = p);
+      _crop.update(p);
+      return;
+    }
+    if (_editIndex != null) {
+      _updateSelectDrag(p);
+      return;
+    }
+    final s = _dragStart;
+    if (s == null) return;
     switch (c.tool.value) {
       case ToolKind.rectangle:
-        final s = _dragStart;
-        if (s != null) {
-          setState(() =>
-              _preview = RectangleDrawable(Rect.fromPoints(s, p), c.style.value));
-        }
+        setState(() =>
+            _preview = RectangleDrawable(Rect.fromPoints(s, p), c.style.value));
         break;
       case ToolKind.arrow:
-        final s = _dragStart;
-        if (s != null) {
-          setState(() => _preview = ArrowDrawable(s, p, c.style.value));
-        }
-        break;
-      case ToolKind.crop:
-        _cropPointer = p;
-        _crop.update(p);
-        break;
-      case ToolKind.select:
-        _updateSelectDrag(p);
+        setState(() => _preview = ArrowDrawable(s, p, c.style.value));
         break;
       case ToolKind.text:
+      case ToolKind.crop:
         break;
     }
   }
@@ -292,11 +471,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final orig = _editOriginal;
     if (orig == null) return;
     if (_resizeCorner != null && orig is RectangleDrawable) {
-      // Opposite corner stays fixed; dragged corner follows the pointer.
       final corners = _rectCorners(orig.rect);
       final opposite = corners[(_resizeCorner! + 2) % 4];
-      setState(() =>
-          _editPreview = orig.resized(Rect.fromPoints(opposite, p)));
+      setState(() => _editPreview = orig.resized(Rect.fromPoints(opposite, p)));
     } else {
       final start = _moveStart;
       if (start != null) {
@@ -306,58 +483,88 @@ class _EditorCanvasState extends State<EditorCanvas> {
   }
 
   void _panEnd(DragEndDetails d) {
-    switch (c.tool.value) {
-      case ToolKind.rectangle:
-      case ToolKind.arrow:
-        final prev = _preview;
-        if (prev != null && prev.bounds.longestSide >= 3) {
-          c.commitDrawable(prev);
-        }
-        setState(() {
-          _preview = null;
-          _dragStart = null;
-        });
-        break;
-      case ToolKind.crop:
-        _cropping = false;
-        final r = _crop.rect.value;
-        if (r != null && r.width >= 2 && r.height >= 2) {
-          widget.onExport(r); // drag-release commits the crop
-        } else {
-          _crop.clear();
-        }
-        break;
-      case ToolKind.select:
-        final i = _editIndex;
-        final prev = _editPreview;
-        if (i != null && prev != null) {
-          c.document.value = c.document.value.replaceAt(i, prev);
-        }
-        _editIndex = null;
-        _editOriginal = null;
-        _editPreview = null;
-        _moveStart = null;
-        _resizeCorner = null;
-        break;
-      case ToolKind.text:
-        break;
+    if (_cancelGesture) {
+      _cancelGesture = false;
+      setState(() {
+        _resetDrawState();
+        _resetEditState();
+      });
+      return;
     }
+    if (c.tool.value == ToolKind.crop) {
+      _cropping = false;
+      final r = _crop.rect.value;
+      if (r != null && r.width >= 2 && r.height >= 2) {
+        widget.onExport(r); // drag-release commits the crop
+      } else {
+        setState(() => _crop.clear());
+      }
+      return;
+    }
+    if (_editIndex != null) {
+      final i = _editIndex!;
+      final prev = _editPreview;
+      if (prev != null) c.document.value = c.document.value.replaceAt(i, prev);
+      setState(_resetEditState);
+      return;
+    }
+    final prev = _preview;
+    if (prev != null && prev.bounds.longestSide >= 3) {
+      c.commitDrawable(prev);
+    }
+    setState(_resetDrawState);
   }
 
   // ---- build -------------------------------------------------------------
 
   List<Drawable> _effectiveDrawables() {
-    final list = [...c.document.value.drawables];
+    var list = [...c.document.value.drawables];
     final i = _editIndex;
     final prev = _editPreview;
     if (i != null && prev != null && i < list.length) list[i] = prev;
     if (_preview != null) list.add(_preview!);
+    // While editing, the TextField text is transparent (caret only) and WE paint
+    // the live text via the painter — so what's shown is always the final
+    // rendering (zero shift on commit). New text appends; a re-edit replaces in
+    // place.
+    if (_editingText && _textPos != null && _richCtl != null) {
+      final live = TextDrawable(_textPos!, _richCtl!.toRuns(), c.style.value);
+      final t = _editTextIndex;
+      if (t != null && t < list.length) {
+        list[t] = live;
+      } else {
+        list = [...list, live];
+      }
+    }
     return list;
+  }
+
+  void _moveToolbar(Offset delta) {
+    setState(() {
+      _toolbarPos = Offset(
+        (_toolbarPos.dx + delta.dx).clamp(0.0, widget.display.width - 80),
+        (_toolbarPos.dy + delta.dy).clamp(0.0, widget.display.height - 60),
+      );
+    });
+  }
+
+  Offset _loupeOrigin() {
+    const size = 120.0;
+    const gap = 24.0;
+    var lx = _cursor.dx + gap;
+    var ly = _cursor.dy + gap;
+    if (lx + size > widget.display.width) lx = _cursor.dx - gap - size;
+    if (ly + size > widget.display.height) ly = _cursor.dy - gap - size;
+    return Offset(
+      lx.clamp(0.0, widget.display.width - size),
+      ly.clamp(0.0, widget.display.height - size),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final inCrop = c.phase.value == EditorPhase.crop;
+    final inCrop = _inCrop;
+    final loupeOrigin = _loupeOrigin();
     return Focus(
       focusNode: _focus,
       autofocus: true,
@@ -373,27 +580,49 @@ class _EditorCanvasState extends State<EditorCanvas> {
               gaplessPlayback: true,
             ),
           ),
-          // Layer 2: annotation layer.
+          // Layer 2: annotation layer (+ a highlight box on the hovered/selected
+          // drawable in the annotate phase).
           RepaintBoundary(
             child: CustomPaint(
               painter: DrawablePainter(
                 drawables: _effectiveDrawables(),
                 selectedIndex:
-                    c.tool.value == ToolKind.select ? c.selectedIndex.value : null,
+                    (inCrop || _editingText) ? null : c.selectedIndex.value,
               ),
               size: Size.infinite,
             ),
           ),
-          // Layer 3: crop scrim — only in the crop phase.
+          // Our own text-selection highlight — shown when the inline field is
+          // blurred (e.g. while typing a pt value), so the selected range stays
+          // visible. When the field is focused it draws its own highlight.
+          if (_editingText &&
+              _richCtl != null &&
+              _textPos != null &&
+              !_textFocus.hasFocus &&
+              !_richCtl!.selection.isCollapsed)
+            IgnorePointer(
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: TextSelectionPainter(
+                  span: buildTextSpan(
+                      TextDrawable(_textPos!, _richCtl!.toRuns(), c.style.value)),
+                  origin: _textPos!,
+                  selection: _richCtl!.selection,
+                ),
+              ),
+            ),
+          // Layer 3: crop scrim — only once a selection drag exists.
           if (inCrop)
             RepaintBoundary(
               child: ValueListenableBuilder<Rect?>(
                 valueListenable: _crop.rect,
-                builder: (context, rect, _) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CustomPaint(painter: SelectionScrimPainter(selection: rect)),
-                    if (rect != null)
+                builder: (context, rect, _) {
+                  if (rect == null) return const SizedBox.shrink();
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomPaint(
+                          painter: SelectionScrimPainter(selection: rect)),
                       Positioned(
                         left: rect.left,
                         top: (rect.bottom + 4).clamp(0, widget.display.height),
@@ -406,50 +635,109 @@ class _EditorCanvasState extends State<EditorCanvas> {
                           ),
                         ),
                       ),
-                  ],
+                    ],
+                  );
+                },
+              ),
+            ),
+          // Crop HUD: full-screen crosshair + pixel loupe.
+          if (inCrop)
+            IgnorePointer(
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: CrosshairPainter(_cursor),
+              ),
+            ),
+          if (inCrop)
+            Positioned(
+              left: loupeOrigin.dx,
+              top: loupeOrigin.dy,
+              child: IgnorePointer(
+                child: CustomPaint(
+                  size: const Size(120, 120),
+                  painter: LoupePainter(
+                    image: widget.frozenImage,
+                    cursorLogical: _cursor,
+                    scaleFactor: widget.display.scaleFactor,
+                  ),
                 ),
               ),
             ),
-          // Gesture layer (transparent, full-canvas).
+          // Gesture + hover layer. A Listener catches the right button reliably
+          // even mid-drag (GestureDetector's secondary-tap loses the arena to an
+          // active pan), so right-click can cancel an in-progress crop/draw.
           Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapUp: _onTapUp,
-              onPanStart: _panStart,
-              onPanUpdate: _panUpdate,
-              onPanEnd: _panEnd,
+            child: Listener(
+              onPointerDown: (e) {
+                if (e.buttons == kSecondaryButton) _onRightDown(e.localPosition);
+              },
+              child: MouseRegion(
+                cursor: inCrop
+                    ? SystemMouseCursors.none // our crosshair replaces it
+                    : SystemMouseCursors.basic,
+                onHover: _onHover,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: _onTapUp,
+                  onPanStart: _panStart,
+                  onPanUpdate: _panUpdate,
+                  onPanEnd: _panEnd,
+                ),
+              ),
             ),
           ),
-          // Inline text editor.
-          if (_editingText && _textPos != null)
+          // Inline multiline text editor (Enter commits, Shift+Enter newline).
+          if (_editingText && _textPos != null && _richCtl != null)
             Positioned(
               left: _textPos!.dx,
               top: _textPos!.dy,
-              child: IntrinsicWidth(
-                child: TextField(
-                  controller: _textCtl,
-                  focusNode: _textFocus,
-                  autofocus: true,
-                  cursorColor: c.style.value.color,
-                  style: TextStyle(
-                    color: c.style.value.color,
-                    fontSize: c.style.value.fontSize,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Focus(
+                  onKeyEvent: _onTextKey,
+                  child: IntrinsicWidth(
+                    child: TextField(
+                      controller: _richCtl,
+                      focusNode: _textFocus,
+                      autofocus: true,
+                      maxLines: null,
+                      // Don't auto-unfocus when tapping the toolbar: that's how
+                      // style controls adjust the selected text WHILE editing.
+                      // Canvas taps still commit explicitly (_onTapUp/_panStart);
+                      // switching tools commits via focus loss.
+                      onTapOutside: (_) {},
+                      cursorColor: c.style.value.color,
+                      // The controller renders transparent per-run spans (the
+                      // painter draws the visible rich text). Disable strut so
+                      // line metrics follow the (mixed-size) glyphs like the
+                      // painter does.
+                      style: textStyleOf(c.style.value),
+                      strutStyle: StrutStyle.disabled,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                   ),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  onSubmitted: (_) => _commitText(),
                 ),
               ),
             ),
-          // Toolbar (bottom-center).
+          // Draggable toolbar.
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 28,
-            child: Center(child: EditorToolbar(controller: c)),
+            left: _toolbarPos.dx,
+            top: _toolbarPos.dy,
+            // Material ancestor for the toolbar's TextField (pt) + IconButtons.
+            child: Material(
+              type: MaterialType.transparency,
+              child: EditorToolbar(
+                controller: c,
+                onMove: _moveToolbar,
+                onPtEditingDone: () {
+                  if (_editingText) _textFocus.requestFocus();
+                },
+              ),
+            ),
           ),
         ],
       ),

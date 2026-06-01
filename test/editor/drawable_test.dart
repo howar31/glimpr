@@ -28,10 +28,20 @@ void main() {
     expect(r.rect, const Rect.fromLTWH(0, 0, 20, 25));
   });
 
-  test('text drawable carries position and string', () {
-    const d = TextDrawable(Offset(5, 6), 'hi', style);
+  test('text drawable carries position and concatenated text', () {
+    final d = TextDrawable.plain(const Offset(5, 6), 'hi', style);
     expect(d.position, const Offset(5, 6));
     expect(d.text, 'hi');
     expect(d.moved(const Offset(1, 1)).bounds.topLeft, const Offset(6, 7));
+  });
+
+  test('text drawable joins multiple runs into one string', () {
+    const d = TextDrawable(
+      Offset(0, 0),
+      [TextRun('abc', Color(0xFFFF0000), 18), TextRun('123', Color(0xFF0000FF), 28)],
+      style,
+    );
+    expect(d.text, 'abc123');
+    expect(d.runs.length, 2);
   });
 }

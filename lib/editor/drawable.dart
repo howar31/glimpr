@@ -51,17 +51,45 @@ class ArrowDrawable extends Drawable {
   ArrowDrawable withStyle(DrawStyle s) => ArrowDrawable(start, end, s);
 }
 
+/// One styled segment of a [TextDrawable] — supports per-span color + size so a
+/// single text object can mix styles (e.g. "abc" red, "123" blue and larger).
+class TextRun {
+  final String text;
+  final Color color;
+  final double fontSize;
+  const TextRun(this.text, this.color, this.fontSize);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TextRun &&
+      other.text == text &&
+      other.color == color &&
+      other.fontSize == fontSize;
+  @override
+  int get hashCode => Object.hash(text, color, fontSize);
+}
+
 class TextDrawable extends Drawable {
   final Offset position; // top-left
-  final String text;
-  const TextDrawable(this.position, this.text, DrawStyle style) : super(style);
+  final List<TextRun> runs;
+  const TextDrawable(this.position, this.runs, DrawStyle style) : super(style);
+
+  /// Convenience for a single-style text (tests, simple callers).
+  factory TextDrawable.plain(Offset position, String text, DrawStyle style) =>
+      TextDrawable(position, [TextRun(text, style.color, style.fontSize)], style);
+
+  String get text => runs.map((r) => r.text).join();
 
   @override
   Rect get bounds => position & measureText(this);
 
   @override
-  TextDrawable moved(Offset d) => TextDrawable(position + d, text, style);
+  TextDrawable moved(Offset d) => TextDrawable(position + d, runs, style);
 
-  TextDrawable withText(String t) => TextDrawable(position, t, style);
-  TextDrawable withStyle(DrawStyle s) => TextDrawable(position, text, s);
+  TextDrawable withRuns(List<TextRun> r) => TextDrawable(position, r, style);
+
+  // Whole-object restyle (flattens to one style) — used when a text is selected
+  // and the toolbar style changes while NOT editing it.
+  TextDrawable withStyle(DrawStyle s) =>
+      TextDrawable(position, [TextRun(text, s.color, s.fontSize)], s);
 }

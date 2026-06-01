@@ -4,8 +4,12 @@ import 'drawable.dart';
 const double _kArrowHitTolerance = 8;
 
 /// Returns the index of the topmost (last-painted) drawable hit by [p], or null.
-int? hitTestTop(List<Drawable> drawables, Offset p) {
+/// When [where] is given, only drawables satisfying it are considered (used to
+/// hit-test against a single tool's own drawable type).
+int? hitTestTop(List<Drawable> drawables, Offset p,
+    {bool Function(Drawable)? where}) {
   for (var i = drawables.length - 1; i >= 0; i--) {
+    if (where != null && !where(drawables[i])) continue;
     if (_hits(drawables[i], p)) return i;
   }
   return null;

@@ -19,7 +19,13 @@ final class ScreenCapturer {
   }
 
   func refreshCache() {
-    SCShareableContent.getWithCompletionHandler { content, _ in self.cachedContent = content }
+    // Only adopt a refresh that actually has displays — a transient empty/error
+    // result during a display reconfiguration must not clobber a good cache.
+    SCShareableContent.getWithCompletionHandler { content, _ in
+      if let content = content, !content.displays.isEmpty {
+        self.cachedContent = content
+      }
+    }
   }
 
   /// true when Screen Recording (TCC) is granted; otherwise prompts and returns false.
@@ -33,12 +39,17 @@ final class ScreenCapturer {
 
   /// Captures every display. Throws CaptureError.noDisplays or rethrows SCK errors.
   func captureAll() async throws -> [[String: Any]] {
-    let content: SCShareableContent
-    if let cached = cachedContent { content = cached }
-    else { content = try await SCShareableContent.current }
-    cachedContent = content
+    // Trust the cache only while it still has displays; otherwise refetch fresh
+    // (the cache can go stale/empty across a display add/remove).
+    var shareable = cachedContent
+    if shareable == nil || shareable!.displays.isEmpty {
+      shareable = try await SCShareableContent.current
+      cachedContent = shareable
+    }
+    guard let content = shareable, !content.displays.isEmpty else {
+      throw CaptureError.noDisplays
+    }
     let displays = content.displays
-    if displays.isEmpty { throw CaptureError.noDisplays }
 
     let cursor = NSEvent.mouseLocation
     var out: [[String: Any]] = []
@@ -167,6 +178,15 @@ final class OverlayManager {
         switch call.method {
         case "overlayReady": self?.show(displayID: id); result(nil)
         case "dismissOverlay": self?.dismiss(); result(nil)
+        case "warpCursor":
+          if let a = call.arguments as? [String: Any],
+             let x = a["x"] as? Double, let y = a["y"] as? Double {
+            // Global top-left-origin display point. Re-associate so the mouse
+            // keeps tracking after the warp (no permanent decoupling).
+            CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
+            CGAssociateMouseAndMouseCursorPosition(1)
+          }
+          result(nil)
         default: result(FlutterMethodNotImplemented)
         }
       }

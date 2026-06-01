@@ -29,6 +29,12 @@ class CaptureBridge {
   /// may order its window front (capture-then-show).
   Future<void> overlayReady() => _channel.invokeMethod('overlayReady');
 
+  /// Warp the OS mouse cursor to a GLOBAL display point (top-left origin,
+  /// logical points) so keyboard nudges move the real pointer, not just the
+  /// selection (otherwise the next mouse move resets the nudge).
+  Future<void> warpCursor(double x, double y) =>
+      _channel.invokeMethod('warpCursor', {'x': x, 'y': y});
+
   /// Register native -> Dart overlay callbacks. Call once per engine at startup.
   void registerOverlayHandlers({
     required void Function(CapturedDisplay display) onCaptureReady,

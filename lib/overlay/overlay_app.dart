@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../output/deliver.dart';
 import 'editor_canvas.dart';
@@ -21,6 +22,8 @@ class _OverlayAppState extends State<OverlayApp> {
   CapturedDisplay? _display;
   ui.Image? _frozen; // decoded once per capture, used for export compositing
   EditorController? _editor;
+  // Last-used style per tool, persisted across captures (in-session).
+  final Map<ToolKind, DrawStyle> _toolStyles = {};
   String? _toast; // shown briefly only when a delivery leg failed
 
   @override
@@ -50,7 +53,7 @@ class _OverlayAppState extends State<OverlayApp> {
         setState(() {
           _toast = null;
           _frozen = frozen;
-          _editor = EditorController();
+          _editor = EditorController(toolStyles: _toolStyles);
           _display = d;
         });
         // Frozen frame is built; reveal this display's window (no blank flash).
@@ -127,6 +130,7 @@ class _OverlayAppState extends State<OverlayApp> {
               children: [
                 EditorCanvas(
                   display: d,
+                  frozenImage: frozen,
                   controller: editor,
                   onExport: _onExport,
                   onCancel: _dismiss,
