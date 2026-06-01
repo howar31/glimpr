@@ -77,7 +77,7 @@ class HighlighterDrawable extends Drawable {
   final Offset start;
   final Offset end;
   const HighlighterDrawable(this.start, this.end, DrawStyle style)
-      : super(style);
+    : super(style);
 
   @override
   Rect get bounds => _segmentBounds(start, end);
@@ -200,11 +200,11 @@ class ImageDrawable extends Drawable implements RectShaped {
 }
 
 Rect _segmentBounds(Offset a, Offset b) => Rect.fromLTRB(
-      a.dx < b.dx ? a.dx : b.dx,
-      a.dy < b.dy ? a.dy : b.dy,
-      a.dx > b.dx ? a.dx : b.dx,
-      a.dy > b.dy ? a.dy : b.dy,
-    );
+  a.dx < b.dx ? a.dx : b.dx,
+  a.dy < b.dy ? a.dy : b.dy,
+  a.dx > b.dx ? a.dx : b.dx,
+  a.dy > b.dy ? a.dy : b.dy,
+);
 
 class ArrowDrawable extends Drawable {
   final Offset start;
@@ -213,11 +213,11 @@ class ArrowDrawable extends Drawable {
 
   @override
   Rect get bounds => Rect.fromLTRB(
-        start.dx < end.dx ? start.dx : end.dx,
-        start.dy < end.dy ? start.dy : end.dy,
-        start.dx > end.dx ? start.dx : end.dx,
-        start.dy > end.dy ? start.dy : end.dy,
-      );
+    start.dx < end.dx ? start.dx : end.dx,
+    start.dy < end.dy ? start.dy : end.dy,
+    start.dx > end.dx ? start.dx : end.dx,
+    start.dy > end.dy ? start.dy : end.dy,
+  );
 
   @override
   ArrowDrawable moved(Offset d) => ArrowDrawable(start + d, end + d, style);
@@ -253,7 +253,9 @@ class TextDrawable extends Drawable {
 
   /// Convenience for a single-style text (tests, simple callers).
   factory TextDrawable.plain(Offset position, String text, DrawStyle style) =>
-      TextDrawable(position, [TextRun(text, style.color, style.fontSize)], style);
+      TextDrawable(position, [
+        TextRun(text, style.color, style.fontSize),
+      ], style);
 
   String get text => runs.map((r) => r.text).join();
 

@@ -13,7 +13,11 @@ Rect nativeCropRect({
   required double scaleFactor,
 }) {
   final full = Rect.fromLTWH(
-      0, 0, logicalSize.width * scaleFactor, logicalSize.height * scaleFactor);
+    0,
+    0,
+    logicalSize.width * scaleFactor,
+    logicalSize.height * scaleFactor,
+  );
   if (selectionLogical == null) return full;
   final scaled = Rect.fromLTRB(
     selectionLogical.left * scaleFactor,

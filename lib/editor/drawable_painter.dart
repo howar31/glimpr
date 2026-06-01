@@ -44,7 +44,9 @@ class DrawablePainter extends CustomPainter {
         // Rounded corners; radius eases down for small rectangles.
         final radius = (d.rect.shortestSide / 4).clamp(0.0, 12.0);
         canvas.drawRRect(
-            RRect.fromRectAndRadius(d.rect, Radius.circular(radius)), paint);
+          RRect.fromRectAndRadius(d.rect, Radius.circular(radius)),
+          paint,
+        );
       case EllipseDrawable():
         final paint = Paint()
           ..color = d.style.color
@@ -90,7 +92,11 @@ class DrawablePainter extends CustomPainter {
         canvas.drawImageRect(
           d.image,
           Rect.fromLTWH(
-              0, 0, d.image.width.toDouble(), d.image.height.toDouble()),
+            0,
+            0,
+            d.image.width.toDouble(),
+            d.image.height.toDouble(),
+          ),
           d.rect,
           Paint()..filterQuality = FilterQuality.medium,
         );
@@ -101,8 +107,13 @@ class DrawablePainter extends CustomPainter {
   /// [rect], stretched across the display ([size]) so it aligns 1:1 with the
   /// frozen frame beneath. [nearest] keeps pixelate blocks crisp. A neutral
   /// placeholder shows while [full] is still being computed (or in unit tests).
-  void _paintMasked(Canvas canvas, Rect rect, Size size, ui.Image? full,
-      {required bool nearest}) {
+  void _paintMasked(
+    Canvas canvas,
+    Rect rect,
+    Size size,
+    ui.Image? full, {
+    required bool nearest,
+  }) {
     if (full == null) {
       canvas.drawRect(rect, Paint()..color = const Color(0x33000000));
       return;
@@ -122,8 +133,11 @@ class DrawablePainter extends CustomPainter {
   void _paintPen(Canvas canvas, PenDrawable d) {
     if (d.points.isEmpty) return;
     if (d.points.length == 1) {
-      canvas.drawCircle(d.points.first, d.style.strokeWidth / 2,
-          Paint()..color = d.style.color);
+      canvas.drawCircle(
+        d.points.first,
+        d.style.strokeWidth / 2,
+        Paint()..color = d.style.color,
+      );
       return;
     }
     final paint = Paint()
@@ -142,7 +156,12 @@ class DrawablePainter extends CustomPainter {
 
   void _paintStep(Canvas canvas, StepDrawable d) {
     canvas.drawCircle(
-        d.center, d.radius, Paint()..color = d.style.color..isAntiAlias = true);
+      d.center,
+      d.radius,
+      Paint()
+        ..color = d.style.color
+        ..isAntiAlias = true,
+    );
     final tp = TextPainter(
       text: TextSpan(
         text: '${d.number}',
@@ -156,14 +175,21 @@ class DrawablePainter extends CustomPainter {
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas,
-        Offset(d.center.dx - tp.width / 2, d.center.dy - tp.height / 2));
+    tp.paint(
+      canvas,
+      Offset(d.center.dx - tp.width / 2, d.center.dy - tp.height / 2),
+    );
   }
 
   /// Tapered, filled "brush" arrow: thin at the tail, swelling into a solid
   /// arrowhead — a marker-pen feel rather than a hairline.
   void _paintArrow(
-      Canvas canvas, Offset start, Offset end, Color color, double w) {
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Color color,
+    double w,
+  ) {
     final fill = Paint()
       ..color = color
       ..style = PaintingStyle.fill

@@ -25,8 +25,8 @@ class DeliveryResult {
 }
 
 /// Function seams so the orchestration is testable without the real plugins.
-typedef SaveFn = Future<String> Function(
-    Uint8List bytes, Directory dir, String name);
+typedef SaveFn =
+    Future<String> Function(Uint8List bytes, Directory dir, String name);
 typedef ClipboardFn = Future<void> Function(Uint8List bytes);
 typedef SoundFn = Future<void> Function();
 
@@ -48,11 +48,11 @@ Future<DeliveryResult> deliverCapture({
   ClipboardFn? clipboardFn,
   SoundFn? soundFn,
 }) async {
-  final dir = saveDir ??
-      Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
+  final dir =
+      saveDir ?? Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
   final name = fileName ?? screenshotFilename(DateTime.now(), 'png');
-  final save = saveFn ??
-      ((b, d, n) => saveBytes(dir: d, fileName: n, bytes: b));
+  final save =
+      saveFn ?? ((b, d, n) => saveBytes(dir: d, fileName: n, bytes: b));
   final clip = clipboardFn ?? Pasteboard.writeImage;
   final sound = soundFn ?? _defaultSound;
 

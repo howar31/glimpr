@@ -41,33 +41,37 @@ void main() {
     expect(played, isTrue);
   });
 
-  test('clipboard failure is captured but save and sound still succeed',
-      () async {
-    final r = await deliverCapture(
-      pngBytes: bytes,
-      fileName: 'y.png',
-      saveFn: (b, d, n) async => '/tmp/$n',
-      clipboardFn: (b) async => throw StateError('no pasteboard'),
-      soundFn: () async {},
-    );
-    expect(r.savedOk, isTrue);
-    expect(r.copiedToClipboard, isFalse);
-    expect(r.errors.containsKey('clipboard'), isTrue);
-    expect(r.soundPlayed, isTrue);
-  });
+  test(
+    'clipboard failure is captured but save and sound still succeed',
+    () async {
+      final r = await deliverCapture(
+        pngBytes: bytes,
+        fileName: 'y.png',
+        saveFn: (b, d, n) async => '/tmp/$n',
+        clipboardFn: (b) async => throw StateError('no pasteboard'),
+        soundFn: () async {},
+      );
+      expect(r.savedOk, isTrue);
+      expect(r.copiedToClipboard, isFalse);
+      expect(r.errors.containsKey('clipboard'), isTrue);
+      expect(r.soundPlayed, isTrue);
+    },
+  );
 
-  test('sound failure is non-critical: save and clipboard still report ok',
-      () async {
-    final r = await deliverCapture(
-      pngBytes: bytes,
-      fileName: 'z.png',
-      saveFn: (b, d, n) async => '/tmp/$n',
-      clipboardFn: (b) async {},
-      soundFn: () async => throw Exception('no audio'),
-    );
-    expect(r.savedOk, isTrue);
-    expect(r.copiedToClipboard, isTrue);
-    expect(r.soundPlayed, isFalse);
-    expect(r.errors.containsKey('sound'), isTrue);
-  });
+  test(
+    'sound failure is non-critical: save and clipboard still report ok',
+    () async {
+      final r = await deliverCapture(
+        pngBytes: bytes,
+        fileName: 'z.png',
+        saveFn: (b, d, n) async => '/tmp/$n',
+        clipboardFn: (b) async {},
+        soundFn: () async => throw Exception('no audio'),
+      );
+      expect(r.savedOk, isTrue);
+      expect(r.copiedToClipboard, isTrue);
+      expect(r.soundPlayed, isFalse);
+      expect(r.errors.containsKey('sound'), isTrue);
+    },
+  );
 }

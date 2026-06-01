@@ -13,8 +13,10 @@ Future<String> saveBytes({
   if (!await dir.exists()) {
     await dir.create(recursive: true);
   }
-  final name = uniqueName(fileName,
-      exists: (n) => File(p.join(dir.path, n)).existsSync());
+  final name = uniqueName(
+    fileName,
+    exists: (n) => File(p.join(dir.path, n)).existsSync(),
+  );
   final file = File(p.join(dir.path, name));
   await file.writeAsBytes(bytes, flush: true);
   return file.path;

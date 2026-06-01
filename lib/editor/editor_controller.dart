@@ -18,6 +18,7 @@ enum ToolKind {
   pixelate,
   paste,
 }
+
 enum EditorPhase { annotate, crop }
 
 /// Mutable editor state exposed as ValueListenables so widgets rebuild narrowly.
@@ -36,10 +37,11 @@ class EditorController {
   final phase = ValueNotifier<EditorPhase>(EditorPhase.crop);
 
   EditorController({Map<ToolKind, DrawStyle>? toolStyles})
-      : toolStyles = toolStyles ?? {} {
+    : toolStyles = toolStyles ?? {} {
     // Seed the active style from any remembered tool so a fresh capture keeps
     // the user's last look instead of resetting to defaults.
-    final seed = this.toolStyles[ToolKind.rectangle] ??
+    final seed =
+        this.toolStyles[ToolKind.rectangle] ??
         this.toolStyles[ToolKind.arrow] ??
         this.toolStyles[ToolKind.text];
     if (seed != null) style.value = seed;
@@ -89,8 +91,7 @@ class EditorController {
     document.value = document.value.replaceAt(i, restyled);
   }
 
-  void commitDrawable(Drawable d) =>
-      document.value = document.value.add(d);
+  void commitDrawable(Drawable d) => document.value = document.value.add(d);
 
   void replaceSelected(Drawable d) {
     final i = selectedIndex.value;

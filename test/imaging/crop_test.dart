@@ -15,22 +15,31 @@ void main() {
     return Uint8List.fromList(img.encodePng(im));
   }
 
-  test('crops with scaleFactor 2.0 to native pixels and keeps the right region', () {
-    final src = makeSourcePng();
-    final out = cropToSelection(
-      pngBytes: src, scaleFactor: 2.0, selection: const Rect.fromLTWH(50, 0, 50, 50));
-    final decoded = img.decodePng(out)!;
-    expect(decoded.width, 100);
-    expect(decoded.height, 100);
-    final p = decoded.getPixel(10, 10);
-    expect(p.r, 0);
-    expect(p.b, 255);
-  });
+  test(
+    'crops with scaleFactor 2.0 to native pixels and keeps the right region',
+    () {
+      final src = makeSourcePng();
+      final out = cropToSelection(
+        pngBytes: src,
+        scaleFactor: 2.0,
+        selection: const Rect.fromLTWH(50, 0, 50, 50),
+      );
+      final decoded = img.decodePng(out)!;
+      expect(decoded.width, 100);
+      expect(decoded.height, 100);
+      final p = decoded.getPixel(10, 10);
+      expect(p.r, 0);
+      expect(p.b, 255);
+    },
+  );
 
   test('clamps a selection that exceeds the image bounds', () {
     final src = makeSourcePng();
     final out = cropToSelection(
-      pngBytes: src, scaleFactor: 2.0, selection: const Rect.fromLTWH(90, 40, 50, 50));
+      pngBytes: src,
+      scaleFactor: 2.0,
+      selection: const Rect.fromLTWH(90, 40, 50, 50),
+    );
     final decoded = img.decodePng(out)!;
     expect(decoded.width, 20);
     expect(decoded.height, 20);
@@ -39,7 +48,11 @@ void main() {
   test('encodes JPEG when quality is provided', () {
     final src = makeSourcePng();
     final out = cropToSelection(
-      pngBytes: src, scaleFactor: 1.0, selection: const Rect.fromLTWH(0, 0, 50, 50), jpegQuality: 90);
+      pngBytes: src,
+      scaleFactor: 1.0,
+      selection: const Rect.fromLTWH(0, 0, 50, 50),
+      jpegQuality: 90,
+    );
     expect(img.decodeJpg(out), isNotNull);
   });
 }

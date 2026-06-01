@@ -6,8 +6,11 @@ const double _kArrowHitTolerance = 8;
 /// Returns the index of the topmost (last-painted) drawable hit by [p], or null.
 /// When [where] is given, only drawables satisfying it are considered (used to
 /// hit-test against a single tool's own drawable type).
-int? hitTestTop(List<Drawable> drawables, Offset p,
-    {bool Function(Drawable)? where}) {
+int? hitTestTop(
+  List<Drawable> drawables,
+  Offset p, {
+  bool Function(Drawable)? where,
+}) {
   for (var i = drawables.length - 1; i >= 0; i--) {
     if (where != null && !where(drawables[i])) continue;
     if (_hits(drawables[i], p)) return i;
@@ -24,9 +27,11 @@ bool _hits(Drawable d, Offset p) {
     case TextDrawable():
       return d.bounds.contains(p);
     case ArrowDrawable():
-      return _distanceToSegment(p, d.start, d.end) <= _band(d.style.strokeWidth);
+      return _distanceToSegment(p, d.start, d.end) <=
+          _band(d.style.strokeWidth);
     case LineDrawable():
-      return _distanceToSegment(p, d.start, d.end) <= _band(d.style.strokeWidth);
+      return _distanceToSegment(p, d.start, d.end) <=
+          _band(d.style.strokeWidth);
     case HighlighterDrawable():
       return _distanceToSegment(p, d.start, d.end) <=
           _band(d.style.strokeWidth * 5);
@@ -44,8 +49,9 @@ bool _hits(Drawable d, Offset p) {
 }
 
 /// Grab band around a stroke: at least the base tolerance, wider for thick lines.
-double _band(double strokeWidth) =>
-    strokeWidth / 2 > _kArrowHitTolerance ? strokeWidth / 2 : _kArrowHitTolerance;
+double _band(double strokeWidth) => strokeWidth / 2 > _kArrowHitTolerance
+    ? strokeWidth / 2
+    : _kArrowHitTolerance;
 
 /// Point inside the (stroke-inflated) ellipse inscribed in [rect].
 bool _hitsEllipse(Rect rect, Offset p, double stroke) {

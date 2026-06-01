@@ -8,11 +8,7 @@ Path scrimPath(Size size, Rect? selection) {
   if (selection == null) return base;
   final hole = selection.intersect(full);
   if (hole.width <= 0 || hole.height <= 0) return base;
-  return Path.combine(
-    PathOperation.difference,
-    base,
-    Path()..addRect(hole),
-  );
+  return Path.combine(PathOperation.difference, base, Path()..addRect(hole));
 }
 
 /// Dims everything outside [selection] and outlines it.

@@ -31,7 +31,10 @@ void main() {
       const EllipseDrawable(Rect.fromLTWH(0, 0, 100, 50), style),
     ];
     expect(hitTestTop(list, const Offset(50, 25)), 0); // center -> inside
-    expect(hitTestTop(list, const Offset(2, 2)), isNull); // bbox corner, outside oval
+    expect(
+      hitTestTop(list, const Offset(2, 2)),
+      isNull,
+    ); // bbox corner, outside oval
     expect(hitTestTop(list, const Offset(200, 25)), isNull);
   });
 
@@ -58,9 +61,7 @@ void main() {
   });
 
   test('step hit is within the badge radius', () {
-    final list = <Drawable>[
-      StepDrawable(const Offset(50, 50), 1, style),
-    ];
+    final list = <Drawable>[StepDrawable(const Offset(50, 50), 1, style)];
     expect(hitTestTop(list, const Offset(50, 50)), 0);
     expect(hitTestTop(list, const Offset(200, 200)), isNull);
   });

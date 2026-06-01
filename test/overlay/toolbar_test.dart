@@ -11,15 +11,17 @@ void main() {
     final c = EditorController();
     addTearDown(c.dispose);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: EditorToolbar(
-          controller: c,
-          onMove: (_) {},
-          onPtEditingDone: () {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EditorToolbar(
+            controller: c,
+            onMove: (_) {},
+            onPtEditingDone: () {},
+          ),
         ),
       ),
-    ));
+    );
 
     expect(EditorToolbar.tools.length, 12);
     expect(find.byType(IconButton), findsNWidgets(12));

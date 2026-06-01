@@ -16,7 +16,10 @@ Future<ui.Image> blurWhole(ui.Image frozen, double sigma) async {
     ui.Offset.zero,
     ui.Paint()
       ..imageFilter = ui.ImageFilter.blur(
-          sigmaX: sigma, sigmaY: sigma, tileMode: ui.TileMode.clamp)
+        sigmaX: sigma,
+        sigmaY: sigma,
+        tileMode: ui.TileMode.clamp,
+      )
       ..filterQuality = ui.FilterQuality.medium,
   );
   return recorder.endRecording().toImage(frozen.width, frozen.height);

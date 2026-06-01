@@ -53,8 +53,11 @@ class EditorToolbar extends StatelessWidget {
                   cursor: SystemMouseCursors.move,
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 2),
-                    child: Icon(Icons.drag_indicator,
-                        color: Colors.white54, size: 20),
+                    child: Icon(
+                      Icons.drag_indicator,
+                      color: Colors.white54,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
@@ -125,13 +128,13 @@ class _Bar extends StatelessWidget {
   const _Bar({required this.child});
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xEE2B2B2B),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: child,
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xEE2B2B2B),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: child,
+  );
 }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
@@ -176,7 +179,8 @@ class _OptionsRow extends StatelessWidget {
             builder: (_, style, _) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final c in kColorPresets) _ColorSwatch(controller, style, c),
+                for (final c in kColorPresets)
+                  _ColorSwatch(controller, style, c),
                 if (showsWidth) ...[
                   const SizedBox(width: 10),
                   for (final w in kStrokeWidths)
@@ -202,21 +206,21 @@ class _ColorSwatch extends StatelessWidget {
   const _ColorSwatch(this.controller, this.style, this.color);
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: () => controller.setColor(color),
-        child: Container(
-          width: 18,
-          height: 18,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: style.color == color ? Colors.white : Colors.black26,
-              width: style.color == color ? 2 : 1,
-            ),
-          ),
+    onTap: () => controller.setColor(color),
+    child: Container(
+      width: 18,
+      height: 18,
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: style.color == color ? Colors.white : Colors.black26,
+          width: style.color == color ? 2 : 1,
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _WidthSwatch extends StatelessWidget {
@@ -226,21 +230,21 @@ class _WidthSwatch extends StatelessWidget {
   const _WidthSwatch(this.controller, this.style, this.width);
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: () => controller.setStrokeWidth(width),
-        child: Container(
-          width: 26,
-          height: 22,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          alignment: Alignment.center,
-          child: Container(
-            width: 20,
-            height: width,
-            color: style.strokeWidth == width
-                ? Colors.lightBlueAccent
-                : Colors.white70,
-          ),
-        ),
-      );
+    onTap: () => controller.setStrokeWidth(width),
+    child: Container(
+      width: 26,
+      height: 22,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      alignment: Alignment.center,
+      child: Container(
+        width: 20,
+        height: width,
+        color: style.strokeWidth == width
+            ? Colors.lightBlueAccent
+            : Colors.white70,
+      ),
+    ),
+  );
 }
 
 /// Adjustable font size in points: a directly-typeable number field plus −/+
@@ -286,18 +290,19 @@ class _FontControlState extends State<_FontControl> {
     if (v != null) widget.controller.setFontSize(v.clamp(8, 200));
   }
 
-  void _step(double d) => widget.controller
-      .setFontSize((widget.controller.style.value.fontSize + d).clamp(8, 200));
+  void _step(double d) => widget.controller.setFontSize(
+    (widget.controller.style.value.fontSize + d).clamp(8, 200),
+  );
 
   @override
   Widget build(BuildContext context) {
     Widget btn(IconData icon, VoidCallback onTap) => GestureDetector(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(icon, color: Colors.white70, size: 16),
-          ),
-        );
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Icon(icon, color: Colors.white70, size: 16),
+      ),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

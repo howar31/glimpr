@@ -7,11 +7,8 @@ import 'drawable.dart';
 const double kTextLineHeight = 1.3;
 
 /// Base text style for a single-style draw style (used as a fallback).
-TextStyle textStyleOf(DrawStyle s) => TextStyle(
-      color: s.color,
-      fontSize: s.fontSize,
-      height: kTextLineHeight,
-    );
+TextStyle textStyleOf(DrawStyle s) =>
+    TextStyle(color: s.color, fontSize: s.fontSize, height: kTextLineHeight);
 
 /// Builds the (possibly multi-style) TextSpan for a [TextDrawable] from its
 /// runs. Empty text falls back to a single space so it still has a height.

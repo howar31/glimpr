@@ -22,7 +22,8 @@ void main() {
   test('commitDrawable adds to the document (undoable)', () {
     final c = EditorController();
     c.commitDrawable(
-        const RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), DrawStyle()));
+      const RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), DrawStyle()),
+    );
     expect(c.document.value.drawables.length, 1);
     c.undo();
     expect(c.document.value.drawables, isEmpty);
@@ -39,7 +40,8 @@ void main() {
   test('setColor also restyles the selected drawable (edit)', () {
     final c = EditorController();
     c.commitDrawable(
-        const RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), DrawStyle()));
+      const RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), DrawStyle()),
+    );
     c.selectedIndex.value = 0;
     c.setColor(const Color(0xFF34C759));
     final d = c.document.value.drawables[0] as RectangleDrawable;

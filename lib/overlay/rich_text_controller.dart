@@ -25,10 +25,13 @@ class RichTextController extends TextEditingController {
     String text = '',
     required Color color,
     required double size,
-  })  : _current = _CharStyle(color, size),
-        _styles = List.filled(text.length, _CharStyle(color, size),
-            growable: true),
-        super(text: text);
+  }) : _current = _CharStyle(color, size),
+       _styles = List.filled(
+         text.length,
+         _CharStyle(color, size),
+         growable: true,
+       ),
+       super(text: text);
 
   factory RichTextController.fromRuns(
     List<TextRun> runs, {
@@ -111,7 +114,9 @@ class RichTextController extends TextEditingController {
       while (j < text.length && _styles[j] == _styles[i]) {
         j++;
       }
-      runs.add(TextRun(text.substring(i, j), _styles[i].color, _styles[i].size));
+      runs.add(
+        TextRun(text.substring(i, j), _styles[i].color, _styles[i].size),
+      );
       i = j;
     }
     return runs;
@@ -131,16 +136,18 @@ class RichTextController extends TextEditingController {
       while (j < text.length && _styles[j] == _styles[i]) {
         j++;
       }
-      children.add(TextSpan(
-        text: text.substring(i, j),
-        // Transparent glyphs (painter draws the visible text); REAL size so the
-        // caret/selection geometry matches the painted result.
-        style: TextStyle(
-          color: const Color(0x00000000),
-          fontSize: _styles[i].size,
-          height: kTextLineHeight,
+      children.add(
+        TextSpan(
+          text: text.substring(i, j),
+          // Transparent glyphs (painter draws the visible text); REAL size so the
+          // caret/selection geometry matches the painted result.
+          style: TextStyle(
+            color: const Color(0x00000000),
+            fontSize: _styles[i].size,
+            height: kTextLineHeight,
+          ),
         ),
-      ));
+      );
       i = j;
     }
     return TextSpan(style: style, children: children);
