@@ -143,9 +143,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // Switching tools commits any in-progress text (its tool is gone). Blur no
     // longer commits, so the pt field can take focus without ending editing.
     if (_editingText) _commitText();
-    // Selecting the Paste tool pastes the clipboard image immediately (the
-    // guard stops the selectTool inside _pasteImage from re-triggering this).
-    if (c.tool.value == ToolKind.paste && !_pasting) _pasteImage();
+    // Paste is triggered by Cmd-V only; selecting the Paste tool just enters
+    // paste mode (to select / move / right-click-delete already-pasted images).
   }
 
   // ---- cross-display follow ----------------------------------------------
@@ -888,7 +887,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
           Positioned.fill(
             child: Listener(
               onPointerDown: (e) {
-                if (e.buttons == kSecondaryButton) _onRightDown(e.localPosition);
+                // Bitwise test, not ==: during a crop drag the left button is
+                // also held (buttons = primary|secondary), so an exact ==
+                // kSecondaryButton missed the right-click and the crop committed.
+                if ((e.buttons & kSecondaryButton) != 0) {
+                  _onRightDown(e.localPosition);
+                }
               },
               child: MouseRegion(
                 cursor: (_active && inCrop)

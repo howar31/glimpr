@@ -113,8 +113,11 @@ class DrawablePainter extends CustomPainter {
       src,
       rect,
       Paint()
+        // Clamp (not decal): the blur kernel samples edge pixels at the region
+        // border instead of transparent, so the blur reaches the rect edges
+        // (decal left a sharp, seemingly-unblurred ring around the region).
         ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: sigma, sigmaY: sigma, tileMode: TileMode.decal)
+            sigmaX: sigma, sigmaY: sigma, tileMode: TileMode.clamp)
         ..filterQuality = FilterQuality.medium,
     );
     canvas.restore();
