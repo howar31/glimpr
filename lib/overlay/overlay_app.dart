@@ -5,6 +5,7 @@ import '../capture/captured_display.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../output/deliver.dart';
+import '../output/sounds.dart';
 import 'editor_canvas.dart';
 import 'export.dart';
 
@@ -167,6 +168,7 @@ class _OverlayAppState extends State<OverlayApp> {
     // when done), so null _frozen first to keep _dismiss/_resetState from
     // disposing it out from under the background work. The shutter sound is the
     // last delivery leg, so it lands on completion.
+    playShutter(); // shutter at the instant of capture (fire-and-forget)
     final drawables = editor.document.value.drawables;
     _frozen = null;
     _dismiss();
@@ -177,9 +179,12 @@ class _OverlayAppState extends State<OverlayApp> {
         drawables: drawables,
         selectionLogical: selectionLogical,
       );
-      // Save + clipboard are the legs that matter; the overlay is already gone,
-      // so a critical failure is surfaced via a native alert.
-      if (!result.savedOk || !result.copiedToClipboard) {
+      // Save + clipboard are the legs that matter. On full success, play the
+      // completion chime; on a critical failure the overlay is already gone, so
+      // surface it via a native alert (no completion chime).
+      if (result.savedOk && result.copiedToClipboard) {
+        playComplete();
+      } else {
         _bridge.showError(_summary(result));
       }
     } catch (e) {

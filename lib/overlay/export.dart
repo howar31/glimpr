@@ -25,5 +25,11 @@ Future<DeliveryResult> exportAnnotated({
     selectionLogical: selectionLogical,
   );
   final saveDir = resolveSaveDir(await Settings.instance.getSaveDirectory());
-  return deliverCapture(pngBytes: png, saveDir: saveDir);
+  // Sounds are orchestrated by the caller (shutter at commit, completion on
+  // success), so suppress deliverCapture's built-in shutter leg here.
+  return deliverCapture(
+    pngBytes: png,
+    saveDir: saveDir,
+    soundFn: () async {},
+  );
 }
