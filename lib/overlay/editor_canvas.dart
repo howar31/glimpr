@@ -735,12 +735,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
     }
     // Right-click is contextual (priority order):
     //  1) a gesture in progress -> CANCEL it (crop drag clears the selection; a
-    //     draw / move / resize reverts) and stay in capture;
-    //  2) over an existing drawable (ANY type) -> DELETE it and stay;
-    //  3) otherwise (empty space) -> EXIT the capture, like Esc.
-    // The any-type hit-test in (2) is what makes "only empty space exits" hold
-    // for every tool — incl. Crop and a tool whose type differs from the drawable
-    // under the cursor (those would otherwise wrongly fall through to exit).
+    //     draw / move / resize reverts), stay in capture;
+    //  2) over a SAME-TYPE drawable (the active tool only deletes its own type,
+    //     mirroring left-click selection) -> DELETE it, stay;
+    //  3) otherwise -> EXIT the capture, like Esc (nothing of the active tool's
+    //     type is under the cursor, so for that tool the spot is "empty").
     if (_cropping ||
         _dragStart != null ||
         _preview != null ||
@@ -755,13 +754,13 @@ class _EditorCanvasState extends State<EditorCanvas> {
       });
       return;
     }
-    final idx = hitTestTop(c.document.value.drawables, p);
+    final idx = _hitActiveType(p);
     if (idx != null) {
       c.document.value = c.document.value.removeAt(idx);
       c.selectedIndex.value = null;
       return;
     }
-    widget.onCancel(); // empty space -> exit capture
+    widget.onCancel(); // no same-type drawable here -> exit capture
   }
 
   void _resetDrawState() {
