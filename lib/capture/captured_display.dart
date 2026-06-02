@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show Rect;
 
 /// One frozen display returned by the native capture channel.
 /// [left/top/width/height] are LOGICAL global-desktop coords; [pngBytes] is NATIVE resolution.
@@ -16,6 +17,9 @@ class CapturedDisplay {
   // is, instead of the display centre. Null on the non-cursor displays.
   final double? cursorX;
   final double? cursorY;
+  // Snappable top-level windows on THIS display at capture time, display-local
+  // logical rects (top-left origin), front-to-back z-order. Empty if none.
+  final List<Rect> windows;
 
   const CapturedDisplay({
     required this.displayId,
@@ -28,6 +32,7 @@ class CapturedDisplay {
     required this.isCursorDisplay,
     this.cursorX,
     this.cursorY,
+    this.windows = const [],
   });
 
   factory CapturedDisplay.fromMap(Map<dynamic, dynamic> m) => CapturedDisplay(
@@ -41,5 +46,10 @@ class CapturedDisplay {
     isCursorDisplay: m['isCursorDisplay'] as bool,
     cursorX: (m['cursorX'] as num?)?.toDouble(),
     cursorY: (m['cursorY'] as num?)?.toDouble(),
+    windows: ((m['windows'] as List<dynamic>?) ?? const [])
+        .map((e) => (e as List).cast<num>())
+        .map((v) => Rect.fromLTWH(
+            v[0].toDouble(), v[1].toDouble(), v[2].toDouble(), v[3].toDouble()))
+        .toList(growable: false),
   );
 }
