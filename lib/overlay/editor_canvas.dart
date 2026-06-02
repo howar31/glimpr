@@ -754,7 +754,25 @@ class _EditorCanvasState extends State<EditorCanvas> {
       });
       return;
     }
-    final idx = _hitActiveType(p);
+    // Prefer the drawable whose handles are currently showing. If a same-type
+    // drawable is selected and the cursor is still in its handle/edge zone — the
+    // SAME generous test `_onHover` uses to keep the handles visible — delete
+    // THAT one. This matches the visual affordance: wherever the handles say a
+    // target is grabbable (e.g. just off a thin line, anywhere inside its
+    // bounds), right-click deletes it instead of falling through to the strict
+    // geometric hit and exiting as if the spot were empty. The type filter keeps
+    // it same-type only (a selection left over from a previous tool won't match).
+    final drawables = c.document.value.drawables;
+    final cur = c.selectedIndex.value;
+    final filter = _typeFilter();
+    final idx =
+        (filter != null &&
+            cur != null &&
+            cur < drawables.length &&
+            filter(drawables[cur]) &&
+            _nearHandles(drawables[cur], p))
+        ? cur
+        : _hitActiveType(p);
     if (idx != null) {
       c.document.value = c.document.value.removeAt(idx);
       c.selectedIndex.value = null;
