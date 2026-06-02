@@ -1172,6 +1172,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
             // even mid-drag (GestureDetector's secondary-tap loses the arena to an
             // active pan), so right-click can cancel an in-progress crop/draw.
             Positioned.fill(
+              // Stable key so this layer (and its pan recognizer) is matched by
+              // key and never re-created when sibling layers above (the animated
+              // snap highlight) or below (the toolbar) toggle or change type
+              // mid-drag. Without it the unkeyed Stack diff misaligns and tears
+              // down the pan mid-gesture (crop stuck at 0x0).
+              key: const ValueKey('editor-gesture-layer'),
               child: Listener(
                 // Watch down/move/up: a right-button press DURING a left drag
                 // arrives as a move (the pointer is already down), not a down — so
