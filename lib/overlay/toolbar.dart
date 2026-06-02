@@ -125,6 +125,14 @@ class _ToolButton extends StatelessWidget {
   }
 }
 
+/// Soft dark shadow so white icons/text stay legible on ANY backdrop while the
+/// glass itself stays high-transparency. Works where an inverting blend can't
+/// (difference washes out on mid-gray); applied via IconTheme + DefaultTextStyle.
+const _glassShadows = <Shadow>[
+  Shadow(color: Color(0xCC000000), blurRadius: 2),
+  Shadow(color: Color(0x80000000), blurRadius: 5),
+];
+
 class _Bar extends StatelessWidget {
   final Widget child;
   const _Bar({required this.child});
@@ -141,13 +149,20 @@ class _Bar extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            // Dark enough (~80%) that the white icons stay legible over ANY
-            // backdrop (incl. white screenshots); the blur still reads as glass.
-            color: const Color(0xCC1C1C1E),
+            // High-transparency glass: a faint tint + the blur read as glass;
+            // legibility comes from the per-icon/text shadows (_glassShadows),
+            // which hold up on any backdrop.
+            color: const Color(0x40222226),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
           ),
-          child: child,
+          child: IconTheme.merge(
+            data: const IconThemeData(shadows: _glassShadows),
+            child: DefaultTextStyle.merge(
+              style: const TextStyle(shadows: _glassShadows),
+              child: child,
+            ),
+          ),
         ),
       ),
     );
