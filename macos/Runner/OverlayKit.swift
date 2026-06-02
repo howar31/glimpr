@@ -102,7 +102,43 @@ final class ScreenCapturer {
         dict["cursorX"] = Double(mouse.x - s.frame.minX)
         dict["cursorY"] = Double(s.frame.maxY - mouse.y)
       }
+      dict["windows"] = Self.snappableWindows(displayID: d.displayID)
       out.append(dict)
+    }
+    return out
+  }
+
+  /// Snappable top-level windows on [displayID], as display-local logical rects
+  /// [x, y, w, h] (top-left origin), front-to-back. Filters to normal app windows
+  /// (layer 0), excludes our own windows, the menu bar/Dock, tiny helpers, and
+  /// clamps to the display. Window bounds/owner/layer need no Screen-Recording
+  /// permission. CGWindowBounds and CGDisplayBounds are both CG global top-left.
+  static func snappableWindows(displayID: CGDirectDisplayID) -> [[Double]] {
+    let dispBounds = CGDisplayBounds(displayID)
+    let myPid = Int(getpid())
+    guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
+      as? [[String: Any]] else { return [] }
+    var out: [[Double]] = []
+    for w in infos { // front-to-back
+      guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
+            layer == 0 else { continue }
+      if let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.intValue,
+         pid == myPid { continue }
+      guard let b = w[kCGWindowBounds as String] as? [String: Any],
+            let x = (b["X"] as? NSNumber)?.doubleValue,
+            let y = (b["Y"] as? NSNumber)?.doubleValue,
+            let ww = (b["Width"] as? NSNumber)?.doubleValue,
+            let hh = (b["Height"] as? NSNumber)?.doubleValue else { continue }
+      if ww < 40 || hh < 40 { continue }
+      let r = CGRect(x: x, y: y, width: ww, height: hh)
+      let inter = r.intersection(dispBounds)
+      if inter.isNull || inter.width < 1 || inter.height < 1 { continue }
+      out.append([
+        Double(inter.minX - dispBounds.minX),
+        Double(inter.minY - dispBounds.minY),
+        Double(inter.width),
+        Double(inter.height),
+      ])
     }
     return out
   }
