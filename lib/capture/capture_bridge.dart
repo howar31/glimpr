@@ -6,21 +6,6 @@ class CaptureBridge {
   static const _channel = MethodChannel('glimpr/capture');
   static const _overlay = MethodChannel('glimpr/overlay');
 
-  Future<List<CapturedDisplay>> captureAllDisplays() async {
-    try {
-      final result = await _channel.invokeMethod<List<dynamic>>(
-        'captureAllDisplays',
-      );
-      if (result == null) return const [];
-      return result
-          .cast<Map<dynamic, dynamic>>()
-          .map(CapturedDisplay.fromMap)
-          .toList(growable: false);
-    } on PlatformException catch (e) {
-      throw CaptureException(e.code, e.message ?? '');
-    }
-  }
-
   /// Trigger the overlay capture flow (native captures + pushes + shows).
   Future<void> beginCapture() => _channel.invokeMethod('beginCapture');
 
@@ -96,12 +81,4 @@ class CaptureBridge {
       }
     });
   }
-}
-
-class CaptureException implements Exception {
-  final String code;
-  final String message;
-  CaptureException(this.code, this.message);
-  @override
-  String toString() => 'CaptureException($code): $message';
 }

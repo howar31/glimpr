@@ -3,6 +3,7 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   private var captureChannel: CaptureChannel?
+  private var captureController: CaptureController?
   private var roleChannel: FlutterMethodChannel?
   var overlayManager: OverlayManager?
 
@@ -14,8 +15,11 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    let capture = CaptureController(manager: { [weak self] in self?.overlayManager })
+    self.captureController = capture
     captureChannel = CaptureChannel(
       messenger: flutterViewController.engine.binaryMessenger,
+      capture: capture,
       manager: { [weak self] in self?.overlayManager }
     )
 
