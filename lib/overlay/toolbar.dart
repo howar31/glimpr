@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
@@ -17,21 +18,22 @@ class EditorToolbar extends StatelessWidget {
   });
 
   // (kind, icon, shortcut badge). Order mirrors editor_canvas `_onKey`:
-  // 1=Crop 2=Rectangle 3=Ellipse 4=Line 5=Arrow 6=Pen 7=Text 8=Highlighter
-  // 9=Step, then B=Blur P=Pixelate (letter shortcuts); Paste has none.
+  // region tools first on letter keys — C=Crop B=Blur P=Pixelate — then the
+  // drawing tools on digits: 1=Rectangle 2=Ellipse 3=Line 4=Arrow 5=Pen 6=Text
+  // 7=Highlighter 8=Step 9=Paste.
   static const tools = <(ToolKind, IconData, String?)>[
-    (ToolKind.crop, Icons.crop, '1'),
-    (ToolKind.rectangle, Icons.crop_square, '2'),
-    (ToolKind.ellipse, Icons.circle_outlined, '3'),
-    (ToolKind.line, Icons.horizontal_rule, '4'),
-    (ToolKind.arrow, Icons.north_east, '5'),
-    (ToolKind.pen, Icons.gesture, '6'),
-    (ToolKind.text, Icons.title, '7'),
-    (ToolKind.highlighter, Icons.border_color, '8'),
-    (ToolKind.step, Icons.looks_one, '9'),
+    (ToolKind.crop, Icons.crop, 'C'),
     (ToolKind.blur, Icons.blur_on, 'B'),
     (ToolKind.pixelate, Icons.grid_on, 'P'),
-    (ToolKind.paste, Icons.content_paste, null),
+    (ToolKind.rectangle, Icons.crop_square, '1'),
+    (ToolKind.ellipse, Icons.circle_outlined, '2'),
+    (ToolKind.line, Icons.horizontal_rule, '3'),
+    (ToolKind.arrow, Icons.north_east, '4'),
+    (ToolKind.pen, Icons.gesture, '5'),
+    (ToolKind.text, Icons.title, '6'),
+    (ToolKind.highlighter, Icons.border_color, '7'),
+    (ToolKind.step, Icons.looks_one, '8'),
+    (ToolKind.paste, Icons.content_paste, '9'),
   ];
 
   @override
@@ -127,14 +129,27 @@ class _Bar extends StatelessWidget {
   final Widget child;
   const _Bar({required this.child});
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: const Color(0xEE2B2B2B),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) {
+    // Frosted glass: blur the frozen screenshot behind the bar, a translucent
+    // dark fill over it, plus a faint top-light border. Pure Flutter so it looks
+    // identical on macOS + Windows (not native Liquid Glass, which is mac-only).
+    const radius = 12.0;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0x552B2B2B), // translucent so the blur shows
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
 }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),

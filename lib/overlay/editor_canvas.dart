@@ -356,19 +356,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
       return KeyEventResult.handled;
     }
 
-    // Tool shortcuts 1-9 (must mirror EditorToolbar.tools order):
-    // 1=Crop 2=Rectangle 3=Ellipse 4=Line 5=Arrow 6=Pen 7=Text 8=Highlighter
-    // 9=Step. Blur=B, Pixelate=P (below); Paste has no shortcut.
+    // Tool shortcuts (mirror EditorToolbar.tools): region tools on letters
+    // (C=Crop B=Blur P=Pixelate, below); the drawing tools on digits 1-9.
     const order = [
-      ToolKind.crop,
-      ToolKind.rectangle,
-      ToolKind.ellipse,
-      ToolKind.line,
-      ToolKind.arrow,
-      ToolKind.pen,
-      ToolKind.text,
-      ToolKind.highlighter,
-      ToolKind.step,
+      ToolKind.rectangle, // 1
+      ToolKind.ellipse, // 2
+      ToolKind.line, // 3
+      ToolKind.arrow, // 4
+      ToolKind.pen, // 5
+      ToolKind.text, // 6
+      ToolKind.highlighter, // 7
+      ToolKind.step, // 8
+      ToolKind.paste, // 9
     ];
     const digits = [
       LogicalKeyboardKey.digit1,
@@ -386,9 +385,13 @@ class _EditorCanvasState extends State<EditorCanvas> {
       c.selectTool(order[di]);
       return KeyEventResult.handled;
     }
-    // Letter shortcuts for the raster region tools (no digit slot). Guarded by
-    // !meta and the _editingText early-return above, so typing is never hijacked.
+    // Letter shortcuts for the region tools. Guarded by !meta and the
+    // _editingText early-return above, so typing is never hijacked.
     if (!meta) {
+      if (key == LogicalKeyboardKey.keyC) {
+        c.selectTool(ToolKind.crop);
+        return KeyEventResult.handled;
+      }
       if (key == LogicalKeyboardKey.keyB) {
         c.selectTool(ToolKind.blur);
         return KeyEventResult.handled;
