@@ -611,10 +611,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
         c.selectedIndex.value = _hitActiveType(p);
         break;
       case ToolKind.crop:
-        // Tap on a highlighted window snaps the crop to its bounds and commits
-        // immediately (a drag instead goes through _panStart -> freehand crop).
-        final win = topmostWindowAt(_windows, p);
-        if (win != null) widget.onExport(win);
+        // Tap snaps to the window under the cursor and commits immediately; with
+        // NO window under the cursor (bare desktop) it captures the whole display
+        // (onExport(null)). A drag instead goes through _panStart -> freehand crop.
+        widget.onExport(topmostWindowAt(_windows, p));
         break;
     }
   }
@@ -686,6 +686,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // Crop: right-click cancels the selection (set _cancelGesture so the
     // pending pan-end does NOT commit/export).
     if (c.tool.value == ToolKind.crop) {
+      // Cancelled -> release the cursor confine immediately so the crosshair can
+      // cross displays again, without waiting for the left button to release.
+      _bridge.setDrawingLock(false);
       setState(() {
         _crop.clear();
         _cropping = false;
@@ -1055,13 +1058,19 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 ),
               ),
             // Window-snap highlight (Crop tool, hovering a window, not dragging).
-            if (_active && inCrop && !_cropping && _hoverWindow != null)
-              IgnorePointer(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: WindowHighlightPainter(_hoverWindow!),
-                ),
+            // ALWAYS keep this layer present (conditional painter) so the Stack's
+            // child COUNT is stable: removing a child before the gesture detector
+            // when the drag starts (_cropping -> true) would shift it and tear
+            // down its pan recognizer mid-drag (crop stuck at 0x0).
+            IgnorePointer(
+              child: CustomPaint(
+                size: Size.infinite,
+                painter:
+                    (_active && inCrop && !_cropping && _hoverWindow != null)
+                    ? WindowHighlightPainter(_hoverWindow!)
+                    : null,
               ),
+            ),
             // Precision HUD: full-screen crosshair + pixel loupe — crop and the
             // raster region tools (blur/pixelate), active display only.
             if (_active && showsCrosshair)
