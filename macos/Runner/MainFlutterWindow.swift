@@ -28,7 +28,7 @@ class MainFlutterWindow: NSWindow {
     let roleChannel = FlutterMethodChannel(
       name: "glimpr/role", binaryMessenger: flutterViewController.engine.binaryMessenger)
     roleChannel.setMethodCallHandler { call, result in
-      if call.method == "getRole" { result("debug") } else { result(FlutterMethodNotImplemented) }
+      if call.method == "getRole" { result("control") } else { result(FlutterMethodNotImplemented) }
     }
     self.roleChannel = roleChannel
 
