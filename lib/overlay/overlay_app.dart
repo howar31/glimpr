@@ -6,6 +6,7 @@ import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../output/deliver.dart';
 import '../output/sounds.dart';
+import '../settings/settings.dart';
 import 'editor_canvas.dart';
 import 'export.dart';
 
@@ -22,6 +23,9 @@ class _OverlayAppState extends State<OverlayApp> {
   final _bridge = CaptureBridge();
   CapturedDisplay? _display;
   ui.Image? _frozen; // decoded once per capture, used for export compositing
+  // Capture-time settings, prefetched per capture (in onCaptured) so the
+  // shutter sound + delivery never await the store on the commit hot path.
+  CaptureSettings _capture = CaptureSettings.defaults;
   EditorController? _editor;
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
@@ -80,6 +84,11 @@ class _OverlayAppState extends State<OverlayApp> {
         _attachShared(_editor!); // sync tool/style with the other displays
         // Frozen frame is built; reveal this display's window (no blank flash).
         _bridge.overlayReady();
+        // Prefetch settings off the hot path: the read completes during the
+        // user's crop interaction, so _onExport reads _capture synchronously.
+        Settings.instance.loadCapture().then((c) {
+          if (mounted) _capture = c;
+        });
       },
       onCaptureFailed: (reason, msg) {
         if (mounted) _resetState();
@@ -169,7 +178,10 @@ class _OverlayAppState extends State<OverlayApp> {
     // when done), so null _frozen first to keep _dismiss/_resetState from
     // disposing it out from under the background work. The shutter sound is the
     // last delivery leg, so it lands on completion.
-    playShutter(); // shutter at the instant of capture (fire-and-forget)
+    final cap = _capture; // snapshot prefetched at capture (off the hot path)
+    if (cap.shutterSound) {
+      playShutter(); // shutter at the instant of capture (fire-and-forget)
+    }
     final drawables = editor.document.value.drawables;
     _frozen = null;
     _dismiss();
@@ -179,14 +191,18 @@ class _OverlayAppState extends State<OverlayApp> {
         frozenImage: frozen,
         drawables: drawables,
         selectionLogical: selectionLogical,
+        cap: cap,
       );
-      // Save + clipboard are the legs that matter. On full success, play the
-      // completion chime; on a critical failure the overlay is already gone, so
-      // surface it via a native alert (no completion chime).
-      if (result.savedOk && result.copiedToClipboard) {
-        playComplete();
+      // Success = every ENABLED leg succeeded (a disabled leg is not a failure).
+      // On success play the completion chime (if enabled); on a real failure the
+      // overlay is already gone, so surface it via a native alert.
+      final ok =
+          (!cap.saveToFile || result.savedOk) &&
+          (!cap.copyToClipboard || result.copiedToClipboard);
+      if (ok) {
+        if (cap.completionSound) playComplete();
       } else {
-        _bridge.showError(_summary(result));
+        _bridge.showError(_summary(result, cap));
       }
     } catch (e) {
       _bridge.showError('Capture failed: $e');
@@ -195,10 +211,13 @@ class _OverlayAppState extends State<OverlayApp> {
     }
   }
 
-  String _summary(DeliveryResult r) {
-    if (r.savedOk && !r.copiedToClipboard) return 'Saved — clipboard failed';
-    if (!r.savedOk && r.copiedToClipboard) return 'Copied — file save failed';
-    return 'Capture failed — not saved or copied';
+  String _summary(DeliveryResult r, CaptureSettings cap) {
+    final saveFailed = cap.saveToFile && !r.savedOk;
+    final clipFailed = cap.copyToClipboard && !r.copiedToClipboard;
+    if (saveFailed && clipFailed) return 'Capture failed — not saved or copied';
+    if (saveFailed) return 'Copied — file save failed';
+    if (clipFailed) return 'Saved — clipboard failed';
+    return 'Capture failed';
   }
 
   @override

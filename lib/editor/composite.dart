@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
+import 'package:image/image.dart' as imglib;
 import 'drawable.dart';
 import 'drawable_painter.dart';
 import 'raster.dart';
@@ -37,6 +38,8 @@ Future<Uint8List> compositeAndCrop({
   required double scaleFactor,
   required Size logicalSize,
   required Rect? selectionLogical,
+  bool jpeg = false,
+  int jpegQuality = 90,
 }) async {
   final crop = nativeCropRect(
     selectionLogical: selectionLogical,
@@ -77,6 +80,24 @@ Future<Uint8List> compositeAndCrop({
   // release their native memory rather than waiting for GC finalizers.
   blurredFull?.dispose();
   pixelatedFull?.dispose();
+  if (jpeg) {
+    // dart:ui can only encode PNG; for JPEG pull the raw RGBA and encode via
+    // the image package. This runs on the background path (overlay already
+    // hidden), so the extra encode cost is off the user-facing hot path.
+    final raw = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+    img.dispose();
+    final encoded = imglib.encodeJpg(
+      imglib.Image.fromBytes(
+        width: outW,
+        height: outH,
+        bytes: raw!.buffer,
+        numChannels: 4,
+        order: imglib.ChannelOrder.rgba,
+      ),
+      quality: jpegQuality,
+    );
+    return Uint8List.fromList(encoded);
+  }
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
   img.dispose();
   return data!.buffer.asUint8List();

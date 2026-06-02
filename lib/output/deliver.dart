@@ -36,10 +36,13 @@ final AudioPlayer _shutterPlayer = AudioPlayer()
 Future<void> _defaultSound() =>
     _shutterPlayer.play(AssetSource('sounds/shutter.wav'));
 
-/// Delivers an already-encoded image: file save + clipboard write + shutter
-/// sound. The bytes are encoded ONCE by the caller and reused for both the file
-/// and the clipboard (design §11 — no double compression). The three legs are
-/// independent; each captures its own failure into [DeliveryResult.errors].
+/// Delivers an already-encoded image (PNG or JPEG): file save + clipboard write
+/// + shutter sound. The bytes are encoded ONCE by the caller and reused for both
+/// the file and the clipboard (design §11 — no double compression). The legs are
+/// independent; each captures its own failure into [DeliveryResult.errors]. The
+/// save / clipboard legs can be disabled via [saveToFile] / [copyToClipboard]
+/// (a disabled leg is skipped, not failed — its result flag stays false with no
+/// error recorded).
 Future<DeliveryResult> deliverCapture({
   required Uint8List pngBytes,
   Directory? saveDir,
@@ -47,6 +50,8 @@ Future<DeliveryResult> deliverCapture({
   SaveFn? saveFn,
   ClipboardFn? clipboardFn,
   SoundFn? soundFn,
+  bool saveToFile = true,
+  bool copyToClipboard = true,
 }) async {
   final dir =
       saveDir ?? Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
@@ -59,18 +64,22 @@ Future<DeliveryResult> deliverCapture({
   final errors = <String, String>{};
 
   String? savedPath;
-  try {
-    savedPath = await save(pngBytes, dir, name);
-  } catch (e) {
-    errors['save'] = '$e';
+  if (saveToFile) {
+    try {
+      savedPath = await save(pngBytes, dir, name);
+    } catch (e) {
+      errors['save'] = '$e';
+    }
   }
 
   var copied = false;
-  try {
-    await clip(pngBytes);
-    copied = true;
-  } catch (e) {
-    errors['clipboard'] = '$e';
+  if (copyToClipboard) {
+    try {
+      await clip(pngBytes);
+      copied = true;
+    } catch (e) {
+      errors['clipboard'] = '$e';
+    }
   }
 
   var played = false;

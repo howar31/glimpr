@@ -74,4 +74,38 @@ void main() {
       expect(r.errors.containsKey('sound'), isTrue);
     },
   );
+
+  test('saveToFile=false skips the save leg without recording an error', () async {
+    var saveCalls = 0;
+    final r = await deliverCapture(
+      pngBytes: bytes,
+      saveFn: (b, d, n) async {
+        saveCalls++;
+        return '/tmp/$n';
+      },
+      clipboardFn: (b) async {},
+      soundFn: () async {},
+      saveToFile: false,
+    );
+    expect(saveCalls, 0); // leg not invoked
+    expect(r.savedOk, isFalse);
+    expect(r.savedPath, isNull);
+    expect(r.errors.containsKey('save'), isFalse); // skipped, not failed
+    expect(r.copiedToClipboard, isTrue);
+  });
+
+  test('copyToClipboard=false skips the clipboard leg without an error', () async {
+    var clipCalls = 0;
+    final r = await deliverCapture(
+      pngBytes: bytes,
+      saveFn: (b, d, n) async => '/tmp/$n',
+      clipboardFn: (b) async => clipCalls++,
+      soundFn: () async {},
+      copyToClipboard: false,
+    );
+    expect(clipCalls, 0); // leg not invoked
+    expect(r.copiedToClipboard, isFalse);
+    expect(r.errors.containsKey('clipboard'), isFalse); // skipped, not failed
+    expect(r.savedOk, isTrue);
+  });
 }
