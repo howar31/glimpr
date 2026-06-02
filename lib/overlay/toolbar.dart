@@ -108,13 +108,26 @@ class _ToolButton extends StatelessWidget {
             if (shortcut != null)
               Positioned(
                 right: 2,
-                bottom: 2,
+                bottom: 1,
                 child: Text(
                   shortcut!,
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 10,
                     height: 1,
-                    color: on ? Colors.lightBlueAccent : Colors.white54,
+                    fontWeight: FontWeight.w700,
+                    color: on ? Colors.lightBlueAccent : Colors.white,
+                    // Crisp 1px outline (8 zero-blur offsets), overriding the
+                    // inherited soft glass shadow which smears at this tiny size.
+                    shadows: const [
+                      Shadow(color: Color(0xFF000000), offset: Offset(0.7, 0)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(-0.7, 0)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(0, 0.7)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(0, -0.7)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(0.7, 0.7)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(0.7, -0.7)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(-0.7, 0.7)),
+                      Shadow(color: Color(0xFF000000), offset: Offset(-0.7, -0.7)),
+                    ],
                   ),
                 ),
               ),
