@@ -47,6 +47,7 @@ class _SettingsAppState extends State<SettingsApp> {
   bool _copyToClipboard = true;
   bool _shutterSound = true;
   bool _completionSound = true;
+  bool _rightClickExits = true;
 
   Settings get _s => widget.settings;
 
@@ -69,6 +70,7 @@ class _SettingsAppState extends State<SettingsApp> {
     final clip = await _s.getCopyToClipboard();
     final shutter = await _s.getShutterSound();
     final complete = await _s.getCompletionSound();
+    final rightClick = await _s.getRightClickExits();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -78,6 +80,7 @@ class _SettingsAppState extends State<SettingsApp> {
       _copyToClipboard = clip;
       _shutterSound = shutter;
       _completionSound = complete;
+      _rightClickExits = rightClick;
     });
   }
 
@@ -278,6 +281,19 @@ class _SettingsAppState extends State<SettingsApp> {
               onChanged: (v) async {
                 await _s.setCopyToClipboard(v);
                 if (mounted) setState(() => _copyToClipboard = v);
+              },
+            ),
+          ]),
+          const SizedBox(height: 18),
+          _caption('Capture'),
+          _card([
+            _switchTile(
+              label: 'Right-click exits',
+              subtitle: 'Right-click leaves capture mode (Esc always works)',
+              value: _rightClickExits,
+              onChanged: (v) async {
+                await _s.setRightClickExits(v);
+                if (mounted) setState(() => _rightClickExits = v);
               },
             ),
           ]),

@@ -42,6 +42,7 @@ void main() {
     expect(cap.completionSound, isTrue);
     expect(cap.saveToFile, isTrue);
     expect(cap.copyToClipboard, isTrue);
+    expect(cap.rightClickExits, isTrue);
   });
 
   test('format + quality round-trip and feed the snapshot', () async {
@@ -69,10 +70,12 @@ void main() {
     await s.setCompletionSound(false);
     await s.setSaveToFile(false);
     await s.setCopyToClipboard(false);
+    await s.setRightClickExits(false);
     final cap = await s.loadCapture();
     expect(cap.shutterSound, isFalse);
     expect(cap.completionSound, isFalse);
     expect(cap.saveToFile, isFalse);
     expect(cap.copyToClipboard, isFalse);
+    expect(cap.rightClickExits, isFalse);
   });
 }

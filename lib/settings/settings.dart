@@ -16,6 +16,7 @@ class CaptureSettings {
     this.completionSound = true,
     this.saveToFile = true,
     this.copyToClipboard = true,
+    this.rightClickExits = true,
   });
 
   final Directory? saveDir;
@@ -25,6 +26,7 @@ class CaptureSettings {
   final bool completionSound;
   final bool saveToFile;
   final bool copyToClipboard;
+  final bool rightClickExits; // right-click on empty space leaves capture mode
 
   static const defaults = CaptureSettings();
 
@@ -48,6 +50,7 @@ class Settings {
   static const _completionSoundKey = 'completion_sound';
   static const _saveToFileKey = 'save_to_file';
   static const _copyToClipboardKey = 'copy_to_clipboard';
+  static const _rightClickExitsKey = 'right_click_exits';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -88,6 +91,12 @@ class Settings {
   Future<void> setCopyToClipboard(bool v) =>
       store.setBool(_copyToClipboardKey, v);
 
+  // Capture interaction --------------------------------------------------
+  Future<bool> getRightClickExits() async =>
+      (await store.getBool(_rightClickExitsKey)) ?? true;
+  Future<void> setRightClickExits(bool v) =>
+      store.setBool(_rightClickExitsKey, v);
+
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
   Future<CaptureSettings> loadCapture() async => CaptureSettings(
     saveDir: resolveSaveDir(await getSaveDirectory()),
@@ -97,6 +106,7 @@ class Settings {
     completionSound: await getCompletionSound(),
     saveToFile: await getSaveToFile(),
     copyToClipboard: await getCopyToClipboard(),
+    rightClickExits: await getRightClickExits(),
   );
 }
 

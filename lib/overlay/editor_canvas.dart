@@ -36,6 +36,9 @@ class EditorCanvas extends StatefulWidget {
   // active iff the id matches its own display; on becoming active it seeds the
   // crosshair from the point so the cross lands without a stale frame.
   final ValueListenable<({int id, Offset cursor})> activeSignal;
+  // When false, right-click no longer EXITS capture (Esc still does); the other
+  // contextual right-click roles (commit text / cancel gesture / delete) remain.
+  final bool rightClickExits;
   const EditorCanvas({
     super.key,
     required this.display,
@@ -44,6 +47,7 @@ class EditorCanvas extends StatefulWidget {
     required this.onExport,
     required this.onCancel,
     required this.activeSignal,
+    this.rightClickExits = true,
   });
 
   @override
@@ -785,7 +789,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
       c.selectedIndex.value = null;
       return;
     }
-    widget.onCancel(); // no same-type drawable here -> exit capture
+    // Nothing of the active tool's type here -> exit, unless the user disabled
+    // right-click-to-exit in settings (Esc still exits regardless).
+    if (widget.rightClickExits) widget.onCancel();
   }
 
   void _resetDrawState() {

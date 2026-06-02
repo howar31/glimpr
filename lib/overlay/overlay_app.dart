@@ -87,7 +87,10 @@ class _OverlayAppState extends State<OverlayApp> {
         // Prefetch settings off the hot path: the read completes during the
         // user's crop interaction, so _onExport reads _capture synchronously.
         Settings.instance.loadCapture().then((c) {
-          if (mounted) _capture = c;
+          // setState so a fresh capture's EditorCanvas picks up settings that
+          // affect interaction (e.g. rightClickExits); shutter/delivery read
+          // _capture directly at export time.
+          if (mounted) setState(() => _capture = c);
         });
       },
       onCaptureFailed: (reason, msg) {
@@ -246,6 +249,7 @@ class _OverlayAppState extends State<OverlayApp> {
                   onExport: _onExport,
                   onCancel: _dismiss,
                   activeSignal: _activeSignal,
+                  rightClickExits: _capture.rightClickExits,
                 ),
               ],
             ),
