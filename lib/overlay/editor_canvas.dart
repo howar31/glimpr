@@ -727,6 +727,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
   );
 
   void _onRightDown(Offset p) {
+    // While editing text, right-click just commits the in-progress text — it
+    // does NOT delete/exit, which would discard the unfinished text.
+    if (_editingText) {
+      _commitText();
+      return;
+    }
     // Right-click is contextual (priority order):
     //  1) a gesture in progress -> CANCEL it (crop drag clears the selection; a
     //     draw / move / resize reverts) and stay in capture;
