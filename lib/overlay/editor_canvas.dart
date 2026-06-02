@@ -18,6 +18,7 @@ import 'selection_controller.dart';
 import 'selection_label.dart';
 import 'selection_scrim.dart';
 import 'toolbar.dart';
+import 'window_snap.dart';
 
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
@@ -82,6 +83,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
   int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable
 
   bool _cropping = false;
+
+  // Snappable windows for THIS display (capture-time snapshot) + the one the
+  // cursor is currently over (crop tool, not mid-drag) — highlighted + snapped.
+  List<Rect> _windows = const [];
+  Rect? _hoverWindow;
   bool _cancelGesture = false; // right-click cancelled the active drag
 
   // Inline rich-text editing.
@@ -117,6 +123,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     );
     _active = widget.display.isCursorDisplay; // launch display starts active
     _overCanvas = widget.display.isCursorDisplay; // pointer starts over canvas
+    _windows = widget.display.windows;
     c.document.addListener(_rebuild);
     c.selectedIndex.addListener(_rebuild);
     c.tool.addListener(_rebuild);
@@ -191,6 +198,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (old.frozenImage != widget.frozenImage) {
       _blurredFull = null;
       _pixelatedFull = null;
+      _windows = widget.display.windows;
+      _hoverWindow = null;
       _ensureRasterFor(c.tool.value);
     }
   }
@@ -602,6 +611,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
         c.selectedIndex.value = _hitActiveType(p);
         break;
       case ToolKind.crop:
+        // Tap on a highlighted window snaps the crop to its bounds and commits
+        // immediately (a drag instead goes through _panStart -> freehand crop).
+        final win = topmostWindowAt(_windows, p);
+        if (win != null) widget.onExport(win);
         break;
     }
   }
@@ -624,11 +637,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
   /// follows everywhere on the active display — over the toolbar, and while the
   /// left button is still held after a right-click cancel.
   void _trackCursor(PointerEvent e) {
-    // Track for BOTH cursors: the full-screen crosshair (crop/blur/pixelate) and
-    // the small reticle (drawing tools) follow the pointer on the active display.
-    if (_active) {
-      setState(() => _cursor = _clampToDisplay(e.localPosition));
-    }
+    if (!_active) return;
+    final p = e.localPosition;
+    // Window-snap: highlight the top-most window under the cursor, but only in
+    // the Crop tool and not while a freehand crop drag is in progress. The
+    // full-screen crosshair / reticle follow the pointer on the active display.
+    final hover = (c.tool.value == ToolKind.crop && !_cropping)
+        ? topmostWindowAt(_windows, p)
+        : null;
+    setState(() {
+      _cursor = _clampToDisplay(p);
+      _hoverWindow = hover;
+    });
   }
 
   /// True when our small reticle should show: an active drawing tool (not a
@@ -713,7 +733,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final p = d.localPosition;
     if (c.tool.value == ToolKind.crop) {
       _cropping = true;
-      setState(() => _cursor = p);
+      setState(() {
+        _cursor = p;
+        _hoverWindow = null;
+      });
       _crop.begin(p);
       return;
     }
@@ -1029,6 +1052,14 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       ],
                     );
                   },
+                ),
+              ),
+            // Window-snap highlight (Crop tool, hovering a window, not dragging).
+            if (_active && inCrop && !_cropping && _hoverWindow != null)
+              IgnorePointer(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: WindowHighlightPainter(_hoverWindow!),
                 ),
               ),
             // Precision HUD: full-screen crosshair + pixel loupe — crop and the
