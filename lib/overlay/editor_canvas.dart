@@ -105,6 +105,20 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Rect get _fullDisplayRect =>
       Rect.fromLTWH(2, 2, widget.display.width - 4, widget.display.height - 4);
 
+  /// Tools whose tap snaps to a hovered window's bounds (ShareX-style): crop
+  /// captures it; blur/pixelate/rectangle/ellipse add a drawable spanning it.
+  static const _snapTools = {
+    ToolKind.crop,
+    ToolKind.blur,
+    ToolKind.pixelate,
+    ToolKind.rectangle,
+    ToolKind.ellipse,
+  };
+
+  /// A drag / edit gesture is in progress (suppresses the window-snap highlight).
+  bool get _dragging =>
+      _cropping || _dragStart != null || _editIndex != null;
+
   /// Region-selection tools that get the precision crosshair + pixel loupe (crop
   /// plus the raster regions, where exact alignment on what you obscure matters).
   /// The dimming scrim stays crop-only.
@@ -583,44 +597,67 @@ class _EditorCanvasState extends State<EditorCanvas> {
       return;
     }
     final p = d.localPosition;
+    // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
+    // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
+    // drawable spanning it. With NO window under the cursor the tools fall back
+    // to their normal tap (crop -> whole display; the rest select).
+    final win = topmostWindowAt(_windows, p);
+    final style = c.style.value;
     switch (c.tool.value) {
+      case ToolKind.crop:
+        widget.onExport(win); // null window -> whole display
+        return;
+      case ToolKind.blur:
+        if (win != null) {
+          c.commitDrawable(BlurDrawable(win, style));
+        } else {
+          c.selectedIndex.value = _hitActiveType(p);
+        }
+        return;
+      case ToolKind.pixelate:
+        if (win != null) {
+          c.commitDrawable(PixelateDrawable(win, style));
+        } else {
+          c.selectedIndex.value = _hitActiveType(p);
+        }
+        return;
+      case ToolKind.rectangle:
+        if (win != null) {
+          c.commitDrawable(RectangleDrawable(win, style));
+        } else {
+          c.selectedIndex.value = _hitActiveType(p);
+        }
+        return;
+      case ToolKind.ellipse:
+        if (win != null) {
+          c.commitDrawable(EllipseDrawable(win, style));
+        } else {
+          c.selectedIndex.value = _hitActiveType(p);
+        }
+        return;
       case ToolKind.text:
         final idx = _hitActiveType(p);
         idx != null ? _reEditText(idx) : _startText(p);
-        break;
+        return;
       case ToolKind.step:
         // Tap on empty space places a new auto-numbered badge; tap on an
         // existing badge just selects it (drag the body to move).
         final idx = _hitActiveType(p);
         if (idx == null) {
           c.commitDrawable(
-            StepDrawable(
-              p,
-              nextStepNumber(c.document.value.drawables),
-              c.style.value,
-            ),
+            StepDrawable(p, nextStepNumber(c.document.value.drawables), style),
           );
         } else {
           c.selectedIndex.value = idx;
         }
-        break;
-      case ToolKind.rectangle:
-      case ToolKind.ellipse:
+        return;
       case ToolKind.arrow:
       case ToolKind.line:
       case ToolKind.pen:
       case ToolKind.highlighter:
-      case ToolKind.blur:
-      case ToolKind.pixelate:
       case ToolKind.paste:
         c.selectedIndex.value = _hitActiveType(p);
-        break;
-      case ToolKind.crop:
-        // Tap snaps to the window under the cursor and commits immediately; with
-        // NO window under the cursor (bare desktop) it captures the whole display
-        // (onExport(null)). A drag instead goes through _panStart -> freehand crop.
-        widget.onExport(topmostWindowAt(_windows, p));
-        break;
+        return;
     }
   }
 
@@ -644,10 +681,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
   void _trackCursor(PointerEvent e) {
     if (!_active) return;
     final p = e.localPosition;
-    // Window-snap: highlight the top-most window under the cursor, but only in
-    // the Crop tool and not while a freehand crop drag is in progress. The
+    // Window-snap: highlight the top-most window under the cursor for the snap
+    // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging. The
     // full-screen crosshair / reticle follow the pointer on the active display.
-    final hover = (c.tool.value == ToolKind.crop && !_cropping)
+    final hover = (_snapTools.contains(c.tool.value) && !_dragging)
         ? topmostWindowAt(_windows, p)
         : null;
     setState(() {
@@ -691,14 +728,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // Crop: right-click cancels the selection (set _cancelGesture so the
     // pending pan-end does NOT commit/export).
     if (c.tool.value == ToolKind.crop) {
-      // Cancelled -> release the cursor confine immediately so the crosshair can
-      // cross displays again, without waiting for the left button to release.
-      _bridge.setDrawingLock(false);
-      setState(() {
-        _crop.clear();
-        _cropping = false;
-        _cancelGesture = true;
-      });
+      // Right-click in Crop EXITS the capture entirely (ShareX-style), like Esc.
+      _cancelGesture = true; // a pending pan-end must not commit
+      _bridge.setDrawingLock(false); // release the cursor confine before exit
+      widget.onCancel();
       return;
     }
     // Cancel an in-progress draw / move / resize.
@@ -963,10 +996,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final inCrop = _inCrop;
     final showsCrosshair = _showsCrosshair;
     final loupeOrigin = _loupeOrigin();
-    // Window-snap target: the hovered window, or the whole display over bare
-    // desktop; null when the highlight shouldn't show (not crop, or dragging).
-    final snapTarget = (_active && inCrop && !_cropping)
-        ? (_hoverWindow ?? _fullDisplayRect)
+    // Window-snap target: the hovered window, or — Crop only — the whole display
+    // over bare desktop; null when no snap tool is active or while dragging.
+    final snapTarget =
+        (_active && _snapTools.contains(c.tool.value) && !_dragging)
+        ? (_hoverWindow ??
+              (c.tool.value == ToolKind.crop ? _fullDisplayRect : null))
         : null;
     // Outermost listener tracks the cursor for the crosshair from the RAW
     // pointer stream — fires everywhere (incl. over the toolbar, and after a
