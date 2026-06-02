@@ -430,16 +430,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
       }
     }
 
-    // Arrow-nudge for the region tools (crop + blur/pixelate): move the
-    // crosshair AND warp the OS cursor 1px so a subsequent physical move
+    // Arrow-nudge for the region tools (crop + blur/pixelate): move the crosshair
+    // by ONE PHYSICAL pixel (= 1 / scaleFactor logical points — a single pixel on
+    // Retina, not 2-3) and warp the OS cursor to match so a later physical move
     // continues from the nudged point. Also nudges the in-progress region's
     // dragging corner.
     if (_showsCrosshair) {
+      final step = 1.0 / widget.display.scaleFactor;
       Offset? delta;
-      if (key == LogicalKeyboardKey.arrowLeft) delta = const Offset(-1, 0);
-      if (key == LogicalKeyboardKey.arrowRight) delta = const Offset(1, 0);
-      if (key == LogicalKeyboardKey.arrowUp) delta = const Offset(0, -1);
-      if (key == LogicalKeyboardKey.arrowDown) delta = const Offset(0, 1);
+      if (key == LogicalKeyboardKey.arrowLeft) delta = Offset(-step, 0);
+      if (key == LogicalKeyboardKey.arrowRight) delta = Offset(step, 0);
+      if (key == LogicalKeyboardKey.arrowUp) delta = Offset(0, -step);
+      if (key == LogicalKeyboardKey.arrowDown) delta = Offset(0, step);
       if (delta != null) {
         final next = Offset(
           (_cursor.dx + delta.dx).clamp(0.0, widget.display.width),
