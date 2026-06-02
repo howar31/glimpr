@@ -58,6 +58,7 @@ class _OverlayAppState extends State<OverlayApp> {
         try {
           final codec = await ui.instantiateImageCodec(d.pngBytes);
           frozen = (await codec.getNextFrame()).image;
+          codec.dispose(); // release the decoder's native memory immediately
         } catch (_) {
           // If decode fails the export will be skipped; the overlay still shows.
         }

@@ -166,6 +166,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
     c.style.removeListener(_onStyleChanged);
     _textFocus.removeListener(_rebuild);
     widget.activeSignal.removeListener(_onActiveSignal);
+    // Release the whole-frame blur/pixelate native images (created per capture
+    // in _ensureRasterFor); otherwise they linger until a GC finalizer runs.
+    _blurredFull?.dispose();
+    _pixelatedFull?.dispose();
     _richCtl?.dispose();
     _focus.dispose();
     _crop.dispose();
@@ -215,6 +219,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // New frozen frame (in-place re-capture) -> the pre-computed images are
     // stale; drop them and recompute for the active tool.
     if (old.frozenImage != widget.frozenImage) {
+      _blurredFull?.dispose();
+      _pixelatedFull?.dispose();
       _blurredFull = null;
       _pixelatedFull = null;
       _windows = widget.display.windows;

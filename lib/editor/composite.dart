@@ -72,6 +72,12 @@ Future<Uint8List> compositeAndCrop({
   final outW = crop.width.round();
   final outH = crop.height.round();
   final img = await picture.toImage(outW, outH);
+  picture.dispose();
+  // The whole-frame blur/pixelate (if any) are now rasterised into `img`;
+  // release their native memory rather than waiting for GC finalizers.
+  blurredFull?.dispose();
+  pixelatedFull?.dispose();
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
+  img.dispose();
   return data!.buffer.asUint8List();
 }

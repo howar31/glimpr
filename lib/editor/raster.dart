@@ -22,7 +22,10 @@ Future<ui.Image> blurWhole(ui.Image frozen, double sigma) async {
       )
       ..filterQuality = ui.FilterQuality.medium,
   );
-  return recorder.endRecording().toImage(frozen.width, frozen.height);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(frozen.width, frozen.height);
+  picture.dispose();
+  return image;
 }
 
 /// Downsample the WHOLE frozen frame by [cell] native px into a small image. The
@@ -39,5 +42,8 @@ Future<ui.Image> pixelateWhole(ui.Image frozen, double cell) async {
     ui.Rect.fromLTWH(0, 0, outW.toDouble(), outH.toDouble()),
     ui.Paint()..filterQuality = ui.FilterQuality.medium,
   );
-  return recorder.endRecording().toImage(outW, outH);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(outW, outH);
+  picture.dispose();
+  return image;
 }
