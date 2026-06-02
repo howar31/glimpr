@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 
-/// Draggable bottom toolbar: a contextual options row above a main tool row.
+/// Draggable bottom toolbar: a main tool row with a contextual options row
+/// below it. The tool row is the Column's first (top-anchored) child so the
+/// options row can grow / collapse downward without ever shifting the tool row.
 /// Each tool shows a number badge (its 1-based keyboard shortcut). [onMove] is
 /// fed pointer deltas from the drag handle so the host can reposition it.
 class EditorToolbar extends StatelessWidget {
@@ -41,8 +43,10 @@ class EditorToolbar extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
-        const SizedBox(height: 6),
+        // Main tool row FIRST so it is the top, top-anchored child: the host
+        // pins this Column's top-left at _toolbarPos, so the tool row stays put
+        // while the contextual options row below it appears / grows / shrinks —
+        // it can never displace the tool row the user is aiming at.
         _Bar(
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -73,6 +77,8 @@ class EditorToolbar extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 6),
+        _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
       ],
     );
   }
