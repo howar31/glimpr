@@ -738,9 +738,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     //     draw / move / resize reverts), stay in capture;
     //  2) over a SAME-TYPE drawable (the active tool only deletes its own type,
     //     mirroring left-click selection) -> DELETE it, stay;
-    //  3) over a drawable of ANOTHER type -> do nothing (not empty, but this
-    //     tool can't delete it);
-    //  4) truly empty (no drawable of any type) -> EXIT the capture, like Esc.
+    //  3) otherwise -> EXIT the capture, like Esc (nothing of the active tool's
+    //     type is under the cursor, so for that tool the spot is "empty").
     if (_cropping ||
         _dragStart != null ||
         _preview != null ||
@@ -761,10 +760,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
       c.selectedIndex.value = null;
       return;
     }
-    // A drawable of another type is still "something" (not empty), and this tool
-    // can't delete it -> do nothing. Only truly-empty space exits.
-    if (hitTestTop(c.document.value.drawables, p) != null) return;
-    widget.onCancel(); // truly empty space -> exit capture
+    widget.onCancel(); // no same-type drawable here -> exit capture
   }
 
   void _resetDrawState() {
