@@ -27,8 +27,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // This window is the debug control; tell its Dart GlimprRoot which role to show.
     let roleChannel = FlutterMethodChannel(
       name: "glimpr/role", binaryMessenger: flutterViewController.engine.binaryMessenger)
-    roleChannel.setMethodCallHandler { call, result in
-      if call.method == "getRole" { result("control") } else { result(FlutterMethodNotImplemented) }
+    roleChannel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "getRole": result("control")
+      // Cmd-W from the settings UI: hide the window (same as the close button).
+      case "closeSettings": self?.hideSettings(); result(nil)
+      default: result(FlutterMethodNotImplemented)
+      }
     }
     self.roleChannel = roleChannel
 
@@ -47,9 +52,20 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     // Resident: keep the engine warm (on-screen, transparent, click-through) so
     // main() runs + the hotkey registers, but present nothing until "Settings…".
-    self.styleMask = [.titled, .closable, .miniaturizable]
+    // Fixed-size settings window (NOT .resizable) with an inline, transparent
+    // title bar so the Flutter sidebar runs to the top edge behind the traffic
+    // lights (macOS preferences style). The content lays out its own top inset.
+    self.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
     self.title = "Glimpr Settings"
-    self.setContentSize(NSSize(width: 480, height: 360))
+    self.titleVisibility = .hidden
+    self.titlebarAppearsTransparent = true
+    self.setContentSize(NSSize(width: 680, height: 480))
+    // Fixed-size window: disable the green zoom / fullscreen button. This also
+    // removes its window-tiling hover menu, whose modal tracking run loop blocked
+    // the global capture hotkey (same-process Carbon hotkey) while it was open.
+    // AppKit re-enables it on some events (e.g. regaining key after a capture),
+    // so it is re-applied in revealSettings + windowDidUpdate.
+    disableZoomButton()
     self.isReleasedWhenClosed = false
     self.collectionBehavior = [.moveToActiveSpace]
     self.delegate = self
@@ -61,26 +77,48 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.ignoresMouseEvents = true
   }
 
-  /// Show the settings window on the user's CURRENT Space, in front.
+  /// Show the settings window on the user's CURRENT Space, in front. While it is
+  /// visible the app becomes a regular app (Dock icon + Cmd-Tab); it reverts to a
+  /// menu-bar accessory when the window is closed (see hideSettings).
   func revealSettings() {
+    NSApp.setActivationPolicy(.regular)
     alphaValue = 1
     ignoresMouseEvents = false
     center()
     NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
+    disableZoomButton()
   }
 
   private func hideSettings() {
     // Stay ON-SCREEN at alpha 0 (engine must remain warm — never orderOut, which
     // would drop the view off-screen and risk a blank re-show). orderBack tucks it
-    // behind everything; resignKey returns focus to the previous app.
+    // behind everything. Back to accessory: no Dock icon / not in Cmd-Tab at rest,
+    // which also keeps the overlay's activate from switching Spaces during capture.
     alphaValue = 0
     ignoresMouseEvents = true
     orderBack(nil)
+    NSApp.setActivationPolicy(.accessory)
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     hideSettings()
     return false
+  }
+
+  // Belt-and-suspenders with the disabled zoom button: never zoom this window.
+  func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
+    false
+  }
+
+  // AppKit re-enables the zoom (green) button on various events — notably when
+  // the window regains key/main focus after a capture. Re-disable it whenever the
+  // window updates so it stays inert (and its tiling hover menu stays suppressed).
+  func windowDidUpdate(_ notification: Notification) {
+    disableZoomButton()
+  }
+
+  private func disableZoomButton() {
+    standardWindowButton(.zoomButton)?.isEnabled = false
   }
 }
