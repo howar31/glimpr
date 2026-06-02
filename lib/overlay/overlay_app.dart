@@ -24,7 +24,6 @@ class _OverlayAppState extends State<OverlayApp> {
   EditorController? _editor;
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
-  String? _toast; // shown briefly only when a delivery leg failed
   // The native cursor poll's single source of truth: which display is the active
   // editor + the cursor's display-local point. Every engine's EditorCanvas reads
   // this and shows its HUD only when the id matches its own display.
@@ -66,7 +65,6 @@ class _OverlayAppState extends State<OverlayApp> {
         _editor?.dispose();
         _frozen?.dispose();
         setState(() {
-          _toast = null;
           _frozen = frozen;
           _editor = EditorController(toolStyles: _toolStyles);
           _display = d;
@@ -97,7 +95,6 @@ class _OverlayAppState extends State<OverlayApp> {
     _frozen?.dispose();
     setState(() {
       _display = null;
-      _toast = null;
       _editor = null;
       _frozen = null;
     });
@@ -164,23 +161,32 @@ class _OverlayAppState extends State<OverlayApp> {
       _dismiss();
       return;
     }
-    final result = await exportAnnotated(
-      display: d,
-      frozenImage: frozen,
-      drawables: editor.document.value.drawables,
-      selectionLogical: selectionLogical,
-    );
-    // Save + clipboard are the legs that matter; a sound-only failure still
-    // dismisses (the capture succeeded where it counts).
-    final critical = !result.savedOk || !result.copiedToClipboard;
-    if (!critical || !mounted) {
-      _dismiss();
-      return;
+    // Snapshot the (immutable) inputs, then HIDE the overlay IMMEDIATELY so the
+    // user isn't staring at the frozen frame while we composite / encode /
+    // deliver. This export takes over the frozen image's lifecycle (disposes it
+    // when done), so null _frozen first to keep _dismiss/_resetState from
+    // disposing it out from under the background work. The shutter sound is the
+    // last delivery leg, so it lands on completion.
+    final drawables = editor.document.value.drawables;
+    _frozen = null;
+    _dismiss();
+    try {
+      final result = await exportAnnotated(
+        display: d,
+        frozenImage: frozen,
+        drawables: drawables,
+        selectionLogical: selectionLogical,
+      );
+      // Save + clipboard are the legs that matter; the overlay is already gone,
+      // so a critical failure is surfaced via a native alert.
+      if (!result.savedOk || !result.copiedToClipboard) {
+        _bridge.showError(_summary(result));
+      }
+    } catch (e) {
+      _bridge.showError('Capture failed: $e');
+    } finally {
+      frozen.dispose();
     }
-    setState(() => _toast = _summary(result));
-    Future.delayed(const Duration(milliseconds: 1600), () {
-      if (mounted) _dismiss();
-    });
   }
 
   String _summary(DeliveryResult r) {
@@ -216,31 +222,6 @@ class _OverlayAppState extends State<OverlayApp> {
                   onCancel: _dismiss,
                   activeSignal: _activeSignal,
                 ),
-                if (_toast != null)
-                  Positioned(
-                    bottom: 80,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xE6B00020),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _toast!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
     );

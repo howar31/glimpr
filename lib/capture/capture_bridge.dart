@@ -12,6 +12,11 @@ class CaptureBridge {
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
+  /// Show a native error alert — used when a BACKGROUND export fails after the
+  /// overlay was already hidden (so the in-overlay toast is no longer available).
+  Future<void> showError(String message) =>
+      _channel.invokeMethod('showError', {'message': message});
+
   /// Signal that this overlay engine has rasterized its first frame, so native
   /// may order its window front (capture-then-show).
   Future<void> overlayReady() => _channel.invokeMethod('overlayReady');

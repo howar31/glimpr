@@ -290,6 +290,12 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self?.dismiss(); result(nil)
+        case "showError":
+          if let a = call.arguments as? [String: Any],
+             let msg = a["message"] as? String {
+            self?.showError(msg)
+          }
+          result(nil)
         case "setDrawingLock":
           // Confine the cursor to THIS display while a draw/crop drag is in
           // progress, and freeze the active handoff so the stroke isn't wiped if
@@ -464,6 +470,18 @@ final class OverlayManager {
     guard hidden != cursorHidden else { return }
     cursorHidden = hidden
     if hidden { NSCursor.hide() } else { NSCursor.unhide() }
+  }
+
+  /// Native error alert for a BACKGROUND export failure (the overlay is already
+  /// hidden, so the in-overlay toast is gone). Hops to the main actor for AppKit.
+  func showError(_ message: String) {
+    Task { @MainActor in
+      let alert = NSAlert()
+      alert.messageText = "Glimpr"
+      alert.informativeText = message
+      alert.alertStyle = .warning
+      alert.runModal()
+    }
   }
 
   /// Warp the cursor back to the drawing display's nearest edge if it strayed
