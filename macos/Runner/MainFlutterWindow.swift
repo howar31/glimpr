@@ -1,7 +1,7 @@
 import Cocoa
 import FlutterMacOS
 
-class MainFlutterWindow: NSWindow {
+class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureChannel: CaptureChannel?
   private var captureController: CaptureController?
   private var statusItem: StatusItemController?
@@ -43,6 +43,44 @@ class MainFlutterWindow: NSWindow {
 
     self.statusItem = StatusItemController(
       onCapture: { [weak self] in self?.captureController?.triggerCapture() },
-      onSettings: { /* wired in Task 7 */ })
+      onSettings: { [weak self] in self?.revealSettings() })
+
+    // Resident: keep the engine warm (on-screen, transparent, click-through) so
+    // main() runs + the hotkey registers, but present nothing until "Settings…".
+    self.styleMask = [.titled, .closable, .miniaturizable]
+    self.title = "Glimpr Settings"
+    self.setContentSize(NSSize(width: 480, height: 360))
+    self.isReleasedWhenClosed = false
+    self.collectionBehavior = [.moveToActiveSpace]
+    self.delegate = self
+    // Order front THEN drop alpha (the proven warm-engine order — same as the
+    // overlay windows): an on-screen layout pass realizes the Metal surface and
+    // runs main(), after which alpha 0 hides it without dropping it off-screen.
+    self.orderFrontRegardless()
+    self.alphaValue = 0
+    self.ignoresMouseEvents = true
+  }
+
+  /// Show the settings window on the user's CURRENT Space, in front.
+  func revealSettings() {
+    alphaValue = 1
+    ignoresMouseEvents = false
+    center()
+    NSApp.activate(ignoringOtherApps: true)
+    makeKeyAndOrderFront(nil)
+  }
+
+  private func hideSettings() {
+    // Stay ON-SCREEN at alpha 0 (engine must remain warm — never orderOut, which
+    // would drop the view off-screen and risk a blank re-show). orderBack tucks it
+    // behind everything; resignKey returns focus to the previous app.
+    alphaValue = 0
+    ignoresMouseEvents = true
+    orderBack(nil)
+  }
+
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    hideSettings()
+    return false
   }
 }
