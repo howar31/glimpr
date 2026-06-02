@@ -100,6 +100,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
   EditorController get c => widget.controller;
   bool get _inCrop => c.phase.value == EditorPhase.crop;
 
+  /// The whole-display rect (inset so its frame stays fully on-screen) — the
+  /// snap target when hovering bare desktop (no window under the cursor).
+  Rect get _fullDisplayRect =>
+      Rect.fromLTWH(2, 2, widget.display.width - 4, widget.display.height - 4);
+
   /// Region-selection tools that get the precision crosshair + pixel loupe (crop
   /// plus the raster regions, where exact alignment on what you obscure matters).
   /// The dimming scrim stays crop-only.
@@ -958,6 +963,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final inCrop = _inCrop;
     final showsCrosshair = _showsCrosshair;
     final loupeOrigin = _loupeOrigin();
+    // Window-snap target: the hovered window, or the whole display over bare
+    // desktop; null when the highlight shouldn't show (not crop, or dragging).
+    final snapTarget = (_active && inCrop && !_cropping)
+        ? (_hoverWindow ?? _fullDisplayRect)
+        : null;
     // Outermost listener tracks the cursor for the crosshair from the RAW
     // pointer stream — fires everywhere (incl. over the toolbar, and after a
     // right-click ends the pan), so the crosshair follows continuously on the
@@ -1057,18 +1067,23 @@ class _EditorCanvasState extends State<EditorCanvas> {
                   },
                 ),
               ),
-            // Window-snap highlight (Crop tool, hovering a window, not dragging).
-            // ALWAYS keep this layer present (conditional painter) so the Stack's
-            // child COUNT is stable: removing a child before the gesture detector
-            // when the drag starts (_cropping -> true) would shift it and tear
-            // down its pan recognizer mid-drag (crop stuck at 0x0).
-            IgnorePointer(
-              child: CustomPaint(
-                size: Size.infinite,
-                painter:
-                    (_active && inCrop && !_cropping && _hoverWindow != null)
-                    ? WindowHighlightPainter(_hoverWindow!)
-                    : null,
+            // Window-snap highlight (Crop tool): the hovered window, or the whole
+            // display over bare desktop. The layer is ALWAYS present so the Stack
+            // child COUNT is stable (removing a child before the gesture detector
+            // when a drag starts would tear down its pan recognizer mid-drag).
+            // The rect tweens between targets so the frame glides from one window
+            // to the next; the painter is null when nothing should show.
+            TweenAnimationBuilder<Rect?>(
+              tween: RectTween(end: snapTarget),
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              builder: (context, rect, _) => IgnorePointer(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: (snapTarget != null && rect != null)
+                      ? WindowHighlightPainter(rect)
+                      : null,
+                ),
               ),
             ),
             // Precision HUD: full-screen crosshair + pixel loupe — crop and the
