@@ -214,24 +214,38 @@ class LoupePainter extends CustomPainter {
       old.pixelatedFull != pixelatedFull;
 }
 
-/// A snap highlight around a hovered window: a faint accent fill + accent
-/// border. A clear border reads on any backdrop (no inverting blend needed).
+/// A snap highlight around a hovered window: a rounded, semi-transparent "glass"
+/// frame with a FULLY TRANSPARENT center (so the content stays visible). The
+/// rounded corners approximate native window radii (macOS/Windows). Legibility
+/// on any backdrop comes from a faint dark backing stroke + a translucent light
+/// stroke — no inverting blend (which washes out on mid-gray).
 class WindowHighlightPainter extends CustomPainter {
   final Rect rect;
-  const WindowHighlightPainter(this.rect);
+  final double radius;
+  const WindowHighlightPainter(this.rect, {this.radius = 10});
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(rect, Paint()..color = const Color(0x1A4DA6FF));
-    canvas.drawRect(
-      rect,
+    final rr = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+    // Faint dark backing stroke (contrast on light windows).
+    canvas.drawRRect(
+      rr,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = const Color(0x40000000),
+    );
+    // Translucent light glass frame; center left fully transparent (no fill).
+    canvas.drawRRect(
+      rr,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5
-        ..color = const Color(0xFF4DA6FF),
+        ..color = const Color(0xCCFFFFFF),
     );
   }
 
   @override
-  bool shouldRepaint(WindowHighlightPainter old) => old.rect != rect;
+  bool shouldRepaint(WindowHighlightPainter old) =>
+      old.rect != rect || old.radius != radius;
 }
