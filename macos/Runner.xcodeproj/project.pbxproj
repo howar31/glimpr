@@ -32,6 +32,7 @@
 		9C5577745ACB4E13949BBBF6 /* OverlayKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47D312F8AA04F5C8576FA60 /* OverlayKit.swift */; };
 		AA0100012044BFA00003C045 /* CaptureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002044BFA00003C045 /* CaptureChannel.swift */; };
 		AA0100032044BFA00003C045 /* CaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100022044BFA00003C045 /* CaptureController.swift */; };
+		AA0100052044BFA00003C045 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100042044BFA00003C045 /* StatusItemController.swift */; };
 		F8E5C618FDB908F43A1EF13F /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0DA49ABD0036DDEB395B9B80 /* Pods_RunnerTests.framework */; };
 /* End PBXBuildFile section */
 
@@ -93,6 +94,7 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		AA0100002044BFA00003C045 /* CaptureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureChannel.swift; sourceTree = "<group>"; };
 		AA0100022044BFA00003C045 /* CaptureController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureController.swift; sourceTree = "<group>"; };
+		AA0100042044BFA00003C045 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		E47D312F8AA04F5C8576FA60 /* OverlayKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayKit.swift; sourceTree = "<group>"; };
 		E8743999C6C81A355AC68FB7 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		F43402A560126D1DFE607F73 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
@@ -203,6 +205,7 @@
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				AA0100002044BFA00003C045 /* CaptureChannel.swift */,
 				AA0100022044BFA00003C045 /* CaptureController.swift */,
+				AA0100042044BFA00003C045 /* StatusItemController.swift */,
 				E47D312F8AA04F5C8576FA60 /* OverlayKit.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
@@ -459,6 +462,7 @@
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				AA0100012044BFA00003C045 /* CaptureChannel.swift in Sources */,
 				AA0100032044BFA00003C045 /* CaptureController.swift in Sources */,
+				AA0100052044BFA00003C045 /* StatusItemController.swift in Sources */,
 				9C5577745ACB4E13949BBBF6 /* OverlayKit.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,

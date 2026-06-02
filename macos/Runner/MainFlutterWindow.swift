@@ -4,6 +4,7 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   private var captureChannel: CaptureChannel?
   private var captureController: CaptureController?
+  private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
   var overlayManager: OverlayManager?
 
@@ -39,5 +40,9 @@ class MainFlutterWindow: NSWindow {
     let manager = OverlayManager()
     manager.startObservingScreens()
     self.overlayManager = manager
+
+    self.statusItem = StatusItemController(
+      onCapture: { [weak self] in self?.captureController?.triggerCapture() },
+      onSettings: { /* wired in Task 7 */ })
   }
 }
