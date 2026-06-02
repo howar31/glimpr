@@ -141,7 +141,9 @@ class _Bar extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0x552B2B2B), // translucent so the blur shows
+            // Dark enough (~80%) that the white icons stay legible over ANY
+            // backdrop (incl. white screenshots); the blur still reads as glass.
+            color: const Color(0xCC1C1C1E),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
           ),
