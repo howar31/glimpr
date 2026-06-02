@@ -110,20 +110,25 @@ final class ScreenCapturer {
 
   /// Snappable top-level windows on [displayID], as display-local logical rects
   /// [x, y, w, h] (top-left origin), front-to-back. Filters to normal app windows
-  /// (layer 0), excludes our own windows, the menu bar/Dock, tiny helpers, and
-  /// clamps to the display. Window bounds/owner/layer need no Screen-Recording
+  /// (layer 0), excludes invisible windows, the menu bar/Dock, tiny helpers, and
+  /// clamps to the display. Window bounds/alpha/layer need no Screen-Recording
   /// permission. CGWindowBounds and CGDisplayBounds are both CG global top-left.
+  /// NOTE: our OWN visible windows (settings, future editor windows) ARE
+  /// snappable — the freeze overlay is already excluded because it lives above
+  /// layer 0 (shielding level), and the warm control window is excluded by the
+  /// alpha filter below, so there's no need to exclude our whole process.
   static func snappableWindows(displayID: CGDirectDisplayID) -> [[Double]] {
     let dispBounds = CGDisplayBounds(displayID)
-    let myPid = Int(getpid())
     guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
       as? [[String: Any]] else { return [] }
     var out: [[Double]] = []
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             layer == 0 else { continue }
-      if let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.intValue,
-         pid == myPid { continue }
+      // Skip effectively-invisible windows (e.g. our own warm control window at
+      // alpha 0) so they don't become phantom snap targets.
+      guard let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
+            alpha > 0.05 else { continue }
       guard let b = w[kCGWindowBounds as String] as? [String: Any],
             let x = (b["X"] as? NSNumber)?.doubleValue,
             let y = (b["Y"] as? NSNumber)?.doubleValue,
