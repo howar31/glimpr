@@ -1073,19 +1073,24 @@ class _EditorCanvasState extends State<EditorCanvas> {
             // when a drag starts would tear down its pan recognizer mid-drag).
             // The rect tweens between targets so the frame glides from one window
             // to the next; the painter is null when nothing should show.
-            TweenAnimationBuilder<Rect?>(
-              tween: RectTween(end: snapTarget),
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
-              builder: (context, rect, _) => IgnorePointer(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: (snapTarget != null && rect != null)
-                      ? WindowHighlightPainter(rect)
-                      : null,
-                ),
-              ),
-            ),
+            // One child either way, so the Stack child COUNT stays stable.
+            // TweenAnimationBuilder asserts a non-null tween end, so only use it
+            // when there's a target; otherwise an empty box.
+            snapTarget == null
+                ? const SizedBox.shrink()
+                : TweenAnimationBuilder<Rect?>(
+                    tween: RectTween(end: snapTarget),
+                    duration: const Duration(milliseconds: 120),
+                    curve: Curves.easeOut,
+                    builder: (context, rect, _) => IgnorePointer(
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: rect == null
+                            ? null
+                            : WindowHighlightPainter(rect),
+                      ),
+                    ),
+                  ),
             // Precision HUD: full-screen crosshair + pixel loupe — crop and the
             // raster region tools (blur/pixelate), active display only.
             if (_active && showsCrosshair)
