@@ -213,3 +213,25 @@ class LoupePainter extends CustomPainter {
       old.blurredFull != blurredFull ||
       old.pixelatedFull != pixelatedFull;
 }
+
+/// A snap highlight around a hovered window: a faint accent fill + accent
+/// border. A clear border reads on any backdrop (no inverting blend needed).
+class WindowHighlightPainter extends CustomPainter {
+  final Rect rect;
+  const WindowHighlightPainter(this.rect);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(rect, Paint()..color = const Color(0x1A4DA6FF));
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = const Color(0xFF4DA6FF),
+    );
+  }
+
+  @override
+  bool shouldRepaint(WindowHighlightPainter old) => old.rect != rect;
+}
