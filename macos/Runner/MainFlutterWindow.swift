@@ -59,7 +59,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.title = "Glimpr Settings"
     self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
-    self.setContentSize(NSSize(width: 680, height: 480))
+    // Hard-lock the size. Dropping .resizable from the style mask alone proved
+    // unreliable (the window is declared resizable="YES" in MainMenu.xib and the
+    // mask override didn't stay applied), so clamp content min == max — AppKit
+    // enforces this unconditionally, blocking edge-drag resize and window tiling.
+    let fixedSize = NSSize(width: 720, height: 560)
+    self.setContentSize(fixedSize)
+    self.contentMinSize = fixedSize
+    self.contentMaxSize = fixedSize
     // Fixed-size window: disable the green zoom / fullscreen button. This also
     // removes its window-tiling hover menu, whose modal tracking run loop blocked
     // the global capture hotkey (same-process Carbon hotkey) while it was open.
