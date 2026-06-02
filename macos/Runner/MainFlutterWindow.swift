@@ -1,11 +1,13 @@
 import Cocoa
 import FlutterMacOS
+import ServiceManagement
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureChannel: CaptureChannel?
   private var captureController: CaptureController?
   private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
+  private var loginChannel: FlutterMethodChannel?
   var overlayManager: OverlayManager?
 
   override func awakeFromNib() {
@@ -37,6 +39,31 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     self.roleChannel = roleChannel
 
+    // Launch-at-login, backed by SMAppService (the OS is the source of truth).
+    let loginChannel = FlutterMethodChannel(
+      name: "glimpr/login", binaryMessenger: flutterViewController.engine.binaryMessenger)
+    loginChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "isEnabled":
+        result(SMAppService.mainApp.status == .enabled)
+      case "setEnabled":
+        let enable = (call.arguments as? Bool) ?? false
+        do {
+          if enable {
+            try SMAppService.mainApp.register()
+          } else {
+            try SMAppService.mainApp.unregister()
+          }
+          result(SMAppService.mainApp.status == .enabled)
+        } catch {
+          result(FlutterError(code: "login_item", message: "\(error)", details: nil))
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.loginChannel = loginChannel
+
     super.awakeFromNib()
 
     // Build + warm the per-display overlay windows/engines now (applicationDid-
@@ -63,7 +90,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // unreliable (the window is declared resizable="YES" in MainMenu.xib and the
     // mask override didn't stay applied), so clamp content min == max — AppKit
     // enforces this unconditionally, blocking edge-drag resize and window tiling.
-    let fixedSize = NSSize(width: 720, height: 560)
+    let fixedSize = NSSize(width: 720, height: 620)
     self.setContentSize(fixedSize)
     self.contentMinSize = fixedSize
     self.contentMaxSize = fixedSize

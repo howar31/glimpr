@@ -1,6 +1,7 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'login_item.dart';
 import 'settings.dart';
 
 /// The settings window content: a macOS-preferences-style sidebar (categories on
@@ -48,6 +49,7 @@ class _SettingsAppState extends State<SettingsApp> {
   bool _shutterSound = true;
   bool _completionSound = true;
   bool _rightClickExits = true;
+  bool _launchAtLogin = false;
 
   Settings get _s => widget.settings;
 
@@ -82,6 +84,11 @@ class _SettingsAppState extends State<SettingsApp> {
       _completionSound = complete;
       _rightClickExits = rightClick;
     });
+    // Login state comes from the OS (SMAppService) over a native channel; query
+    // it separately so a slow / unavailable channel never blocks the rest of the
+    // settings UI (and never stalls widget tests where the channel is unmocked).
+    final login = await LoginItem.isEnabled();
+    if (mounted) setState(() => _launchAtLogin = login);
   }
 
   Future<void> _chooseDir() async {
@@ -294,6 +301,19 @@ class _SettingsAppState extends State<SettingsApp> {
               onChanged: (v) async {
                 await _s.setRightClickExits(v);
                 if (mounted) setState(() => _rightClickExits = v);
+              },
+            ),
+          ]),
+          const SizedBox(height: 18),
+          _caption('Startup'),
+          _card([
+            _switchTile(
+              label: 'Launch at login',
+              subtitle: 'Start Glimpr automatically when you log in',
+              value: _launchAtLogin,
+              onChanged: (v) async {
+                final actual = await LoginItem.setEnabled(v);
+                if (mounted) setState(() => _launchAtLogin = actual);
               },
             ),
           ]),
