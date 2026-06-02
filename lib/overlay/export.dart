@@ -4,11 +4,13 @@ import '../capture/captured_display.dart';
 import '../editor/composite.dart';
 import '../editor/drawable.dart';
 import '../output/deliver.dart';
+import '../settings/settings.dart';
 
 /// Composites [frozenImage] (native pixels) + [drawables] (logical coords),
 /// crops to [selectionLogical] (null = whole display), encodes ONCE, then
-/// delivers (file + clipboard + sound — Phase-1b `deliverCapture`). Off the
-/// freeze path: compositing + encoding happen here, on commit.
+/// delivers (file + clipboard + sound — Phase-1b `deliverCapture`). The save
+/// folder comes from Settings (null -> deliverCapture's ~/Pictures/Glimpr
+/// default). Off the freeze path: compositing + encoding happen here, on commit.
 Future<DeliveryResult> exportAnnotated({
   required CapturedDisplay display,
   required ui.Image frozenImage,
@@ -22,5 +24,6 @@ Future<DeliveryResult> exportAnnotated({
     logicalSize: Size(display.width, display.height),
     selectionLogical: selectionLogical,
   );
-  return deliverCapture(pngBytes: png);
+  final saveDir = resolveSaveDir(await Settings.instance.getSaveDirectory());
+  return deliverCapture(pngBytes: png, saveDir: saveDir);
 }
