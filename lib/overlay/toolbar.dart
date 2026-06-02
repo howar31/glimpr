@@ -16,22 +16,22 @@ class EditorToolbar extends StatelessWidget {
     required this.onPtEditingDone,
   });
 
-  // Order == 1-based shortcut (mirror editor_canvas `_onKey` order):
-  // 1=Crop 2=Rectangle 3=Arrow 4=Text 5=Ellipse 6=Line 7=Pen 8=Highlighter
-  // 9=Step. (Wave-2 raster tools append after, with no digit shortcut.)
-  static const tools = <(ToolKind, IconData)>[
-    (ToolKind.crop, Icons.crop),
-    (ToolKind.rectangle, Icons.crop_square),
-    (ToolKind.arrow, Icons.north_east),
-    (ToolKind.text, Icons.title),
-    (ToolKind.ellipse, Icons.circle_outlined),
-    (ToolKind.line, Icons.horizontal_rule),
-    (ToolKind.pen, Icons.gesture),
-    (ToolKind.highlighter, Icons.border_color),
-    (ToolKind.step, Icons.looks_one),
-    (ToolKind.blur, Icons.blur_on),
-    (ToolKind.pixelate, Icons.grid_on),
-    (ToolKind.paste, Icons.content_paste),
+  // (kind, icon, shortcut badge). Order mirrors editor_canvas `_onKey`:
+  // 1=Crop 2=Rectangle 3=Ellipse 4=Line 5=Arrow 6=Pen 7=Text 8=Highlighter
+  // 9=Step, then B=Blur P=Pixelate (letter shortcuts); Paste has none.
+  static const tools = <(ToolKind, IconData, String?)>[
+    (ToolKind.crop, Icons.crop, '1'),
+    (ToolKind.rectangle, Icons.crop_square, '2'),
+    (ToolKind.ellipse, Icons.circle_outlined, '3'),
+    (ToolKind.line, Icons.horizontal_rule, '4'),
+    (ToolKind.arrow, Icons.north_east, '5'),
+    (ToolKind.pen, Icons.gesture, '6'),
+    (ToolKind.text, Icons.title, '7'),
+    (ToolKind.highlighter, Icons.border_color, '8'),
+    (ToolKind.step, Icons.looks_one, '9'),
+    (ToolKind.blur, Icons.blur_on, 'B'),
+    (ToolKind.pixelate, Icons.grid_on, 'P'),
+    (ToolKind.paste, Icons.content_paste, null),
   ];
 
   @override
@@ -61,12 +61,12 @@ class EditorToolbar extends StatelessWidget {
                   ),
                 ),
               ),
-              for (var i = 0; i < tools.length; i++)
+              for (final t in tools)
                 _ToolButton(
                   controller: controller,
-                  kind: tools[i].$1,
-                  icon: tools[i].$2,
-                  shortcut: i < 9 ? i + 1 : null, // digit shortcuts only 1-9
+                  kind: t.$1,
+                  icon: t.$2,
+                  shortcut: t.$3,
                 ),
             ],
           ),
@@ -81,7 +81,7 @@ class _ToolButton extends StatelessWidget {
   final EditorController controller;
   final ToolKind kind;
   final IconData icon;
-  final int? shortcut; // null = no digit shortcut (tools past the 9th)
+  final String? shortcut; // badge label (digit or letter); null = no shortcut
   const _ToolButton({
     required this.controller,
     required this.kind,
@@ -108,7 +108,7 @@ class _ToolButton extends StatelessWidget {
                 right: 2,
                 bottom: 2,
                 child: Text(
-                  '$shortcut',
+                  shortcut!,
                   style: TextStyle(
                     fontSize: 9,
                     height: 1,

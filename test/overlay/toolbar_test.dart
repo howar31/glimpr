@@ -26,7 +26,7 @@ void main() {
     expect(EditorToolbar.tools.length, 12);
     expect(find.byType(IconButton), findsNWidgets(12));
 
-    for (final (kind, _) in EditorToolbar.tools) {
+    for (final (kind, _, _) in EditorToolbar.tools) {
       c.selectTool(kind);
       await tester.pump();
       expect(tester.takeException(), isNull, reason: 'options row for $kind');

@@ -357,16 +357,16 @@ class _EditorCanvasState extends State<EditorCanvas> {
     }
 
     // Tool shortcuts 1-9 (must mirror EditorToolbar.tools order):
-    // 1=Crop 2=Rectangle 3=Arrow 4=Text 5=Ellipse 6=Line 7=Pen 8=Highlighter
-    // 9=Step. Raster tools (blur/pixelate/paste) have no digit shortcut.
+    // 1=Crop 2=Rectangle 3=Ellipse 4=Line 5=Arrow 6=Pen 7=Text 8=Highlighter
+    // 9=Step. Blur=B, Pixelate=P (below); Paste has no shortcut.
     const order = [
       ToolKind.crop,
       ToolKind.rectangle,
-      ToolKind.arrow,
-      ToolKind.text,
       ToolKind.ellipse,
       ToolKind.line,
+      ToolKind.arrow,
       ToolKind.pen,
+      ToolKind.text,
       ToolKind.highlighter,
       ToolKind.step,
     ];
@@ -385,6 +385,18 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (di != -1) {
       c.selectTool(order[di]);
       return KeyEventResult.handled;
+    }
+    // Letter shortcuts for the raster region tools (no digit slot). Guarded by
+    // !meta and the _editingText early-return above, so typing is never hijacked.
+    if (!meta) {
+      if (key == LogicalKeyboardKey.keyB) {
+        c.selectTool(ToolKind.blur);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyP) {
+        c.selectTool(ToolKind.pixelate);
+        return KeyEventResult.handled;
+      }
     }
 
     // Arrow-nudge for the region tools (crop + blur/pixelate): move the
@@ -1141,9 +1153,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
                   ),
                 ),
               ),
-            // Draggable toolbar — only on the display the cursor is over, so it
-            // "follows" the cursor across displays.
-            if (_active)
+            // Draggable toolbar — only on the cursor's display (so it "follows"
+            // across displays), and hidden while a crop drag is in progress so the
+            // selection / screen isn't obscured.
+            if (_active && !_cropping)
               Positioned(
                 left: _toolbarPos.dx,
                 top: _toolbarPos.dy,
