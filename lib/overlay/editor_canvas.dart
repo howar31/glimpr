@@ -727,30 +727,35 @@ class _EditorCanvasState extends State<EditorCanvas> {
   );
 
   void _onRightDown(Offset p) {
-    // Crop: right-click cancels the selection (set _cancelGesture so the
-    // pending pan-end does NOT commit/export).
-    if (c.tool.value == ToolKind.crop) {
-      // Right-click in Crop EXITS the capture entirely (ShareX-style), like Esc.
-      _cancelGesture = true; // a pending pan-end must not commit
-      _bridge.setDrawingLock(false); // release the cursor confine before exit
-      widget.onCancel();
-      return;
-    }
-    // Cancel an in-progress draw / move / resize.
-    if (_preview != null || _dragStart != null || _editIndex != null) {
+    // Right-click is contextual (priority order):
+    //  1) a gesture in progress -> CANCEL it (crop drag clears the selection; a
+    //     draw / move / resize reverts) and stay in capture;
+    //  2) over an existing drawable (ANY type) -> DELETE it and stay;
+    //  3) otherwise (empty space) -> EXIT the capture, like Esc.
+    // The any-type hit-test in (2) is what makes "only empty space exits" hold
+    // for every tool — incl. Crop and a tool whose type differs from the drawable
+    // under the cursor (those would otherwise wrongly fall through to exit).
+    if (_cropping ||
+        _dragStart != null ||
+        _preview != null ||
+        _editIndex != null) {
+      _bridge.setDrawingLock(false); // release the cursor confine
       setState(() {
-        _cancelGesture = true;
+        _cancelGesture = true; // a pending pan-end must not commit
+        _crop.clear();
+        _cropping = false;
         _resetDrawState();
         _resetEditState();
       });
       return;
     }
-    // Otherwise delete the same-type drawable under the cursor.
-    final idx = _hitActiveType(p);
+    final idx = hitTestTop(c.document.value.drawables, p);
     if (idx != null) {
       c.document.value = c.document.value.removeAt(idx);
       c.selectedIndex.value = null;
+      return;
     }
+    widget.onCancel(); // empty space -> exit capture
   }
 
   void _resetDrawState() {
