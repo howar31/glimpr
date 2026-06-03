@@ -35,6 +35,10 @@ void main() {
     // A fresh mount models opening the settings window with the stored value.
     await tester.pumpWidget(SettingsApp(settings: settings));
     await tester.pumpAndSettle();
-    expect(find.text('/tmp/shots'), findsOneWidget);
+    // The wider save-folder line splits the path into an ellipsizing head and a
+    // pinned trailing segment, so the full string is no longer one Text widget.
+    // Assert on the visible trailing folder; the full path lives in the Tooltip.
+    expect(find.textContaining('shots'), findsOneWidget);
+    expect(find.byTooltip('/tmp/shots'), findsOneWidget);
   });
 }
