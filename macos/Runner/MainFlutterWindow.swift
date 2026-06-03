@@ -45,6 +45,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "getRole": result("control")
       // Cmd-W from the settings UI: hide the window (same as the close button).
       case "closeSettings": self?.hideSettings(); result(nil)
+      // Settings > Advanced: how many displays to keep warm capture-ready. Read by
+      // OverlayManager ONCE at launch, so a change applies on next launch.
+      case "getOverlayWarmTarget":
+        result(UserDefaults.standard.object(forKey: "overlayWarmTarget") as? Int ?? 2)
+      case "setOverlayWarmTarget":
+        if let v = call.arguments as? Int {
+          UserDefaults.standard.set(max(1, min(8, v)), forKey: "overlayWarmTarget")
+        }
+        result(nil)
       default: result(FlutterMethodNotImplemented)
       }
     }

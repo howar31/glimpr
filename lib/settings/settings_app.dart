@@ -29,6 +29,7 @@ const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
   ('Output', Icons.image_outlined),
   ('Sounds', Icons.volume_up_outlined),
+  ('Advanced', Icons.memory),
 ];
 
 class _SettingsAppState extends State<SettingsApp>
@@ -44,6 +45,10 @@ class _SettingsAppState extends State<SettingsApp>
   bool _completionSound = true;
   bool _rightClickExits = true;
   bool _launchAtLogin = false;
+  int _warmTarget = 2;
+  // The warm target active SINCE launch (what OverlayManager actually built with).
+  // When the user picks a different value, a restart is needed to apply it.
+  int? _warmTargetInitial;
 
   Settings get _s => widget.settings;
 
@@ -94,6 +99,18 @@ class _SettingsAppState extends State<SettingsApp>
     // settings UI (and never stalls widget tests where the channel is unmocked).
     final login = await LoginItem.isEnabled();
     if (mounted) setState(() => _launchAtLogin = login);
+    // Warm-display target lives natively (UserDefaults, read by OverlayManager at
+    // launch). Query it over the role channel; guard so an unmocked channel never
+    // breaks the rest of the UI.
+    try {
+      final warm = await _roleChannel.invokeMethod<int>('getOverlayWarmTarget');
+      if (mounted) {
+        setState(() {
+          _warmTarget = warm ?? 2;
+          _warmTargetInitial = warm ?? 2;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _chooseDir() async {
@@ -106,6 +123,13 @@ class _SettingsAppState extends State<SettingsApp>
   Future<void> _resetDir() async {
     await _s.clearSaveDirectory();
     if (mounted) setState(() => _saveDir = null);
+  }
+
+  Future<void> _setWarmTarget(int v) async {
+    try {
+      await _roleChannel.invokeMethod('setOverlayWarmTarget', v);
+    } catch (_) {}
+    if (mounted) setState(() => _warmTarget = v);
   }
 
   @override
@@ -209,6 +233,8 @@ class _SettingsAppState extends State<SettingsApp>
         return _outputPane(t);
       case 2:
         return _soundsPane(t);
+      case 3:
+        return _advancedPane(t);
       default:
         return _generalPane(t);
     }
@@ -383,6 +409,66 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ]),
+    ];
+  }
+
+  List<Widget> _advancedPane(GlimprTokens t) {
+    return [
+      _h1('Advanced', t),
+      const SectionLabel('Multi-display', icon: Icons.memory),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Warm capture engines',
+              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'How many displays Glimpr keeps instantly capture-ready — including '
+              'displays connected after the app has launched (e.g. plugging into a '
+              'dock). Glimpr pre-warms a rendering engine per display so the freeze '
+              'overlay appears with no delay.\n\n'
+              'Cost: each engine uses about 100 MB of memory while Glimpr runs. A '
+              'display connected beyond this number still captures, but only shows '
+              'the frozen frame — its crosshair and toolbar follow correctly after a '
+              'restart (which makes every connected display warm again).',
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 16),
+            Segmented<int>(
+              full: true,
+              value: _warmTarget.clamp(1, 5),
+              options: const [(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
+              onChanged: _setWarmTarget,
+            ),
+            const SizedBox(height: 12),
+            if (_warmTargetInitial != null && _warmTarget != _warmTargetInitial)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.restart_alt,
+                    size: 15,
+                    color: GlimprTokens.danger,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Restart Glimpr for this to take effect.',
+                      style: GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                'Default 2 · applies after restarting Glimpr',
+                style: GlimprType.sansStyle(12, 500, t.fg4),
+              ),
+          ],
+        ),
+      ),
     ];
   }
 

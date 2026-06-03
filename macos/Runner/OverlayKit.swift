@@ -215,6 +215,26 @@ final class OverlayManager {
   // window takes key/active focus on reveal (see show()). nil = unknown.
   private var keyDisplayID: CGDirectDisplayID?
 
+  // Launch-born warm spares (see buildUnits): healthy, vsync-seeded engines parked
+  // alpha-0, re-homed onto displays hot-plugged AFTER launch. A unit created fresh
+  // on a just-attached display never starts its steady-state render loop, so we
+  // move one of these instead. didBuildLaunchUnits gates the launch batch from
+  // consuming spares; spareCount bounds how many post-launch displays are covered.
+  private var spares: [Unit] = []
+  private var didBuildLaunchUnits = false
+  // Pre-warm enough launch-born engines that up to this many displays TOTAL can be
+  // handled at once. Engines only initialize a working render loop at app launch,
+  // so spares are pre-stocked = max(0, target - displays present at launch) and
+  // re-homed onto displays hot-plugged later. Resident warm engines = max(displays-
+  // at-launch, target), each ~100 MB. Displays beyond target degrade gracefully
+  // (freeze shown, HUD follow needs a restart). User-tunable in Settings > Advanced
+  // (persisted to UserDefaults by the role channel); read here ONCE at launch, so a
+  // change applies on the next launch. Default 2; clamped 1...8 against a bad pref.
+  private let maxTotalDisplays: Int = {
+    let stored = UserDefaults.standard.object(forKey: "overlayWarmTarget") as? Int
+    return max(1, min(8, stored ?? 2))
+  }()
+
   // Single-authority cross-display follow: a high-frequency poll of the GLOBAL
   // cursor position decides which display is active (one source of truth),
   // instead of each engine guessing from its own key-window-gated mouse events
@@ -258,12 +278,41 @@ final class OverlayManager {
   }
 
   private func buildUnits() {
-    for screen in NSScreen.screens { addUnit(for: screen) }
+    for screen in NSScreen.screens { units[displayID(of: screen)] = makeUnit(on: screen) }
+    // Launch-born spares: warm, vsync-seeded engines parked alpha-0 on a present
+    // display, ready to be RE-HOMED onto a display hot-plugged AFTER launch. A unit
+    // created fresh ON a just-attached display never starts its steady-state render
+    // loop (its implicit engine's display snapshot races the new display's
+    // enumeration and the fresh CVDisplayLink can be stillborn), so on hot-plug we
+    // move one of these healthy launch-born units instead (see syncUnitsToScreens).
+    let spareTarget = max(0, maxTotalDisplays - NSScreen.screens.count)
+    if spareTarget > 0, let host = NSScreen.main ?? NSScreen.screens.first {
+      for _ in 0..<spareTarget { spares.append(makeUnit(on: host)) }
+    }
+    didBuildLaunchUnits = true
   }
 
-  /// Build + warm ONE display's overlay window + engine (resident at alpha 0).
+  /// Last-resort direct-create: build a unit FOR its own display and register it.
+  /// A unit created directly on a freshly-attached display may never start its
+  /// render loop (see makeUnit), so this is only used when there is no OTHER present
+  /// display to host an on-demand unit on (see addUnitOnDemand).
   private func addUnit(for screen: NSScreen) {
-      let id = displayID(of: screen)
+    units[displayID(of: screen)] = makeUnit(on: screen)
+  }
+
+  /// Reverse-lookup: which display does this view controller currently serve? A
+  /// unit's per-engine control handler resolves its display id dynamically (not
+  /// captured at creation) so a parked spare can be re-homed onto any display.
+  private func displayID(forVC vc: FlutterViewController) -> CGDirectDisplayID? {
+    for (id, u) in units where u.vc === vc { return id }
+    return nil
+  }
+
+  /// Build + warm ONE overlay window + implicit FlutterEngine on `screen` (resident
+  /// at alpha 0). Does NOT register it in `units` — the caller decides whether it is
+  /// a live display unit or a parked spare. The control handler resolves its display
+  /// id via displayID(forVC:) at call time, so the same unit can later be re-homed.
+  private func makeUnit(on screen: NSScreen) -> Unit {
       // VC-owns-its-implicit-engine — the only pattern that renders reliably for
       // our windows on macOS (separate FlutterEngine().run() views never paint).
       // The implicit engine runs main(); a per-engine glimpr/role channel tells
@@ -286,34 +335,39 @@ final class OverlayManager {
         if call.method == "getRole" { result("overlay") } else { result(FlutterMethodNotImplemented) }
       }
       let control = FlutterMethodChannel(name: "glimpr/capture", binaryMessenger: msgr)
-      control.setMethodCallHandler { [weak self] call, result in
+      control.setMethodCallHandler { [weak self, weak vc] call, result in
+        guard let self = self else { result(nil); return }
         switch call.method {
-        case "overlayReady": self?.show(displayID: id); result(nil)
+        case "overlayReady":
+          if let vc = vc, let id = self.displayID(forVC: vc) { self.show(displayID: id) }
+          result(nil)
         case "broadcastEditorState":
-          if let a = call.arguments as? [String: Any] {
-            self?.broadcastEditorState(from: id, args: a)
+          if let vc = vc, let id = self.displayID(forVC: vc),
+             let a = call.arguments as? [String: Any] {
+            self.broadcastEditorState(from: id, args: a)
           }
           result(nil)
-        case "dismissOverlay": self?.dismiss(); result(nil)
+        case "dismissOverlay": self.dismiss(); result(nil)
         case "showError":
           if let a = call.arguments as? [String: Any],
              let msg = a["message"] as? String {
-            self?.showError(msg)
+            self.showError(msg)
           }
           result(nil)
         case "setDrawingLock":
           // Confine the cursor to THIS display while a draw/crop drag is in
           // progress, and freeze the active handoff so the stroke isn't wiped if
           // the pointer would otherwise wander onto another display.
-          if let a = call.arguments as? [String: Any],
+          if let vc = vc, let id = self.displayID(forVC: vc),
+             let a = call.arguments as? [String: Any],
              let locked = a["locked"] as? Bool {
-            self?.setDrawingLock(locked ? id : nil)
+            self.setDrawingLock(locked ? id : nil)
           }
           result(nil)
         case "setCursorHidden":
           if let a = call.arguments as? [String: Any],
              let hidden = a["hidden"] as? Bool {
-            self?.setCursorHidden(hidden)
+            self.setCursorHidden(hidden)
           }
           result(nil)
         case "warpCursor":
@@ -345,7 +399,7 @@ final class OverlayManager {
       window.alphaValue = 0
       window.ignoresMouseEvents = true
 
-      units[id] = Unit(window: window, engine: vc.engine, vc: vc, overlay: overlay, role: role, control: control)
+      return Unit(window: window, engine: vc.engine, vc: vc, overlay: overlay, role: role, control: control)
   }
 
   /// Add/remove warm overlay units so there is exactly one per CURRENT display.
@@ -357,15 +411,44 @@ final class OverlayManager {
   func syncUnitsToScreens() {
     let currentIDs = Set(NSScreen.screens.map { displayID(of: $0) })
     for id in Set(units.keys).subtracting(currentIDs) {
-      if let u = units[id] {
+      let removed = units[id]
+      units.removeValue(forKey: id)
+      guard let u = removed else { continue }
+      // Return the (launch-born, vsync-seeded) unit to the spare pool instead of
+      // tearing it down, so docking/undocking keeps working: re-park it warm +
+      // alpha-0 on a SURVIVING display (never orderOut, which nulls window.screen
+      // and unregisters its Flutter display link). Keep only as many spares as the
+      // target needs for the now-fewer displays; shut down any excess so the
+      // resident warm-engine count stays bounded.
+      let desiredSpares = max(0, maxTotalDisplays - units.count)
+      if spares.count < desiredSpares, let host = NSScreen.main ?? NSScreen.screens.first {
+        u.window.setFrame(host.frame, display: true)
+        u.window.alphaValue = 0
+        u.window.ignoresMouseEvents = true
+        spares.append(u)
+      } else {
         u.window.orderOut(nil)
         u.window.contentViewController = nil
         u.engine.shutDownEngine()
       }
-      units.removeValue(forKey: id)
     }
     for screen in NSScreen.screens where units[displayID(of: screen)] == nil {
-      addUnit(for: screen)
+      let id = displayID(of: screen)
+      if let spare = spares.popLast() {
+        // Re-home a launch-born (healthy, vsync-seeded) spare onto the new display.
+        // Moving the window fires NSWindowDidChangeScreenNotification, which makes
+        // the Flutter display link re-register on the new CGDirectDisplayID while
+        // the already-seeded vsync waiter keeps the render loop running — the fix
+        // for "a unit created fresh on a hot-plugged display never repaints".
+        spare.window.setFrame(screen.frame, display: true)
+        units[id] = spare
+      } else {
+        // Pool exhausted — only reachable past maxTotalDisplays concurrent displays,
+        // i.e. beyond the hardware max. Best-effort direct create; its render loop
+        // may not start (engines initialize cleanly only at launch), so a restart
+        // (which makes every present display a launch unit) recovers it.
+        addUnit(for: screen)
+      }
     }
   }
 
@@ -400,7 +483,11 @@ final class OverlayManager {
   /// frame is rasterized (also sidesteps the documented blank-on-reshow bug).
   private func show(displayID id: CGDirectDisplayID) {
     guard let unit = units[id] else { return }
-    unit.window.setFrame(unit.window.screen?.frame ?? unit.window.frame, display: true)
+    // Use the display's CURRENT frame (a re-homed spare's window.screen may still
+    // read its old park display until AppKit settles the move).
+    let frame = NSScreen.screens.first(where: { displayID(of: $0) == id })?.frame
+      ?? unit.window.screen?.frame ?? unit.window.frame
+    unit.window.setFrame(frame, display: true)
     unit.window.alphaValue = 1
     // ALL displays are interactive so the editor can FOLLOW the cursor across
     // them (the cursor poll re-keys the active display via setActiveDisplay).

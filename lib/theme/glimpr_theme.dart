@@ -79,6 +79,10 @@ class GlimprTokens {
   static const Color accentFrom = Color(0xFF60A5FA); // blue-400
   static const Color accentTo = Color(0xFF6366F1); // indigo-500
 
+  /// Warning / needs-attention red (e.g. a setting that needs a restart to
+  /// apply). Same lightness family as the blue accent so it reads in light+dark.
+  static const Color danger = Color(0xFFF87171); // red-400
+
   /// 135deg cyan→blue gradient used by the active controls, nav fill, wordmark.
   static const LinearGradient accentGrad = LinearGradient(
     begin: Alignment.topLeft,
