@@ -1,0 +1,109 @@
+import 'package:flutter/services.dart';
+import '../editor/editor_controller.dart';
+import 'hotkey_binding.dart';
+
+// Action keys (naming: <scope>.<camelCaseName>).
+const kCaptureAreaKey = 'global.captureArea';
+
+// Editor command keys.
+const kEditorUndoKey = 'editor.undo';
+const kEditorRedoKey = 'editor.redo';
+const kEditorPasteKey = 'editor.pasteImage';
+const kEditorDeleteKey = 'editor.deleteSelected';
+const kEditorConfirmKey = 'editor.confirmExport';
+
+/// Maps each editor tool to its action key.
+const kEditorToolActionKey = <ToolKind, String>{
+  ToolKind.crop: 'editor.crop',
+  ToolKind.blur: 'editor.blur',
+  ToolKind.pixelate: 'editor.pixelate',
+  ToolKind.rectangle: 'editor.rectangle',
+  ToolKind.ellipse: 'editor.ellipse',
+  ToolKind.line: 'editor.line',
+  ToolKind.arrow: 'editor.arrow',
+  ToolKind.pen: 'editor.pen',
+  ToolKind.text: 'editor.text',
+  ToolKind.highlighter: 'editor.highlighter',
+  ToolKind.step: 'editor.step',
+  ToolKind.paste: 'editor.paste',
+};
+
+HotkeyBinding _b(
+  PhysicalKeyboardKey p,
+  LogicalKeyboardKey l, [
+  Set<HotkeyModifier> m = const {},
+]) =>
+    HotkeyBinding(physicalKey: p, logicalKey: l, modifiers: m);
+
+/// Factory defaults. Tier-1 + Tier-2 in one map (foundation; Tier-2 dispatch is
+/// wired in Phase 4.1b). Mirrors the current hardcoded keys in editor_canvas.
+final Map<String, HotkeyBinding> kDefaultBindings = {
+  kCaptureAreaKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  // Editor commands
+  kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
+      {HotkeyModifier.meta}),
+  kEditorRedoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
+      {HotkeyModifier.meta, HotkeyModifier.shift}),
+  kEditorPasteKey: _b(PhysicalKeyboardKey.keyV, LogicalKeyboardKey.keyV,
+      {HotkeyModifier.meta}),
+  kEditorDeleteKey:
+      _b(PhysicalKeyboardKey.backspace, LogicalKeyboardKey.backspace),
+  kEditorConfirmKey: _b(PhysicalKeyboardKey.enter, LogicalKeyboardKey.enter),
+  // Editor tools
+  kEditorToolActionKey[ToolKind.crop]!:
+      _b(PhysicalKeyboardKey.keyC, LogicalKeyboardKey.keyC),
+  kEditorToolActionKey[ToolKind.blur]!:
+      _b(PhysicalKeyboardKey.keyB, LogicalKeyboardKey.keyB),
+  kEditorToolActionKey[ToolKind.pixelate]!:
+      _b(PhysicalKeyboardKey.keyP, LogicalKeyboardKey.keyP),
+  kEditorToolActionKey[ToolKind.rectangle]!:
+      _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1),
+  kEditorToolActionKey[ToolKind.ellipse]!:
+      _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2),
+  kEditorToolActionKey[ToolKind.line]!:
+      _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3),
+  kEditorToolActionKey[ToolKind.arrow]!:
+      _b(PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4),
+  kEditorToolActionKey[ToolKind.pen]!:
+      _b(PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5),
+  kEditorToolActionKey[ToolKind.text]!:
+      _b(PhysicalKeyboardKey.digit6, LogicalKeyboardKey.digit6),
+  kEditorToolActionKey[ToolKind.highlighter]!:
+      _b(PhysicalKeyboardKey.digit7, LogicalKeyboardKey.digit7),
+  kEditorToolActionKey[ToolKind.step]!:
+      _b(PhysicalKeyboardKey.digit8, LogicalKeyboardKey.digit8),
+  kEditorToolActionKey[ToolKind.paste]!:
+      _b(PhysicalKeyboardKey.digit9, LogicalKeyboardKey.digit9),
+};
+
+/// Keys reserved for fixed editor behavior — cannot be bound to an editor action
+/// (recorder rejects them). Esc = safety Cancel/Exit; arrows = crosshair nudge.
+final kEditorReservedKeys = <LogicalKeyboardKey>{
+  LogicalKeyboardKey.escape,
+  LogicalKeyboardKey.arrowUp,
+  LogicalKeyboardKey.arrowDown,
+  LogicalKeyboardKey.arrowLeft,
+  LogicalKeyboardKey.arrowRight,
+};
+
+/// A bindable global action. Only actions with a handler appear here, so the
+/// Shortcuts UI renders no dead rows. This slice: captureArea only.
+class GlobalAction {
+  const GlobalAction({
+    required this.actionKey,
+    required this.label,
+    required this.hint,
+  });
+  final String actionKey;
+  final String label;
+  final String hint;
+}
+
+const kGlobalActions = <GlobalAction>[
+  GlobalAction(
+    actionKey: kCaptureAreaKey,
+    label: 'Capture',
+    hint: 'Start a screen capture',
+  ),
+];

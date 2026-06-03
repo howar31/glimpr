@@ -2,6 +2,11 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../output/filename.dart';
+import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/hotkey_service.dart';
+import '../shortcuts/shortcut_actions.dart';
+import '../shortcuts/shortcut_store.dart';
+import '../shortcuts/widgets/hotkey_recorder_field.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
@@ -16,8 +21,13 @@ import 'settings.dart';
 /// lights — hence the top inset. Each control persists immediately; overlay
 /// engines read the values fresh on next capture.
 class SettingsApp extends StatefulWidget {
-  const SettingsApp({super.key, required this.settings});
+  const SettingsApp({super.key, required this.settings, this.hotkeyService});
   final Settings settings;
+
+  // The live Tier-1 hotkey service from the control engine, used by the
+  // Shortcuts pane to re-register a rebound global hotkey on Apply. Null in
+  // tests / the overlay engine (which never builds the settings UI).
+  final HotkeyService? hotkeyService;
 
   @override
   State<SettingsApp> createState() => _SettingsAppState();
@@ -30,6 +40,7 @@ const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
   ('Output', Icons.image_outlined),
   ('Sounds', Icons.volume_up_outlined),
+  ('Shortcuts', Icons.keyboard),
   ('Advanced', Icons.memory),
 ];
 
@@ -52,6 +63,14 @@ class _SettingsAppState extends State<SettingsApp>
   int? _warmTargetInitial;
   String _filenameTemplate = defaultFilenameTemplate;
   final _filenameController = TextEditingController();
+
+  // Shortcuts draft: null until the user first opens the Shortcuts pane. Only
+  // this pane uses a staged draft (the other panes are live-apply). The baseline
+  // is the last-applied state; Revert restores it and the Apply/Revert buttons
+  // show only when the draft differs from it.
+  late final _shortcutStore = ShortcutStore(widget.settings.store);
+  Map<String, HotkeyBinding?>? _shortcutsDraft;
+  Map<String, HotkeyBinding?> _shortcutsBaseline = const {};
 
   Settings get _s => widget.settings;
 
@@ -241,6 +260,8 @@ class _SettingsAppState extends State<SettingsApp>
       case 2:
         return _soundsPane(t);
       case 3:
+        return _shortcutsPane(t);
+      case 4:
         return _advancedPane(t);
       default:
         return _generalPane(t);
@@ -585,6 +606,146 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
     ];
+  }
+
+  // ---- shortcuts ---------------------------------------------------------
+
+  // Loads the effective bindings (defaults merged with stored overrides) into the
+  // draft + baseline the first time the Shortcuts pane is shown.
+  Future<void> _ensureShortcutsDraft() async {
+    if (_shortcutsDraft != null) return;
+    final all = await _shortcutStore.all();
+    if (!mounted) return;
+    setState(() {
+      _shortcutsDraft = {...all};
+      _shortcutsBaseline = {...all};
+    });
+  }
+
+  List<Widget> _shortcutsPane(GlimprTokens t) {
+    final draft = _shortcutsDraft;
+    if (draft == null) {
+      _ensureShortcutsDraft();
+      return const [Center(child: CircularProgressIndicator())];
+    }
+    final dupes = duplicateActionKeys(draft);
+    final dirty = !_mapEquals(draft, _shortcutsBaseline);
+    final allValid = _allValid(draft, dupes);
+
+    return [
+      _h1('Shortcuts', t),
+      const SectionLabel('Global', icon: Icons.public),
+      GlassCard.rows([
+        for (final a in kGlobalActions)
+          SettingRow(
+            title: a.label,
+            hint: a.hint,
+            trailing: _bindingRow(
+              t: t,
+              actionKey: a.actionKey,
+              requireModifier: true,
+              reserved: const {},
+              dupes: dupes,
+            ),
+          ),
+      ]),
+      const SizedBox(height: 20),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (dirty) ...[
+            GhostButton('Revert', onTap: _revertShortcuts),
+            const SizedBox(width: 8),
+            // AccentButton's onTap is non-nullable, so render a disabled ghost
+            // placeholder when the draft is invalid rather than a dead accent.
+            if (allValid)
+              AccentButton('Apply', onTap: _applyShortcuts)
+            else
+              GhostButton('Apply', onTap: null),
+          ],
+        ],
+      ),
+    ];
+  }
+
+  Widget _bindingRow({
+    required GlimprTokens t,
+    required String actionKey,
+    required bool requireModifier,
+    required Set<LogicalKeyboardKey> reserved,
+    required Set<String> dupes,
+  }) {
+    final draft = _shortcutsDraft!;
+    final binding = draft[actionKey];
+    final needsModifier =
+        requireModifier && binding != null && !binding.hasModifier;
+    final isDupe = dupes.contains(actionKey);
+    final warning = needsModifier
+        ? 'Needs a modifier'
+        : (isDupe ? 'Duplicate' : null);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (warning != null) ...[
+          Text(
+            warning,
+            style: GlimprType.sansStyle(11.5, 600, GlimprTokens.danger),
+          ),
+          const SizedBox(width: 10),
+        ],
+        HotkeyRecorderField(
+          value: binding,
+          requireModifier: requireModifier,
+          reservedKeys: reserved,
+          onChanged: (b) => setState(() => draft[actionKey] = b),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'Reset to default',
+          icon: Icon(Icons.restart_alt, size: 18, color: t.fg3),
+          onPressed: () =>
+              setState(() => draft[actionKey] = kDefaultBindings[actionKey]),
+        ),
+      ],
+    );
+  }
+
+  // Valid when there are no duplicate combos and every present global binding has
+  // a modifier (a bare global hotkey is rejected — Tier 1 requires a modifier).
+  bool _allValid(Map<String, HotkeyBinding?> draft, Set<String> dupes) {
+    if (dupes.isNotEmpty) return false;
+    for (final a in kGlobalActions) {
+      final b = draft[a.actionKey];
+      if (b != null && !b.hasModifier) return false;
+    }
+    return true;
+  }
+
+  Future<void> _applyShortcuts() async {
+    final draft = _shortcutsDraft!;
+    await _shortcutStore.saveAll(draft);
+    // Re-register the changed Tier-1 actions live (no restart).
+    for (final a in kGlobalActions) {
+      if (draft[a.actionKey] != _shortcutsBaseline[a.actionKey]) {
+        await widget.hotkeyService?.rebind(a.actionKey, draft[a.actionKey]);
+      }
+    }
+    if (mounted) setState(() => _shortcutsBaseline = {...draft});
+  }
+
+  void _revertShortcuts() =>
+      setState(() => _shortcutsDraft = {..._shortcutsBaseline});
+
+  // Entry-wise equality for two binding maps (HotkeyBinding has value equality).
+  bool _mapEquals(
+    Map<String, HotkeyBinding?> a,
+    Map<String, HotkeyBinding?> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key) || b[entry.key] != entry.value) return false;
+    }
+    return true;
   }
 
   // ---- building blocks ---------------------------------------------------

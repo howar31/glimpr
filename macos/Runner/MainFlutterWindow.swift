@@ -110,7 +110,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // unreliable (the window is declared resizable="YES" in MainMenu.xib and the
     // mask override didn't stay applied), so clamp content min == max — AppKit
     // enforces this unconditionally, blocking edge-drag resize and window tiling.
-    let fixedSize = NSSize(width: 720, height: 620)
+    // Roomier for the denser Shortcuts tab (its many rows scroll within the
+    // content ListView; sizing does not try to fit them all without scrolling).
+    let fixedSize = NSSize(width: 820, height: 700)
     self.setContentSize(fixedSize)
     self.contentMinSize = fixedSize
     self.contentMaxSize = fixedSize

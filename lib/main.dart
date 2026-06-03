@@ -4,7 +4,10 @@ import 'capture/capture_bridge.dart';
 import 'overlay/overlay_app.dart';
 import 'settings/settings.dart';
 import 'settings/settings_app.dart';
-import 'shell/hotkey.dart';
+import 'shortcuts/hotkey_registrar.dart';
+import 'shortcuts/hotkey_service.dart';
+import 'shortcuts/shortcut_actions.dart';
+import 'shortcuts/shortcut_store.dart';
 
 /// Every engine runs this same main(). The native side answers `glimpr/role`
 /// with 'overlay' for the per-display overlay engines and 'control' for the
@@ -16,14 +19,21 @@ Future<void> main() async {
     runApp(const OverlayApp());
     return;
   }
-  // Control engine only: register the global capture hotkey (⌘⌥1). The
-  // per-display overlay engines must NOT also register it (one system hotkey).
-  try {
-    await CaptureHotkey.register(() => CaptureBridge().beginCapture());
-  } catch (_) {
-    // A hotkey failure must not block the app; the menu-bar Capture still works.
-  }
-  runApp(SettingsApp(settings: Settings.instance));
+  // Control engine only: register the global capture hotkey (default ⌘⌥1) via
+  // the rebindable HotkeyService. The per-display overlay engines must NOT also
+  // register it (one system hotkey). HotkeyService.start() never throws, so a
+  // registration failure cannot block the app; the menu-bar Capture still works.
+  final shortcutStore = ShortcutStore(Settings.instance.store);
+  final bindings = await shortcutStore.all();
+  final hotkeyService = HotkeyService(
+    registrar: HotkeyManagerRegistrar(),
+    bindings: bindings,
+    onAction: (actionKey) {
+      if (actionKey == kCaptureAreaKey) CaptureBridge().beginCapture();
+    },
+  );
+  await hotkeyService.start();
+  runApp(SettingsApp(settings: Settings.instance, hotkeyService: hotkeyService));
 }
 
 /// Resolves this engine's role. The native handler is registered synchronously
