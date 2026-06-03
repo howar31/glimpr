@@ -29,7 +29,8 @@ class EditorCanvas extends StatefulWidget {
   final CapturedDisplay display;
   final ui.Image frozenImage; // native pixels — used by the loupe
   final EditorController controller;
-  final Future<void> Function(Rect? selectionLogical) onExport;
+  final Future<void> Function(Rect? selectionLogical, SnapWindow? window)
+  onExport;
   final VoidCallback onCancel;
   // Single source of truth for cross-display follow: the native cursor poll
   // pushes (active display id, cursor display-local point) here. This editor is
@@ -90,7 +91,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   // Snappable windows for THIS display (capture-time snapshot) + the one the
   // cursor is currently over (crop tool, not mid-drag) — highlighted + snapped.
-  List<Rect> _windows = const [];
+  List<SnapWindow> _windows = const [];
   Rect? _hoverWindow;
   bool _cancelGesture = false; // right-click cancelled the active drag
 
@@ -383,7 +384,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if ((key == LogicalKeyboardKey.enter ||
             key == LogicalKeyboardKey.numpadEnter) &&
         !_inCrop) {
-      widget.onExport(null); // annotate phase, no crop -> whole display
+      // Whole display (no crop) — name after the window under the cursor.
+      widget.onExport(null, topmostWindowAt(_windows, _cursor));
       return KeyEventResult.handled;
     }
 
@@ -617,32 +619,32 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final style = c.style.value;
     switch (c.tool.value) {
       case ToolKind.crop:
-        widget.onExport(win); // null window -> whole display
+        widget.onExport(win?.rect, win); // null window -> whole display
         return;
       case ToolKind.blur:
         if (win != null) {
-          c.commitDrawable(BlurDrawable(win, style));
+          c.commitDrawable(BlurDrawable(win.rect, style));
         } else {
           c.selectedIndex.value = _hitActiveType(p);
         }
         return;
       case ToolKind.pixelate:
         if (win != null) {
-          c.commitDrawable(PixelateDrawable(win, style));
+          c.commitDrawable(PixelateDrawable(win.rect, style));
         } else {
           c.selectedIndex.value = _hitActiveType(p);
         }
         return;
       case ToolKind.rectangle:
         if (win != null) {
-          c.commitDrawable(RectangleDrawable(win, style));
+          c.commitDrawable(RectangleDrawable(win.rect, style));
         } else {
           c.selectedIndex.value = _hitActiveType(p);
         }
         return;
       case ToolKind.ellipse:
         if (win != null) {
-          c.commitDrawable(EllipseDrawable(win, style));
+          c.commitDrawable(EllipseDrawable(win.rect, style));
         } else {
           c.selectedIndex.value = _hitActiveType(p);
         }
@@ -701,7 +703,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
         : null;
     setState(() {
       _cursor = _clampToDisplay(p);
-      _hoverWindow = hover;
+      _hoverWindow = hover?.rect;
     });
   }
 
@@ -967,7 +969,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
       _cropping = false;
       final r = _crop.rect.value;
       if (r != null && r.width >= 2 && r.height >= 2) {
-        widget.onExport(r); // drag-release commits the crop
+        // Window under the cursor at the drag-release point names the file.
+        widget.onExport(r, topmostWindowAt(_windows, _cursor));
       } else {
         setState(() => _crop.clear());
       }

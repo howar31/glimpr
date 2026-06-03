@@ -1,6 +1,19 @@
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
+/// A snappable top-level window at capture time: its display-local logical [rect]
+/// plus the window [title] and owning [app] name (for naming the saved file).
+class SnapWindow {
+  final Rect rect;
+  final String title;
+  final String app;
+  const SnapWindow({required this.rect, required this.title, required this.app});
+
+  /// Best human label: the window title, or the app name when the title is
+  /// unavailable (kCGWindowName can be empty even with Screen-Recording access).
+  String get label => title.isNotEmpty ? title : app;
+}
+
 /// One frozen display returned by the native capture channel.
 /// [left/top/width/height] are LOGICAL global-desktop coords; [pngBytes] is NATIVE resolution.
 class CapturedDisplay {
@@ -18,8 +31,8 @@ class CapturedDisplay {
   final double? cursorX;
   final double? cursorY;
   // Snappable top-level windows on THIS display at capture time, display-local
-  // logical rects (top-left origin), front-to-back z-order. Empty if none.
-  final List<Rect> windows;
+  // logical (top-left origin), front-to-back z-order. Empty if none.
+  final List<SnapWindow> windows;
 
   const CapturedDisplay({
     required this.displayId,
@@ -47,9 +60,17 @@ class CapturedDisplay {
     cursorX: (m['cursorX'] as num?)?.toDouble(),
     cursorY: (m['cursorY'] as num?)?.toDouble(),
     windows: ((m['windows'] as List<dynamic>?) ?? const [])
-        .map((e) => (e as List).cast<num>())
-        .map((v) => Rect.fromLTWH(
-            v[0].toDouble(), v[1].toDouble(), v[2].toDouble(), v[3].toDouble()))
+        .map((e) => (e as Map).cast<dynamic, dynamic>())
+        .map((w) => SnapWindow(
+              rect: Rect.fromLTWH(
+                (w['x'] as num).toDouble(),
+                (w['y'] as num).toDouble(),
+                (w['w'] as num).toDouble(),
+                (w['h'] as num).toDouble(),
+              ),
+              title: (w['title'] as String?) ?? '',
+              app: (w['app'] as String?) ?? '',
+            ))
         .toList(growable: false),
   );
 }

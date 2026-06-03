@@ -1,6 +1,7 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../output/filename.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
@@ -49,6 +50,8 @@ class _SettingsAppState extends State<SettingsApp>
   // The warm target active SINCE launch (what OverlayManager actually built with).
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
+  String _filenameTemplate = defaultFilenameTemplate;
+  final _filenameController = TextEditingController();
 
   Settings get _s => widget.settings;
 
@@ -67,6 +70,7 @@ class _SettingsAppState extends State<SettingsApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _filenameController.dispose();
     super.dispose();
   }
 
@@ -83,6 +87,7 @@ class _SettingsAppState extends State<SettingsApp>
     final shutter = await _s.getShutterSound();
     final complete = await _s.getCompletionSound();
     final rightClick = await _s.getRightClickExits();
+    final template = await _s.getFilenameTemplate();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -93,7 +98,9 @@ class _SettingsAppState extends State<SettingsApp>
       _shutterSound = shutter;
       _completionSound = complete;
       _rightClickExits = rightClick;
+      _filenameTemplate = template;
     });
+    _filenameController.text = template;
     // Login state comes from the OS (SMAppService) over a native channel; query
     // it separately so a slow / unavailable channel never blocks the rest of the
     // settings UI (and never stalls widget tests where the channel is unmocked).
@@ -384,7 +391,107 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 15),
+      const SectionLabel('Filename', icon: Icons.text_fields_outlined),
+      GlassCard.padded(child: _filenameBody(t)),
     ];
+  }
+
+  Widget _filenameBody(GlimprTokens t) {
+    final preview = buildScreenshotName(
+      template: _filenameTemplate.trim().isEmpty
+          ? defaultFilenameTemplate
+          : _filenameTemplate,
+      t: DateTime.now(),
+      windowTitle: 'Safari',
+      appName: 'Safari',
+      ext: _format == ImageFormat.jpeg ? 'jpg' : 'png',
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _filenameController,
+          style: GlimprType.mono(13, t.fg1),
+          cursorColor: GlimprTokens.accent,
+          onChanged: (v) {
+            _s.setFilenameTemplate(v);
+            setState(() => _filenameTemplate = v);
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: t.fieldBg,
+            hintText: defaultFilenameTemplate,
+            hintStyle: GlimprType.mono(13, t.fg4),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 11,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(9),
+              borderSide: BorderSide(color: t.fieldBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(9),
+              borderSide: const BorderSide(
+                color: GlimprTokens.accent,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Text('Preview', style: GlimprType.sansStyle(12.5, 600, t.fg4)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                preview,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GlimprType.mono(12.5, t.fg3),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text('Placeholders', style: GlimprType.sansStyle(12.5, 600, t.fg4)),
+        const SizedBox(height: 8),
+        _token(t, '{window}', 'The window title, or the app name if it has none'),
+        _token(t, '{app}', 'The application name (e.g. Safari)'),
+        _token(t, '{date}', 'Capture date — 2026-06-03'),
+        _token(t, '{time}', 'Capture time — 15-04-09'),
+        const SizedBox(height: 6),
+        Text(
+          'Uses the window under the cursor when the capture ends. On bare '
+          'desktop, {window} and {app} are left out.',
+          style: GlimprType.sansStyle(12, 400, t.fg4),
+        ),
+      ],
+    );
+  }
+
+  Widget _token(GlimprTokens t, String token, String desc) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 82,
+            child: Text(
+              token,
+              style: GlimprType.mono(12.5, GlimprTokens.accent),
+            ),
+          ),
+          Expanded(
+            child: Text(desc, style: GlimprType.sansStyle(12.5, 400, t.fg3)),
+          ),
+        ],
+      ),
+    );
   }
 
   List<Widget> _soundsPane(GlimprTokens t) {

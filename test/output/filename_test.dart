@@ -29,4 +29,76 @@ void main() {
       'Screenshot_x.png',
     );
   });
+
+  group('buildScreenshotName', () {
+    final t = DateTime(2026, 6, 3, 14, 9, 5);
+
+    test('default template uses the window name + date + time', () {
+      expect(
+        buildScreenshotName(
+          template: defaultFilenameTemplate,
+          t: t,
+          windowTitle: 'Safari',
+          ext: 'png',
+        ),
+        'Safari_2026-06-03_14-09-05.png',
+      );
+    });
+
+    test('{window} falls back to the app name when there is no title', () {
+      expect(
+        buildScreenshotName(
+          template: '{window}',
+          t: t,
+          windowTitle: '',
+          appName: 'Finder',
+          ext: 'png',
+        ),
+        'Finder.png',
+      );
+    });
+
+    test('{app} is always the app name (not the window title)', () {
+      expect(
+        buildScreenshotName(
+          template: '{app}_{time}',
+          t: t,
+          windowTitle: 'Inbox — Gmail',
+          appName: 'Safari',
+          ext: 'png',
+        ),
+        'Safari_14-09-05.png',
+      );
+    });
+
+    test('an empty {window} leaves no dangling separator', () {
+      expect(
+        buildScreenshotName(
+          template: '{window}_{date}_{time}',
+          t: t,
+          ext: 'png',
+        ),
+        '2026-06-03_14-09-05.png',
+      );
+    });
+
+    test('filesystem-illegal characters are stripped', () {
+      expect(
+        buildScreenshotName(
+          template: '{window}',
+          t: t,
+          windowTitle: 'a/b:c*?',
+          ext: 'jpg',
+        ),
+        'abc.jpg',
+      );
+    });
+
+    test('a template that resolves to empty falls back to the built-in name', () {
+      expect(
+        buildScreenshotName(template: '{window}', t: t, ext: 'png'),
+        'Screenshot_2026-06-03_14-09-05.png',
+      );
+    });
+  });
 }

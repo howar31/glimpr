@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../output/filename.dart';
 import 'settings_store.dart';
 
 /// Output image format for a saved / copied capture.
@@ -17,6 +18,7 @@ class CaptureSettings {
     this.saveToFile = true,
     this.copyToClipboard = true,
     this.rightClickExits = true,
+    this.filenameTemplate = defaultFilenameTemplate,
   });
 
   final Directory? saveDir;
@@ -27,6 +29,7 @@ class CaptureSettings {
   final bool saveToFile;
   final bool copyToClipboard;
   final bool rightClickExits; // right-click on empty space leaves capture mode
+  final String filenameTemplate; // tokens: {date} {time} {title} {app}
 
   static const defaults = CaptureSettings();
 
@@ -51,6 +54,7 @@ class Settings {
   static const _saveToFileKey = 'save_to_file';
   static const _copyToClipboardKey = 'copy_to_clipboard';
   static const _rightClickExitsKey = 'right_click_exits';
+  static const _filenameTemplateKey = 'filename_template';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -97,6 +101,15 @@ class Settings {
   Future<void> setRightClickExits(bool v) =>
       store.setBool(_rightClickExitsKey, v);
 
+  // Filename template ------------------------------------------------------
+  Future<String> getFilenameTemplate() async {
+    final s = await store.getString(_filenameTemplateKey);
+    return (s == null || s.trim().isEmpty) ? defaultFilenameTemplate : s;
+  }
+
+  Future<void> setFilenameTemplate(String v) =>
+      store.setString(_filenameTemplateKey, v);
+
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
   Future<CaptureSettings> loadCapture() async => CaptureSettings(
     saveDir: resolveSaveDir(await getSaveDirectory()),
@@ -107,6 +120,7 @@ class Settings {
     saveToFile: await getSaveToFile(),
     copyToClipboard: await getCopyToClipboard(),
     rightClickExits: await getRightClickExits(),
+    filenameTemplate: await getFilenameTemplate(),
   );
 }
 

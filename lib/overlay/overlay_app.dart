@@ -167,7 +167,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _bridge.dismissOverlay();
   }
 
-  Future<void> _onExport(Rect? selectionLogical) async {
+  Future<void> _onExport(Rect? selectionLogical, SnapWindow? window) async {
     final d = _display;
     final frozen = _frozen;
     final editor = _editor;
@@ -195,6 +195,8 @@ class _OverlayAppState extends State<OverlayApp> {
         drawables: drawables,
         selectionLogical: selectionLogical,
         cap: cap,
+        windowTitle: window?.title,
+        appName: window?.app,
       );
       // Success = every ENABLED leg succeeded (a disabled leg is not a failure).
       // On success play the completion chime (if enabled); on a real failure the

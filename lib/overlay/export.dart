@@ -19,6 +19,8 @@ Future<DeliveryResult> exportAnnotated({
   required List<Drawable> drawables,
   required Rect? selectionLogical,
   required CaptureSettings cap,
+  String? windowTitle,
+  String? appName,
 }) async {
   final bytes = await compositeAndCrop(
     frozen: frozenImage,
@@ -32,7 +34,13 @@ Future<DeliveryResult> exportAnnotated({
   return deliverCapture(
     pngBytes: bytes,
     saveDir: cap.saveDir,
-    fileName: screenshotFilename(DateTime.now(), cap.fileExtension),
+    fileName: buildScreenshotName(
+      template: cap.filenameTemplate,
+      t: DateTime.now(),
+      windowTitle: windowTitle,
+      appName: appName,
+      ext: cap.fileExtension,
+    ),
     soundFn: () async {},
     saveToFile: cap.saveToFile,
     copyToClipboard: cap.copyToClipboard,

@@ -117,11 +117,11 @@ final class ScreenCapturer {
   /// snappable — the freeze overlay is already excluded because it lives above
   /// layer 0 (shielding level), and the warm control window is excluded by the
   /// alpha filter below, so there's no need to exclude our whole process.
-  static func snappableWindows(displayID: CGDirectDisplayID) -> [[Double]] {
+  static func snappableWindows(displayID: CGDirectDisplayID) -> [[String: Any]] {
     let dispBounds = CGDisplayBounds(displayID)
     guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
       as? [[String: Any]] else { return [] }
-    var out: [[Double]] = []
+    var out: [[String: Any]] = []
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             layer == 0 else { continue }
@@ -138,11 +138,18 @@ final class ScreenCapturer {
       let r = CGRect(x: x, y: y, width: ww, height: hh)
       let inter = r.intersection(dispBounds)
       if inter.isNull || inter.width < 1 || inter.height < 1 { continue }
+      // Window title (kCGWindowName needs Screen-Recording permission, which we
+      // hold; can still be empty) + owning app name (always available) — used to
+      // name the saved file after the window under the cursor at capture.
+      let title = (w[kCGWindowName as String] as? String) ?? ""
+      let app = (w[kCGWindowOwnerName as String] as? String) ?? ""
       out.append([
-        Double(inter.minX - dispBounds.minX),
-        Double(inter.minY - dispBounds.minY),
-        Double(inter.width),
-        Double(inter.height),
+        "x": Double(inter.minX - dispBounds.minX),
+        "y": Double(inter.minY - dispBounds.minY),
+        "w": Double(inter.width),
+        "h": Double(inter.height),
+        "title": title,
+        "app": app,
       ])
     }
     return out
