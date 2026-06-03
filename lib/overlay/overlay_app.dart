@@ -7,6 +7,9 @@ import '../editor/editor_controller.dart';
 import '../output/deliver.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
+import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/shortcut_actions.dart';
+import '../shortcuts/shortcut_store.dart';
 import 'editor_canvas.dart';
 import 'export.dart';
 
@@ -26,6 +29,12 @@ class _OverlayAppState extends State<OverlayApp> {
   // Capture-time settings, prefetched per capture (in onCaptured) so the
   // shutter sound + delivery never await the store on the commit hot path.
   CaptureSettings _capture = CaptureSettings.defaults;
+  // Effective editor.* hotkey bindings, prefetched per capture (in onCaptured)
+  // so EditorCanvas's _onKey reads them live on each rebuild without awaiting.
+  // Seeded with the factory defaults so editor shortcuts work the instant the
+  // first overlay appears (the async load below only layers in user overrides);
+  // ShortcutStore.all() returns the same merged shape.
+  Map<String, HotkeyBinding?> _editorBindings = {...kDefaultBindings};
   EditorController? _editor;
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
@@ -91,6 +100,12 @@ class _OverlayAppState extends State<OverlayApp> {
           // affect interaction (e.g. rightClickExits); shutter/delivery read
           // _capture directly at export time.
           if (mounted) setState(() => _capture = c);
+        });
+        // Prefetch the editor hotkey bindings the same way; EditorCanvas reads
+        // widget.editorBindings live in _onKey, so the in-flight capture's State
+        // (ValueKey already bumped) rebuilds with the loaded map.
+        ShortcutStore(Settings.instance.store).all().then((b) {
+          if (mounted) setState(() => _editorBindings = b);
         });
       },
       onCaptureFailed: (reason, msg) {
@@ -252,6 +267,7 @@ class _OverlayAppState extends State<OverlayApp> {
                   onCancel: _dismiss,
                   activeSignal: _activeSignal,
                   rightClickExits: _capture.rightClickExits,
+                  editorBindings: _editorBindings,
                 ),
               ],
             ),

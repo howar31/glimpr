@@ -107,3 +107,31 @@ const kGlobalActions = <GlobalAction>[
     hint: 'Start a screen capture',
   ),
 ];
+
+/// Pure Tier-2 dispatch: given a key-down event, the currently-pressed modifier
+/// set, and the effective editor bindings, return the matching editor action key
+/// (a command key or a tool action key), or null. Commands are checked before
+/// tools; order is otherwise irrelevant because matching is exact (modifier-set
+/// equality) and duplicates are blocked at edit time.
+String? pickEditorAction(
+  KeyEvent e,
+  Set<HotkeyModifier> pressed,
+  Map<String, HotkeyBinding?> bindings,
+) {
+  const commands = [
+    kEditorUndoKey,
+    kEditorRedoKey,
+    kEditorPasteKey,
+    kEditorDeleteKey,
+    kEditorConfirmKey,
+  ];
+  for (final k in commands) {
+    final b = bindings[k];
+    if (b != null && b.matches(e, pressed)) return k;
+  }
+  for (final entry in kEditorToolActionKey.entries) {
+    final b = bindings[entry.value];
+    if (b != null && b.matches(e, pressed)) return entry.value;
+  }
+  return null;
+}

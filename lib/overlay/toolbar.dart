@@ -2,13 +2,18 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../editor/tool_meta.dart';
+import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/shortcut_actions.dart';
 import '../theme/glimpr_theme.dart';
 
 /// Draggable bottom toolbar: a main tool row with a contextual options row
 /// below it. The tool row is the Column's first (top-anchored) child so the
 /// options row can grow / collapse downward without ever shifting the tool row.
-/// Each tool shows a number badge (its 1-based keyboard shortcut). [onMove] is
-/// fed pointer deltas from the drag handle so the host can reposition it.
+/// Each tool shows a badge with its CURRENT keyboard shortcut (read from
+/// [editorBindings], so a user rebind in Settings is reflected here on the next
+/// capture); an unbound tool shows no badge. [onMove] is fed pointer deltas from
+/// the drag handle so the host can reposition it.
 ///
 /// The toolbar floats over the frozen screenshot, but its chrome follows the
 /// system light/dark appearance (same as the settings window) via a
@@ -19,31 +24,16 @@ class EditorToolbar extends StatelessWidget {
   final EditorController controller;
   final void Function(Offset delta) onMove;
   final VoidCallback onPtEditingDone; // re-focus the text after pt entry
+  // Effective editor.* bindings; the per-tool badge is derived from these so it
+  // tracks the user's customized shortcut (Tier 2). Empty => no badges.
+  final Map<String, HotkeyBinding?> editorBindings;
   const EditorToolbar({
     super.key,
     required this.controller,
     required this.onMove,
     required this.onPtEditingDone,
+    this.editorBindings = const {},
   });
-
-  // (kind, icon, shortcut badge). Order mirrors editor_canvas `_onKey`:
-  // region tools first on letter keys — C=Crop B=Blur P=Pixelate — then the
-  // drawing tools on digits: 1=Rectangle 2=Ellipse 3=Line 4=Arrow 5=Pen 6=Text
-  // 7=Highlighter 8=Step 9=Paste.
-  static const tools = <(ToolKind, IconData, String?)>[
-    (ToolKind.crop, Icons.crop, 'C'),
-    (ToolKind.blur, Icons.blur_on, 'B'),
-    (ToolKind.pixelate, Icons.grid_on, 'P'),
-    (ToolKind.rectangle, Icons.crop_square, '1'),
-    (ToolKind.ellipse, Icons.circle_outlined, '2'),
-    (ToolKind.line, Icons.horizontal_rule, '3'),
-    (ToolKind.arrow, Icons.north_east, '4'),
-    (ToolKind.pen, Icons.gesture, '5'),
-    (ToolKind.text, Icons.title, '6'),
-    (ToolKind.highlighter, Icons.border_color, '7'),
-    (ToolKind.step, Icons.looks_one, '8'),
-    (ToolKind.paste, Icons.content_paste, '9'),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -79,12 +69,14 @@ class EditorToolbar extends StatelessWidget {
                     ),
                   ),
                 ),
-                for (final t in tools)
+                for (final (kind, icon) in kEditorToolMeta)
                   _ToolButton(
                     controller: controller,
-                    kind: t.$1,
-                    icon: t.$2,
-                    shortcut: t.$3,
+                    kind: kind,
+                    icon: icon,
+                    // Badge = the tool's current binding label (e.g. "C", "1",
+                    // "⌘B"); null/unbound => no badge.
+                    shortcut: editorBindings[kEditorToolActionKey[kind]]?.label(),
                   ),
               ],
             ),

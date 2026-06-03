@@ -1,12 +1,15 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../editor/editor_controller.dart';
+import '../editor/tool_meta.dart';
 import '../output/filename.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/hotkey_service.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
 import '../shortcuts/widgets/hotkey_recorder_field.dart';
+import '../shortcuts/widgets/key_cap_chips.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
@@ -247,10 +250,18 @@ class _SettingsAppState extends State<SettingsApp>
   // ---- content -----------------------------------------------------------
 
   Widget _content(GlimprTokens t) {
-    return ListView(
+    final list = ListView(
       padding: const EdgeInsets.fromLTRB(28, _kTitleBarInset, 28, 32),
       children: _pane(t),
     );
+    // The Shortcuts pane is long; pin its Apply/Revert bar to the bottom so it's
+    // always reachable without scrolling to the end of the list.
+    if (_section == 3) {
+      return Column(
+        children: [Expanded(child: list), _shortcutsFooter(t)],
+      );
+    }
+    return list;
   }
 
   List<Widget> _pane(GlimprTokens t) {
@@ -629,8 +640,6 @@ class _SettingsAppState extends State<SettingsApp>
       return const [Center(child: CircularProgressIndicator())];
     }
     final dupes = duplicateActionKeys(draft);
-    final dirty = !_mapEquals(draft, _shortcutsBaseline);
-    final allValid = _allValid(draft, dupes);
 
     return [
       _h1('Shortcuts', t),
@@ -649,23 +658,108 @@ class _SettingsAppState extends State<SettingsApp>
             ),
           ),
       ]),
-      const SizedBox(height: 20),
-      Row(
+      const SizedBox(height: 24),
+      const SectionLabel('Toolbar/Editor', icon: Icons.edit_outlined),
+      GlassCard.rows([
+        for (final cmd in const <(String, String, String?)>[
+          (kEditorUndoKey, 'Undo', null),
+          (kEditorRedoKey, 'Redo', null),
+          (kEditorPasteKey, 'Paste image', 'From the clipboard'),
+          (kEditorDeleteKey, 'Delete selected', 'Remove the selected annotation'),
+          (
+            kEditorConfirmKey,
+            'Export',
+            'Screenshot the snapped window, or the whole screen',
+          ),
+        ])
+          SettingRow(
+            title: cmd.$2,
+            hint: cmd.$3,
+            trailing: _bindingRow(
+              t: t,
+              actionKey: cmd.$1,
+              requireModifier: false,
+              reserved: kEditorReservedKeys,
+              dupes: dupes,
+            ),
+          ),
+        // Tools, in toolbar order, each with its toolbar icon (shared SSOT).
+        for (final (tool, icon) in kEditorToolMeta)
+          SettingRow(
+            title: _toolLabel(tool),
+            icon: icon,
+            trailing: _bindingRow(
+              t: t,
+              actionKey: kEditorToolActionKey[tool]!,
+              requireModifier: false,
+              reserved: kEditorReservedKeys,
+              dupes: dupes,
+            ),
+          ),
+        // Reserved (read-only) — fixed keys that cannot be rebound. Rendered in a
+        // field-shaped box matching the recorder so the caps line up with the
+        // editable rows (a lock glyph replaces the recorder's keyboard/✕ glyph).
+        SettingRow(
+          title: 'Cancel / Exit',
+          hint: 'Reserved',
+          trailing: _reservedField(t, const [KeyCap('esc')]),
+        ),
+        SettingRow(
+          title: 'Nudge crosshair',
+          hint: 'Reserved · region tools',
+          trailing: _reservedField(
+            t,
+            const [KeyCap('←'), KeyCap('↑'), KeyCap('↓'), KeyCap('→')],
+          ),
+        ),
+        // Text-input semantics, fixed while editing a text annotation — one row
+        // per action so the keys don't read as a single chord.
+        SettingRow(
+          title: 'Commit text',
+          hint: 'Reserved · while editing text',
+          trailing: _reservedField(t, const [KeyCap('⏎')]),
+        ),
+        SettingRow(
+          title: 'New line',
+          hint: 'Reserved · while editing text',
+          trailing: _reservedField(t, const [KeyCap('⇧'), KeyCap('⏎')]),
+        ),
+        SettingRow(
+          title: 'Cancel text',
+          hint: 'Reserved · while editing text',
+          trailing: _reservedField(t, const [KeyCap('esc')]),
+        ),
+      ]),
+    ];
+  }
+
+  // The Shortcuts pane's Apply/Revert bar, pinned to the bottom of the content
+  // area (see _content) so it stays reachable however long the list grows. Only
+  // shown when the draft is dirty; Apply is disabled (rendered as a dead ghost)
+  // when the draft is invalid (duplicate / missing-modifier).
+  Widget _shortcutsFooter(GlimprTokens t) {
+    final draft = _shortcutsDraft;
+    if (draft == null || _mapEquals(draft, _shortcutsBaseline)) {
+      return const SizedBox.shrink();
+    }
+    final allValid = _allValid(draft, duplicateActionKeys(draft));
+    return Container(
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 16),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          if (dirty) ...[
-            GhostButton('Revert', onTap: _revertShortcuts),
-            const SizedBox(width: 8),
-            // AccentButton's onTap is non-nullable, so render a disabled ghost
-            // placeholder when the draft is invalid rather than a dead accent.
-            if (allValid)
-              AccentButton('Apply', onTap: _applyShortcuts)
-            else
-              GhostButton('Apply', onTap: null),
-          ],
+          GhostButton('Revert', onTap: _revertShortcuts),
+          const SizedBox(width: 8),
+          if (allValid)
+            AccentButton('Apply', onTap: _applyShortcuts)
+          else
+            GhostButton('Apply', onTap: null),
         ],
       ),
-    ];
+    );
   }
 
   Widget _bindingRow({
@@ -677,6 +771,7 @@ class _SettingsAppState extends State<SettingsApp>
   }) {
     final draft = _shortcutsDraft!;
     final binding = draft[actionKey];
+    final isDefault = binding == kDefaultBindings[actionKey];
     final needsModifier =
         requireModifier && binding != null && !binding.hasModifier;
     final isDupe = dupes.contains(actionKey);
@@ -700,11 +795,18 @@ class _SettingsAppState extends State<SettingsApp>
           onChanged: (b) => setState(() => draft[actionKey] = b),
         ),
         const SizedBox(width: 4),
-        IconButton(
-          tooltip: 'Reset to default',
-          icon: Icon(Icons.restart_alt, size: 18, color: t.fg3),
-          onPressed: () =>
-              setState(() => draft[actionKey] = kDefaultBindings[actionKey]),
+        // Reset to default — disabled + dimmed when the binding already is the
+        // default (nothing to reset), so it reads as inactive.
+        Opacity(
+          opacity: isDefault ? 0.25 : 1,
+          child: IconButton(
+            tooltip: isDefault ? null : 'Reset to default',
+            icon: Icon(Icons.restart_alt, size: 18, color: t.fg3),
+            onPressed: isDefault
+                ? null
+                : () => setState(
+                    () => draft[actionKey] = kDefaultBindings[actionKey]),
+          ),
         ),
       ],
     );
@@ -755,6 +857,47 @@ class _SettingsAppState extends State<SettingsApp>
     child: Text(
       title,
       style: GlimprType.sansStyle(25, 700, t.fg1, letterSpacing: -0.5),
+    ),
+  );
+
+  String _toolLabel(ToolKind t) => switch (t) {
+        ToolKind.crop => 'Crop',
+        ToolKind.blur => 'Blur',
+        ToolKind.pixelate => 'Pixelate',
+        ToolKind.rectangle => 'Rectangle',
+        ToolKind.ellipse => 'Ellipse',
+        ToolKind.line => 'Line',
+        ToolKind.arrow => 'Arrow',
+        ToolKind.pen => 'Pen',
+        ToolKind.text => 'Text',
+        ToolKind.highlighter => 'Highlighter',
+        ToolKind.step => 'Numbered step',
+        // The "paste" tool selects/edits pasted clipboard images; the paste
+        // ACTION is the Cmd-V "Paste image" command above. Labelled "Image" to
+        // avoid colliding with that command.
+        ToolKind.paste => 'Image',
+      };
+
+  // A read-only, field-shaped box for reserved (fixed) keys, mirroring the
+  // HotkeyRecorderField's idle look (same height / bg / border) so the reserved
+  // caps line up with the editable rows. A lock glyph fills the trailing slot
+  // where the recorder shows its keyboard/✕ glyph.
+  Widget _reservedField(GlimprTokens t, List<Widget> caps) => Container(
+    height: 42,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: t.fieldBg,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: t.fieldBorder),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(spacing: 5, children: caps),
+        const SizedBox(width: 8),
+        Icon(Icons.lock_outline, size: 15, color: t.fg3),
+      ],
     ),
   );
 

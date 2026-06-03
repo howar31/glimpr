@@ -9,6 +9,11 @@ void main() {
     modifiers: {HotkeyModifier.meta, HotkeyModifier.alt},
   );
 
+  test('Enter / numpad Enter render the monochrome ⏎ (not the ↩ emoji)', () {
+    expect(keyLabelOf(LogicalKeyboardKey.enter), '⏎');
+    expect(keyLabelOf(LogicalKeyboardKey.numpadEnter), '⏎');
+  });
+
   test('toJson/fromJson round-trips', () {
     final json = cmdOpt1.toJson();
     final back = HotkeyBinding.fromJson(json);

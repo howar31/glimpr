@@ -120,8 +120,8 @@ String keyLabelOf(LogicalKeyboardKey k) => _keyLabel(k);
 String _keyLabel(LogicalKeyboardKey k) {
   // Keys are matched by their real LogicalKeyboardKey.keyId values.
   const special = {
-    0x10000000d: '↩', // enter
-    0x20000020d: '↩', // numpad enter
+    0x10000000d: '⏎', // enter (U+23CE return symbol — monochrome, not emoji)
+    0x20000020d: '⏎', // numpad enter
     0x10000001b: 'esc', // escape
     0x100000008: '⌫', // backspace
     0x10000007f: 'Del', // delete (forward)

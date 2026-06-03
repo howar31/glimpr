@@ -12,6 +12,8 @@ import '../editor/editor_controller.dart';
 import '../editor/hit_test.dart';
 import '../editor/raster.dart';
 import '../editor/text_metrics.dart';
+import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/shortcut_actions.dart';
 import 'crop_hud.dart';
 import 'rich_text_controller.dart';
 import 'selection_controller.dart';
@@ -40,6 +42,7 @@ class EditorCanvas extends StatefulWidget {
   // When false, right-click no longer EXITS capture (Esc still does); the other
   // contextual right-click roles (commit text / cancel gesture / delete) remain.
   final bool rightClickExits;
+  final Map<String, HotkeyBinding?> editorBindings; // effective editor.* bindings
   const EditorCanvas({
     super.key,
     required this.display,
@@ -48,6 +51,7 @@ class EditorCanvas extends StatefulWidget {
     required this.onExport,
     required this.onCancel,
     required this.activeSignal,
+    required this.editorBindings,
     this.rightClickExits = true,
   });
 
@@ -355,8 +359,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
     }
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final key = e.logicalKey;
-    final meta = HardwareKeyboard.instance.isMetaPressed;
-    final shift = HardwareKeyboard.instance.isShiftPressed;
 
     if (key == LogicalKeyboardKey.escape) {
       if (_inCrop && _cropping) {
@@ -370,76 +372,59 @@ class _EditorCanvasState extends State<EditorCanvas> {
       return KeyEventResult.handled;
     }
 
-    if (meta && key == LogicalKeyboardKey.keyZ) {
-      shift ? c.redo() : c.undo();
+    final pressed = <HotkeyModifier>{
+      if (HardwareKeyboard.instance.isMetaPressed) HotkeyModifier.meta,
+      if (HardwareKeyboard.instance.isAltPressed) HotkeyModifier.alt,
+      if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
+      if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
+    };
+    final action = pickEditorAction(e, pressed, widget.editorBindings);
+    if (action == kEditorUndoKey) {
+      c.undo();
       c.selectedIndex.value = null;
       return KeyEventResult.handled;
     }
-
-    if (meta && key == LogicalKeyboardKey.keyV) {
+    if (action == kEditorRedoKey) {
+      c.redo();
+      c.selectedIndex.value = null;
+      return KeyEventResult.handled;
+    }
+    if (action == kEditorPasteKey) {
       _pasteImage();
       return KeyEventResult.handled;
     }
-
-    if ((key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.numpadEnter) &&
-        !_inCrop) {
-      // Whole display (no crop) — name after the window under the cursor.
-      widget.onExport(null, topmostWindowAt(_windows, _cursor));
+    // numpadEnter confirms too, but only while confirm stays on the default
+    // Enter binding (HotkeyBinding.matches requires an exact logicalKey, so
+    // pickEditorAction never returns confirm for numpadEnter on its own).
+    final numpadConfirm = e.logicalKey == LogicalKeyboardKey.numpadEnter &&
+        widget.editorBindings[kEditorConfirmKey]?.logicalKey ==
+            LogicalKeyboardKey.enter;
+    if ((action == kEditorConfirmKey || numpadConfirm) && !_dragging) {
+      // Confirm/Export is always a SCREENSHOT — never the tool's own click effect
+      // (so in blur/pixelate it screenshots rather than applies the effect).
+      // Skipped mid-gesture (a drag/edit in progress).
+      if (_showsCrosshair) {
+        // Crosshair/loupe tools (crop/blur/pixelate + any future ones): capture
+        // the snap target — the window under the cursor, or the whole display
+        // when none is under it.
+        final win = topmostWindowAt(_windows, _cursor);
+        widget.onExport(win?.rect, win);
+      } else {
+        // Other tools: export the whole (annotated) display.
+        widget.onExport(null, topmostWindowAt(_windows, _cursor));
+      }
       return KeyEventResult.handled;
     }
-
-    if ((key == LogicalKeyboardKey.delete ||
-            key == LogicalKeyboardKey.backspace) &&
-        c.selectedIndex.value != null) {
+    if (action == kEditorDeleteKey && c.selectedIndex.value != null) {
       c.deleteSelected();
       return KeyEventResult.handled;
     }
-
-    // Tool shortcuts (mirror EditorToolbar.tools): region tools on letters
-    // (C=Crop B=Blur P=Pixelate, below); the drawing tools on digits 1-9.
-    const order = [
-      ToolKind.rectangle, // 1
-      ToolKind.ellipse, // 2
-      ToolKind.line, // 3
-      ToolKind.arrow, // 4
-      ToolKind.pen, // 5
-      ToolKind.text, // 6
-      ToolKind.highlighter, // 7
-      ToolKind.step, // 8
-      ToolKind.paste, // 9
-    ];
-    const digits = [
-      LogicalKeyboardKey.digit1,
-      LogicalKeyboardKey.digit2,
-      LogicalKeyboardKey.digit3,
-      LogicalKeyboardKey.digit4,
-      LogicalKeyboardKey.digit5,
-      LogicalKeyboardKey.digit6,
-      LogicalKeyboardKey.digit7,
-      LogicalKeyboardKey.digit8,
-      LogicalKeyboardKey.digit9,
-    ];
-    final di = digits.indexOf(key);
-    if (di != -1) {
-      c.selectTool(order[di]);
+    if (action != null && kEditorToolActionKey.containsValue(action)) {
+      final tool = kEditorToolActionKey.entries
+          .firstWhere((x) => x.value == action)
+          .key;
+      c.selectTool(tool);
       return KeyEventResult.handled;
-    }
-    // Letter shortcuts for the region tools. Guarded by !meta and the
-    // _editingText early-return above, so typing is never hijacked.
-    if (!meta) {
-      if (key == LogicalKeyboardKey.keyC) {
-        c.selectTool(ToolKind.crop);
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.keyB) {
-        c.selectTool(ToolKind.blur);
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.keyP) {
-        c.selectTool(ToolKind.pixelate);
-        return KeyEventResult.handled;
-      }
     }
 
     // Arrow-nudge for the region tools (crop + blur/pixelate): move the crosshair
@@ -1319,6 +1304,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     onPtEditingDone: () {
                       if (_editingText) _textFocus.requestFocus();
                     },
+                    editorBindings: widget.editorBindings,
                   ),
                 ),
               ),
