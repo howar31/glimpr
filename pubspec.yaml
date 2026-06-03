@@ -41,7 +41,6 @@ dependencies:
   audioplayers: ^6.7.0
   shared_preferences: ^2.3.0
   file_selector: ^1.0.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -67,6 +66,18 @@ flutter:
   assets:
     - assets/sounds/shutter.wav
     - assets/sounds/complete.wav
+
+  # Design-system fonts (Aurora settings theme). Both are variable fonts (wght
+  # axis); the bundled .ttf were decompressed from the design handoff's .woff2
+  # (Flutter does not load .woff2). Monospace uses the platform font (SF Mono /
+  # Menlo) via fontFamilyFallback, so JetBrains Mono is intentionally not bundled.
+  fonts:
+    - family: Noto Sans TC
+      fonts:
+        - asset: assets/fonts/NotoSansTC.ttf
+    - family: Atkinson Hyperlegible Next
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegibleNext.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

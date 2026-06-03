@@ -1,0 +1,551 @@
+import 'package:flutter/widgets.dart';
+import 'glimpr_theme.dart';
+
+/// Design-system widgets for the Aurora settings theme, ported from the design
+/// handoff's `components.jsx`. Each reads the active [GlimprTokens] via
+/// [GlimprTheme.of], so the same widget renders correctly in light or dark.
+
+/// The Glimpr wordmark — accent-gradient text in the display face.
+class Wordmark extends StatelessWidget {
+  const Wordmark({super.key, this.size = 19});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (rect) => GlimprTokens.accentGrad.createShader(rect),
+      child: Text(
+        'Glimpr',
+        style: GlimprType.displayStyle(
+          size,
+          800,
+          const Color(0xFFFFFFFF),
+          letterSpacing: size * -0.02,
+        ),
+      ),
+    );
+  }
+}
+
+/// A sidebar navigation row (icon + label) with an active + hover state.
+class NavItem extends StatefulWidget {
+  const NavItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  State<NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<NavItem> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final fg = widget.active ? t.navActiveFg : t.fg2;
+    final bg = widget.active
+        ? t.navActiveBg
+        : (_hover ? t.navHoverBg : const Color(0x00000000));
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 17, color: fg),
+              const SizedBox(width: 11),
+              Text(widget.label, style: GlimprType.sansStyle(14, 600, fg)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Uppercase eyebrow label, optionally led by an icon.
+class SectionLabel extends StatelessWidget {
+  const SectionLabel(this.label, {super.key, this.icon});
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: t.fg3),
+            const SizedBox(width: 7),
+          ],
+          Text(
+            label.toUpperCase(),
+            style: GlimprType.sansStyle(11.5, 700, t.fg3, letterSpacing: 1.0),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A glass card. Use [GlassCard.rows] for a list of setting rows separated by
+/// hairline dividers, or [GlassCard.padded] for a single padded body.
+class GlassCard extends StatelessWidget {
+  const GlassCard.rows(this.rows, {super.key}) : pad = null, child = null;
+  const GlassCard.padded({super.key, required this.child, this.pad = 18})
+    : rows = null;
+
+  final List<Widget>? rows;
+  final Widget? child;
+  final double? pad;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final decoration = BoxDecoration(
+      color: t.cardBg,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: t.cardBorder),
+    );
+    if (rows != null) {
+      return Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: decoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rows!,
+        ),
+      );
+    }
+    return Container(
+      decoration: decoration,
+      padding: EdgeInsets.all(pad!),
+      child: child,
+    );
+  }
+}
+
+/// A single setting line: title (+ hint) on the left, a control on the right.
+/// [divider] draws a hairline separator above the row (used for stacked rows).
+class SettingRow extends StatelessWidget {
+  const SettingRow({
+    super.key,
+    required this.title,
+    this.hint,
+    required this.trailing,
+    this.icon,
+    this.divider = false,
+    this.enabled = true,
+  });
+
+  final String title;
+  final String? hint;
+  final Widget trailing;
+  final IconData? icon;
+  final bool divider;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: t.accentSoft,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              alignment: Alignment.center,
+              child: Icon(icon, size: 18, color: t.accentFg),
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GlimprType.sansStyle(
+                    14.5,
+                    600,
+                    t.fg1,
+                    letterSpacing: -0.145,
+                  ),
+                ),
+                if (hint != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      hint!,
+                      style: GlimprType.sansStyle(12.5, 400, t.fg3, height: 1.4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          trailing,
+        ],
+      ),
+    );
+    final wrapped = enabled
+        ? row
+        : Opacity(
+            opacity: 0.4,
+            child: IgnorePointer(child: row),
+          );
+    if (!divider) return wrapped;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: wrapped,
+    );
+  }
+}
+
+/// Cyan→blue gradient toggle with a white knob.
+class GlassToggle extends StatelessWidget {
+  const GlassToggle({super.key, required this.value, required this.onChanged});
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    const w = 48.0, h = 28.0, k = 22.0;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => onChanged(!value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: value ? GlimprTokens.accentGrad : null,
+            color: value ? null : t.track,
+            boxShadow: value
+                ? [
+                    BoxShadow(
+                      color: t.shadowAccent,
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
+                : null,
+          ),
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutBack,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: Container(
+                width: k,
+                height: k,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: t.knob,
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x47000000),
+                      blurRadius: 5,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A pill segmented control. The selected segment fills with the accent
+/// gradient. [full] stretches the segments to fill the available width.
+class Segmented<T> extends StatelessWidget {
+  const Segmented({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.options,
+    this.full = false,
+  });
+
+  final T value;
+  final ValueChanged<T> onChanged;
+  final List<(T, String)> options;
+  final bool full;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    Widget seg((T, String) o) {
+      final active = o.$1 == value;
+      final btn = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onChanged(o.$1),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: active ? GlimprTokens.accentGrad : null,
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: t.shadowAccent,
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            o.$2,
+            style: GlimprType.sansStyle(
+              13,
+              600,
+              active ? GlimprTokens.onAccent : t.fg2,
+            ),
+          ),
+        ),
+      );
+      return full
+          ? Expanded(child: MouseRegion(cursor: SystemMouseCursors.click, child: btn))
+          : MouseRegion(cursor: SystemMouseCursors.click, child: btn);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: t.insetBg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: t.cardBorder),
+      ),
+      child: Row(
+        mainAxisSize: full ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0) const SizedBox(width: 2),
+            seg(options[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Gradient-fill slider with a soft white knob and a monospace value readout.
+class GlimprSlider extends StatelessWidget {
+  const GlimprSlider({
+    super.key,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.onChangeEnd,
+    this.suffix = '',
+  });
+
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeEnd;
+  final String suffix;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final pct = ((value - min) / (max - min)).clamp(0.0, 1.0);
+    return Row(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (ctx, c) {
+              final w = c.maxWidth;
+              void update(double dx) {
+                final p = (dx / w).clamp(0.0, 1.0);
+                onChanged(min + p * (max - min));
+              }
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => update(d.localPosition.dx),
+                onTapUp: (_) => onChangeEnd?.call(value),
+                onHorizontalDragUpdate: (d) => update(d.localPosition.dx),
+                onHorizontalDragEnd: (_) => onChangeEnd?.call(value),
+                child: SizedBox(
+                  height: 22,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 8.5,
+                        height: 5,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: t.track,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: 8.5,
+                        width: pct * w,
+                        height: 5,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: GlimprTokens.accentGrad,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: (pct * w - 9).clamp(0.0, (w - 18).clamp(0.0, w)),
+                        top: 2,
+                        width: 18,
+                        height: 18,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: t.knob,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x4D000000),
+                                blurRadius: 6,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 14),
+        SizedBox(
+          width: 44,
+          child: Text(
+            '${value.round()}$suffix',
+            textAlign: TextAlign.right,
+            style: GlimprType.mono(13, t.fg2),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Primary (accent gradient) action button.
+class AccentButton extends StatelessWidget {
+  const AccentButton(this.label, {super.key, required this.onTap, this.icon});
+  final String label;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            gradient: GlimprTokens.accentGrad,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: [
+              BoxShadow(
+                color: t.shadowAccent,
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: GlimprTokens.onAccent),
+                const SizedBox(width: 7),
+              ],
+              Text(
+                label,
+                style: GlimprType.sansStyle(13.5, 600, GlimprTokens.onAccent),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Quiet text button (ghost). Dims when [onTap] is null.
+class GhostButton extends StatelessWidget {
+  const GhostButton(this.label, {super.key, required this.onTap});
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final enabled = onTap != null;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Text(
+            label,
+            style: GlimprType.sansStyle(13.5, 600, enabled ? t.fg3 : t.fg4),
+          ),
+        ),
+      ),
+    );
+  }
+}

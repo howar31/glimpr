@@ -13,7 +13,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
-    self.contentViewController = flutterViewController
+    // Frosted-glass window: host the Flutter view inside a vibrancy view
+    // controller whose own view is an NSVisualEffectView (.behindWindow), so the
+    // window blurs the desktop behind it; the Flutter view is transparent and
+    // layers the design's translucent tint on top. IMPORTANT: do NOT set
+    // window.isOpaque = false / backgroundColor = .clear — the behind-window
+    // effect view drives the vibrancy itself, and forcing window transparency
+    // makes the window swallow / pass through mouse events (dead UI). This recipe
+    // mirrors macos_window_utils' MacOSWindowUtilsViewController. Vibrancy is a
+    // stable, cross-platform-portable effect (Windows: acrylic), distinct from
+    // the macOS-only Liquid Glass deliberately avoided elsewhere.
+    self.contentViewController = GlassContentViewController(
+      flutterViewController: flutterViewController)
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
@@ -154,5 +165,44 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
   private func disableZoomButton() {
     standardWindowButton(.zoomButton)?.isEnabled = false
+  }
+}
+
+/// Hosts the Flutter view on top of a behind-window NSVisualEffectView so the
+/// settings window reads as frosted glass over the desktop. The Flutter view is
+/// added as a CHILD view controller (keeping the responder chain intact so input
+/// works) and made transparent so the vibrancy and the Flutter tint composite.
+/// Mirrors the recipe used by macos_window_utils — crucially, the window itself
+/// is left opaque (the behind-window effect view drives the vibrancy; forcing the
+/// window transparent breaks mouse-event delivery).
+class GlassContentViewController: NSViewController {
+  private let flutterViewController: FlutterViewController
+
+  init(flutterViewController: FlutterViewController) {
+    self.flutterViewController = flutterViewController
+    super.init(nibName: nil, bundle: nil)
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+  override func loadView() {
+    let effectView = NSVisualEffectView()
+    effectView.autoresizingMask = [.width, .height]
+    effectView.blendingMode = .behindWindow
+    effectView.state = .followsWindowActiveState
+    effectView.material = .sidebar
+    self.view = effectView
+  }
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    addChild(flutterViewController)
+    let flutterView = flutterViewController.view
+    flutterView.frame = view.bounds
+    flutterView.autoresizingMask = [.width, .height]
+    // Flutter 3.7+ defaults the view background to black — clear it so the
+    // vibrancy behind shows through the transparent parts of the UI.
+    flutterViewController.backgroundColor = .clear
+    view.addSubview(flutterView)
   }
 }

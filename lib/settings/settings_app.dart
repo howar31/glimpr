@@ -1,15 +1,19 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme/glimpr_controls.dart';
+import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
 import 'settings.dart';
 
-/// The settings window content: a macOS-preferences-style sidebar (categories on
-/// the left) + a content pane on the right, in Glimpr's dark identity (kept in
-/// Flutter so it is identical on macOS + Windows). The native window is
-/// fixed-size with an inline transparent title bar, so the sidebar runs to the
-/// top edge behind the traffic lights — hence the top inset. Each control
-/// persists immediately; overlay engines read the values fresh on next capture.
+/// The settings window content: the "Aurora" design — a frosted-glass window
+/// (the blur comes from a native NSVisualEffectView behind the Flutter view) with
+/// a left sidebar (General / Output / Sounds) over a content pane, in Glimpr's
+/// own identity (kept in Flutter so it is identical on macOS + Windows). The
+/// theme follows the system light/dark setting. The native window has an inline
+/// transparent title bar, so the sidebar runs to the top edge behind the traffic
+/// lights — hence the top inset. Each control persists immediately; overlay
+/// engines read the values fresh on next capture.
 class SettingsApp extends StatefulWidget {
   const SettingsApp({super.key, required this.settings});
   final Settings settings;
@@ -18,19 +22,8 @@ class SettingsApp extends StatefulWidget {
   State<SettingsApp> createState() => _SettingsAppState();
 }
 
-// Palette — shares the overlay toolbar's dark-glass identity.
-const _kContentBg = Color(0xFF1A1A1C);
-const _kSidebarBg = Color(0xFF222226);
-const _kCard = Color(0xFF252528);
-const _kCardBorder = Color(0x14FFFFFF);
-const _kDivider = Color(0x12FFFFFF);
-const _kAccent = Colors.lightBlueAccent; // matches the active-tool colour
-const _kText = Colors.white;
-const _kTextDim = Colors.white70;
-const _kTextMuted = Colors.white38;
-
-// Height reserved at the top for the transparent title bar / traffic lights.
-const _kTitleBarInset = 40.0;
+// Reserved at the top for the transparent title bar / traffic lights.
+const _kTitleBarInset = 52.0;
 
 const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
@@ -38,7 +31,8 @@ const _kSections = <(String, IconData)>[
   ('Sounds', Icons.volume_up_outlined),
 ];
 
-class _SettingsAppState extends State<SettingsApp> {
+class _SettingsAppState extends State<SettingsApp>
+    with WidgetsBindingObserver {
   int _section = 0;
 
   String? _saveDir;
@@ -61,8 +55,19 @@ class _SettingsAppState extends State<SettingsApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Follow the system appearance: rebuild when it flips so the token set swaps.
+  @override
+  void didChangePlatformBrightness() => setState(() {});
 
   Future<void> _load() async {
     final dir = await _s.getSaveDirectory();
@@ -105,45 +110,38 @@ class _SettingsAppState extends State<SettingsApp> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final tokens = GlimprTokens.forBrightness(brightness);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: _kContentBg,
-        colorScheme: const ColorScheme.dark(
-          primary: _kAccent,
-          surface: _kContentBg,
-        ),
-        switchTheme: SwitchThemeData(
-          trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
-        ),
-        sliderTheme: SliderThemeData(
-          activeTrackColor: _kAccent,
-          thumbColor: _kAccent,
-          inactiveTrackColor: const Color(0x22FFFFFF),
-          overlayColor: _kAccent.withValues(alpha: 0.12),
-          trackHeight: 3,
-        ),
+        brightness: brightness,
+        scaffoldBackgroundColor: Colors.transparent,
+        fontFamily: GlimprType.sans,
       ),
-      home: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.keyW, meta: true): _close,
-        },
-        child: Focus(
-          autofocus: true,
-          child: Scaffold(
-            body: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _sidebar(),
-                const VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  color: _kCardBorder,
+      home: GlimprTheme(
+        tokens: tokens,
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyW, meta: true): _close,
+          },
+          child: Focus(
+            autofocus: true,
+            // The base glass tint that layers over the native vibrancy blur.
+            child: Material(
+              type: MaterialType.transparency,
+              child: ColoredBox(
+                color: tokens.winBg,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sidebar(tokens),
+                    Container(width: 1, color: tokens.divider),
+                    Expanded(child: _content(tokens)),
+                  ],
                 ),
-                Expanded(child: _content()),
-              ],
+              ),
             ),
           ),
         ),
@@ -153,417 +151,281 @@ class _SettingsAppState extends State<SettingsApp> {
 
   // ---- sidebar -----------------------------------------------------------
 
-  Widget _sidebar() {
+  Widget _sidebar(GlimprTokens t) {
     return Container(
-      width: 190,
-      color: _kSidebarBg,
+      width: 212,
+      color: t.sidebarBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Traffic-light zone (real macOS controls overlay this area).
           const SizedBox(height: _kTitleBarInset),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 6, 20, 16),
-            child: Text(
-              'Glimpr',
-              style: TextStyle(
-                color: _kText,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+            child: const Wordmark(size: 19),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(
+              children: [
+                for (var i = 0; i < _kSections.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1.5),
+                    child: NavItem(
+                      icon: _kSections[i].$2,
+                      label: _kSections[i].$1,
+                      active: _section == i,
+                      onTap: () => setState(() => _section = i),
+                    ),
+                  ),
+              ],
             ),
           ),
-          for (var i = 0; i < _kSections.length; i++) _navItem(i),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Glimpr 1.0.0',
+              style: GlimprType.sansStyle(11.5, 500, t.fg4),
+            ),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _navItem(int i) {
-    final (label, icon) = _kSections[i];
-    final on = _section == i;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _section = i),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: on ? _kAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 16, color: on ? Colors.black87 : _kTextDim),
-              const SizedBox(width: 9),
-              Text(
-                label,
-                style: TextStyle(
-                  color: on ? Colors.black87 : _kTextDim,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
 
   // ---- content -----------------------------------------------------------
 
-  Widget _content() {
-    return Container(
-      color: _kContentBg,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: _kTitleBarInset),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-              children: _pane(),
-            ),
-          ),
-        ],
-      ),
+  Widget _content(GlimprTokens t) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, _kTitleBarInset, 28, 32),
+      children: _pane(t),
     );
   }
 
-  List<Widget> _pane() {
+  List<Widget> _pane(GlimprTokens t) {
     switch (_section) {
       case 1:
-        return [
-          _header('Output'),
-          _card([
-            _tile(label: 'Format', trailing: _formatToggle()),
-            if (_format == ImageFormat.jpeg) _qualityTile(),
-          ]),
-        ];
+        return _outputPane(t);
       case 2:
-        return [
-          _header('Sounds'),
-          _card([
-            _switchTile(
-              label: 'Shutter',
-              subtitle: 'Plays the instant a capture is taken',
-              value: _shutterSound,
-              onChanged: (v) async {
-                await _s.setShutterSound(v);
-                if (mounted) setState(() => _shutterSound = v);
-              },
-            ),
-            _switchTile(
-              label: 'Completion',
-              subtitle: 'Chimes once the capture is saved / copied',
-              value: _completionSound,
-              onChanged: (v) async {
-                await _s.setCompletionSound(v);
-                if (mounted) setState(() => _completionSound = v);
-              },
-            ),
-          ]),
-        ];
+        return _soundsPane(t);
       default:
-        return [
-          _header('General'),
-          _card([_saveFolderTile()]),
-          const SizedBox(height: 18),
-          _caption('Destinations'),
-          _card([
-            _switchTile(
-              label: 'Save to file',
-              subtitle: 'Write the capture to the save folder',
-              value: _saveToFile,
-              onChanged: (v) async {
-                await _s.setSaveToFile(v);
-                if (mounted) setState(() => _saveToFile = v);
-              },
-            ),
-            _switchTile(
-              label: 'Copy to clipboard',
-              subtitle: 'Put the image on the clipboard',
-              value: _copyToClipboard,
-              onChanged: (v) async {
-                await _s.setCopyToClipboard(v);
-                if (mounted) setState(() => _copyToClipboard = v);
-              },
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _caption('Capture'),
-          _card([
-            _switchTile(
-              label: 'Right-click exits',
-              subtitle: 'Right-click leaves capture mode (Esc always works)',
-              value: _rightClickExits,
-              onChanged: (v) async {
-                await _s.setRightClickExits(v);
-                if (mounted) setState(() => _rightClickExits = v);
-              },
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _caption('Startup'),
-          _card([
-            _switchTile(
-              label: 'Launch at login',
-              subtitle: 'Start Glimpr automatically when you log in',
-              value: _launchAtLogin,
-              onChanged: (v) async {
-                final actual = await LoginItem.setEnabled(v);
-                if (mounted) setState(() => _launchAtLogin = actual);
-              },
-            ),
-          ]),
-        ];
+        return _generalPane(t);
     }
+  }
+
+  // ---- panes -------------------------------------------------------------
+
+  List<Widget> _generalPane(GlimprTokens t) {
+    return [
+      _h1('General', t),
+      const SectionLabel('Save location', icon: Icons.folder_outlined),
+      GlassCard.padded(child: _saveFolderBody(t)),
+      const SizedBox(height: 15),
+      const SectionLabel('Destinations', icon: Icons.layers_outlined),
+      GlassCard.rows([
+        SettingRow(
+          title: 'Save to file',
+          hint: 'Write the capture to the save folder',
+          trailing: GlassToggle(
+            value: _saveToFile,
+            onChanged: (v) async {
+              await _s.setSaveToFile(v);
+              if (mounted) setState(() => _saveToFile = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Copy to clipboard',
+          hint: 'Put the image on the clipboard',
+          trailing: GlassToggle(
+            value: _copyToClipboard,
+            onChanged: (v) async {
+              await _s.setCopyToClipboard(v);
+              if (mounted) setState(() => _copyToClipboard = v);
+            },
+          ),
+        ),
+      ]),
+      const SizedBox(height: 15),
+      const SectionLabel('Capture', icon: Icons.photo_camera_outlined),
+      GlassCard.rows([
+        SettingRow(
+          title: 'Right-click exits',
+          hint: 'Right-click leaves capture mode (Esc always works)',
+          trailing: GlassToggle(
+            value: _rightClickExits,
+            onChanged: (v) async {
+              await _s.setRightClickExits(v);
+              if (mounted) setState(() => _rightClickExits = v);
+            },
+          ),
+        ),
+      ]),
+      const SizedBox(height: 15),
+      const SectionLabel('Startup', icon: Icons.power_settings_new),
+      GlassCard.rows([
+        SettingRow(
+          title: 'Launch at login',
+          hint: 'Start Glimpr automatically when you log in',
+          trailing: GlassToggle(
+            value: _launchAtLogin,
+            onChanged: (v) async {
+              final actual = await LoginItem.setEnabled(v);
+              if (mounted) setState(() => _launchAtLogin = actual);
+            },
+          ),
+        ),
+      ]),
+    ];
+  }
+
+  List<Widget> _outputPane(GlimprTokens t) {
+    final lossy = _format == ImageFormat.jpeg;
+    return [
+      _h1('Output', t),
+      const SectionLabel('Format', icon: Icons.image_outlined),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Segmented<ImageFormat>(
+              full: true,
+              value: _format,
+              options: const [
+                (ImageFormat.png, 'PNG'),
+                (ImageFormat.jpeg, 'JPEG'),
+              ],
+              onChanged: (f) async {
+                await _s.setFormat(f);
+                if (mounted) setState(() => _format = f);
+              },
+            ),
+            const SizedBox(height: 18),
+            Divider(height: 1, thickness: 1, color: t.divider),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                SizedBox(
+                  width: 130,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quality',
+                        style: GlimprType.sansStyle(
+                          14.5,
+                          600,
+                          lossy ? t.fg1 : t.fg4,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        lossy ? 'Compression level' : 'Lossless · n/a',
+                        style: GlimprType.sansStyle(12.5, 400, t.fg3),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Opacity(
+                    opacity: lossy ? 1 : 0.4,
+                    child: IgnorePointer(
+                      ignoring: !lossy,
+                      child: GlimprSlider(
+                        value: _jpegQuality.toDouble(),
+                        min: 10,
+                        max: 100,
+                        suffix: '%',
+                        onChanged: (v) =>
+                            setState(() => _jpegQuality = v.round()),
+                        onChangeEnd: (v) => _s.setJpegQuality(v.round()),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _soundsPane(GlimprTokens t) {
+    return [
+      _h1('Sounds', t),
+      const SectionLabel('Sound', icon: Icons.volume_up_outlined),
+      GlassCard.rows([
+        SettingRow(
+          icon: Icons.volume_up_outlined,
+          title: 'Shutter',
+          hint: 'Plays the instant a capture is taken',
+          trailing: GlassToggle(
+            value: _shutterSound,
+            onChanged: (v) async {
+              await _s.setShutterSound(v);
+              if (mounted) setState(() => _shutterSound = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Completion',
+          hint: 'Chimes once the capture is saved / copied',
+          trailing: GlassToggle(
+            value: _completionSound,
+            onChanged: (v) async {
+              await _s.setCompletionSound(v);
+              if (mounted) setState(() => _completionSound = v);
+            },
+          ),
+        ),
+      ]),
+    ];
   }
 
   // ---- building blocks ---------------------------------------------------
 
-  Widget _header(String title) => Padding(
-    padding: const EdgeInsets.only(bottom: 18),
+  Widget _h1(String title, GlimprTokens t) => Padding(
+    padding: const EdgeInsets.only(bottom: 22),
     child: Text(
       title,
-      style: const TextStyle(
-        color: _kText,
-        fontSize: 21,
-        fontWeight: FontWeight.w600,
-      ),
+      style: GlimprType.sansStyle(25, 700, t.fg1, letterSpacing: -0.5),
     ),
   );
 
-  Widget _caption(String text) => Padding(
-    padding: const EdgeInsets.only(left: 6, bottom: 8),
-    child: Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        color: _kTextMuted,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.1,
-      ),
-    ),
-  );
-
-  /// A rounded card whose rows are separated by hairline dividers.
-  Widget _card(List<Widget> rows) {
-    final children = <Widget>[];
-    for (var i = 0; i < rows.length; i++) {
-      if (i > 0) {
-        children.add(
-          const Divider(
-            height: 1,
-            thickness: 1,
-            color: _kDivider,
-            indent: 16,
-            endIndent: 16,
-          ),
-        );
-      }
-      children.add(rows[i]);
-    }
-    return Container(
-      decoration: BoxDecoration(
-        color: _kCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _kCardBorder),
-      ),
-      child: Column(children: children),
-    );
-  }
-
-  /// A label (+ optional subtitle) on the left, a control on the right.
-  Widget _tile({
-    required String label,
-    String? subtitle,
-    required Widget trailing,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(color: _kText, fontSize: 13.5),
-                ),
-                if (subtitle != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      subtitle,
-                      style: const TextStyle(color: _kTextMuted, fontSize: 11.5),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          trailing,
-        ],
-      ),
-    );
-  }
-
-  Widget _switchTile({
-    required String label,
-    String? subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return _tile(
-      label: label,
-      subtitle: subtitle,
-      trailing: Switch(
-        value: value,
-        onChanged: onChanged,
-        activeThumbColor: Colors.white,
-        activeTrackColor: _kAccent,
-        inactiveThumbColor: Colors.white70,
-        inactiveTrackColor: const Color(0x22FFFFFF),
-      ),
-    );
-  }
-
-  Widget _saveFolderTile() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Save folder',
-            style: TextStyle(color: _kText, fontSize: 13.5),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            _saveDir ?? 'Default · ~/Pictures/Glimpr',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: _kTextMuted, fontSize: 11.5),
-          ),
-          const SizedBox(height: 10),
-          Row(
+  Widget _saveFolderBody(GlimprTokens t) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _accentButton('Choose…', _chooseDir),
-              const SizedBox(width: 8),
-              _ghostButton('Reset', _saveDir == null ? null : _resetDir),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _qualityTile() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'JPEG quality',
-                style: TextStyle(color: _kTextDim, fontSize: 12.5),
-              ),
-              const Spacer(),
               Text(
-                '$_jpegQuality',
-                style: const TextStyle(
-                  color: _kAccent,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
+                'Save folder',
+                style: GlimprType.sansStyle(14.5, 600, t.fg1),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _saveDir ?? 'Default · ~/Pictures/Glimpr',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GlimprType.mono(12.5, t.fg3),
               ),
             ],
-          ),
-          Slider(
-            value: _jpegQuality.toDouble(),
-            min: 1,
-            max: 100,
-            divisions: 99,
-            onChanged: (v) => setState(() => _jpegQuality = v.round()),
-            onChangeEnd: (v) => _s.setJpegQuality(v.round()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Custom two-option pill (PNG / JPEG) — the selected side fills with accent.
-  Widget _formatToggle() {
-    Widget seg(String text, ImageFormat f) {
-      final on = _format == f;
-      return GestureDetector(
-        onTap: () async {
-          await _s.setFormat(f);
-          if (mounted) setState(() => _format = f);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: on ? _kAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: on ? Colors.black : _kTextDim,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-            ),
           ),
         ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: const Color(0x14FFFFFF),
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [seg('PNG', ImageFormat.png), seg('JPEG', ImageFormat.jpeg)],
-      ),
-    );
-  }
-
-  Widget _accentButton(String label, VoidCallback onTap) {
-    return FilledButton(
-      onPressed: onTap,
-      style: FilledButton.styleFrom(
-        backgroundColor: _kAccent,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-      ),
-      child: Text(label),
-    );
-  }
-
-  Widget _ghostButton(String label, VoidCallback? onTap) {
-    return TextButton(
-      onPressed: onTap,
-      style: TextButton.styleFrom(
-        foregroundColor: _kTextDim,
-        disabledForegroundColor: _kTextMuted,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-      ),
-      child: Text(label),
+        const SizedBox(width: 14),
+        AccentButton(
+          'Choose…',
+          icon: Icons.folder_open_outlined,
+          onTap: _chooseDir,
+        ),
+        const SizedBox(width: 8),
+        GhostButton('Reset', onTap: _saveDir == null ? null : _resetDir),
+      ],
     );
   }
 }
