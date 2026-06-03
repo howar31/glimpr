@@ -2,12 +2,19 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../theme/glimpr_theme.dart';
 
 /// Draggable bottom toolbar: a main tool row with a contextual options row
 /// below it. The tool row is the Column's first (top-anchored) child so the
 /// options row can grow / collapse downward without ever shifting the tool row.
 /// Each tool shows a number badge (its 1-based keyboard shortcut). [onMove] is
 /// fed pointer deltas from the drag handle so the host can reposition it.
+///
+/// The toolbar floats over the frozen screenshot, but its chrome follows the
+/// system light/dark appearance (same as the settings window) via a
+/// brightness-resolved [_ToolbarPalette]; per-icon/text shadows keep it legible
+/// on any backdrop in either theme. The active-tool highlight is the brand
+/// accent ([GlimprTokens.accent]) in both themes.
 class EditorToolbar extends StatelessWidget {
   final EditorController controller;
   final void Function(Offset delta) onMove;
@@ -40,48 +47,129 @@ class EditorToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Main tool row FIRST so it is the top, top-anchored child: the host
-        // pins this Column's top-left at _toolbarPos, so the tool row stays put
-        // while the contextual options row below it appears / grows / shrinks —
-        // it can never displace the tool row the user is aiming at.
-        _Bar(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Drag handle — move the whole toolbar out of the way.
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate: (d) => onMove(d.delta),
-                child: const MouseRegion(
-                  cursor: SystemMouseCursors.move,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 2),
-                    child: Icon(
-                      Icons.drag_indicator,
-                      color: Colors.white54,
-                      size: 20,
+    final palette = _ToolbarPalette.forBrightness(
+      MediaQuery.platformBrightnessOf(context),
+    );
+    return _ToolbarTheme(
+      palette: palette,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Main tool row FIRST so it is the top, top-anchored child: the host
+          // pins this Column's top-left at _toolbarPos, so the tool row stays put
+          // while the contextual options row below it appears / grows / shrinks —
+          // it can never displace the tool row the user is aiming at.
+          _Bar(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle — move the whole toolbar out of the way.
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanUpdate: (d) => onMove(d.delta),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.move,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Icon(
+                        Icons.drag_indicator,
+                        color: palette.fgDim,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              for (final t in tools)
-                _ToolButton(
-                  controller: controller,
-                  kind: t.$1,
-                  icon: t.$2,
-                  shortcut: t.$3,
-                ),
-            ],
+                for (final t in tools)
+                  _ToolButton(
+                    controller: controller,
+                    kind: t.$1,
+                    icon: t.$2,
+                    shortcut: t.$3,
+                  ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
-      ],
+          const SizedBox(height: 6),
+          _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
+        ],
+      ),
     );
   }
+}
+
+/// Brightness-resolved colors for the toolbar chrome. The accent is the brand
+/// blue in both themes; everything else flips with the system appearance.
+class _ToolbarPalette {
+  const _ToolbarPalette({
+    required this.glassTint,
+    required this.glassBorder,
+    required this.shadows,
+    required this.fg,
+    required this.fgDim,
+    required this.fgFaint,
+    required this.badgeOutline,
+    required this.swatchUnselectedBorder,
+  });
+
+  final Color glassTint;
+  final Color glassBorder;
+  final List<Shadow> shadows; // legibility halo behind icons/text
+  final Color fg; // primary icon / text
+  final Color fgDim; // tertiary (drag handle, "pt")
+  final Color fgFaint; // secondary (−/+ buttons, unselected width)
+  final Color badgeOutline; // crisp 1px outline behind the shortcut badge
+  final Color swatchUnselectedBorder;
+
+  // Dark halo behind white marks; light halo behind dark marks — so the toolbar
+  // stays legible over any screenshot region in either theme.
+  static const _darkShadows = <Shadow>[
+    Shadow(color: Color(0xCC000000), blurRadius: 2),
+    Shadow(color: Color(0x80000000), blurRadius: 5),
+  ];
+  static const _lightShadows = <Shadow>[
+    Shadow(color: Color(0xE6FFFFFF), blurRadius: 2),
+    Shadow(color: Color(0x99FFFFFF), blurRadius: 5),
+  ];
+
+  static const dark = _ToolbarPalette(
+    glassTint: Color(0x40222226),
+    glassBorder: Color(0x33FFFFFF),
+    shadows: _darkShadows,
+    fg: Colors.white,
+    fgDim: Colors.white54,
+    fgFaint: Colors.white70,
+    badgeOutline: Color(0xFF000000),
+    swatchUnselectedBorder: Colors.black26,
+  );
+
+  static const light = _ToolbarPalette(
+    glassTint: Color(0xCCEEF2F7),
+    glassBorder: Color(0x66FFFFFF),
+    shadows: _lightShadows,
+    fg: Color(0xFF14223B),
+    fgDim: Color(0xFF64748B),
+    fgFaint: Color(0xFF475569),
+    badgeOutline: Color(0xFFFFFFFF),
+    swatchUnselectedBorder: Color(0x33000000),
+  );
+
+  static _ToolbarPalette forBrightness(Brightness b) =>
+      b == Brightness.dark ? dark : light;
+}
+
+/// Makes the active [_ToolbarPalette] available to the toolbar's descendants.
+class _ToolbarTheme extends InheritedWidget {
+  const _ToolbarTheme({required this.palette, required super.child});
+  final _ToolbarPalette palette;
+
+  static _ToolbarPalette of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_ToolbarTheme>()!
+          .palette;
+
+  @override
+  bool updateShouldNotify(_ToolbarTheme oldWidget) =>
+      palette != oldWidget.palette;
 }
 
 /// A tool icon with a bottom-right shortcut-number badge.
@@ -99,6 +187,7 @@ class _ToolButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
     return ValueListenableBuilder<ToolKind>(
       valueListenable: controller.tool,
       builder: (_, active, _) {
@@ -108,7 +197,7 @@ class _ToolButton extends StatelessWidget {
           children: [
             IconButton(
               icon: Icon(icon),
-              color: on ? Colors.lightBlueAccent : Colors.white,
+              color: on ? GlimprTokens.accent : p.fg,
               onPressed: () => controller.selectTool(kind),
             ),
             if (shortcut != null)
@@ -121,18 +210,18 @@ class _ToolButton extends StatelessWidget {
                     fontSize: 10,
                     height: 1,
                     fontWeight: FontWeight.w700,
-                    color: on ? Colors.lightBlueAccent : Colors.white,
+                    color: on ? GlimprTokens.accent : p.fg,
                     // Crisp 1px outline (8 zero-blur offsets), overriding the
                     // inherited soft glass shadow which smears at this tiny size.
-                    shadows: const [
-                      Shadow(color: Color(0xFF000000), offset: Offset(0.7, 0)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(-0.7, 0)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(0, 0.7)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(0, -0.7)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(0.7, 0.7)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(0.7, -0.7)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(-0.7, 0.7)),
-                      Shadow(color: Color(0xFF000000), offset: Offset(-0.7, -0.7)),
+                    shadows: [
+                      Shadow(color: p.badgeOutline, offset: const Offset(0.7, 0)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(-0.7, 0)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(0, 0.7)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(0, -0.7)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(0.7, 0.7)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(0.7, -0.7)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(-0.7, 0.7)),
+                      Shadow(color: p.badgeOutline, offset: const Offset(-0.7, -0.7)),
                     ],
                   ),
                 ),
@@ -144,22 +233,17 @@ class _ToolButton extends StatelessWidget {
   }
 }
 
-/// Soft dark shadow so white icons/text stay legible on ANY backdrop while the
-/// glass itself stays high-transparency. Works where an inverting blend can't
-/// (difference washes out on mid-gray); applied via IconTheme + DefaultTextStyle.
-const _glassShadows = <Shadow>[
-  Shadow(color: Color(0xCC000000), blurRadius: 2),
-  Shadow(color: Color(0x80000000), blurRadius: 5),
-];
-
 class _Bar extends StatelessWidget {
   final Widget child;
   const _Bar({required this.child});
   @override
   Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
     // Frosted glass: blur the frozen screenshot behind the bar, a translucent
-    // dark fill over it, plus a faint top-light border. Pure Flutter so it looks
+    // theme-tinted fill over it, plus a faint border. Pure Flutter so it looks
     // identical on macOS + Windows (not native Liquid Glass, which is mac-only).
+    // Legibility comes from the per-icon/text shadows (p.shadows), which hold up
+    // on any backdrop in either theme.
     const radius = 12.0;
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -168,17 +252,14 @@ class _Bar extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            // High-transparency glass: a faint tint + the blur read as glass;
-            // legibility comes from the per-icon/text shadows (_glassShadows),
-            // which hold up on any backdrop.
-            color: const Color(0x40222226),
+            color: p.glassTint,
             borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: const Color(0x33FFFFFF), width: 0.5),
+            border: Border.all(color: p.glassBorder, width: 0.5),
           ),
           child: IconTheme.merge(
-            data: const IconThemeData(shadows: _glassShadows),
+            data: IconThemeData(shadows: p.shadows),
             child: DefaultTextStyle.merge(
-              style: const TextStyle(shadows: _glassShadows),
+              style: TextStyle(shadows: p.shadows),
               child: child,
             ),
           ),
@@ -256,22 +337,26 @@ class _ColorSwatch extends StatelessWidget {
   final Color color;
   const _ColorSwatch(this.controller, this.style, this.color);
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () => controller.setColor(color),
-    child: Container(
-      width: 18,
-      height: 18,
-      margin: const EdgeInsets.symmetric(horizontal: 3),
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: style.color == color ? Colors.white : Colors.black26,
-          width: style.color == color ? 2 : 1,
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    final selected = style.color == color;
+    return GestureDetector(
+      onTap: () => controller.setColor(color),
+      child: Container(
+        width: 18,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? p.fg : p.swatchUnselectedBorder,
+            width: selected ? 2 : 1,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _WidthSwatch extends StatelessWidget {
@@ -280,22 +365,23 @@ class _WidthSwatch extends StatelessWidget {
   final double width;
   const _WidthSwatch(this.controller, this.style, this.width);
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () => controller.setStrokeWidth(width),
-    child: Container(
-      width: 26,
-      height: 22,
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      alignment: Alignment.center,
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return GestureDetector(
+      onTap: () => controller.setStrokeWidth(width),
       child: Container(
-        width: 20,
-        height: width,
-        color: style.strokeWidth == width
-            ? Colors.lightBlueAccent
-            : Colors.white70,
+        width: 26,
+        height: 22,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        alignment: Alignment.center,
+        child: Container(
+          width: 20,
+          height: width,
+          color: style.strokeWidth == width ? GlimprTokens.accent : p.fgFaint,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Adjustable font size in points: a directly-typeable number field plus −/+
@@ -347,11 +433,12 @@ class _FontControlState extends State<_FontControl> {
 
   @override
   Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
     Widget btn(IconData icon, VoidCallback onTap) => GestureDetector(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(4),
-        child: Icon(icon, color: Colors.white70, size: 16),
+        child: Icon(icon, color: p.fgFaint, size: 16),
       ),
     );
     return Row(
@@ -365,7 +452,7 @@ class _FontControlState extends State<_FontControl> {
             focusNode: _ptFocus,
             textAlign: TextAlign.center,
             keyboardType: TextInputType.number,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(color: p.fg, fontSize: 12),
             decoration: const InputDecoration(
               isDense: true,
               border: InputBorder.none,
@@ -379,7 +466,7 @@ class _FontControlState extends State<_FontControl> {
             onTapOutside: (_) {},
           ),
         ),
-        const Text('pt', style: TextStyle(color: Colors.white54, fontSize: 11)),
+        Text('pt', style: TextStyle(color: p.fgDim, fontSize: 11)),
         btn(Icons.add, () => _step(2)),
       ],
     );

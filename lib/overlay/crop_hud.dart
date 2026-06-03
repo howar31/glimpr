@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../editor/drawable.dart';
 import '../editor/drawable_painter.dart';
+import '../theme/glimpr_theme.dart';
 
 /// Full-screen crosshair lines through [cursor] (logical coords). Uses an
 /// inverting blend (BlendMode.difference with white) so the line flips whatever
@@ -86,7 +87,9 @@ class TextSelectionPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       strutStyle: StrutStyle.disabled, // match the inline field's layout
     )..layout();
-    final paint = Paint()..color = const Color(0x553A7BFF);
+    // Text-selection highlight in the brand accent (kept translucent so the
+    // glyphs underneath stay readable).
+    final paint = Paint()..color = GlimprTokens.accent.withValues(alpha: 0.33);
     for (final box in tp.getBoxesForSelection(selection)) {
       canvas.drawRect(box.toRect().shift(origin), paint);
     }
