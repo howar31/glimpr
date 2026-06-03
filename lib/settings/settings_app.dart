@@ -598,34 +598,70 @@ class _SettingsAppState extends State<SettingsApp>
   );
 
   Widget _saveFolderBody(GlimprTokens t) {
-    return Row(
+    final path = _saveDir;
+    final mono = GlimprType.mono(12.5, t.fg3);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
+        // Label + actions on the top row; the path gets its own full-width line
+        // below so it is not squeezed into half the card.
+        Row(
+          children: [
+            Expanded(
+              child: Text(
                 'Save folder',
                 style: GlimprType.sansStyle(14.5, 600, t.fg1),
               ),
-              const SizedBox(height: 3),
-              Text(
-                _saveDir ?? 'Default · ~/Pictures/Glimpr',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GlimprType.mono(12.5, t.fg3),
-              ),
-            ],
+            ),
+            const SizedBox(width: 14),
+            AccentButton(
+              'Choose…',
+              icon: Icons.folder_open_outlined,
+              onTap: _chooseDir,
+            ),
+            const SizedBox(width: 8),
+            GhostButton('Reset', onTap: path == null ? null : _resetDir),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (path == null)
+          Text('Default · ~/Pictures/Glimpr', style: mono)
+        else
+          Tooltip(
+            message: path,
+            waitDuration: const Duration(milliseconds: 400),
+            child: _pathLine(path, mono),
+          ),
+      ],
+    );
+  }
+
+  // A full-width path that keeps the LAST folder visible: the head ellipsizes
+  // when space runs out, the trailing segment stays. Hover shows the full path.
+  Widget _pathLine(String path, TextStyle style) {
+    final i = path.lastIndexOf('/');
+    if (i <= 0) {
+      return Text(
+        path,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+    return Row(
+      children: [
+        // Loose Flexible: takes its content width (so head + tail stay contiguous)
+        // and only shrinks/ellipsizes the head when the line runs out of room.
+        Flexible(
+          child: Text(
+            path.substring(0, i),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: style,
           ),
         ),
-        const SizedBox(width: 14),
-        AccentButton(
-          'Choose…',
-          icon: Icons.folder_open_outlined,
-          onTap: _chooseDir,
-        ),
-        const SizedBox(width: 8),
-        GhostButton('Reset', onTap: _saveDir == null ? null : _resetDir),
+        Text(path.substring(i), maxLines: 1, softWrap: false, style: style),
       ],
     );
   }

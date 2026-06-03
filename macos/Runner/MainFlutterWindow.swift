@@ -121,7 +121,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // so it is re-applied in revealSettings + windowDidUpdate.
     disableZoomButton()
     self.isReleasedWhenClosed = false
-    self.collectionBehavior = [.moveToActiveSpace]
+    // moveToActiveSpace: reveal on the user's current Space. fullScreenNone: this
+    // fixed-size window must not go full-screen (greys out View > Enter Full Screen).
+    self.collectionBehavior = [.moveToActiveSpace, .fullScreenNone]
     self.delegate = self
     // Order front THEN drop alpha (the proven warm-engine order — same as the
     // overlay windows): an on-screen layout pass realizes the Metal surface and
@@ -158,6 +160,21 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     hideSettings()
     return false
+  }
+
+  // Cmd-W closes (hides) the settings window regardless of which Flutter widget
+  // holds focus. A focused Flutter text field (e.g. the filename template) can
+  // swallow the in-Flutter Cmd-W shortcut, so intercept the key equivalent at the
+  // window — ahead of the FlutterView — whenever settings is actually visible.
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if alphaValue > 0,
+      event.modifierFlags.contains(.command),
+      event.charactersIgnoringModifiers?.lowercased() == "w"
+    {
+      hideSettings()
+      return true
+    }
+    return super.performKeyEquivalent(with: event)
   }
 
   // Belt-and-suspenders with the disabled zoom button: never zoom this window.
