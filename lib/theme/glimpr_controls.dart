@@ -478,21 +478,34 @@ class GlimprSlider extends StatelessWidget {
   }
 }
 
-/// Primary (accent gradient) action button.
-class AccentButton extends StatelessWidget {
+/// Primary (accent gradient) action button. On hover it brightens slightly —
+/// the same no-movement highlight model as [GhostButton], so all buttons behave
+/// consistently (no lift, no shadow ramp).
+class AccentButton extends StatefulWidget {
   const AccentButton(this.label, {super.key, required this.onTap, this.icon});
   final String label;
   final VoidCallback onTap;
   final IconData? icon;
 
   @override
+  State<AccentButton> createState() => _AccentButtonState();
+}
+
+class _AccentButtonState extends State<AccentButton> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
-        onTap: onTap,
-        child: Container(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
           decoration: BoxDecoration(
             gradient: GlimprTokens.accentGrad,
@@ -505,15 +518,21 @@ class AccentButton extends StatelessWidget {
               ),
             ],
           ),
+          // A faint white wash to read as "brighter" on hover (no movement —
+          // consistent with the ghost button).
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            color: _hover ? const Color(0x1FFFFFFF) : const Color(0x00FFFFFF),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (icon != null) ...[
-                Icon(icon, size: 16, color: GlimprTokens.onAccent),
+              if (widget.icon != null) ...[
+                Icon(widget.icon, size: 16, color: GlimprTokens.onAccent),
                 const SizedBox(width: 7),
               ],
               Text(
-                label,
+                widget.label,
                 style: GlimprType.sansStyle(13.5, 600, GlimprTokens.onAccent),
               ),
             ],
@@ -524,25 +543,45 @@ class AccentButton extends StatelessWidget {
   }
 }
 
-/// Quiet text button (ghost). Dims when [onTap] is null.
-class GhostButton extends StatelessWidget {
+/// Quiet text button (ghost). Dims when [onTap] is null; on hover it picks up a
+/// soft fill and a brighter label.
+class GhostButton extends StatefulWidget {
   const GhostButton(this.label, {super.key, required this.onTap});
   final String label;
   final VoidCallback? onTap;
 
   @override
+  State<GhostButton> createState() => _GhostButtonState();
+}
+
+class _GhostButtonState extends State<GhostButton> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
-    final enabled = onTap != null;
+    final enabled = widget.onTap != null;
+    final active = enabled && _hover;
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
+      onExit: enabled ? (_) => setState(() => _hover = false) : null,
       child: GestureDetector(
-        onTap: onTap,
-        child: Padding(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: active ? t.navHoverBg : const Color(0x00000000),
+            borderRadius: BorderRadius.circular(9),
+          ),
           child: Text(
-            label,
-            style: GlimprType.sansStyle(13.5, 600, enabled ? t.fg3 : t.fg4),
+            widget.label,
+            style: GlimprType.sansStyle(
+              13.5,
+              600,
+              !enabled ? t.fg4 : (active ? t.fg2 : t.fg3),
+            ),
           ),
         ),
       ),

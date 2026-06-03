@@ -94,10 +94,11 @@ class GlimprTokens {
   // ========================== DARK (canonical) ===========================
   static const GlimprTokens dark = GlimprTokens(
     brightness: Brightness.dark,
-    // Liquid material: very translucent window bg + bright border.
-    winBg: Color.fromRGBO(15, 21, 38, 0.38),
+    // Liquid material: a thin brand tint over the native desktop vibrancy (low
+    // alpha = the blurred desktop reads strongly through the window).
+    winBg: Color.fromRGBO(15, 21, 38, 0.10),
     winBorder: Color.fromRGBO(255, 255, 255, 0.22),
-    sidebarBg: Color.fromRGBO(255, 255, 255, 0.03),
+    sidebarBg: Color.fromRGBO(255, 255, 255, 0.04),
     divider: Color.fromRGBO(255, 255, 255, 0.08),
     cardBg: Color.fromRGBO(255, 255, 255, 0.045),
     cardBgHover: Color.fromRGBO(255, 255, 255, 0.07),
@@ -122,10 +123,11 @@ class GlimprTokens {
   // ============================== LIGHT ==================================
   static const GlimprTokens light = GlimprTokens(
     brightness: Brightness.light,
-    // Liquid material: very translucent window bg + bright border.
-    winBg: Color.fromRGBO(249, 251, 253, 0.44),
+    // Liquid material: a thin brand tint over the native desktop vibrancy (low
+    // alpha = the blurred desktop reads strongly through the window).
+    winBg: Color.fromRGBO(249, 251, 253, 0.12),
     winBorder: Color.fromRGBO(255, 255, 255, 0.70),
-    sidebarBg: Color.fromRGBO(255, 255, 255, 0.28),
+    sidebarBg: Color.fromRGBO(255, 255, 255, 0.14),
     divider: Color.fromRGBO(15, 23, 42, 0.08),
     cardBg: Color.fromRGBO(255, 255, 255, 0.62),
     cardBgHover: Color.fromRGBO(255, 255, 255, 0.82),

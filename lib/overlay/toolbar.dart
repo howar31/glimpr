@@ -132,7 +132,7 @@ class _ToolbarPalette {
   ];
 
   static const dark = _ToolbarPalette(
-    glassTint: Color(0x40222226),
+    glassTint: Color(0x1A222226),
     glassBorder: Color(0x33FFFFFF),
     shadows: _darkShadows,
     fg: Colors.white,
@@ -143,7 +143,7 @@ class _ToolbarPalette {
   );
 
   static const light = _ToolbarPalette(
-    glassTint: Color(0xCCEEF2F7),
+    glassTint: Color(0x40EEF2F7),
     glassBorder: Color(0x66FFFFFF),
     shadows: _lightShadows,
     fg: Color(0xFF14223B),
