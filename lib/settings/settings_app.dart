@@ -328,50 +328,58 @@ class _SettingsAppState extends State<SettingsApp>
                 if (mounted) setState(() => _format = f);
               },
             ),
-            const SizedBox(height: 18),
-            Divider(height: 1, thickness: 1, color: t.divider),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                SizedBox(
-                  width: 130,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            // Quality applies to JPEG only. Slide + fade it in/out on format
+            // switch (collapses to zero height for PNG, which is lossless).
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 200),
+              alignment: Alignment.topCenter,
+              sizeCurve: Curves.easeOutCubic,
+              firstCurve: Curves.easeOut,
+              secondCurve: Curves.easeOut,
+              crossFadeState: lossy
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              firstChild: const SizedBox(width: double.infinity, height: 0),
+              secondChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 18),
+                  Divider(height: 1, thickness: 1, color: t.divider),
+                  const SizedBox(height: 18),
+                  Row(
                     children: [
-                      Text(
-                        'Quality',
-                        style: GlimprType.sansStyle(
-                          14.5,
-                          600,
-                          lossy ? t.fg1 : t.fg4,
+                      SizedBox(
+                        width: 130,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Quality',
+                              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Compression level',
+                              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        lossy ? 'Compression level' : 'Lossless · n/a',
-                        style: GlimprType.sansStyle(12.5, 400, t.fg3),
+                      Expanded(
+                        child: GlimprSlider(
+                          value: _jpegQuality.toDouble(),
+                          min: 10,
+                          max: 100,
+                          suffix: '%',
+                          onChanged: (v) =>
+                              setState(() => _jpegQuality = v.round()),
+                          onChangeEnd: (v) => _s.setJpegQuality(v.round()),
+                        ),
                       ),
                     ],
                   ),
-                ),
-                Expanded(
-                  child: Opacity(
-                    opacity: lossy ? 1 : 0.4,
-                    child: IgnorePointer(
-                      ignoring: !lossy,
-                      child: GlimprSlider(
-                        value: _jpegQuality.toDouble(),
-                        min: 10,
-                        max: 100,
-                        suffix: '%',
-                        onChanged: (v) =>
-                            setState(() => _jpegQuality = v.round()),
-                        onChangeEnd: (v) => _s.setJpegQuality(v.round()),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
