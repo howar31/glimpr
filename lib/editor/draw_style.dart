@@ -35,17 +35,33 @@ const List<double> kStrokeWidths = [2, 4, 8];
 const double kStrokeMin = 1;
 const double kStrokeMax = 40;
 
+/// Brush texture for the highlighter tool (consumed only by its painter). Other
+/// tools carry the field but ignore it (it rides on the shared [DrawStyle], like
+/// [DrawStyle.fontFamily] which only the Text tool uses).
+enum HighlighterTexture { clean, streaks, frayed }
+
+/// Parse a [HighlighterTexture] by name, falling back to [streaks] for a
+/// missing/garbage value (forward/backward compatible persistence).
+HighlighterTexture _textureFromName(Object? name) {
+  for (final t in HighlighterTexture.values) {
+    if (t.name == name) return t;
+  }
+  return HighlighterTexture.streaks;
+}
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
   final double strokeWidth;
   final double fontSize;
   final String? fontFamily; // null = system default
+  final HighlighterTexture texture; // highlighter-only; ignored by other tools
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
     this.fontSize = 18,
     this.fontFamily,
+    this.texture = HighlighterTexture.streaks,
   });
 
   DrawStyle copyWith({
@@ -53,11 +69,13 @@ class DrawStyle {
     double? strokeWidth,
     double? fontSize,
     String? fontFamily,
+    HighlighterTexture? texture,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
     fontSize: fontSize ?? this.fontSize,
     fontFamily: fontFamily ?? this.fontFamily,
+    texture: texture ?? this.texture,
   );
 
   Map<String, dynamic> toJson() => {
@@ -65,6 +83,7 @@ class DrawStyle {
     'strokeWidth': strokeWidth,
     'fontSize': fontSize,
     if (fontFamily != null) 'fontFamily': fontFamily,
+    'texture': texture.name,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -72,6 +91,7 @@ class DrawStyle {
     strokeWidth: (j['strokeWidth'] as num?)?.toDouble() ?? 4,
     fontSize: (j['fontSize'] as num?)?.toDouble() ?? 18,
     fontFamily: j['fontFamily'] as String?,
+    texture: _textureFromName(j['texture']),
   );
 
   @override
@@ -80,7 +100,9 @@ class DrawStyle {
       other.color == color &&
       other.strokeWidth == strokeWidth &&
       other.fontSize == fontSize &&
-      other.fontFamily == fontFamily;
+      other.fontFamily == fontFamily &&
+      other.texture == texture;
   @override
-  int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily);
+  int get hashCode =>
+      Object.hash(color, strokeWidth, fontSize, fontFamily, texture);
 }

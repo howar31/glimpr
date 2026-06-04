@@ -198,13 +198,12 @@ class _OverlayAppState extends State<OverlayApp> {
     if (_applyingRemote) return;
     final e = _editor;
     if (e == null) return;
-    final s = e.style.value;
+    // Send the full DrawStyle JSON (same shape as persistence) so EVERY style
+    // field stays in sync — incl. fontFamily and the highlighter texture — and a
+    // future field can't silently drop out of the cross-display broadcast.
     _bridge.broadcastEditorState({
       'tool': e.tool.value.index,
-      'color': s.color.toARGB32(),
-      'strokeWidth': s.strokeWidth,
-      'fontSize': s.fontSize,
-      'fontFamily': s.fontFamily, // may be null
+      ...e.style.value.toJson(),
     });
   }
 
@@ -214,12 +213,7 @@ class _OverlayAppState extends State<OverlayApp> {
     if (e == null) return;
     _applyingRemote = true;
     final t = ToolKind.values[state['tool'] as int];
-    final s = DrawStyle(
-      color: Color(state['color'] as int),
-      strokeWidth: (state['strokeWidth'] as num).toDouble(),
-      fontSize: (state['fontSize'] as num).toDouble(),
-      fontFamily: state['fontFamily'] as String?,
-    );
+    final s = DrawStyle.fromJson(state); // tolerant; ignores the extra 'tool' key
     e.tool.value = t;
     e.phase.value = t == ToolKind.crop
         ? EditorPhase.crop

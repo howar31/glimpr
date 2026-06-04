@@ -63,6 +63,20 @@ void main() {
     expect(s.fontSize, 18);
   });
 
+  test('highlighter texture round-trips and defaults to streaks', () {
+    const s = DrawStyle(texture: HighlighterTexture.frayed);
+    expect(DrawStyle.fromJson(s.toJson()).texture, HighlighterTexture.frayed);
+    // Default + missing-key fallback.
+    expect(const DrawStyle().texture, HighlighterTexture.streaks);
+    final old = {'color': 0xFFFF3B30, 'strokeWidth': 4.0, 'fontSize': 18.0};
+    expect(DrawStyle.fromJson(old).texture, HighlighterTexture.streaks);
+    // A garbage texture value falls back, not throws.
+    expect(
+      DrawStyle.fromJson({...old, 'texture': 'bogus'}).texture,
+      HighlighterTexture.streaks,
+    );
+  });
+
   test('stroke range constants are sane', () {
     expect(kStrokeMin, lessThan(kStrokeMax));
     expect(kStrokeWidths.every((w) => w >= kStrokeMin && w <= kStrokeMax), isTrue);

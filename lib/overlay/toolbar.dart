@@ -295,7 +295,7 @@ class _Bar extends StatelessWidget {
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
-enum _OpenPopover { none, color, font }
+enum _OpenPopover { none, color, font, texture }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
 /// font size (text only). Hidden for the Crop tool.
@@ -410,6 +410,28 @@ class _OptionsRowState extends State<_OptionsRow> {
           } else {
             _c.setFontFamily(name);
           }
+        },
+      ),
+    );
+  }
+
+  void _openTexturePopover() {
+    if (_open == _OpenPopover.texture) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    _showPopover(
+      _OpenPopover.texture,
+      _barLink,
+      width: 200,
+      child: TexturePickerPopover(
+        selected: _c.style.value.texture,
+        color: _c.style.value.color,
+        onSelected: (t) {
+          _c.setHighlighterTexture(t);
+          _closePopover(); // menu-style: pick closes
+          setState(() {}); // refresh the button label
         },
       ),
     );
@@ -548,6 +570,14 @@ class _OptionsRowState extends State<_OptionsRow> {
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
+                  if (tool == ToolKind.highlighter) ...[
+                    const SizedBox(width: 8),
+                    _TextureButton(
+                      key: const ValueKey('texture-picker'),
+                      label: textureLabel(style.texture),
+                      onTap: _openTexturePopover,
+                    ),
+                  ],
                   if (showsFont) ...[
                     const SizedBox(width: 10),
                     _NumberStepper(
@@ -582,6 +612,36 @@ class _OptionsRowState extends State<_OptionsRow> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Highlighter-only: a compact pill showing the current brush texture name;
+/// tapping opens the [TexturePickerPopover] (a named menu with previews).
+class _TextureButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _TextureButton({super.key, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: p.swatchUnselectedBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: TextStyle(color: p.fg, fontSize: 12)),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 16, color: p.fgFaint),
+          ],
+        ),
+      ),
     );
   }
 }

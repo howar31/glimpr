@@ -75,6 +75,8 @@ class EditorController {
   void setStrokeWidth(double w) =>
       _updateStyle(style.value.copyWith(strokeWidth: w));
   void setFontSize(double s) => _updateStyle(style.value.copyWith(fontSize: s));
+  void setHighlighterTexture(HighlighterTexture t) =>
+      _updateStyle(style.value.copyWith(texture: t));
   void setFontFamily(String? f) =>
       _updateStyle(style.value.copyWith(fontFamily: f));
 

@@ -101,6 +101,16 @@ void main() {
     expect(c.style.value.strokeWidth, 40);
   });
 
+  testWidgets('texture picker shows only for the highlighter', (t) async {
+    final c = EditorController();
+    c.selectTool(ToolKind.rectangle);
+    await t.pumpWidget(_host(c));
+    expect(find.byKey(const ValueKey('texture-picker')), findsNothing);
+    c.selectTool(ToolKind.highlighter);
+    await t.pumpWidget(_host(c));
+    expect(find.byKey(const ValueKey('texture-picker')), findsOneWidget);
+  });
+
   testWidgets('reset-this-tool restores the default style', (t) async {
     final c = EditorController();
     c.selectTool(ToolKind.rectangle);

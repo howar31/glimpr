@@ -1,7 +1,139 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'draw_style.dart';
 import 'drawable.dart';
 import 'text_metrics.dart';
+
+/// Smooth, deterministic value noise for the procedural marker texture — same
+/// seed always yields the same curve, so a highlighter never shimmers on repaint.
+class _MarkerNoise {
+  late final List<double> _g;
+  _MarkerNoise(int seed) {
+    final r = math.Random(seed);
+    _g = List.generate(256, (_) => r.nextDouble());
+  }
+  double call(double x) {
+    final i = x.floor();
+    final f = x - i;
+    final a = _g[((i % 256) + 256) % 256];
+    final b = _g[(((i + 1) % 256) + 256) % 256];
+    final u = f * f * (3 - 2 * f); // smoothstep
+    return a + (b - a) * u;
+  }
+}
+
+/// Paints a straight highlighter band from [points].first to [points].last in
+/// [style], rendering the style's [HighlighterTexture]. Translucent srcOver only
+/// (no multiply — it vanishes on dark screenshots); honours the colour's own
+/// alpha. Reused by the painter and the toolbar's texture-preview chips.
+///
+/// Tunables for in-app iteration are grouped near the top.
+void paintHighlighterStroke(
+  Canvas canvas,
+  List<Offset> points,
+  DrawStyle style,
+) {
+  if (points.isEmpty) return;
+  final start = points.first;
+  final end = points.last;
+  final w = style.strokeWidth * 5; // wide marker band
+  final color = style.color;
+  final half = w / 2;
+
+  if ((end - start).distance < 0.5) {
+    canvas.drawCircle(
+      start,
+      half,
+      Paint()
+        ..color = color
+        ..isAntiAlias = true,
+    );
+    return;
+  }
+
+  // Clean: a plain round-capped translucent band, no texture.
+  if (style.texture == HighlighterTexture.clean) {
+    canvas.drawLine(
+      start,
+      end,
+      Paint()
+        ..color = color
+        ..strokeWidth = w
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke
+        ..isAntiAlias = true,
+    );
+    return;
+  }
+
+  // ---- tunable constants (iterate in-app) --------------------------------
+  const streakCount = 18; // felt-tip streak lines across the band — a COUNT, so
+  // the look scales with width AND stays cheap (≈this many draws per stroke).
+  const streakAmp = 0.4; // per-streak intensity variation
+  const lengthAmp = 0.22; // along-stroke variation (per-streak gradient)
+  const edgeInk = 0.7; // extra darkening at the long edges
+
+  final dir = end - start;
+  final len = dir.distance;
+  final u = dir / len; // unit along axis
+  final n = Offset(-u.dy, u.dx); // unit normal
+  final seed =
+      (start.dx * 131 + start.dy * 557 + end.dx * 1289 + end.dy * 2741).round();
+  final noise = _MarkerNoise(seed);
+  final baseA = color.a; // the chosen alpha (0..1)
+  Color withA(double a) => color.withValues(alpha: a.clamp(0.0, 0.95));
+
+  // Build the band from a FEW long streak lines (≈streakCount draws) instead of
+  // a per-pixel scanline×segment grid (that was ~10k+ drawLine calls per stroke
+  // and made the editor janky). Each streak spans the full length at its own
+  // intensity, with a 3-stop gradient along it for felt-tip lengthwise variation.
+  final paint = Paint()
+    ..isAntiAlias = true
+    ..strokeCap = StrokeCap.butt;
+  final bandStep = w / streakCount;
+  for (var i = 0; i < streakCount; i++) {
+    final t = (i + 0.5) / streakCount; // 0..1 across the band
+    final off = (t - 0.5) * w;
+    var base = (1 - streakAmp) + streakAmp * noise(i * 1.7 + 3);
+    final edge = math.pow((t - 0.5).abs() * 2, 2.2).toDouble();
+    base *= 1 + edgeInk * edge; // ink-darker long edges
+    final p0 = start + n * off;
+    final p1 = end + n * off;
+    double la(double k) =>
+        baseA * base * ((1 - lengthAmp) + lengthAmp * noise(i * 0.5 + k));
+    paint
+      ..strokeWidth = bandStep * 1.3 // overlap so there are no seams
+      ..shader = ui.Gradient.linear(p0, p1, [
+        withA(la(0)),
+        withA(la(6)),
+        withA(la(12)),
+      ], const [0.0, 0.5, 1.0]);
+    canvas.drawLine(p0, p1, paint);
+  }
+  paint.shader = null;
+
+  // Frayed: dry split-fork streaks trailing off both ends.
+  if (style.texture == HighlighterTexture.frayed) {
+    final fn = _MarkerNoise(seed * 5 + 1);
+    final fray = Paint()
+      ..isAntiAlias = true
+      ..strokeCap = StrokeCap.round;
+    for (final (ex, sign) in [(end, 1.0), (start, -1.0)]) {
+      for (var i = 0; i < 7; i++) {
+        final off = (fn(i * 1.3) - 0.5) * w * 0.95;
+        final length = 6 + fn(i * 2.1 + 9) * 26;
+        final p0 = ex + n * off;
+        final p1 =
+            ex + u * (sign * length) + n * (off + (fn(i * 4.0) - 0.5) * 4);
+        fray
+          ..color = withA(baseA * (0.25 + 0.5 * fn(i * 0.7 + 3)))
+          ..strokeWidth = 1.2 + fn(i.toDouble()) * 2.2;
+        canvas.drawLine(p0, p1, fray);
+      }
+    }
+  }
+}
 
 /// Paints the drawable list (annotation layer) and, if [selectedIndex] is set,
 /// a selection rectangle + corner handles around that drawable.
@@ -147,47 +279,8 @@ class DrawablePainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  void _paintHighlighter(Canvas canvas, HighlighterDrawable d) {
-    if (d.points.isEmpty) return;
-    final start = d.points.first;
-    final end = d.points.last;
-    final w = d.style.strokeWidth * 5; // wide marker band
-    final color = d.style.color; // honours the chosen alpha (no forced value)
-    if ((end - start).distance < 0.5) {
-      canvas.drawCircle(
-        start,
-        w / 2,
-        Paint()
-          ..color = color
-          ..isAntiAlias = true,
-      );
-      return;
-    }
-    // Straight translucent band with round ends (no self-overlap to darken).
-    canvas.drawLine(
-      start,
-      end,
-      Paint()
-        ..color = color
-        ..strokeWidth = w
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke
-        ..isAntiAlias = true,
-    );
-    // Ink accumulation: a darker, thin line just inside each long edge — the
-    // look of marker ink pooling along the boundaries of the swipe.
-    final dir = end - start;
-    final n = Offset(-dir.dy, dir.dx) / dir.distance; // unit perpendicular
-    final off = n * (w / 2 - w * 0.08); // sit just inside each long edge
-    final edgePaint = Paint()
-      ..color = color.withValues(alpha: (color.a * 2.0).clamp(0.0, 1.0))
-      ..strokeWidth = w * 0.12
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..isAntiAlias = true;
-    canvas.drawLine(start + off, end + off, edgePaint);
-    canvas.drawLine(start - off, end - off, edgePaint);
-  }
+  void _paintHighlighter(Canvas canvas, HighlighterDrawable d) =>
+      paintHighlighterStroke(canvas, d.points, d.style);
 
   void _paintStep(Canvas canvas, StepDrawable d) {
     canvas.drawCircle(

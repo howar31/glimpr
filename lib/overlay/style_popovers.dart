@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../editor/color_math.dart';
 import '../editor/draw_style.dart';
+import '../editor/drawable_painter.dart' show paintHighlighterStroke;
 import '../theme/glimpr_theme.dart';
 
 // ignore_for_file: use_super_parameters
@@ -707,6 +708,131 @@ class _FontRow extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// TexturePickerPopover (highlighter brush texture)
+// ---------------------------------------------------------------------------
+
+/// Human label for a highlighter [HighlighterTexture].
+String textureLabel(HighlighterTexture t) => switch (t) {
+  HighlighterTexture.clean => 'Clean',
+  HighlighterTexture.streaks => 'Streaks',
+  HighlighterTexture.frayed => 'Frayed',
+};
+
+/// A small menu listing the highlighter brush textures by name, each with a
+/// readable preview rendered in [color]. Tapping a row calls [onSelected].
+class TexturePickerPopover extends StatelessWidget {
+  const TexturePickerPopover({
+    Key? key,
+    required this.selected,
+    required this.color,
+    required this.onSelected,
+  }) : super(key: key);
+
+  final HighlighterTexture selected;
+  final Color color;
+  final ValueChanged<HighlighterTexture> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    const accent = GlimprTokens.accent;
+    // Fixed width so the rows' Expanded resolves and the check stays INSIDE the
+    // panel (an unbounded width let the check overflow past the rounded border).
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final tex in HighlighterTexture.values)
+            InkWell(
+              onTap: () => onSelected(tex),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      // Clip the texture into a uniform rounded pill so every
+                      // row's highlight has the SAME left/right bounds and never
+                      // pokes past the panel corners — Clean's round cap and
+                      // Frayed's end streaks would otherwise overflow the band.
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: SizedBox(
+                          height: 30,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // The texture AS A HIGHLIGHT over the dark menu —
+                              // translucent yellow on white was invisible; over
+                              // the dark row it reads, like highlighting the word.
+                              CustomPaint(painter: _TexturePreview(tex, color)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    textureLabel(tex),
+                                    style: TextStyle(
+                                      color: tex == selected ? accent : fg,
+                                      fontSize: 14,
+                                      fontWeight: tex == selected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Fixed check column so bands align and the check stays
+                    // inside the panel.
+                    SizedBox(
+                      width: 22,
+                      child: tex == selected
+                          ? const Icon(Icons.check, size: 16, color: accent)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TexturePreview extends CustomPainter {
+  final HighlighterTexture texture;
+  final Color color;
+  _TexturePreview(this.texture, this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cy = size.height / 2;
+    final stroke = (size.height * 0.72) / 5; // band ≈ 72% tall
+    // Inset the band so the round cap / fray ends sit INSIDE the row (with a
+    // margin), not cut flat at the clip edge.
+    const inset = 16.0;
+    paintHighlighterStroke(
+      canvas,
+      [Offset(inset, cy), Offset(size.width - inset, cy)],
+      DrawStyle(color: color, strokeWidth: stroke, texture: texture),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TexturePreview old) =>
+      old.texture != texture || old.color != color;
 }
 
 // ---------------------------------------------------------------------------

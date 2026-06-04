@@ -12,6 +12,14 @@ void main() {
     expect(c.toolStyles[ToolKind.text]!.fontFamily, 'PingFang TC');
   });
 
+  test('setHighlighterTexture updates style and remembers it per tool', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.highlighter);
+    c.setHighlighterTexture(HighlighterTexture.frayed);
+    expect(c.style.value.texture, HighlighterTexture.frayed);
+    expect(c.toolStyles[ToolKind.highlighter]!.texture, HighlighterTexture.frayed);
+  });
+
   test('resetTool restores the default style for that tool', () {
     final c = EditorController();
     c.selectTool(ToolKind.rectangle);
