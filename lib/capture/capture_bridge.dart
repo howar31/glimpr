@@ -9,6 +9,23 @@ class CaptureBridge {
   /// Trigger the overlay capture flow (native captures + pushes + shows).
   Future<void> beginCapture() => _channel.invokeMethod('beginCapture');
 
+  /// Capture every display and RETURN the frames to this (control) engine,
+  /// WITHOUT showing the overlay — for the direct (non-interactive) modes.
+  Future<List<CapturedDisplay>> captureFrames() async {
+    final res = await _channel.invokeMethod('captureFrames');
+    final list = (res as List).cast<dynamic>();
+    return list
+        .map((e) => CapturedDisplay.fromMap((e as Map).cast<dynamic, dynamic>()))
+        .toList(growable: false);
+  }
+
+  /// The frontmost focused window's display-local rect + names, or null if none.
+  Future<FocusedWindowInfo?> focusedWindow() async {
+    final res = await _channel.invokeMethod('focusedWindow');
+    if (res == null) return null;
+    return FocusedWindowInfo.fromMap((res as Map).cast<dynamic, dynamic>());
+  }
+
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
