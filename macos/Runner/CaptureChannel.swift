@@ -21,6 +21,16 @@ final class CaptureChannel {
       switch call.method {
       case "beginCapture": self?.capture.triggerCapture(); result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
+      case "captureFrames":
+        Task {
+          do {
+            let frames = try await self?.capture.captureFrames() ?? []
+            result(frames)
+          } catch {
+            result(FlutterError(
+              code: "capture_failed", message: "\(error)", details: nil))
+          }
+        }
       default: result(FlutterMethodNotImplemented)
       }
     }

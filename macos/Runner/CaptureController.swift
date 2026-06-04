@@ -10,6 +10,16 @@ final class CaptureController {
 
   init(manager: @escaping () -> OverlayManager?) { self.manager = manager }
 
+  /// Capture all displays and RETURN the frame dicts (no overlay) — for the
+  /// direct (non-interactive) capture modes. Throws if permission is missing or
+  /// there are no displays.
+  func captureFrames() async throws -> [[String: Any]] {
+    guard capturer.hasPermissionOrRequest() else {
+      throw ScreenCapturer.CaptureError.noDisplays
+    }
+    return try await capturer.captureAll()
+  }
+
   func triggerCapture() {
     // Whole body on the main actor: NSAlert + the AppKit overlay work are all
     // MainActor-isolated, and triggerCapture() itself stays nonisolated so it is
