@@ -21,6 +21,12 @@ final class StatusItemController: NSObject {
     item.button?.image = mark
 
     let menu = NSMenu()
+    // App-name header: disabled, non-clickable. action == nil + autoenablesItems
+    // (on by default) renders it greyed out; isEnabled = false makes the intent explicit.
+    let header = NSMenuItem(title: "Glimpr", action: nil, keyEquivalent: "")
+    header.isEnabled = false
+    menu.addItem(header)
+    menu.addItem(.separator())
     menu.addItem(menuItem(title: "Capture", action: #selector(capture), key: ""))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: "Settings…", action: #selector(settings), key: ","))
