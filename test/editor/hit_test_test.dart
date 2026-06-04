@@ -46,7 +46,7 @@ void main() {
     expect(hitTestTop(line, const Offset(50, 40)), isNull);
     // Highlighter is wide (5x), so a point well off the centerline still hits.
     final hl = <Drawable>[
-      const HighlighterDrawable(Offset(0, 0), Offset(100, 0), style),
+      const HighlighterDrawable([Offset(0, 0), Offset(100, 0)], style),
     ];
     expect(hitTestTop(hl, const Offset(50, 9)), 0); // inside the wide band
   });

@@ -6,7 +6,7 @@ import 'drawable.dart';
 /// committed text is pixel-identical to what was typed (WYSIWYG).
 const double kTextLineHeight = 1.3;
 
-/// Base text style for a single-style draw style (used as a fallback).
+/// Text style for a [DrawStyle] (colour + size + font family).
 TextStyle textStyleOf(DrawStyle s) => TextStyle(
       color: s.color,
       fontSize: s.fontSize,
@@ -14,31 +14,12 @@ TextStyle textStyleOf(DrawStyle s) => TextStyle(
       fontFamily: s.fontFamily,
     );
 
-/// Builds the (possibly multi-style) TextSpan for a [TextDrawable] from its
-/// runs. Empty text falls back to a single space so it still has a height.
-TextSpan buildTextSpan(TextDrawable d) {
-  if (d.runs.isEmpty || d.text.isEmpty) {
-    return TextSpan(text: ' ', style: textStyleOf(d.style));
-  }
-  // Root style mirrors the inline field's `style` (RichTextController.buildTextSpan
-  // wraps its runs the same way), so the painted glyphs lay out IDENTICALLY to
-  // the editor's caret/selection geometry — keeping the caret aligned even with
-  // mixed per-run sizes.
-  return TextSpan(
-    style: textStyleOf(d.style),
-    children: [
-      for (final r in d.runs)
-        TextSpan(
-          text: r.text,
-          style: TextStyle(
-            color: r.color,
-            fontSize: r.fontSize,
-            height: kTextLineHeight,
-          ),
-        ),
-    ],
-  );
-}
+/// Builds the TextSpan for a [TextDrawable] in its single style. Empty text
+/// falls back to a single space so it still has a height. The inline editor
+/// field uses the same style (transparent glyphs) so the painted text lays out
+/// identically to the caret/selection geometry (WYSIWYG, zero shift on commit).
+TextSpan buildTextSpan(TextDrawable d) =>
+    TextSpan(text: d.text.isEmpty ? ' ' : d.text, style: textStyleOf(d.style));
 
 /// Measures a TextDrawable's rendered size with a one-off TextPainter so the
 /// model itself stays free of Flutter painting deps in its constructors.

@@ -65,15 +65,7 @@ class DrawablePainter extends CustomPainter {
           ..isAntiAlias = true;
         canvas.drawLine(d.start, d.end, paint);
       case HighlighterDrawable():
-        // Wide, translucent marker band. One stroked path = uniform opacity (no
-        // self-overlap darkening along the band).
-        final paint = Paint()
-          ..color = d.style.color.withValues(alpha: 0.38)
-          ..strokeWidth = d.style.strokeWidth * 5
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..isAntiAlias = true;
-        canvas.drawLine(d.start, d.end, paint);
+        _paintHighlighter(canvas, d);
       case PenDrawable():
         _paintPen(canvas, d);
       case TextDrawable():
@@ -153,6 +145,48 @@ class DrawablePainter extends CustomPainter {
       path.lineTo(d.points[i].dx, d.points[i].dy);
     }
     canvas.drawPath(path, paint);
+  }
+
+  void _paintHighlighter(Canvas canvas, HighlighterDrawable d) {
+    if (d.points.isEmpty) return;
+    final start = d.points.first;
+    final end = d.points.last;
+    final w = d.style.strokeWidth * 5; // wide marker band
+    final color = d.style.color; // honours the chosen alpha (no forced value)
+    if ((end - start).distance < 0.5) {
+      canvas.drawCircle(
+        start,
+        w / 2,
+        Paint()
+          ..color = color
+          ..isAntiAlias = true,
+      );
+      return;
+    }
+    // Straight translucent band with round ends (no self-overlap to darken).
+    canvas.drawLine(
+      start,
+      end,
+      Paint()
+        ..color = color
+        ..strokeWidth = w
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke
+        ..isAntiAlias = true,
+    );
+    // Ink accumulation: a darker, thin line just inside each long edge — the
+    // look of marker ink pooling along the boundaries of the swipe.
+    final dir = end - start;
+    final n = Offset(-dir.dy, dir.dx) / dir.distance; // unit perpendicular
+    final off = n * (w / 2 - w * 0.08); // sit just inside each long edge
+    final edgePaint = Paint()
+      ..color = color.withValues(alpha: (color.a * 2.0).clamp(0.0, 1.0))
+      ..strokeWidth = w * 0.12
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+    canvas.drawLine(start + off, end + off, edgePaint);
+    canvas.drawLine(start - off, end - off, edgePaint);
   }
 
   void _paintStep(Canvas canvas, StepDrawable d) {

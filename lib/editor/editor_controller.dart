@@ -21,6 +21,14 @@ enum ToolKind {
 
 enum EditorPhase { annotate, crop }
 
+/// Factory-default style for a tool. Tools share the uniform default except the
+/// highlighter, which defaults to a translucent marker colour so it reads as a
+/// highlighter out of the box — its painter honours the colour's alpha (no
+/// forced opacity), so the default carries the translucency.
+DrawStyle defaultStyleFor(ToolKind t) => t == ToolKind.highlighter
+    ? const DrawStyle(color: kHighlighterDefaultColor)
+    : const DrawStyle();
+
 /// Mutable editor state exposed as ValueListenables so widgets rebuild narrowly.
 /// Defaults to the Crop tool — most captures are a plain crop; annotation tools
 /// are opt-in (Flow B: draw first if you want, then crop).
@@ -53,7 +61,13 @@ class EditorController {
     selectedIndex.value = null; // switching tools drops the per-type selection
     if (t != ToolKind.crop) {
       final saved = toolStyles[t];
-      if (saved != null) style.value = saved; // restore this tool's last style
+      if (saved != null) {
+        style.value = saved; // restore this tool's last style
+      } else if (t == ToolKind.highlighter) {
+        // The highlighter needs its translucent default, not the carried-over
+        // (often opaque) style of the previously-used tool.
+        style.value = defaultStyleFor(t);
+      }
     }
   }
 
@@ -66,16 +80,18 @@ class EditorController {
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
   // so we rebuild the style explicitly without a fontFamily.
-  void resetFontFamily() => _updateStyle(DrawStyle(
-        color: style.value.color,
-        strokeWidth: style.value.strokeWidth,
-        fontSize: style.value.fontSize,
-      ));
+  void resetFontFamily() => _updateStyle(
+    DrawStyle(
+      color: style.value.color,
+      strokeWidth: style.value.strokeWidth,
+      fontSize: style.value.fontSize,
+    ),
+  );
 
   /// Restore [t] to the factory default style and make it active if it is the
   /// current tool. Clears the per-tool memory entry.
   void resetTool(ToolKind t) {
-    const def = DrawStyle();
+    final def = defaultStyleFor(t);
     toolStyles[t] = def;
     if (tool.value == t) {
       style.value = def;

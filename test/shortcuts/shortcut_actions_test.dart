@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
 import 'package:glimpr/editor/editor_controller.dart';
@@ -9,6 +10,17 @@ void main() {
       expect(kEditorToolActionKey.containsKey(t), isTrue, reason: '$t');
       expect(kDefaultBindings[kEditorToolActionKey[t]], isNotNull, reason: '$t');
     }
+  });
+
+  test('text / highlighter / step / select default to T / H / S / V', () {
+    LogicalKeyboardKey keyFor(ToolKind t) =>
+        kDefaultBindings[kEditorToolActionKey[t]!]!.logicalKey;
+    expect(keyFor(ToolKind.text), LogicalKeyboardKey.keyT);
+    expect(keyFor(ToolKind.highlighter), LogicalKeyboardKey.keyH);
+    expect(keyFor(ToolKind.step), LogicalKeyboardKey.keyS);
+    // The "paste" slot is the universal Select tool — V (the industry-standard
+    // selection-tool key).
+    expect(keyFor(ToolKind.paste), LogicalKeyboardKey.keyV);
   });
 
   test('captureArea default is Cmd+Opt+1', () {

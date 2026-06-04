@@ -71,23 +71,33 @@ class LineDrawable extends Drawable {
   LineDrawable withStyle(DrawStyle s) => LineDrawable(start, end, s);
 }
 
-/// A thick, translucent marker stroke (drawn as a wide rounded line in the
-/// painter at reduced opacity). Same geometry as a line; move-only.
+/// A freehand translucent marker band through the captured pointer [points].
+/// The painter draws a wide rounded band and composites the WHOLE stroke at the
+/// colour's alpha in one layer, so self-overlap doesn't darken (the highlighter
+/// look) and the chosen alpha is honoured. Move-only.
 class HighlighterDrawable extends Drawable {
-  final Offset start;
-  final Offset end;
-  const HighlighterDrawable(this.start, this.end, DrawStyle style)
-    : super(style);
+  final List<Offset> points;
+  const HighlighterDrawable(this.points, DrawStyle style) : super(style);
 
   @override
-  Rect get bounds => _segmentBounds(start, end);
+  Rect get bounds {
+    if (points.isEmpty) return Rect.zero;
+    var minX = points.first.dx, minY = points.first.dy;
+    var maxX = minX, maxY = minY;
+    for (final p in points) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
 
   @override
   HighlighterDrawable moved(Offset d) =>
-      HighlighterDrawable(start + d, end + d, style);
+      HighlighterDrawable([for (final p in points) p + d], style);
 
-  HighlighterDrawable withStyle(DrawStyle s) =>
-      HighlighterDrawable(start, end, s);
+  HighlighterDrawable withStyle(DrawStyle s) => HighlighterDrawable(points, s);
 }
 
 /// A freehand polyline through the captured pointer [points]. Move-only.
@@ -228,47 +238,21 @@ class ArrowDrawable extends Drawable {
   ArrowDrawable withStyle(DrawStyle s) => ArrowDrawable(start, end, s);
 }
 
-/// One styled segment of a [TextDrawable] — supports per-span color + size so a
-/// single text object can mix styles (e.g. "abc" red, "123" blue and larger).
-class TextRun {
-  final String text;
-  final Color color;
-  final double fontSize;
-  const TextRun(this.text, this.color, this.fontSize);
-
-  @override
-  bool operator ==(Object other) =>
-      other is TextRun &&
-      other.text == text &&
-      other.color == color &&
-      other.fontSize == fontSize;
-  @override
-  int get hashCode => Object.hash(text, color, fontSize);
-}
-
+/// A text annotation: a single string at [position], drawn in one [style]
+/// (colour + size + font family). Text annotations carry one uniform style —
+/// per-character styling is intentionally out of scope for a screenshot tool.
 class TextDrawable extends Drawable {
   final Offset position; // top-left
-  final List<TextRun> runs;
-  const TextDrawable(this.position, this.runs, DrawStyle style) : super(style);
-
-  /// Convenience for a single-style text (tests, simple callers).
-  factory TextDrawable.plain(Offset position, String text, DrawStyle style) =>
-      TextDrawable(position, [
-        TextRun(text, style.color, style.fontSize),
-      ], style);
-
-  String get text => runs.map((r) => r.text).join();
+  final String text;
+  const TextDrawable(this.position, this.text, DrawStyle style) : super(style);
 
   @override
   Rect get bounds => position & measureText(this);
 
   @override
-  TextDrawable moved(Offset d) => TextDrawable(position + d, runs, style);
+  TextDrawable moved(Offset d) => TextDrawable(position + d, text, style);
 
-  TextDrawable withRuns(List<TextRun> r) => TextDrawable(position, r, style);
-
-  // Whole-object restyle (flattens to one style) — used when a text is selected
-  // and the toolbar style changes while NOT editing it.
-  TextDrawable withStyle(DrawStyle s) =>
-      TextDrawable(position, [TextRun(text, s.color, s.fontSize)], s);
+  // Whole-object restyle — used when a text is selected and the toolbar style
+  // changes, or to apply the live style while editing.
+  TextDrawable withStyle(DrawStyle s) => TextDrawable(position, text, s);
 }

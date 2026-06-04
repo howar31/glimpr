@@ -5,6 +5,10 @@ import 'editor_controller.dart';
 /// the Shortcuts settings rows so the two never drift. Order = the toolbar
 /// layout: the region tools (crop/blur/pixelate) first, then the drawing tools.
 const kEditorToolMeta = <(ToolKind, IconData)>[
+  // The "paste" slot is the universal SELECT tool (any-type select/move/resize/
+  // delete); the Cmd-V paste action drops images into it. Placed first as the
+  // pointer/select tool, ahead of the region + drawing tools.
+  (ToolKind.paste, Icons.ads_click),
   (ToolKind.crop, Icons.crop),
   (ToolKind.blur, Icons.blur_on),
   (ToolKind.pixelate, Icons.grid_on),
@@ -16,5 +20,4 @@ const kEditorToolMeta = <(ToolKind, IconData)>[
   (ToolKind.text, Icons.title),
   (ToolKind.highlighter, Icons.border_color),
   (ToolKind.step, Icons.looks_one),
-  (ToolKind.paste, Icons.content_paste),
 ];

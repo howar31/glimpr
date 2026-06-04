@@ -1,5 +1,7 @@
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../editor/font_bridge.dart';
@@ -28,7 +30,9 @@ import 'style_popovers.dart';
 class EditorToolbar extends StatelessWidget {
   final EditorController controller;
   final void Function(Offset delta) onMove;
-  final VoidCallback onPtEditingDone; // re-focus the text after pt entry
+  // Called when a toolbar number field (stroke px / font pt) commits, so the
+  // host can hand keyboard focus back to the editor (or the inline text field).
+  final VoidCallback onPtEditingDone;
   // Effective editor.* bindings; the per-tool badge is derived from these so it
   // tracks the user's customized shortcut (Tier 2). Empty => no badges.
   final Map<String, HotkeyBinding?> editorBindings;
@@ -521,27 +525,41 @@ class _OptionsRowState extends State<_OptionsRow> {
               builder: (_, style, _) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final c in kColorPresets) _ColorSwatch(_c, style, c),
+                  for (final c
+                      in (tool == ToolKind.highlighter
+                          ? kHighlighterPresets
+                          : kColorPresets))
+                    _ColorSwatch(_c, style, c),
                   // Custom-colour "+" swatch — opens the HSV picker.
                   _CustomColorSwatch(onTap: _openColorPopover),
                   if (showsWidth) ...[
                     const SizedBox(width: 10),
-                    for (final w in kStrokeWidths) _WidthSwatch(_c, style, w),
-                    const SizedBox(width: 6),
-                    SizedBox(
-                      width: 110,
-                      child: Slider(
-                        key: const ValueKey('stroke-slider'),
-                        min: kStrokeMin,
-                        max: kStrokeMax,
-                        value: style.strokeWidth.clamp(kStrokeMin, kStrokeMax),
-                        onChanged: _c.setStrokeWidth,
-                      ),
+                    _NumberStepper(
+                      key: const ValueKey('stroke-stepper'),
+                      controller: _c,
+                      read: (s) => s.strokeWidth,
+                      write: _c.setStrokeWidth,
+                      min: kStrokeMin,
+                      max: kStrokeMax,
+                      step: 2,
+                      suffix: 'px',
+                      // Hand keyboard focus back to the editor on commit so tool
+                      // shortcuts work again (the font field already does this).
+                      onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
                   if (showsFont) ...[
                     const SizedBox(width: 10),
-                    _FontControl(_c, widget.onPtEditingDone),
+                    _NumberStepper(
+                      controller: _c,
+                      read: (s) => s.fontSize,
+                      write: _c.setFontSize,
+                      min: 8,
+                      max: 200,
+                      step: 2,
+                      suffix: 'pt',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
                   ],
                   if (showsFontFamily) ...[
                     const SizedBox(width: 8),
@@ -555,7 +573,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                   const SizedBox(width: 6),
                   _ResetToolButton(
                     key: const ValueKey('reset-tool'),
-                    enabled: style != const DrawStyle(),
+                    enabled: style != defaultStyleFor(tool),
                     onTap: () => _c.resetTool(_c.tool.value),
                   ),
                 ],
@@ -713,7 +731,9 @@ class _ColorSwatch extends StatelessWidget {
         height: 18,
         margin: const EdgeInsets.symmetric(horizontal: 3),
         decoration: BoxDecoration(
-          color: color,
+          // Composite over white so a translucent (highlighter) colour reads as
+          // ink on paper; opaque colours are unchanged.
+          color: Color.alphaBlend(color, Colors.white),
           shape: BoxShape.circle,
           border: Border.all(
             color: selected ? p.fg : p.swatchUnselectedBorder,
@@ -725,77 +745,156 @@ class _ColorSwatch extends StatelessWidget {
   }
 }
 
-class _WidthSwatch extends StatelessWidget {
+/// Compact `− N + <suffix>` numeric stepper — the unified style for every
+/// option bar's numeric control (stroke width "px", font size "pt"). A centred
+/// directly-typeable field plus −/+ buttons; the buttons are GestureDetectors
+/// (not focusable) so they don't blur the inline text being edited.
+class _NumberStepper extends StatefulWidget {
   final EditorController controller;
-  final DrawStyle style;
-  final double width;
-  const _WidthSwatch(this.controller, this.style, this.width);
+  final double Function(DrawStyle) read; // current value from the style
+  final void Function(double) write; // apply a clamped value
+  final double min;
+  final double max;
+  final double step;
+  final String suffix; // "px" / "pt"
+  final VoidCallback? onEditingDone; // re-focus inline text (font only)
+  const _NumberStepper({
+    super.key,
+    required this.controller,
+    required this.read,
+    required this.write,
+    required this.min,
+    required this.max,
+    required this.step,
+    required this.suffix,
+    this.onEditingDone,
+  });
   @override
-  Widget build(BuildContext context) {
-    final p = _ToolbarTheme.of(context);
-    return GestureDetector(
-      onTap: () => controller.setStrokeWidth(width),
-      child: Container(
-        width: 26,
-        height: 22,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        alignment: Alignment.center,
-        child: Container(
-          width: 20,
-          height: width,
-          color: style.strokeWidth == width ? GlimprTokens.accent : p.fgFaint,
-        ),
-      ),
-    );
-  }
+  State<_NumberStepper> createState() => _NumberStepperState();
 }
 
-/// Adjustable font size in points: a directly-typeable number field plus −/+
-/// buttons. The buttons are GestureDetectors (not focusable) so they don't blur
-/// the text being edited; the number field commits via [onEditingDone].
-class _FontControl extends StatefulWidget {
-  final EditorController controller;
-  final VoidCallback onEditingDone;
-  const _FontControl(this.controller, this.onEditingDone);
-  @override
-  State<_FontControl> createState() => _FontControlState();
-}
-
-class _FontControlState extends State<_FontControl> {
-  late final TextEditingController _ptCtl;
-  final _ptFocus = FocusNode();
+class _NumberStepperState extends State<_NumberStepper> {
+  late final TextEditingController _ctl;
+  final _focus = FocusNode();
+  double? _editStart; // value when editing began, for Esc-revert
 
   @override
   void initState() {
     super.initState();
-    _ptCtl = TextEditingController(text: _styleSize);
+    _ctl = TextEditingController(text: _value);
     widget.controller.style.addListener(_syncFromStyle);
+    _focus.addListener(_onFocusChange);
   }
 
   @override
   void dispose() {
     widget.controller.style.removeListener(_syncFromStyle);
-    _ptCtl.dispose();
-    _ptFocus.dispose();
+    _focus.removeListener(_onFocusChange);
+    _ctl.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
-  String get _styleSize =>
-      widget.controller.style.value.fontSize.round().toString();
+  String get _value =>
+      widget.read(widget.controller.style.value).round().toString();
+
+  void _onFocusChange() {
+    if (_focus.hasFocus) {
+      _editStart ??= widget.read(widget.controller.style.value); // snapshot
+    } else {
+      _editStart = null;
+      // On unfocus, show the real APPLIED value: an out-of-range entry (e.g.
+      // 1213 for a 1..40 stroke) is clamped live in _setFromText, and an emptied
+      // field made no write — either way realign the label to the actual value.
+      if (_ctl.text != _value) _ctl.text = _value;
+    }
+  }
 
   void _syncFromStyle() {
-    if (_ptFocus.hasFocus) return; // don't fight the user's typing
-    if (_ptCtl.text != _styleSize) _ptCtl.text = _styleSize;
+    if (_focus.hasFocus) return; // don't fight the user's typing
+    if (_ctl.text != _value) _ctl.text = _value;
   }
 
   void _setFromText(String s) {
     final v = double.tryParse(s.trim());
-    if (v != null) widget.controller.setFontSize(v.clamp(8, 200));
+    if (v != null) widget.write(v.clamp(widget.min, widget.max));
   }
 
-  void _step(double d) => widget.controller.setFontSize(
-    (widget.controller.style.value.fontSize + d).clamp(8, 200),
-  );
+  // Set [v] on the style AND the field text, so +/- update the displayed number
+  // even while the field has focus (where _syncFromStyle defers to the typist).
+  void _set(double v) {
+    final c = v.clamp(widget.min, widget.max);
+    widget.write(c);
+    final s = c.round().toString();
+    if (_ctl.text != s) _ctl.text = s;
+  }
+
+  void _bump(double d) => _set(widget.read(widget.controller.style.value) + d);
+
+  // Commit: keep the value, drop focus, hand keyboard focus back to the editor.
+  // Unfocusing realigns the displayed text to the applied value (_onFocusChange).
+  void _commit() {
+    _editStart = null;
+    if (_focus.hasFocus) _focus.unfocus();
+    widget.onEditingDone?.call();
+  }
+
+  // Cancel: revert to the value when editing began, then commit.
+  void _cancel() {
+    final start = _editStart;
+    if (start != null) _set(start);
+    _commit();
+  }
+
+  // Intercept Enter/Esc so they confirm/cancel the field instead of bubbling to
+  // the editor (which treats Enter as export and Esc as exit-capture).
+  KeyEventResult _onFieldKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+      _commit();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.escape) {
+      _cancel();
+      return KeyEventResult.handled;
+    }
+    // While focused the field owns all plain keys, so typing digits doesn't fire
+    // the editor's tool shortcuts; Cmd/Ctrl/Alt combos still reach the editor.
+    final combo =
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed;
+    // skipRemainingHandlers (NOT handled): stop the key reaching the editor's
+    // ancestor _onKey (no tool-shortcut leak) yet report it unhandled so the
+    // platform still inserts the character into the field. Returning `handled`
+    // here suppressed the platform text insertion entirely — i.e. you couldn't
+    // type. Combos pass through (ignored) so editor commands like ⌘V still work.
+    return combo
+        ? KeyEventResult.ignored
+        : KeyEventResult.skipRemainingHandlers;
+  }
+
+  double _scrollAccum = 0; // accumulates scroll delta -> one ±1 step per notch
+
+  // Scroll wheel over the stepper (while focused) nudges by ±1 per notch. The
+  // delta is accumulated so a trackpad's fine-grained event stream steps once
+  // per notch rather than racing through the range.
+  void _onScroll(PointerSignalEvent signal) {
+    if (signal is! PointerScrollEvent || !_focus.hasFocus) return;
+    const notch = 50.0; // logical px of scroll per ±1
+    _scrollAccum += signal.scrollDelta.dy;
+    var steps = 0;
+    while (_scrollAccum <= -notch) {
+      _scrollAccum += notch;
+      steps++;
+    }
+    while (_scrollAccum >= notch) {
+      _scrollAccum -= notch;
+      steps--;
+    }
+    if (steps != 0) _set(widget.read(widget.controller.style.value) + steps);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -807,34 +906,43 @@ class _FontControlState extends State<_FontControl> {
         child: Icon(icon, color: p.fgFaint, size: 16),
       ),
     );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        btn(Icons.remove, () => _step(-2)),
-        SizedBox(
-          width: 36,
-          child: TextField(
-            controller: _ptCtl,
-            focusNode: _ptFocus,
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            style: TextStyle(color: p.fg, fontSize: 12),
-            decoration: const InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 4),
+    return Listener(
+      onPointerSignal: _onScroll,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          btn(Icons.remove, () => _bump(-widget.step)),
+          SizedBox(
+            width: 36,
+            child: Focus(
+              onKeyEvent: _onFieldKey,
+              child: TextField(
+                controller: _ctl,
+                focusNode: _focus,
+                textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
+                // Stroke/size are integers — only digits are typeable (the
+                // keyboardType hint isn't enforced on desktop hardware keyboards).
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: TextStyle(color: p.fg, fontSize: 12),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 4),
+                ),
+                onChanged: _setFromText,
+                onSubmitted: (_) => _commit(),
+                // Tapping anywhere outside the field commits + unfocuses.
+                onTapOutside: (_) {
+                  if (_focus.hasFocus) _commit();
+                },
+              ),
             ),
-            onChanged: _setFromText,
-            onSubmitted: (_) {
-              _ptFocus.unfocus();
-              widget.onEditingDone();
-            },
-            onTapOutside: (_) {},
           ),
-        ),
-        Text('pt', style: TextStyle(color: p.fgDim, fontSize: 11)),
-        btn(Icons.add, () => _step(2)),
-      ],
+          Text(widget.suffix, style: TextStyle(color: p.fgDim, fontSize: 11)),
+          btn(Icons.add, () => _bump(widget.step)),
+        ],
+      ),
     );
   }
 }

@@ -31,4 +31,34 @@ void main() {
     c.resetTool(ToolKind.arrow);
     expect(c.toolStyles[ToolKind.arrow], const DrawStyle());
   });
+
+  test(
+    'highlighter default is translucent (distinct from the uniform default)',
+    () {
+      final def = defaultStyleFor(ToolKind.highlighter);
+      expect(def.color.a, lessThan(1.0)); // translucent
+      expect(def, isNot(const DrawStyle())); // not the uniform default
+      expect(defaultStyleFor(ToolKind.rectangle), const DrawStyle());
+    },
+  );
+
+  test(
+    'selecting the highlighter (no saved style) seeds its translucent default',
+    () {
+      final c = EditorController();
+      c.selectTool(ToolKind.rectangle);
+      c.setColor(const Color(0xFFFF0000)); // opaque red on rectangle
+      c.selectTool(ToolKind.highlighter); // must NOT carry over the opaque red
+      expect(c.style.value, defaultStyleFor(ToolKind.highlighter));
+      expect(c.style.value.color.a, lessThan(1.0));
+    },
+  );
+
+  test('resetTool restores the highlighter translucent default', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.highlighter);
+    c.setColor(const Color(0xFF00FF00)); // opaque
+    c.resetTool(ToolKind.highlighter);
+    expect(c.style.value, defaultStyleFor(ToolKind.highlighter));
+  });
 }

@@ -15,7 +15,6 @@ import '../editor/text_metrics.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import 'crop_hud.dart';
-import 'rich_text_controller.dart';
 import 'selection_controller.dart';
 import 'selection_label.dart';
 import 'selection_scrim.dart';
@@ -80,7 +79,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
   // New-shape preview (drag on empty).
   Drawable? _preview;
   Offset? _dragStart;
-  List<Offset>? _penPoints; // accumulated freehand points (pen tool)
+  List<Offset>?
+  _strokePoints; // accumulated freehand points (pen + highlighter)
   // Whole frame pre-blurred / pre-pixelated once when the tool is selected; the
   // blur/pixelate regions just mask these (no per-frame recompute -> no lag).
   ui.Image? _blurredFull;
@@ -101,9 +101,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Rect? _hoverWindow;
   bool _cancelGesture = false; // right-click cancelled the active drag
 
-  // Inline rich-text editing.
+  // Inline text editing — one uniform style per text box.
   final _textFocus = FocusNode();
-  RichTextController? _richCtl;
+  TextEditingController? _textCtl;
   Offset? _textPos;
   int? _editTextIndex; // re-editing an existing text drawable
   bool _editingText = false;
@@ -180,19 +180,17 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // in _ensureRasterFor); otherwise they linger until a GC finalizer runs.
     _blurredFull?.dispose();
     _pixelatedFull?.dispose();
-    _richCtl?.dispose();
+    _textCtl?.dispose();
     _focus.dispose();
     _crop.dispose();
     _textFocus.dispose();
     super.dispose();
   }
 
-  /// While editing, a toolbar style change applies to the selected text range
-  /// (or sets the style for subsequent typing) instead of the whole object.
+  /// While editing, a toolbar style change applies to the whole text box: the
+  /// painter (and the transparent field, via build) re-render in the new style.
   void _onStyleChanged() {
-    if (_editingText) {
-      _richCtl?.applyStyle(c.style.value.color, c.style.value.fontSize);
-    }
+    if (_editingText) _rebuild();
   }
 
   void _rebuild() {
@@ -203,8 +201,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // Switching tools commits any in-progress text (its tool is gone). Blur no
     // longer commits, so the pt field can take focus without ending editing.
     if (_editingText) _commitText();
-    // Paste is triggered by Cmd-V only; selecting the Paste tool just enters
-    // paste mode (to select / move / right-click-delete already-pasted images).
+    // The "paste" slot is the universal SELECT tool (select / move / resize /
+    // delete any drawable). The paste ACTION is Cmd-V only.
     _ensureRasterFor(c.tool.value); // pre-compute whole-frame blur/pixelate
   }
 
@@ -332,7 +330,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
       case ToolKind.pixelate:
         return (d) => d is PixelateDrawable;
       case ToolKind.paste:
-        return (d) => d is ImageDrawable;
+        // The "paste" slot is the universal SELECT tool: it operates on EVERY
+        // drawable type (select / move / resize / delete), so it matches all.
+        return (d) => true;
       case ToolKind.crop:
         return null;
     }
@@ -489,12 +489,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
   // ---- text editing ------------------------------------------------------
 
   void _startText(Offset at) {
-    final ctl = RichTextController(
-      color: c.style.value.color,
-      size: c.style.value.fontSize,
-    )..addListener(_rebuild);
+    final ctl = TextEditingController()..addListener(_rebuild);
     setState(() {
-      _richCtl = ctl;
+      _textCtl = ctl;
       _editTextIndex = null;
       _textPos = at;
       _editingText = true;
@@ -508,13 +505,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
   void _reEditText(int idx) {
     final d = c.document.value.drawables[idx];
     if (d is! TextDrawable) return;
-    final ctl = RichTextController.fromRuns(
-      d.runs,
-      color: c.style.value.color,
-      size: c.style.value.fontSize,
-    )..addListener(_rebuild);
+    // Reflect the box's own style in the toolbar so the size / family / colour
+    // controls show the text being edited (single style per box).
+    c.style.value = d.style;
+    final ctl = TextEditingController(text: d.text)..addListener(_rebuild);
     setState(() {
-      _richCtl = ctl;
+      _textCtl = ctl;
       _editTextIndex = idx;
       _textPos = d.position;
       _editingText = true;
@@ -527,11 +523,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   void _commitText() {
     final pos = _textPos;
-    final ctl = _richCtl;
+    final ctl = _textCtl;
     final idx = _editTextIndex;
     if (pos != null && ctl != null) {
       if (ctl.text.trim().isNotEmpty) {
-        final d = TextDrawable(pos, ctl.toRuns(), c.style.value);
+        final d = TextDrawable(pos, ctl.text, c.style.value);
         c.document.value = idx != null
             ? c.document.value.replaceAt(idx, d)
             : c.document.value.add(d);
@@ -543,13 +539,13 @@ class _EditorCanvasState extends State<EditorCanvas> {
   }
 
   void _cancelText() {
-    final old = _richCtl;
+    final old = _textCtl;
     old?.removeListener(_rebuild);
     setState(() {
       _editingText = false;
       _textPos = null;
       _editTextIndex = null;
-      _richCtl = null;
+      _textCtl = null;
     });
     // Dispose after this frame so the now-removed TextField doesn't touch a
     // disposed controller.
@@ -694,11 +690,20 @@ class _EditorCanvasState extends State<EditorCanvas> {
     });
   }
 
-  /// True when our small reticle should show: an active drawing tool (not a
-  /// region tool, which uses the full crosshair) with the pointer over the canvas
-  /// and no inline text edit in progress.
+  /// The universal SELECT tool (the repurposed "paste" slot): operates on any
+  /// drawable type. It shows the normal arrow cursor — neither crosshair (region
+  /// tools) nor our drawing reticle.
+  bool get _isSelectTool => c.tool.value == ToolKind.paste;
+
+  /// True when our small reticle should show: an active DRAWING tool (not a
+  /// region tool, which uses the full crosshair; not the select tool, which uses
+  /// the system arrow) with the pointer over the canvas and no text edit.
   bool get _showsReticle =>
-      _active && !_showsCrosshair && _overCanvas && !_editingText;
+      _active &&
+      !_showsCrosshair &&
+      !_isSelectTool &&
+      _overCanvas &&
+      !_editingText;
 
   /// Hide the system cursor whenever we're drawing OUR own cursor (crosshair or
   /// reticle) over the canvas, or while dragging (the drag may briefly stray off
@@ -709,6 +714,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final hide =
         _active &&
         !_editingText &&
+        !_isSelectTool && // select shows the system arrow, never hidden
         (_overCanvas || _dragStart != null || _editIndex != null || _cropping);
     if (hide != _lastHide) {
       _lastHide = hide;
@@ -786,7 +792,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   void _resetDrawState() {
     _preview = null;
     _dragStart = null;
-    _penPoints = null;
+    _strokePoints = null;
   }
 
   void _resetEditState() {
@@ -847,7 +853,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
       _dragStart = p; // start drawing a new same-type drawable (not for text)
       _preview = null;
       // Pen accumulates the stroke's points as the drag proceeds.
-      if (c.tool.value == ToolKind.pen) _penPoints = [p];
+      if (c.tool.value == ToolKind.pen) _strokePoints = [p];
     }
   }
 
@@ -896,11 +902,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
         setState(() => _preview = LineDrawable(s, p, c.style.value));
         break;
       case ToolKind.highlighter:
-        setState(() => _preview = HighlighterDrawable(s, p, c.style.value));
+        // Straight marker swipe: a 2-point band from the drag start to here.
+        setState(() => _preview = HighlighterDrawable([s, p], c.style.value));
         break;
       case ToolKind.pen:
-        _penPoints = [...?_penPoints, p];
-        setState(() => _preview = PenDrawable(_penPoints!, c.style.value));
+        _strokePoints = [...?_strokePoints, p];
+        setState(() => _preview = PenDrawable(_strokePoints!, c.style.value));
         break;
       case ToolKind.blur:
         setState(() {
@@ -989,8 +996,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // the live text via the painter — so what's shown is always the final
     // rendering (zero shift on commit). New text appends; a re-edit replaces in
     // place.
-    if (_editingText && _textPos != null && _richCtl != null) {
-      final live = TextDrawable(_textPos!, _richCtl!.toRuns(), c.style.value);
+    if (_editingText && _textPos != null && _textCtl != null) {
+      final live = TextDrawable(_textPos!, _textCtl!.text, c.style.value);
       final t = _editTextIndex;
       if (t != null && t < list.length) {
         list[t] = live;
@@ -1083,23 +1090,19 @@ class _EditorCanvasState extends State<EditorCanvas> {
             // visible. When the field is focused it draws its own highlight.
             if (_active &&
                 _editingText &&
-                _richCtl != null &&
+                _textCtl != null &&
                 _textPos != null &&
                 !_textFocus.hasFocus &&
-                !_richCtl!.selection.isCollapsed)
+                !_textCtl!.selection.isCollapsed)
               IgnorePointer(
                 child: CustomPaint(
                   size: Size.infinite,
                   painter: TextSelectionPainter(
                     span: buildTextSpan(
-                      TextDrawable(
-                        _textPos!,
-                        _richCtl!.toRuns(),
-                        c.style.value,
-                      ),
+                      TextDrawable(_textPos!, _textCtl!.text, c.style.value),
                     ),
                     origin: _textPos!,
-                    selection: _richCtl!.selection,
+                    selection: _textCtl!.selection,
                   ),
                 ),
               ),
@@ -1227,7 +1230,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                   // the system cursor — except while editing text. Over the
                   // toolbar this region isn't hit, so its normal click cursor
                   // shows.
-                  cursor: (_active && !_editingText)
+                  cursor: (_active && !_editingText && !_isSelectTool)
                       ? SystemMouseCursors.none
                       : SystemMouseCursors.basic,
                   onEnter: (_) => setState(() => _overCanvas = true),
@@ -1256,7 +1259,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
               ),
             ),
             // Inline multiline text editor (Enter commits, Shift+Enter newline).
-            if (_active && _editingText && _textPos != null && _richCtl != null)
+            if (_active && _editingText && _textPos != null && _textCtl != null)
               Positioned(
                 left: _textPos!.dx,
                 top: _textPos!.dy,
@@ -1266,21 +1269,23 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     onKeyEvent: _onTextKey,
                     child: IntrinsicWidth(
                       child: TextField(
-                        controller: _richCtl,
+                        controller: _textCtl,
                         focusNode: _textFocus,
                         autofocus: true,
                         maxLines: null,
                         // Don't auto-unfocus when tapping the toolbar: that's how
-                        // style controls adjust the selected text WHILE editing.
+                        // style controls adjust the text WHILE editing.
                         // Canvas taps still commit explicitly (_onTapUp/_panStart);
                         // switching tools commits via focus loss.
                         onTapOutside: (_) {},
                         cursorColor: c.style.value.color,
-                        // The controller renders transparent per-run spans (the
-                        // painter draws the visible rich text). Disable strut so
-                        // line metrics follow the (mixed-size) glyphs like the
-                        // painter does.
-                        style: textStyleOf(c.style.value),
+                        // Glyphs are TRANSPARENT (the painter draws the visible
+                        // text in the real colour) at the real size/family, so the
+                        // caret/selection geometry matches the painted result and
+                        // commit causes zero shift. Disable strut to match.
+                        style: textStyleOf(
+                          c.style.value,
+                        ).copyWith(color: const Color(0x00000000)),
                         strutStyle: StrutStyle.disabled,
                         decoration: const InputDecoration(
                           isDense: true,
@@ -1308,7 +1313,14 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     controller: c,
                     onMove: _moveToolbar,
                     onPtEditingDone: () {
-                      if (_editingText) _textFocus.requestFocus();
+                      // Hand keyboard focus back after a toolbar number field
+                      // commits: to the inline text field if editing text, else
+                      // to the editor so tool shortcuts / Enter-export work again.
+                      if (_editingText) {
+                        _textFocus.requestFocus();
+                      } else {
+                        _focus.requestFocus();
+                      }
                     },
                     editorBindings: widget.editorBindings,
                   ),

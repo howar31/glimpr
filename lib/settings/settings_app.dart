@@ -892,10 +892,10 @@ class _SettingsAppState extends State<SettingsApp>
         ToolKind.text => 'Text',
         ToolKind.highlighter => 'Highlighter',
         ToolKind.step => 'Numbered step',
-        // The "paste" tool selects/edits pasted clipboard images; the paste
-        // ACTION is the Cmd-V "Paste image" command above. Labelled "Image" to
-        // avoid colliding with that command.
-        ToolKind.paste => 'Image',
+        // The "paste" slot is the universal SELECT tool (select / move / resize
+        // / delete any drawable); the paste ACTION is the Cmd-V "Paste image"
+        // command above.
+        ToolKind.paste => 'Select',
       };
 
   // A read-only, field-shaped box for reserved (fixed) keys, mirroring the

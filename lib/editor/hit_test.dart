@@ -33,8 +33,7 @@ bool _hits(Drawable d, Offset p) {
       return _distanceToSegment(p, d.start, d.end) <=
           _band(d.style.strokeWidth);
     case HighlighterDrawable():
-      return _distanceToSegment(p, d.start, d.end) <=
-          _band(d.style.strokeWidth * 5);
+      return _hitsPolyline(d.points, p, _band(d.style.strokeWidth * 5));
     case PenDrawable():
       return _hitsPolyline(d.points, p, _band(d.style.strokeWidth));
     case StepDrawable():

@@ -56,12 +56,12 @@ void main() {
     expect(m.end, const Offset(50, 40));
   });
 
-  test('highlighter bounds is the points bbox; move shifts both ends', () {
-    const d = HighlighterDrawable(Offset(5, 5), Offset(45, 35), style);
+  test('highlighter bounds is the points bbox; move shifts every point', () {
+    const d = HighlighterDrawable([Offset(5, 5), Offset(45, 35)], style);
     expect(d.bounds, const Rect.fromLTRB(5, 5, 45, 35));
     final m = d.moved(const Offset(-5, -5));
-    expect(m.start, const Offset(0, 0));
-    expect(m.end, const Offset(40, 30));
+    expect(m.points.first, const Offset(0, 0));
+    expect(m.points.last, const Offset(40, 30));
   });
 
   test(
@@ -97,19 +97,22 @@ void main() {
     expect(nextStepNumber(list), 4);
   });
 
-  test('text drawable carries position and concatenated text', () {
-    final d = TextDrawable.plain(const Offset(5, 6), 'hi', style);
+  test('text drawable carries position and text', () {
+    final d = TextDrawable(const Offset(5, 6), 'hi', style);
     expect(d.position, const Offset(5, 6));
     expect(d.text, 'hi');
     expect(d.moved(const Offset(1, 1)).bounds.topLeft, const Offset(6, 7));
   });
 
-  test('text drawable joins multiple runs into one string', () {
-    const d = TextDrawable(Offset(0, 0), [
-      TextRun('abc', Color(0xFFFF0000), 18),
-      TextRun('123', Color(0xFF0000FF), 28),
-    ], style);
-    expect(d.text, 'abc123');
-    expect(d.runs.length, 2);
+  test('text drawable carries its single style', () {
+    const d = TextDrawable(
+      Offset(0, 0),
+      'abc',
+      DrawStyle(fontSize: 28, fontFamily: 'Courier'),
+    );
+    expect(d.text, 'abc');
+    expect(d.style.fontSize, 28);
+    expect(d.style.fontFamily, 'Courier');
+    expect(d.withStyle(const DrawStyle(fontSize: 12)).style.fontSize, 12);
   });
 }

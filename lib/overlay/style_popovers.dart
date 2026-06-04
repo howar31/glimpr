@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../editor/color_math.dart';
 import '../editor/draw_style.dart';
+import '../theme/glimpr_theme.dart';
 
 // ignore_for_file: use_super_parameters
 
@@ -587,6 +588,14 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
+    // Resolve foreground colours from the system appearance, mirroring the
+    // toolbar's brightness-aware palette so the list reads on the glass in both
+    // themes (the popover lives in an overlay, outside the toolbar's theme).
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fgDim = dark ? Colors.white54 : const Color(0xFF64748B);
+    final border = dark ? Colors.white24 : Colors.black26;
+    const accent = GlimprTokens.accent;
     return SizedBox(
       width: 260,
       height: 380,
@@ -598,16 +607,26 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
             child: TextField(
               key: const ValueKey('font-search'),
               controller: _searchCtrl,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 8,
                   vertical: 8,
                 ),
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(color: border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: fgDim),
+                ),
                 hintText: 'Search fonts…',
+                hintStyle: TextStyle(color: fgDim, fontSize: 13),
               ),
-              style: const TextStyle(fontSize: 13),
+              cursorColor: fg,
+              style: TextStyle(fontSize: 13, color: fg),
             ),
           ),
           Expanded(
@@ -620,8 +639,10 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
                   fontFamily: null,
                   selected: widget.selected == null,
                   onTap: () => widget.onSelected(null),
+                  color: fg,
+                  accent: accent,
                 ),
-                const Divider(height: 1, thickness: 1),
+                Divider(height: 1, thickness: 1, color: border),
                 ...filtered.map(
                   (name) => _FontRow(
                     key: ValueKey('font-$name'),
@@ -629,6 +650,8 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
                     fontFamily: name,
                     selected: widget.selected == name,
                     onTap: () => widget.onSelected(name),
+                    color: fg,
+                    accent: accent,
                   ),
                 ),
               ],
@@ -647,12 +670,16 @@ class _FontRow extends StatelessWidget {
     required this.fontFamily,
     required this.selected,
     required this.onTap,
+    required this.color,
+    required this.accent,
   }) : super(key: key);
 
   final String name;
   final String? fontFamily;
   final bool selected;
   final VoidCallback onTap;
+  final Color color; // resolved foreground (brightness-aware)
+  final Color accent; // brand accent for the selected row + check
 
   @override
   Widget build(BuildContext context) {
@@ -665,11 +692,16 @@ class _FontRow extends StatelessWidget {
             Expanded(
               child: Text(
                 name,
-                style: TextStyle(fontFamily: fontFamily, fontSize: 14),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: fontFamily,
+                  fontSize: 14,
+                  color: selected ? accent : color,
+                ),
               ),
             ),
-            if (selected)
-              const Icon(Icons.check, size: 16, color: Color(0xFF007AFF)),
+            if (selected) Icon(Icons.check, size: 16, color: accent),
           ],
         ),
       ),

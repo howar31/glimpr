@@ -77,13 +77,15 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kEditorToolActionKey[ToolKind.pen]!:
       _b(PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5),
   kEditorToolActionKey[ToolKind.text]!:
-      _b(PhysicalKeyboardKey.digit6, LogicalKeyboardKey.digit6),
+      _b(PhysicalKeyboardKey.keyT, LogicalKeyboardKey.keyT),
   kEditorToolActionKey[ToolKind.highlighter]!:
-      _b(PhysicalKeyboardKey.digit7, LogicalKeyboardKey.digit7),
+      _b(PhysicalKeyboardKey.keyH, LogicalKeyboardKey.keyH),
   kEditorToolActionKey[ToolKind.step]!:
-      _b(PhysicalKeyboardKey.digit8, LogicalKeyboardKey.digit8),
+      _b(PhysicalKeyboardKey.keyS, LogicalKeyboardKey.keyS),
+  // The "paste" slot is the universal Select tool — V (the standard selection-
+  // tool key in design apps); ⌘V remains the paste-image action.
   kEditorToolActionKey[ToolKind.paste]!:
-      _b(PhysicalKeyboardKey.digit9, LogicalKeyboardKey.digit9),
+      _b(PhysicalKeyboardKey.keyV, LogicalKeyboardKey.keyV),
 };
 
 /// Keys reserved for fixed editor behavior — cannot be bound to an editor action
