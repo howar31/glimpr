@@ -8,6 +8,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
   private var loginChannel: FlutterMethodChannel?
+  private var appearanceObservation: NSKeyValueObservation?
   var overlayManager: OverlayManager?
 
   override func awakeFromNib() {
@@ -133,6 +134,24 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.orderFrontRegardless()
     self.alphaValue = 0
     self.ignoresMouseEvents = true
+
+    // Dock icon follows the system appearance: dark-glass tile in Dark Mode, the
+    // gradient-fill tile in Light Mode. The Dock icon is only visible while the
+    // settings window is open (the app is .accessory at rest), but applying it
+    // continuously means it is already correct the moment the icon appears.
+    updateAppIcon()
+    appearanceObservation = NSApp.observe(\.effectiveAppearance, options: []) {
+      [weak self] _, _ in
+      DispatchQueue.main.async { self?.updateAppIcon() }
+    }
+  }
+
+  /// Swap the running app's Dock icon to match the effective system appearance.
+  private func updateAppIcon() {
+    let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    if let icon = NSImage(named: isDark ? "AppIconDark" : "AppIconLight") {
+      NSApp.applicationIconImage = icon
+    }
   }
 
   /// Show the settings window on the user's CURRENT Space, in front. While it is
@@ -140,6 +159,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// menu-bar accessory when the window is closed (see hideSettings).
   func revealSettings() {
     NSApp.setActivationPolicy(.regular)
+    updateAppIcon()
     alphaValue = 1
     ignoresMouseEvents = false
     center()

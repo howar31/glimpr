@@ -12,9 +12,13 @@ final class StatusItemController: NSObject {
     self.onSettings = onSettings
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
-    item.button?.image = NSImage(
-      systemSymbolName: "camera.viewfinder", accessibilityDescription: "Glimpr")
-    item.button?.image?.isTemplate = true
+    // Brand Viewfinder mark as a template image: macOS tints it to match the
+    // menu-bar appearance (white on a dark bar, black on a light one). Falls back
+    // to the system viewfinder symbol if the asset is somehow unavailable.
+    let mark = NSImage(named: "StatusBarIcon")
+      ?? NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Glimpr")
+    mark?.isTemplate = true
+    item.button?.image = mark
 
     let menu = NSMenu()
     menu.addItem(menuItem(title: "Capture", action: #selector(capture), key: ""))

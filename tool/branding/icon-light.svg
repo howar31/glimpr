@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Glimpr app icon — LIGHT appearance variant.
+     Gradient-fill tile (spec alt) + white Viewfinder mark.
+     macOS padded icon grid: 824x824 body in a 1024 canvas, ~185 corner radius,
+     soft contact shadow, transparent margin. Mark = 58% of the body, centered.
+     Source of truth: design handoff "Glimpr Logo - Final (Viewfinder)". -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Tile background: linear-gradient(150deg, #22d3ee, #3b82f6 52%, #a78bfa) -->
+    <linearGradient id="bg" gradientUnits="objectBoundingBox"
+        x1="0.25" y1="0.067" x2="0.75" y2="0.933">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.52" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <!-- Top sheen: linear-gradient(180deg, rgba(255,255,255,.22), transparent 46%) -->
+    <linearGradient id="sheen" gradientUnits="objectBoundingBox"
+        x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="bodyClip">
+      <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
+    </clipPath>
+    <filter id="contactShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="22"
+          flood-color="#1e293b" flood-opacity="0.24"/>
+    </filter>
+    <!-- Soft depth shadow under the white mark so it reads on the bright tile. -->
+    <filter id="markShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14"
+          flood-color="#0b1220" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Base tile + contact shadow -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185"
+      fill="url(#bg)" filter="url(#contactShadow)"/>
+
+  <!-- Top sheen, clipped to the tile -->
+  <g clip-path="url(#bodyClip)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#sheen)"/>
+  </g>
+
+  <!-- Bright inner border highlight -->
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" ry="183.5"
+      fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="3"/>
+
+  <!-- Viewfinder mark (white) -->
+  <g filter="url(#markShadow)">
+    <g transform="translate(273.04 273.04) scale(4.97833)"
+        fill="none" stroke="#ffffff" stroke-width="8.5"
+        stroke-linecap="round" stroke-linejoin="round">
+      <path d="M36 18 H23 A5 5 0 0 0 18 23 V36"/>
+      <path d="M60 18 H73 A5 5 0 0 1 78 23 V36"/>
+      <path d="M78 60 V73 A5 5 0 0 1 73 78 H60"/>
+      <path d="M18 60 V73 A5 5 0 0 0 23 78 H36"/>
+    </g>
+    <path transform="translate(273.04 273.04) scale(4.97833)" fill="#ffffff"
+        d="M48 31 C49.7 43, 53 46.3, 65 48 C53 49.7, 49.7 53, 48 65
+           C46.3 53, 43 49.7, 31 48 C43 46.3, 46.3 43, 48 31 Z"/>
+  </g>
+</svg>

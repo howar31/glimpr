@@ -5,25 +5,144 @@ import 'glimpr_theme.dart';
 /// handoff's `components.jsx`. Each reads the active [GlimprTokens] via
 /// [GlimprTheme.of], so the same widget renders correctly in light or dark.
 
-/// The Glimpr wordmark — accent-gradient text in the display face.
+/// The Glimpr brand gradient (cyan → blue → violet), 135° top-left → bottom-right.
+/// Deliberately distinct from the Aurora UI accent ([GlimprTokens.accentGrad]) —
+/// the logo keeps its own identity across surfaces.
+const LinearGradient kGlimprLogoGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [Color(0xFF22D3EE), Color(0xFF3B82F6), Color(0xFFA78BFA)],
+  stops: [0.0, 0.52, 1.0],
+);
+
+/// The Glimpr wordmark — the leading "G" carries the brand gradient, the rest is
+/// solid foreground (white on dark, ink on light), per the locked logo spec.
 class Wordmark extends StatelessWidget {
-  const Wordmark({super.key, this.size = 19});
+  const Wordmark({super.key, this.size = 19, this.restColor});
   final double size;
+
+  /// Color of the "limpr" letters; defaults to the active foreground token.
+  final Color? restColor;
 
   @override
   Widget build(BuildContext context) {
-    return ShaderMask(
-      blendMode: BlendMode.srcIn,
-      shaderCallback: (rect) => GlimprTokens.accentGrad.createShader(rect),
-      child: Text(
-        'Glimpr',
-        style: GlimprType.displayStyle(
-          size,
-          800,
-          const Color(0xFFFFFFFF),
-          letterSpacing: size * -0.02,
+    final t = GlimprTheme.of(context);
+    final style = GlimprType.displayStyle(
+      size,
+      800,
+      restColor ?? t.fg1,
+      letterSpacing: size * -0.035,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (r) => kGlimprLogoGradient.createShader(r),
+          child: Text('G', style: style.copyWith(color: const Color(0xFFFFFFFF))),
         ),
-      ),
+        Text('limpr', style: style),
+      ],
+    );
+  }
+}
+
+/// The Viewfinder mark — four crop brackets around a capture spark. Painted in
+/// the brand gradient, or a solid [color] override. Drawn on the 96-unit design
+/// grid, framed to the content box (grid 12..84) so it fills [size] like the
+/// monochrome menu-bar asset.
+class GlimprMark extends StatelessWidget {
+  const GlimprMark({super.key, this.size = 26, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(size: Size.square(size), painter: _MarkPainter(color));
+}
+
+class _MarkPainter extends CustomPainter {
+  _MarkPainter(this.color);
+  final Color? color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 72.0;
+    canvas.save();
+    canvas.translate(-12 * s, -12 * s);
+    canvas.scale(s);
+
+    final brackets = Path()
+      ..moveTo(36, 18)
+      ..lineTo(23, 18)
+      ..arcToPoint(const Offset(18, 23),
+          radius: const Radius.circular(5), clockwise: false)
+      ..lineTo(18, 36)
+      ..moveTo(60, 18)
+      ..lineTo(73, 18)
+      ..arcToPoint(const Offset(78, 23),
+          radius: const Radius.circular(5), clockwise: true)
+      ..lineTo(78, 36)
+      ..moveTo(78, 60)
+      ..lineTo(78, 73)
+      ..arcToPoint(const Offset(73, 78),
+          radius: const Radius.circular(5), clockwise: true)
+      ..lineTo(60, 78)
+      ..moveTo(18, 60)
+      ..lineTo(18, 73)
+      ..arcToPoint(const Offset(23, 78),
+          radius: const Radius.circular(5), clockwise: false)
+      ..lineTo(36, 78);
+
+    final spark = Path()
+      ..moveTo(48, 31)
+      ..cubicTo(49.7, 43, 53, 46.3, 65, 48)
+      ..cubicTo(53, 49.7, 49.7, 53, 48, 65)
+      ..cubicTo(46.3, 53, 43, 49.7, 31, 48)
+      ..cubicTo(43, 46.3, 46.3, 43, 48, 31)
+      ..close();
+
+    const rect = Rect.fromLTRB(18, 18, 78, 78);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final fill = Paint()..style = PaintingStyle.fill;
+    if (color != null) {
+      stroke.color = color!;
+      fill.color = color!;
+    } else {
+      stroke.shader = kGlimprLogoGradient.createShader(rect);
+      fill.shader = kGlimprLogoGradient.createShader(rect);
+    }
+    canvas.drawPath(brackets, stroke);
+    canvas.drawPath(spark, fill);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_MarkPainter old) => old.color != color;
+}
+
+/// The full logo lockup — the Viewfinder mark beside the wordmark. Used in the
+/// settings sidebar header.
+class Lockup extends StatelessWidget {
+  const Lockup({super.key, this.markSize = 25, this.fontSize = 21});
+  final double markSize;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GlimprMark(size: markSize),
+        SizedBox(width: markSize * 0.34),
+        Wordmark(size: fontSize),
+      ],
     );
   }
 }

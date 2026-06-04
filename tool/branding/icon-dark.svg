@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Glimpr app icon — DARK appearance variant.
+     Dark glass tile (spec primary) + gradient Viewfinder mark.
+     macOS padded icon grid: 824x824 body in a 1024 canvas, ~185 corner radius,
+     soft contact shadow, transparent margin. Mark = 58% of the body, centered.
+     Source of truth: design handoff "Glimpr Logo - Final (Viewfinder)". -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Tile background: linear-gradient(158deg, #141d33, #0a0f1d 78%) -->
+    <linearGradient id="bg" gradientUnits="objectBoundingBox"
+        x1="0.313" y1="0.036" x2="0.687" y2="0.964">
+      <stop offset="0" stop-color="#141d33"/>
+      <stop offset="0.78" stop-color="#0a0f1d"/>
+      <stop offset="1" stop-color="#0a0f1d"/>
+    </linearGradient>
+    <!-- Brand gradient across the whole mark (single, user-space). -->
+    <linearGradient id="mark" gradientUnits="userSpaceOnUse"
+        x1="340" y1="340" x2="684" y2="684">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.52" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <!-- Cyan glow behind the mark: radial 60%x55% at 50% 32% of the body. -->
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse"
+        cx="512" cy="363.68" r="494"
+        gradientTransform="matrix(1 0 0 0.917 0 30.19)">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.20"/>
+      <stop offset="0.72" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Top inner highlight (inset 0 1px 0 rgba(255,255,255,.10)). -->
+    <linearGradient id="topHi" gradientUnits="objectBoundingBox"
+        x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.12" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="bodyClip">
+      <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
+    </clipPath>
+    <filter id="contactShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="22"
+          flood-color="#000000" flood-opacity="0.30"/>
+    </filter>
+    <filter id="markGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="24"
+          flood-color="#38bdf8" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <!-- Base tile + contact shadow -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185"
+      fill="url(#bg)" filter="url(#contactShadow)"/>
+
+  <!-- Glow + top highlight, clipped to the tile -->
+  <g clip-path="url(#bodyClip)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#topHi)"/>
+  </g>
+
+  <!-- Hairline border -->
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" ry="183.5"
+      fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="3"/>
+
+  <!-- Viewfinder mark -->
+  <g filter="url(#markGlow)">
+    <g transform="translate(273.04 273.04) scale(4.97833)"
+        fill="none" stroke="url(#mark)" stroke-width="8.5"
+        stroke-linecap="round" stroke-linejoin="round">
+      <path d="M36 18 H23 A5 5 0 0 0 18 23 V36"/>
+      <path d="M60 18 H73 A5 5 0 0 1 78 23 V36"/>
+      <path d="M78 60 V73 A5 5 0 0 1 73 78 H60"/>
+      <path d="M18 60 V73 A5 5 0 0 0 23 78 H36"/>
+    </g>
+    <path transform="translate(273.04 273.04) scale(4.97833)" fill="url(#mark)"
+        d="M48 31 C49.7 43, 53 46.3, 65 48 C53 49.7, 49.7 53, 48 65
+           C46.3 53, 43 49.7, 31 48 C43 46.3, 46.3 43, 48 31 Z"/>
+  </g>
+</svg>

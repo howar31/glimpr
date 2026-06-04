@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Glimpr Viewfinder mark — monochrome, for the menu-bar template image.
+     Solid black on transparent; macOS tints it per the menu-bar appearance when
+     loaded as a template image. Tight viewBox so it fills the status item. -->
+<svg width="72" height="72" viewBox="12 12 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000000" stroke-width="8.5"
+      stroke-linecap="round" stroke-linejoin="round">
+    <path d="M36 18 H23 A5 5 0 0 0 18 23 V36"/>
+    <path d="M60 18 H73 A5 5 0 0 1 78 23 V36"/>
+    <path d="M78 60 V73 A5 5 0 0 1 73 78 H60"/>
+    <path d="M18 60 V73 A5 5 0 0 0 23 78 H36"/>
+  </g>
+  <path fill="#000000" stroke="none"
+      d="M48 31 C49.7 43, 53 46.3, 65 48 C53 49.7, 49.7 53, 48 65
+         C46.3 53, 43 49.7, 31 48 C43 46.3, 46.3 43, 48 31 Z"/>
+</svg>

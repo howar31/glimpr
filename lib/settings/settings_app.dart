@@ -215,7 +215,7 @@ class _SettingsAppState extends State<SettingsApp>
           const SizedBox(height: _kTitleBarInset),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
-            child: const Wordmark(size: 19),
+            child: const Lockup(),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
