@@ -14,6 +14,31 @@ class SnapWindow {
   String get label => title.isNotEmpty ? title : app;
 }
 
+/// The frontmost focused window, as resolved natively (display-local logical
+/// rect on [displayId], top-left origin). Lives here (next to [SnapWindow]) so
+/// `capture_bridge.dart` — which already imports this file — can return it
+/// without importing `direct_capture.dart` (which would create a cycle).
+class FocusedWindowInfo {
+  const FocusedWindowInfo({
+    required this.displayId,
+    required this.rect,
+    required this.title,
+    required this.app,
+  });
+  final int displayId;
+  final Rect rect;
+  final String title;
+  final String app;
+
+  factory FocusedWindowInfo.fromMap(Map<dynamic, dynamic> m) => FocusedWindowInfo(
+        displayId: (m['displayId'] as num).toInt(),
+        rect: Rect.fromLTWH((m['x'] as num).toDouble(), (m['y'] as num).toDouble(),
+            (m['w'] as num).toDouble(), (m['h'] as num).toDouble()),
+        title: (m['title'] as String?) ?? '',
+        app: (m['app'] as String?) ?? '',
+      );
+}
+
 /// One frozen display returned by the native capture channel.
 /// [left/top/width/height] are LOGICAL global-desktop coords; [pngBytes] is NATIVE resolution.
 class CapturedDisplay {
