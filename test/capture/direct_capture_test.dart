@@ -4,6 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/capture/captured_display.dart';
 import 'package:glimpr/capture/direct_capture.dart';
 import 'package:glimpr/capture/last_region.dart';
+import 'package:glimpr/output/deliver.dart';
+import 'package:glimpr/settings/settings.dart';
+import 'package:glimpr/settings/settings_store.dart';
+
+class _FakeStore implements SettingsStore {
+  final Map<String, Object> _m = {};
+  @override
+  Future<String?> getString(String k) async => _m[k] as String?;
+  @override
+  Future<void> setString(String k, String v) async => _m[k] = v;
+  @override
+  Future<bool?> getBool(String k) async => _m[k] as bool?;
+  @override
+  Future<void> setBool(String k, bool v) async => _m[k] = v;
+  @override
+  Future<int?> getInt(String k) async => _m[k] as int?;
+  @override
+  Future<void> setInt(String k, int v) async => _m[k] = v;
+  @override
+  Future<void> remove(String k) async => _m.remove(k);
+}
 
 CapturedDisplay _disp(int id, {bool cursor = false, double w = 1920, double h = 1080}) =>
     CapturedDisplay(
@@ -77,6 +98,86 @@ void main() {
       final t = resolveLastRegionTarget([_disp(3)],
           const LastRegion(displayId: 99, rect: Rect.fromLTWH(0, 0, 5, 5)));
       expect(t, isNull);
+    });
+  });
+
+  group('DirectCapture orchestrator', () {
+    late _FakeStore store;
+    late LastRegionStore regionStore;
+    late List<CaptureTarget> delivered;
+    late int shutters;
+    late int completes;
+    late List<String> errors;
+
+    DirectCapture build({
+      required List<CapturedDisplay> frames,
+      FocusedWindowInfo? window,
+    }) {
+      store = _FakeStore();
+      regionStore = LastRegionStore(store);
+      delivered = [];
+      shutters = 0;
+      completes = 0;
+      errors = [];
+      return DirectCapture(
+        captureFrames: () async => frames,
+        focusedWindow: () async => window,
+        settings: Settings(store),
+        regionStore: regionStore,
+        deliver: (t, cap) async {
+          delivered.add(t);
+          return const DeliveryResult(
+              savedPath: '/tmp/x.png', copiedToClipboard: true, soundPlayed: false);
+        },
+        shutter: () => shutters++,
+        complete: () => completes++,
+        showError: (m) => errors.add(m),
+      );
+    }
+
+    test('screen(): delivers the cursor display, sounds, records full region',
+        () async {
+      final dc = build(frames: [_disp(1), _disp(2, cursor: true)]);
+      await dc.screen();
+      expect(delivered.single.display.displayId, 2);
+      expect(delivered.single.selectionLogical, isNull);
+      expect(shutters, 1);
+      expect(completes, 1);
+      final saved = await regionStore.load();
+      expect(saved!.displayId, 2);
+      expect(saved.rect, const Rect.fromLTWH(0, 0, 1920, 1080));
+    });
+
+    test('window(): delivers the focused window rect + records it', () async {
+      final dc = build(
+        frames: [_disp(1, cursor: true), _disp(2)],
+        window: const FocusedWindowInfo(
+            displayId: 2,
+            rect: Rect.fromLTWH(5, 6, 100, 80),
+            title: 'W',
+            app: 'A'),
+      );
+      await dc.window();
+      expect(delivered.single.display.displayId, 2);
+      expect(delivered.single.selectionLogical, const Rect.fromLTWH(5, 6, 100, 80));
+      final saved = await regionStore.load();
+      expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
+    });
+
+    test('lastRegion(): no stored region -> no delivery, no sound', () async {
+      final dc = build(frames: [_disp(1, cursor: true)]);
+      await dc.lastRegion();
+      expect(delivered, isEmpty);
+      expect(shutters, 0);
+    });
+
+    test('lastRegion(): replays a stored rect', () async {
+      final dc = build(frames: [_disp(1, cursor: true), _disp(2)]);
+      await regionStore.save(
+          const LastRegion(displayId: 2, rect: Rect.fromLTWH(7, 8, 200, 150)));
+      await dc.lastRegion();
+      expect(delivered.single.display.displayId, 2);
+      expect(delivered.single.selectionLogical, const Rect.fromLTWH(7, 8, 200, 150));
     });
   });
 }
