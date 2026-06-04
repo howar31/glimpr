@@ -59,17 +59,14 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   void initState() {
     super.initState();
-    // Load persisted per-tool styles so the first capture resumes from the last
-    // session's style choices. A capture that begins before this completes simply
-    // starts from defaults; the next capture will have the loaded map.
-    try {
-      ToolStyleStore(Settings.instance.store).load().then((m) {
-        if (!mounted) return;
-        _toolStyles..clear()..addAll(m);
-      }).catchError((_) {/* async failure — start from defaults */});
-    } catch (_) {/* no platform store in test environments — start from defaults */}
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d) async {
+        // Reseed per-tool styles from disk on EVERY capture so a Settings
+        // "Reset all tool styles" (or an edit made on another engine) takes
+        // effect on THIS capture — not only after a restart. Kicked off now and
+        // awaited just before the controller is built, so its latency hides
+        // behind the image decode below (no added reveal delay).
+        final stylesFuture = _loadToolStyles();
         // Warm-decode the image both for the on-screen Image.memory and for the
         // export ui.Image. The engine is already warm (window on-screen at
         // alpha 0), so these resolve; bounded so a hiccup can't stall the reveal.
@@ -89,10 +86,20 @@ class _OverlayAppState extends State<OverlayApp> {
         } catch (_) {
           // If decode fails the export will be skipped; the overlay still shows.
         }
+        final loadedStyles = await stylesFuture;
         if (!mounted) return;
         _detachShared();
         _editor?.dispose();
         _frozen?.dispose();
+        // Reseed BEFORE building the controller so the freshly-loaded styles
+        // (incl. a reset that emptied the map) seed this capture's initial tool
+        // style. The map instance is shared with the controller, so mutate it in
+        // place. Null = store unavailable/error -> keep the current in-memory map.
+        if (loadedStyles != null) {
+          _toolStyles
+            ..clear()
+            ..addAll(loadedStyles);
+        }
         setState(() {
           _frozen = frozen;
           _editor = EditorController(toolStyles: _toolStyles);
@@ -130,6 +137,17 @@ class _OverlayAppState extends State<OverlayApp> {
       },
       onEditorState: _applyRemoteEditorState,
     );
+  }
+
+  /// Loads the persisted per-tool styles, or null when the store is unavailable
+  /// (e.g. a test environment with no platform binding) or errors — callers keep
+  /// the current in-memory map in that case.
+  Future<Map<ToolKind, DrawStyle>?> _loadToolStyles() async {
+    try {
+      return await ToolStyleStore(Settings.instance.store).load();
+    } catch (_) {
+      return null;
+    }
   }
 
   void _resetState() {
