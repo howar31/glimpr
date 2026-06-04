@@ -61,6 +61,27 @@ class EditorController {
   void setStrokeWidth(double w) =>
       _updateStyle(style.value.copyWith(strokeWidth: w));
   void setFontSize(double s) => _updateStyle(style.value.copyWith(fontSize: s));
+  void setFontFamily(String? f) =>
+      _updateStyle(style.value.copyWith(fontFamily: f));
+
+  // copyWith cannot clear fontFamily back to null (null means "keep existing"),
+  // so we rebuild the style explicitly without a fontFamily.
+  void resetFontFamily() => _updateStyle(DrawStyle(
+        color: style.value.color,
+        strokeWidth: style.value.strokeWidth,
+        fontSize: style.value.fontSize,
+      ));
+
+  /// Restore [t] to the factory default style and make it active if it is the
+  /// current tool. Clears the per-tool memory entry.
+  void resetTool(ToolKind t) {
+    const def = DrawStyle();
+    toolStyles[t] = def;
+    if (tool.value == t) {
+      style.value = def;
+      _restyleSelected();
+    }
+  }
 
   void _updateStyle(DrawStyle s) {
     style.value = s;
