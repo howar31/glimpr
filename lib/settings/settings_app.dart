@@ -532,7 +532,6 @@ class _SettingsAppState extends State<SettingsApp>
       const SectionLabel('Sound', icon: Icons.volume_up_outlined),
       GlassCard.rows([
         SettingRow(
-          icon: Icons.volume_up_outlined,
           title: 'Shutter',
           hint: 'Plays the instant a capture is taken',
           trailing: GlassToggle(
