@@ -65,8 +65,12 @@ CaptureTarget? resolveLastRegionTarget(
 /// Decodes the chosen frame and delivers it with no annotations.
 Future<DeliveryResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) async {
   final codec = await ui.instantiateImageCodec(t.display.pngBytes);
-  final image = (await codec.getNextFrame()).image;
-  codec.dispose();
+  final ui.Image image;
+  try {
+    image = (await codec.getNextFrame()).image;
+  } finally {
+    codec.dispose(); // release the decoder even if getNextFrame throws
+  }
   try {
     return await exportAnnotated(
       display: t.display,

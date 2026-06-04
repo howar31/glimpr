@@ -22,7 +22,9 @@ final class CaptureChannel {
       case "beginCapture": self?.capture.triggerCapture(); result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
       case "captureFrames":
-        Task {
+        // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
+        // and the channel reply must land on the platform (main) thread.
+        Task { @MainActor in
           do {
             let frames = try await self?.capture.captureFrames() ?? []
             result(frames)
