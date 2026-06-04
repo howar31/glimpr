@@ -40,10 +40,12 @@ CapturedDisplay _disp(int id, {bool cursor = false, double w = 1920, double h = 
 
 void main() {
   group('resolveScreenTarget', () {
-    test('picks the cursor display', () {
+    test('picks the cursor display, labelled DISPLAY', () {
       final t = resolveScreenTarget([_disp(1), _disp(2, cursor: true)]);
       expect(t!.display.displayId, 2);
       expect(t.selectionLogical, isNull);
+      expect(t.windowTitle, 'DISPLAY');
+      expect(t.appName, 'DISPLAY');
     });
     test('falls back to the first display when none is the cursor display', () {
       final t = resolveScreenTarget([_disp(5), _disp(6)]);
@@ -85,11 +87,13 @@ void main() {
   });
 
   group('resolveLastRegionTarget', () {
-    test('crops the stored rect on the stored display', () {
+    test('crops the stored rect on the stored display, labelled LAST', () {
       final t = resolveLastRegionTarget([_disp(3), _disp(4)],
           const LastRegion(displayId: 4, rect: Rect.fromLTWH(1, 2, 300, 200)));
       expect(t!.display.displayId, 4);
       expect(t.selectionLogical, const Rect.fromLTWH(1, 2, 300, 200));
+      expect(t.windowTitle, 'LAST');
+      expect(t.appName, 'LAST');
     });
     test('null region -> null (no-op)', () {
       expect(resolveLastRegionTarget([_disp(3)], null), isNull);

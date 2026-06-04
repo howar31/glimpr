@@ -24,11 +24,20 @@ class CaptureTarget {
   final String? appName;
 }
 
-/// The display under the cursor (whole display). Null when no frames.
+/// Filename labels substituted for the {window}/{app} tokens when a capture has
+/// no real window context, so the saved name is meaningful instead of blank.
+const kDisplayCaptureLabel = 'DISPLAY';
+const kLastRegionCaptureLabel = 'LAST';
+
+/// The display under the cursor (whole display). Null when no frames. Labelled
+/// "DISPLAY" so the filename's window/app tokens read sensibly.
 CaptureTarget? resolveScreenTarget(List<CapturedDisplay> frames) {
   if (frames.isEmpty) return null;
   final d = frames.firstWhere((f) => f.isCursorDisplay, orElse: () => frames.first);
-  return CaptureTarget(display: d);
+  return CaptureTarget(
+      display: d,
+      windowTitle: kDisplayCaptureLabel,
+      appName: kDisplayCaptureLabel);
 }
 
 /// The focused window's rect on its display. Falls back to [resolveScreenTarget]
@@ -56,7 +65,11 @@ CaptureTarget? resolveLastRegionTarget(
   if (region == null) return null;
   for (final f in frames) {
     if (f.displayId == region.displayId) {
-      return CaptureTarget(display: f, selectionLogical: region.rect);
+      return CaptureTarget(
+          display: f,
+          selectionLogical: region.rect,
+          windowTitle: kLastRegionCaptureLabel,
+          appName: kLastRegionCaptureLabel);
     }
   }
   return null;
