@@ -31,6 +31,8 @@ final class CaptureChannel {
               code: "capture_failed", message: "\(error)", details: nil))
           }
         }
+      case "focusedWindow":
+        result(ScreenCapturer.focusedWindow())
       default: result(FlutterMethodNotImplemented)
       }
     }

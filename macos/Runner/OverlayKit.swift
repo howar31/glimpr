@@ -155,6 +155,63 @@ final class ScreenCapturer {
     return out
   }
 
+  /// The display whose bounds overlap [r] the most, or nil. CGWindowBounds and
+  /// CGDisplayBounds are both CG global top-left, so they compare directly.
+  static func displayForRect(_ r: CGRect) -> CGDirectDisplayID? {
+    var best: CGDirectDisplayID?
+    var bestArea: CGFloat = 0
+    for screen in NSScreen.screens {
+      guard let id = screenNumber(screen) else { continue }
+      let inter = r.intersection(CGDisplayBounds(id))
+      let area = inter.isNull ? 0 : inter.width * inter.height
+      if area > bestArea { bestArea = area; best = id }
+    }
+    return best
+  }
+
+  /// The frontmost FOCUSED window (frontmost app's front on-screen window) as a
+  /// display-local logical rect, mirroring snappableWindows' mapping. Returns the
+  /// dict { displayId, x, y, w, h, title, app } or nil if there is no such window.
+  static func focusedWindow() -> [String: Any]? {
+    guard let frontPid =
+            NSWorkspace.shared.frontmostApplication?.processIdentifier,
+          let infos = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
+    else { return nil }
+    for w in infos { // front-to-back
+      guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
+            layer == 0,
+            let owner = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+            owner == frontPid,
+            let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
+            alpha > 0.05,
+            let b = w[kCGWindowBounds as String] as? [String: Any],
+            let x = (b["X"] as? NSNumber)?.doubleValue,
+            let y = (b["Y"] as? NSNumber)?.doubleValue,
+            let ww = (b["Width"] as? NSNumber)?.doubleValue,
+            let hh = (b["Height"] as? NSNumber)?.doubleValue
+      else { continue }
+      if ww < 40 || hh < 40 { continue }
+      let r = CGRect(x: x, y: y, width: ww, height: hh)
+      guard let displayID = displayForRect(r) else { continue }
+      let dispBounds = CGDisplayBounds(displayID)
+      let inter = r.intersection(dispBounds)
+      if inter.isNull || inter.width < 1 || inter.height < 1 { continue }
+      let title = (w[kCGWindowName as String] as? String) ?? ""
+      let app = (w[kCGWindowOwnerName as String] as? String) ?? ""
+      return [
+        "displayId": Int(displayID),
+        "x": Double(inter.minX - dispBounds.minX),
+        "y": Double(inter.minY - dispBounds.minY),
+        "w": Double(inter.width),
+        "h": Double(inter.height),
+        "title": title,
+        "app": app,
+      ]
+    }
+    return nil
+  }
+
   static func scaleFactor(for displayID: CGDirectDisplayID) -> CGFloat {
     for screen in NSScreen.screens {
       if let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
