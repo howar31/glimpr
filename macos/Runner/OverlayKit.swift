@@ -272,6 +272,7 @@ final class OverlayManager {
     let overlay: FlutterMethodChannel   // native -> Dart (onCaptureReady)
     let role: FlutterMethodChannel      // retained: native -> Dart role handler
     let control: FlutterMethodChannel   // retained: Dart -> native control handler
+    let fonts: FlutterMethodChannel     // retained: system font families enumerator
   }
   private var units: [CGDirectDisplayID: Unit] = [:]
   private var pendingShow: Set<CGDirectDisplayID> = []
@@ -448,6 +449,15 @@ final class OverlayManager {
       }
       let overlay = FlutterMethodChannel(name: "glimpr/overlay", binaryMessenger: msgr)
 
+      let fonts = FlutterMethodChannel(name: "glimpr/fonts", binaryMessenger: msgr)
+      fonts.setMethodCallHandler { call, result in
+        if call.method == "availableFamilies" {
+          result(NSFontManager.shared.availableFontFamilies.sorted())
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
       let window = OverlayWindow(screen: screen)
       // Warm the engine NOW: a FlutterView only realizes its Metal surface and
       // runs its implicit engine's main() once its view enters an on-screen
@@ -463,7 +473,7 @@ final class OverlayManager {
       window.alphaValue = 0
       window.ignoresMouseEvents = true
 
-      return Unit(window: window, engine: vc.engine, vc: vc, overlay: overlay, role: role, control: control)
+      return Unit(window: window, engine: vc.engine, vc: vc, overlay: overlay, role: role, control: control, fonts: fonts)
   }
 
   /// Add/remove warm overlay units so there is exactly one per CURRENT display.
