@@ -2,10 +2,14 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../editor/font_bridge.dart';
 import '../editor/tool_meta.dart';
+import '../editor/tool_style_store.dart';
+import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../theme/glimpr_theme.dart';
+import 'style_popovers.dart';
 
 /// Draggable bottom toolbar: a main tool row with a contextual options row
 /// below it. The tool row is the Column's first (top-anchored) child so the
@@ -261,17 +265,184 @@ class _Bar extends StatelessWidget {
   }
 }
 
+/// Which contextual popover (if any) is currently open above the toolbar.
+enum _OpenPopover { none, color, font }
+
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
 /// font size (text only). Hidden for the Crop tool.
-class _OptionsRow extends StatelessWidget {
+///
+/// Beyond the always-visible quick controls (preset colour swatches, the three
+/// quick stroke buttons, the font-SIZE field) this row hosts three richer
+/// controls: a continuous stroke slider (stroke tools), a custom-colour "+"
+/// swatch that opens a [ColorPickerPopover], and a font-FAMILY button (Text
+/// tool only) that opens a [FontPickerPopover]. A "reset this tool" icon
+/// restores the active tool's factory default style.
+///
+/// Popover hosting: at most one popover is open at a time; opening one closes
+/// the other; a popover dismisses on outside-tap (a full-screen barrier) and on
+/// any tool switch. The popover renders ABOVE the floating toolbar via an
+/// [OverlayEntry] anchored to its trigger with a [CompositedTransformFollower].
+/// All async work (recent colours, font families) runs only when a popover is
+/// OPENED (on tap) — never at build time — so a plain build needs neither the
+/// platform channel nor the settings store.
+class _OptionsRow extends StatefulWidget {
   final EditorController controller;
   final VoidCallback onPtEditingDone;
   const _OptionsRow({required this.controller, required this.onPtEditingDone});
 
   @override
+  State<_OptionsRow> createState() => _OptionsRowState();
+}
+
+class _OptionsRowState extends State<_OptionsRow> {
+  // Anchors for the two popovers (custom-colour "+" swatch and font button).
+  final _colorLink = LayerLink();
+  final _fontLink = LayerLink();
+
+  OverlayEntry? _entry;
+  _OpenPopover _open = _OpenPopover.none;
+
+  @override
+  void initState() {
+    super.initState();
+    // Switching tools must dismiss any open popover.
+    widget.controller.tool.addListener(_onToolChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.tool.removeListener(_onToolChanged);
+    _removeEntry();
+    super.dispose();
+  }
+
+  void _onToolChanged() => _closePopover();
+
+  void _removeEntry() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  void _closePopover() {
+    if (_entry == null) return;
+    _removeEntry();
+    _open = _OpenPopover.none;
+  }
+
+  EditorController get _c => widget.controller;
+
+  // --- popover openers (async work happens HERE, on tap, not at build) -------
+
+  Future<void> _openColorPopover() async {
+    // Toggle off if already open; ensure only one popover at a time.
+    if (_open == _OpenPopover.color) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final recents =
+        await ToolStyleStore(Settings.instance.store).loadRecentColors();
+    if (!mounted) return;
+    _showPopover(
+      _OpenPopover.color,
+      _colorLink,
+      width: 240,
+      child: ColorPickerPopover(
+        color: _c.style.value.color,
+        recents: recents,
+        onChanged: _c.setColor,
+        onCommit: (color) => ToolStyleStore(Settings.instance.store)
+            .pushRecentColor(color.toARGB32()),
+      ),
+    );
+  }
+
+  Future<void> _openFontPopover() async {
+    if (_open == _OpenPopover.font) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final families = await FontBridge().availableFamilies();
+    if (!mounted) return;
+    _showPopover(
+      _OpenPopover.font,
+      _fontLink,
+      width: 260,
+      child: FontPickerPopover(
+        families: families,
+        selected: _c.style.value.fontFamily,
+        onSelected: (name) {
+          if (name == null) {
+            _c.resetFontFamily();
+          } else {
+            _c.setFontFamily(name);
+          }
+        },
+      ),
+    );
+  }
+
+  /// Inserts the [OverlayEntry] that hosts [child] above the toolbar, anchored
+  /// to [link] and dismissed by a full-screen outside-tap barrier.
+  void _showPopover(
+    _OpenPopover which,
+    LayerLink link, {
+    required double width,
+    required Widget child,
+  }) {
+    final palette = _ToolbarTheme.of(context);
+    final overlay = Overlay.of(context);
+    _entry = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          // Outside-tap barrier — fills the whole overlay and dismisses.
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _closePopover,
+            ),
+          ),
+          // The popover, anchored just above the trigger (followerAnchor
+          // bottom-left -> targetAnchor top-left), so it grows UPWARD.
+          CompositedTransformFollower(
+            link: link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.topLeft,
+            followerAnchor: Alignment.bottomLeft,
+            offset: const Offset(0, -8),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: width),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: palette.glassTint,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: palette.glassBorder, width: 0.5),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x66000000), blurRadius: 16),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_entry!);
+    _open = which;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ToolKind>(
-      valueListenable: controller.tool,
+      valueListenable: _c.tool,
       builder: (_, tool, _) {
         // Tools that carry a color (all vector draw tools; not crop/raster).
         const colorTools = {
@@ -297,28 +468,156 @@ class _OptionsRow extends StatelessWidget {
         final showsWidth = widthTools.contains(tool);
         // Font size = glyph size for text, badge radius for the numbered step.
         final showsFont = tool == ToolKind.text || tool == ToolKind.step;
+        // The font-FAMILY button is Text-only (Step has no editable family).
+        final showsFontFamily = tool == ToolKind.text;
         return _Bar(
           child: ValueListenableBuilder<DrawStyle>(
-            valueListenable: controller.style,
+            valueListenable: _c.style,
             builder: (_, style, _) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final c in kColorPresets)
-                  _ColorSwatch(controller, style, c),
+                  _ColorSwatch(_c, style, c),
+                // Custom-colour "+" swatch — opens the HSV picker.
+                CompositedTransformTarget(
+                  link: _colorLink,
+                  child: _CustomColorSwatch(onTap: _openColorPopover),
+                ),
                 if (showsWidth) ...[
                   const SizedBox(width: 10),
                   for (final w in kStrokeWidths)
-                    _WidthSwatch(controller, style, w),
+                    _WidthSwatch(_c, style, w),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 110,
+                    child: Slider(
+                      key: const ValueKey('stroke-slider'),
+                      min: kStrokeMin,
+                      max: kStrokeMax,
+                      value: style.strokeWidth.clamp(kStrokeMin, kStrokeMax),
+                      onChanged: _c.setStrokeWidth,
+                    ),
+                  ),
                 ],
                 if (showsFont) ...[
                   const SizedBox(width: 10),
-                  _FontControl(controller, onPtEditingDone),
+                  _FontControl(_c, widget.onPtEditingDone),
                 ],
+                if (showsFontFamily) ...[
+                  const SizedBox(width: 8),
+                  CompositedTransformTarget(
+                    link: _fontLink,
+                    child: _FontFamilyButton(
+                      key: const ValueKey('font-button'),
+                      label: style.fontFamily ?? 'System',
+                      onTap: _openFontPopover,
+                    ),
+                  ),
+                ],
+                // Reset the active tool's style to the factory default.
+                const SizedBox(width: 6),
+                _ResetToolButton(
+                  key: const ValueKey('reset-tool'),
+                  onTap: () => _c.resetTool(_c.tool.value),
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// A small "+" swatch (rainbow gradient with a centred plus) that opens the
+/// bespoke HSV colour picker for a fully custom colour.
+class _CustomColorSwatch extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CustomColorSwatch({required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 18,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const SweepGradient(
+            colors: [
+              Color(0xFFFF0000),
+              Color(0xFFFFFF00),
+              Color(0xFF00FF00),
+              Color(0xFF00FFFF),
+              Color(0xFF0000FF),
+              Color(0xFFFF00FF),
+              Color(0xFFFF0000),
+            ],
+          ),
+          border: Border.all(color: p.swatchUnselectedBorder),
+        ),
+        child: Icon(Icons.add, size: 12, color: p.fg),
+      ),
+    );
+  }
+}
+
+/// A compact pill showing the current font family; tapping opens the font
+/// picker popover. Text-tool only.
+class _FontFamilyButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _FontFamilyButton({super.key, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 110),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: p.swatchUnselectedBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.fg, fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 16, color: p.fgFaint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Reset-this-tool icon: restores the active tool's factory default style.
+class _ResetToolButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ResetToolButton({super.key, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Tooltip(
+        message: 'Reset this tool',
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(Icons.restart_alt, size: 18, color: p.fgFaint),
+        ),
+      ),
     );
   }
 }
