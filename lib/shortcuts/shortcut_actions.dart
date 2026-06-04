@@ -4,6 +4,9 @@ import 'hotkey_binding.dart';
 
 // Action keys (naming: <scope>.<camelCaseName>).
 const kCaptureAreaKey = 'global.captureArea';
+const kCaptureScreenKey = 'global.captureScreen';
+const kCaptureWindowKey = 'global.captureWindow';
+const kCaptureLastRegionKey = 'global.captureLastRegion';
 
 // Editor command keys.
 const kEditorUndoKey = 'editor.undo';
@@ -39,6 +42,12 @@ HotkeyBinding _b(
 /// wired in Phase 4.1b). Mirrors the current hardcoded keys in editor_canvas.
 final Map<String, HotkeyBinding> kDefaultBindings = {
   kCaptureAreaKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  kCaptureScreenKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  kCaptureWindowKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  kCaptureLastRegionKey: _b(PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   // Editor commands
   kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
@@ -105,6 +114,21 @@ const kGlobalActions = <GlobalAction>[
     actionKey: kCaptureAreaKey,
     label: 'Capture',
     hint: 'Start a screen capture',
+  ),
+  GlobalAction(
+    actionKey: kCaptureScreenKey,
+    label: 'Capture Display',
+    hint: 'Capture the display under the cursor',
+  ),
+  GlobalAction(
+    actionKey: kCaptureWindowKey,
+    label: 'Capture Window',
+    hint: 'Capture the focused window',
+  ),
+  GlobalAction(
+    actionKey: kCaptureLastRegionKey,
+    label: 'Capture Last Region',
+    hint: 'Repeat the last capture region',
   ),
 ];
 
