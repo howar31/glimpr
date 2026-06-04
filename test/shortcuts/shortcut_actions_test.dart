@@ -16,7 +16,12 @@ void main() {
     expect(b.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
   });
 
-  test('global registry contains only captureArea this slice', () {
-    expect(kGlobalActions.map((a) => a.actionKey), [kCaptureAreaKey]);
+  test('global registry contains the 4 global capture actions', () {
+    expect(kGlobalActions.map((a) => a.actionKey), [
+      kCaptureAreaKey,
+      kCaptureScreenKey,
+      kCaptureWindowKey,
+      kCaptureLastRegionKey,
+    ]);
   });
 }

@@ -42,7 +42,11 @@ Future<void> _openShortcuts(WidgetTester tester, Settings settings) async {
 final _globalCard = find.byType(GlassCard).first;
 Finder _inGlobal(Finder matching) =>
     find.descendant(of: _globalCard, matching: matching);
-final _globalRecorder = _inGlobal(find.byType(HotkeyRecorderField));
+// The global card now has 4 rows (captureArea + the 3 Phase-4 modes). Tests
+// that probe the interaction mechanics only need one representative row; we
+// target the first one (captureArea / ⌘⌥1) so they remain stable as new
+// global actions are added.
+final _globalRecorder = _inGlobal(find.byType(HotkeyRecorderField)).first;
 
 // The Editor section now sits between the Global card and the Apply/Revert
 // footer, pushing the footer below the test viewport. Scroll it back into view
@@ -64,10 +68,12 @@ void main() {
     expect(find.text('Capture'), findsOneWidget);
     // Default ⌘⌥1 renders three key caps (two modifiers + the digit). The
     // modifier glyphs are platform-dependent; the digit '1' is not, so assert on
-    // it (and on the cap count) for a host-platform-stable check. Scope to the
-    // Global card: the Editor section also has a bare '1' (the Rectangle tool).
+    // it for a host-platform-stable check. Scope to the Global card: the Editor
+    // section also has a bare '1' (the Rectangle tool).
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(3));
+    // The global card now has 4 rows (captureArea + 3 Phase-4 modes), each with
+    // 3 caps (⌘⌥ modifier pair + one digit) = 12 caps total.
+    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(12));
   });
 
   testWidgets('Editor section renders its command + tool rows', (tester) async {
@@ -156,14 +162,13 @@ void main() {
     // and its tooltip is suppressed everywhere (global + editor rows alike).
     expect(find.byTooltip('Reset to default'), findsNothing);
     // Each Reset IconButton is dimmed to 0.25 opacity at default. The global
-    // card has exactly one binding row, so scope the opacity check there.
+    // card has 4 binding rows; target the first one (captureArea) specifically.
     final globalResetOpacity = _inGlobal(
       find.ancestor(
         of: find.byIcon(Icons.restart_alt),
         matching: find.byType(Opacity),
       ),
-    );
-    expect(globalResetOpacity, findsOneWidget);
+    ).first;
     expect(tester.widget<Opacity>(globalResetOpacity).opacity, 0.25);
 
     // Record ⌘G on the global capture row => it is now off-default.
@@ -212,10 +217,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Back to default => clean => Apply hidden (footer is empty), ⌘⌥1 shown again
-    // (two modifiers + the digit '1').
+    // (two modifiers + the digit '1'; all 4 global rows back to their defaults).
     expect(find.text('Apply'), findsNothing);
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(3));
+    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(12));
   });
 
   testWidgets('clearing during recording disables the global hotkey',
@@ -231,9 +236,12 @@ void main() {
 
     // Unbound => muted "Disabled" text (NOT a pressable cap); null is valid for a
     // global binding (= disabled), so the draft is dirty + valid and Apply shows.
-    // Scope the no-cap assertion to the global card (the editor rows have caps).
-    expect(_inGlobal(find.byType(KeyCap)), findsNothing);
+    // The other 3 global rows still have their default caps; only the cleared row
+    // (captureArea) shows "Disabled". Find the recorder widget itself and check
+    // that no KeyCap lives inside its parent row.
     expect(find.text('Disabled'), findsOneWidget);
+    // The cleared recorder field contains no KeyCap (confirmed by no '1' digit cap).
+    expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsNothing);
     // Apply lives in the footer below the Editor section — scroll it into view.
     await _scrollToFooter(tester);
     expect(find.text('Apply'), findsOneWidget);

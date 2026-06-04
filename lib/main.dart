@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'capture/capture_bridge.dart';
+import 'capture/direct_capture.dart';
 import 'overlay/overlay_app.dart';
 import 'settings/settings.dart';
 import 'settings/settings_app.dart';
@@ -25,11 +26,21 @@ Future<void> main() async {
   // registration failure cannot block the app; the menu-bar Capture still works.
   final shortcutStore = ShortcutStore(Settings.instance.store);
   final bindings = await shortcutStore.all();
+  final direct = DirectCapture();
   final hotkeyService = HotkeyService(
     registrar: HotkeyManagerRegistrar(),
     bindings: bindings,
     onAction: (actionKey) {
-      if (actionKey == kCaptureAreaKey) CaptureBridge().beginCapture();
+      switch (actionKey) {
+        case kCaptureAreaKey:
+          CaptureBridge().beginCapture();
+        case kCaptureScreenKey:
+          direct.screen();
+        case kCaptureWindowKey:
+          direct.window();
+        case kCaptureLastRegionKey:
+          direct.lastRegion();
+      }
     },
   );
   await hotkeyService.start();
