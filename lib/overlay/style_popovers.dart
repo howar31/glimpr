@@ -510,6 +510,160 @@ class _GradientSliderPainter extends CustomPainter {
 }
 
 // ---------------------------------------------------------------------------
+// FontPickerPopover
+// ---------------------------------------------------------------------------
+
+/// A font-family picker popover with a search field and scrollable preview list.
+///
+/// [families] is injected by the host (fetched from FontBridge); this widget
+/// is therefore fully testable without a native channel.
+///
+/// Each family row renders the name in its own font via
+/// `TextStyle(fontFamily: name)` for a live preview.
+///
+/// A pinned "System" row at the top lets the user revert to the default font;
+/// tapping it calls `onSelected(null)`.
+class FontPickerPopover extends StatefulWidget {
+  const FontPickerPopover({
+    Key? key,
+    required this.families,
+    required this.selected,
+    required this.onSelected,
+  }) : super(key: key);
+
+  /// All available font families (injected by the host).
+  final List<String> families;
+
+  /// Currently selected family, or null for System (default).
+  final String? selected;
+
+  /// Called with null when "System" is chosen, or the family name otherwise.
+  final ValueChanged<String?> onSelected;
+
+  @override
+  State<FontPickerPopover> createState() => _FontPickerPopoverState();
+}
+
+class _FontPickerPopoverState extends State<FontPickerPopover> {
+  late TextEditingController _searchCtrl;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController();
+    _searchCtrl.addListener(() {
+      setState(() => _query = _searchCtrl.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<String> get _filtered {
+    if (_query.isEmpty) return widget.families;
+    final q = _query.toLowerCase();
+    return widget.families.where((f) => f.toLowerCase().contains(q)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+    return SizedBox(
+      width: 260,
+      height: 380,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: TextField(
+              key: const ValueKey('font-search'),
+              controller: _searchCtrl,
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                border: OutlineInputBorder(),
+                hintText: 'Search fonts…',
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              children: [
+                // System row — always visible, not affected by search filter
+                _FontRow(
+                  key: const ValueKey('font-system'),
+                  name: 'System',
+                  fontFamily: null,
+                  selected: widget.selected == null,
+                  onTap: () => widget.onSelected(null),
+                ),
+                const Divider(height: 1, thickness: 1),
+                ...filtered.map(
+                  (name) => _FontRow(
+                    key: ValueKey('font-$name'),
+                    name: name,
+                    fontFamily: name,
+                    selected: widget.selected == name,
+                    onTap: () => widget.onSelected(name),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FontRow extends StatelessWidget {
+  const _FontRow({
+    Key? key,
+    required this.name,
+    required this.fontFamily,
+    required this.selected,
+    required this.onTap,
+  }) : super(key: key);
+
+  final String name;
+  final String? fontFamily;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                name,
+                style: TextStyle(
+                  fontFamily: fontFamily,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check, size: 16, color: Color(0xFF007AFF)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // _Swatch
 // ---------------------------------------------------------------------------
 
