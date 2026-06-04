@@ -14,9 +14,9 @@ void main() {
   });
 
   test('each direct-capture action has a default ⌘⌥digit binding', () {
-    expect(kDefaultBindings[kCaptureScreenKey]!.logicalKey,
-        LogicalKeyboardKey.digit2);
     expect(kDefaultBindings[kCaptureWindowKey]!.logicalKey,
+        LogicalKeyboardKey.digit2);
+    expect(kDefaultBindings[kCaptureScreenKey]!.logicalKey,
         LogicalKeyboardKey.digit3);
     expect(kDefaultBindings[kCaptureLastRegionKey]!.logicalKey,
         LogicalKeyboardKey.digit4);

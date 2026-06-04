@@ -19,8 +19,8 @@ void main() {
   test('global registry contains the 4 global capture actions', () {
     expect(kGlobalActions.map((a) => a.actionKey), [
       kCaptureAreaKey,
-      kCaptureScreenKey,
       kCaptureWindowKey,
+      kCaptureScreenKey,
       kCaptureLastRegionKey,
     ]);
   });

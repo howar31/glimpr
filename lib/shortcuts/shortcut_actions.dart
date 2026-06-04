@@ -43,9 +43,9 @@ HotkeyBinding _b(
 final Map<String, HotkeyBinding> kDefaultBindings = {
   kCaptureAreaKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
-  kCaptureScreenKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
+  kCaptureWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
-  kCaptureWindowKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
+  kCaptureScreenKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kCaptureLastRegionKey: _b(PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
@@ -116,14 +116,14 @@ const kGlobalActions = <GlobalAction>[
     hint: 'Start a screen capture',
   ),
   GlobalAction(
-    actionKey: kCaptureScreenKey,
-    label: 'Capture Display',
-    hint: 'Capture the display under the cursor',
-  ),
-  GlobalAction(
     actionKey: kCaptureWindowKey,
     label: 'Capture Window',
     hint: 'Capture the focused window',
+  ),
+  GlobalAction(
+    actionKey: kCaptureScreenKey,
+    label: 'Capture Display',
+    hint: 'Capture the display under the cursor',
   ),
   GlobalAction(
     actionKey: kCaptureLastRegionKey,
