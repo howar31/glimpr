@@ -11,9 +11,10 @@ import '../shortcuts/shortcut_actions.dart';
 import '../theme/glimpr_theme.dart';
 import 'style_popovers.dart';
 
-/// Draggable bottom toolbar: a main tool row with a contextual options row
-/// below it. The tool row is the Column's first (top-anchored) child so the
-/// options row can grow / collapse downward without ever shifting the tool row.
+/// Draggable toolbar: a contextual options row ABOVE a main tool row. The tool
+/// row is the Column's last (bottom) child and the host bottom-anchors the
+/// toolbar, so the tool row stays put while the options row (and any popover)
+/// above it grows / collapses upward without ever shifting the tool row.
 /// Each tool shows a badge with its CURRENT keyboard shortcut (read from
 /// [editorBindings], so a user rebind in Settings is reflected here on the next
 /// capture); an unbound tool shows no badge. [onMove] is fed pointer deltas from
@@ -49,10 +50,13 @@ class EditorToolbar extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Main tool row FIRST so it is the top, top-anchored child: the host
-          // pins this Column's top-left at _toolbarPos, so the tool row stays put
-          // while the contextual options row below it appears / grows / shrinks —
-          // it can never displace the tool row the user is aiming at.
+          // Contextual options row FIRST so it grows UPWARD. The host pins this
+          // Column's BOTTOM at the toolbar position, so the tool row (the last,
+          // bottom child) stays put while the options row above it appears /
+          // grows / shrinks — it can never displace the tool row being aimed at.
+          _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
+          const SizedBox(height: 6),
+          // Main tool row LAST = the fixed bottom anchor.
           _Bar(
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -80,13 +84,12 @@ class EditorToolbar extends StatelessWidget {
                     icon: icon,
                     // Badge = the tool's current binding label (e.g. "C", "1",
                     // "⌘B"); null/unbound => no badge.
-                    shortcut: editorBindings[kEditorToolActionKey[kind]]?.label(),
+                    shortcut: editorBindings[kEditorToolActionKey[kind]]
+                        ?.label(),
                   ),
               ],
             ),
           ),
-          const SizedBox(height: 6),
-          _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
         ],
       ),
     );
@@ -159,9 +162,7 @@ class _ToolbarTheme extends InheritedWidget {
   final _ToolbarPalette palette;
 
   static _ToolbarPalette of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<_ToolbarTheme>()!
-          .palette;
+      context.dependOnInheritedWidgetOfExactType<_ToolbarTheme>()!.palette;
 
   @override
   bool updateShouldNotify(_ToolbarTheme oldWidget) =>
@@ -210,14 +211,38 @@ class _ToolButton extends StatelessWidget {
                     // Crisp 1px outline (8 zero-blur offsets), overriding the
                     // inherited soft glass shadow which smears at this tiny size.
                     shadows: [
-                      Shadow(color: p.badgeOutline, offset: const Offset(0.7, 0)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(-0.7, 0)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(0, 0.7)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(0, -0.7)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(0.7, 0.7)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(0.7, -0.7)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(-0.7, 0.7)),
-                      Shadow(color: p.badgeOutline, offset: const Offset(-0.7, -0.7)),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(0.7, 0),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(-0.7, 0),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(0, 0.7),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(0, -0.7),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(0.7, 0.7),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(0.7, -0.7),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(-0.7, 0.7),
+                      ),
+                      Shadow(
+                        color: p.badgeOutline,
+                        offset: const Offset(-0.7, -0.7),
+                      ),
                     ],
                   ),
                 ),
@@ -295,9 +320,10 @@ class _OptionsRow extends StatefulWidget {
 }
 
 class _OptionsRowState extends State<_OptionsRow> {
-  // Anchors for the two popovers (custom-colour "+" swatch and font button).
-  final _colorLink = LayerLink();
-  final _fontLink = LayerLink();
+  // One anchor on the whole options row: the row's height varies with the
+  // stroke slider, so anchoring to the row (not a button inside it) lets the
+  // popover sit a consistent gap above the entire row, centred over it.
+  final _barLink = LayerLink();
 
   OverlayEntry? _entry;
   _OpenPopover _open = _OpenPopover.none;
@@ -340,19 +366,21 @@ class _OptionsRowState extends State<_OptionsRow> {
       return;
     }
     _closePopover();
-    final recents =
-        await ToolStyleStore(Settings.instance.store).loadRecentColors();
+    final recents = await ToolStyleStore(
+      Settings.instance.store,
+    ).loadRecentColors();
     if (!mounted) return;
     _showPopover(
       _OpenPopover.color,
-      _colorLink,
+      _barLink,
       width: 240,
       child: ColorPickerPopover(
         color: _c.style.value.color,
         recents: recents,
         onChanged: _c.setColor,
-        onCommit: (color) => ToolStyleStore(Settings.instance.store)
-            .pushRecentColor(color.toARGB32()),
+        onCommit: (color) => ToolStyleStore(
+          Settings.instance.store,
+        ).pushRecentColor(color.toARGB32()),
       ),
     );
   }
@@ -367,7 +395,7 @@ class _OptionsRowState extends State<_OptionsRow> {
     if (!mounted) return;
     _showPopover(
       _OpenPopover.font,
-      _fontLink,
+      _barLink,
       width: 260,
       child: FontPickerPopover(
         families: families,
@@ -403,30 +431,45 @@ class _OptionsRowState extends State<_OptionsRow> {
               onTap: _closePopover,
             ),
           ),
-          // The popover, anchored just above the trigger (followerAnchor
-          // bottom-left -> targetAnchor top-left), so it grows UPWARD.
+          // The popover sits a consistent 8px gap above the WHOLE options row
+          // and is centred over it (follower bottom-centre -> row top-centre),
+          // so it never overlaps the row regardless of the row's height.
           CompositedTransformFollower(
             link: link,
             showWhenUnlinked: false,
-            targetAnchor: Alignment.topLeft,
-            followerAnchor: Alignment.bottomLeft,
-            offset: const Offset(0, -8),
+            targetAnchor: Alignment.topCenter,
+            followerAnchor: Alignment.bottomCenter,
+            offset: const Offset(0, -6), // match the tool-row<->options gap
             child: Material(
               type: MaterialType.transparency,
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: width),
+                // Match the toolbar's frosted glass exactly: a backdrop blur
+                // under the same tint + border, so the screenshot behind isn't
+                // legible through the panel (the bare tint alone was near-clear).
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: palette.glassTint,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: palette.glassBorder, width: 0.5),
                     boxShadow: const [
                       BoxShadow(color: Color(0x66000000), blurRadius: 16),
                     ],
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: child,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: palette.glassTint,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: palette.glassBorder,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: child,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -470,57 +513,53 @@ class _OptionsRowState extends State<_OptionsRow> {
         final showsFont = tool == ToolKind.text || tool == ToolKind.step;
         // The font-FAMILY button is Text-only (Step has no editable family).
         final showsFontFamily = tool == ToolKind.text;
-        return _Bar(
-          child: ValueListenableBuilder<DrawStyle>(
-            valueListenable: _c.style,
-            builder: (_, style, _) => Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final c in kColorPresets)
-                  _ColorSwatch(_c, style, c),
-                // Custom-colour "+" swatch — opens the HSV picker.
-                CompositedTransformTarget(
-                  link: _colorLink,
-                  child: _CustomColorSwatch(onTap: _openColorPopover),
-                ),
-                if (showsWidth) ...[
-                  const SizedBox(width: 10),
-                  for (final w in kStrokeWidths)
-                    _WidthSwatch(_c, style, w),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 110,
-                    child: Slider(
-                      key: const ValueKey('stroke-slider'),
-                      min: kStrokeMin,
-                      max: kStrokeMax,
-                      value: style.strokeWidth.clamp(kStrokeMin, kStrokeMax),
-                      onChanged: _c.setStrokeWidth,
+        return CompositedTransformTarget(
+          link: _barLink,
+          child: _Bar(
+            child: ValueListenableBuilder<DrawStyle>(
+              valueListenable: _c.style,
+              builder: (_, style, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final c in kColorPresets) _ColorSwatch(_c, style, c),
+                  // Custom-colour "+" swatch — opens the HSV picker.
+                  _CustomColorSwatch(onTap: _openColorPopover),
+                  if (showsWidth) ...[
+                    const SizedBox(width: 10),
+                    for (final w in kStrokeWidths) _WidthSwatch(_c, style, w),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 110,
+                      child: Slider(
+                        key: const ValueKey('stroke-slider'),
+                        min: kStrokeMin,
+                        max: kStrokeMax,
+                        value: style.strokeWidth.clamp(kStrokeMin, kStrokeMax),
+                        onChanged: _c.setStrokeWidth,
+                      ),
                     ),
-                  ),
-                ],
-                if (showsFont) ...[
-                  const SizedBox(width: 10),
-                  _FontControl(_c, widget.onPtEditingDone),
-                ],
-                if (showsFontFamily) ...[
-                  const SizedBox(width: 8),
-                  CompositedTransformTarget(
-                    link: _fontLink,
-                    child: _FontFamilyButton(
+                  ],
+                  if (showsFont) ...[
+                    const SizedBox(width: 10),
+                    _FontControl(_c, widget.onPtEditingDone),
+                  ],
+                  if (showsFontFamily) ...[
+                    const SizedBox(width: 8),
+                    _FontFamilyButton(
                       key: const ValueKey('font-button'),
                       label: style.fontFamily ?? 'System',
                       onTap: _openFontPopover,
                     ),
+                  ],
+                  // Reset the active tool's style to the factory default.
+                  const SizedBox(width: 6),
+                  _ResetToolButton(
+                    key: const ValueKey('reset-tool'),
+                    enabled: style != const DrawStyle(),
+                    onTap: () => _c.resetTool(_c.tool.value),
                   ),
                 ],
-                // Reset the active tool's style to the factory default.
-                const SizedBox(width: 6),
-                _ResetToolButton(
-                  key: const ValueKey('reset-tool'),
-                  onTap: () => _c.resetTool(_c.tool.value),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -569,7 +608,11 @@ class _CustomColorSwatch extends StatelessWidget {
 class _FontFamilyButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  const _FontFamilyButton({super.key, required this.label, required this.onTap});
+  const _FontFamilyButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
@@ -603,19 +646,51 @@ class _FontFamilyButton extends StatelessWidget {
 }
 
 /// Reset-this-tool icon: restores the active tool's factory default style.
-class _ResetToolButton extends StatelessWidget {
+/// Disabled + dimmed when the tool is ALREADY at its default (same model as the
+/// Settings per-row reset); a hover highlight + click cursor signal it is
+/// clickable when enabled.
+class _ResetToolButton extends StatefulWidget {
   final VoidCallback onTap;
-  const _ResetToolButton({super.key, required this.onTap});
+  final bool enabled;
+  const _ResetToolButton({
+    super.key,
+    required this.onTap,
+    required this.enabled,
+  });
+  @override
+  State<_ResetToolButton> createState() => _ResetToolButtonState();
+}
+
+class _ResetToolButtonState extends State<_ResetToolButton> {
+  bool _hover = false;
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Tooltip(
-        message: 'Reset this tool',
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(Icons.restart_alt, size: 18, color: p.fgFaint),
+    final icon = Padding(
+      padding: const EdgeInsets.all(4),
+      child: Icon(
+        Icons.restart_alt,
+        size: 18,
+        color: (widget.enabled && _hover) ? p.fg : p.fgFaint,
+      ),
+    );
+    // Already at default -> dim + non-interactive (mirrors Settings reset rows).
+    if (!widget.enabled) return Opacity(opacity: 0.25, child: icon);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: 'Reset this tool',
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _hover ? p.glassBorder : Colors.transparent,
+            ),
+            child: icon,
+          ),
         ),
       ),
     );

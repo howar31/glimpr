@@ -42,7 +42,8 @@ class EditorCanvas extends StatefulWidget {
   // When false, right-click no longer EXITS capture (Esc still does); the other
   // contextual right-click roles (commit text / cancel gesture / delete) remain.
   final bool rightClickExits;
-  final Map<String, HotkeyBinding?> editorBindings; // effective editor.* bindings
+  final Map<String, HotkeyBinding?>
+  editorBindings; // effective editor.* bindings
   const EditorCanvas({
     super.key,
     required this.display,
@@ -65,7 +66,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
   final _bridge = CaptureBridge();
 
   late Offset _cursor; // logical cursor (crosshair/loupe/nudge + hover)
-  late Offset _toolbarPos; // top-left of the draggable toolbar
+  late Offset
+  _toolbarPos; // bottom-left anchor (tool row's bottom) of the toolbar
   // The cursor is over THIS display -> show the interactive HUD/toolbar here.
   // Follows the mouse across displays; the launch (cursor) display starts active.
   late bool _active;
@@ -125,8 +127,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   };
 
   /// A drag / edit gesture is in progress (suppresses the window-snap highlight).
-  bool get _dragging =>
-      _cropping || _dragStart != null || _editIndex != null;
+  bool get _dragging => _cropping || _dragStart != null || _editIndex != null;
 
   /// Region-selection tools that get the precision crosshair + pixel loupe (crop
   /// plus the raster regions, where exact alignment on what you obscure matters).
@@ -147,7 +148,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
         : Offset(widget.display.width / 2, widget.display.height / 2);
     _toolbarPos = Offset(
       widget.display.width / 2 - 160,
-      widget.display.height - 120,
+      widget.display.height - 60, // dy = toolbar BOTTOM; options grow upward
     );
     _active = widget.display.isCursorDisplay; // launch display starts active
     _overCanvas = widget.display.isCursorDisplay; // pointer starts over canvas
@@ -396,7 +397,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     // numpadEnter confirms too, but only while confirm stays on the default
     // Enter binding (HotkeyBinding.matches requires an exact logicalKey, so
     // pickEditorAction never returns confirm for numpadEnter on its own).
-    final numpadConfirm = e.logicalKey == LogicalKeyboardKey.numpadEnter &&
+    final numpadConfirm =
+        e.logicalKey == LogicalKeyboardKey.numpadEnter &&
         widget.editorBindings[kEditorConfirmKey]?.logicalKey ==
             LogicalKeyboardKey.enter;
     if ((action == kEditorConfirmKey || numpadConfirm) && !_dragging) {
@@ -1003,7 +1005,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     setState(() {
       _toolbarPos = Offset(
         (_toolbarPos.dx + delta.dx).clamp(0.0, widget.display.width - 80),
-        (_toolbarPos.dy + delta.dy).clamp(0.0, widget.display.height - 60),
+        // dy is the toolbar's bottom edge; keep it on-screen with the tool row
+        // visible (>= 80 from the top) down to the screen bottom.
+        (_toolbarPos.dy + delta.dy).clamp(80.0, widget.display.height),
       );
     });
   }
@@ -1294,7 +1298,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
             if (_active && !_cropping)
               Positioned(
                 left: _toolbarPos.dx,
-                top: _toolbarPos.dy,
+                // Bottom-anchored so the tool row (the Column's last/bottom child)
+                // stays put while the options row above it grows upward.
+                bottom: widget.display.height - _toolbarPos.dy,
                 // Material ancestor for the toolbar's TextField (pt) + IconButtons.
                 child: Material(
                   type: MaterialType.transparency,

@@ -123,8 +123,7 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
       runSpacing: 6,
       children: kColorPresets.map((c) {
         final argb = c.toARGB32();
-        final keyStr =
-            'preset-0x${argb.toRadixString(16).toUpperCase()}';
+        final keyStr = 'preset-0x${argb.toRadixString(16).toUpperCase()}';
         return GestureDetector(
           key: ValueKey(keyStr),
           onTap: () => _emitCommit(c),
@@ -164,15 +163,17 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
   Widget _buildHueSlider() {
     return _GradientSlider(
       value: _hsv.hue / 360.0,
-      gradient: const LinearGradient(colors: [
-        Color(0xFFFF0000),
-        Color(0xFFFFFF00),
-        Color(0xFF00FF00),
-        Color(0xFF00FFFF),
-        Color(0xFF0000FF),
-        Color(0xFFFF00FF),
-        Color(0xFFFF0000),
-      ]),
+      gradient: const LinearGradient(
+        colors: [
+          Color(0xFFFF0000),
+          Color(0xFFFFFF00),
+          Color(0xFF00FF00),
+          Color(0xFF00FFFF),
+          Color(0xFF0000FF),
+          Color(0xFFFF00FF),
+          Color(0xFFFF0000),
+        ],
+      ),
       onChanged: (v) {
         final c = _hsv.withHue(v * 360.0).toColor();
         setState(() => _color = c);
@@ -197,10 +198,7 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
     final opaque = _color.withValues(alpha: 1.0);
     return _GradientSlider(
       value: _color.a,
-      gradient: LinearGradient(colors: [
-        const Color(0x00000000),
-        opaque,
-      ]),
+      gradient: LinearGradient(colors: [const Color(0x00000000), opaque]),
       checkerboard: true,
       onChanged: (v) {
         final c = _color.withValues(alpha: v);
@@ -229,10 +227,24 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
       decoration: const InputDecoration(
         isDense: true,
         contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        border: OutlineInputBorder(),
+        border: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.white24),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.white24),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.white54),
+        ),
         hintText: '#RRGGBB or #AARRGGBB',
+        hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
       ),
-      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+      cursorColor: Colors.white,
+      style: const TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: Colors.white,
+      ),
       textInputAction: TextInputAction.done,
       onSubmitted: (text) {
         final parsed = hexToColor(text);
@@ -308,10 +320,7 @@ class _SVPlane extends StatelessWidget {
             // Emit current HSV as commit
             onCommit(hsv.toColor());
           },
-          child: CustomPaint(
-            size: size,
-            painter: _SVPlanePainter(hsv),
-          ),
+          child: CustomPaint(size: size, painter: _SVPlanePainter(hsv)),
         );
       },
     );
@@ -455,8 +464,10 @@ class _GradientSliderPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final trackTop = (size.height - trackHeight) / 2;
     final trackRect = Rect.fromLTWH(0, trackTop, size.width, trackHeight);
-    final rrect =
-        RRect.fromRectAndRadius(trackRect, Radius.circular(trackHeight / 2));
+    final rrect = RRect.fromRectAndRadius(
+      trackRect,
+      Radius.circular(trackHeight / 2),
+    );
 
     // Draw checkerboard behind alpha slider
     if (checkerboard) {
@@ -464,17 +475,21 @@ class _GradientSliderPainter extends CustomPainter {
     }
 
     // Draw gradient track
-    canvas.drawRRect(
-      rrect,
-      Paint()..shader = gradient.createShader(trackRect),
-    );
+    canvas.drawRRect(rrect, Paint()..shader = gradient.createShader(trackRect));
 
     // Draw knob
     final knobX = value * size.width;
-    final knobCenter = Offset(knobX.clamp(knobSize / 2, size.width - knobSize / 2), size.height / 2);
+    final knobCenter = Offset(
+      knobX.clamp(knobSize / 2, size.width - knobSize / 2),
+      size.height / 2,
+    );
     final shadowPaint = Paint()..color = const Color(0x4D000000);
     canvas.drawCircle(knobCenter, knobSize / 2 + 1, shadowPaint);
-    canvas.drawCircle(knobCenter, knobSize / 2, Paint()..color = const Color(0xFFFFFFFF));
+    canvas.drawCircle(
+      knobCenter,
+      knobSize / 2,
+      Paint()..color = const Color(0xFFFFFFFF),
+    );
   }
 
   void _paintCheckerboard(Canvas canvas, RRect rrect, Rect trackRect) {
@@ -585,8 +600,10 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
               controller: _searchCtrl,
               decoration: const InputDecoration(
                 isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
                 border: OutlineInputBorder(),
                 hintText: 'Search fonts…',
               ),
@@ -648,10 +665,7 @@ class _FontRow extends StatelessWidget {
             Expanded(
               child: Text(
                 name,
-                style: TextStyle(
-                  fontFamily: fontFamily,
-                  fontSize: 14,
-                ),
+                style: TextStyle(fontFamily: fontFamily, fontSize: 14),
               ),
             ),
             if (selected)
@@ -682,9 +696,7 @@ class _Swatch extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: selected
-              ? const Color(0xFF007AFF)
-              : const Color(0x40000000),
+          color: selected ? const Color(0xFF007AFF) : const Color(0x40000000),
           width: selected ? 2 : 1,
         ),
       ),
