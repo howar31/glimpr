@@ -10,6 +10,7 @@ import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
 import '../shortcuts/widgets/hotkey_recorder_field.dart';
 import '../shortcuts/widgets/key_cap_chips.dart';
+import '../editor/tool_style_store.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
@@ -612,6 +613,26 @@ class _SettingsAppState extends State<SettingsApp>
                 'Default 2 · applies after restarting Glimpr',
                 style: GlimprType.sansStyle(12, 500, t.fg4),
               ),
+          ],
+        ),
+      ),
+      const SectionLabel('Tool styles', icon: Icons.brush_outlined),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Reset all tool styles',
+                style: GlimprType.sansStyle(14.5, 600, t.fg1)),
+            const SizedBox(height: 4),
+            Text(
+              'Restore every annotation tool (colour, stroke, font size, font) to its '
+              'default. Takes effect on your next capture.',
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 14),
+            GhostButton('Reset all tool styles', onTap: () {
+              ToolStyleStore(Settings.instance.store).resetAll();
+            }),
           ],
         ),
       ),
