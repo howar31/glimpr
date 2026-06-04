@@ -154,6 +154,7 @@ class _OverlayAppState extends State<OverlayApp> {
       'color': s.color.toARGB32(),
       'strokeWidth': s.strokeWidth,
       'fontSize': s.fontSize,
+      'fontFamily': s.fontFamily, // may be null
     });
   }
 
@@ -167,6 +168,7 @@ class _OverlayAppState extends State<OverlayApp> {
       color: Color(state['color'] as int),
       strokeWidth: (state['strokeWidth'] as num).toDouble(),
       fontSize: (state['fontSize'] as num).toDouble(),
+      fontFamily: state['fontFamily'] as String?,
     );
     e.tool.value = t;
     e.phase.value = t == ToolKind.crop
