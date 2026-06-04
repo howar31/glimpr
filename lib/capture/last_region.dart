@@ -45,3 +45,9 @@ class LastRegionStore {
     }
   }
 }
+
+/// The rect a capture should record: an explicit crop selection, else the snap
+/// window rect, else the whole display. All inputs are display-local logical.
+Rect resolveRecordedRect(
+    Rect? selectionLogical, Rect? windowRect, double width, double height) =>
+    selectionLogical ?? windowRect ?? Rect.fromLTWH(0, 0, width, height);

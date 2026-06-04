@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import '../capture/last_region.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../output/deliver.dart';
@@ -197,6 +198,14 @@ class _OverlayAppState extends State<OverlayApp> {
     // disposing it out from under the background work. The shutter sound is the
     // last delivery leg, so it lands on completion.
     final cap = _capture; // snapshot prefetched at capture (off the hot path)
+    // Record this capture's final rect so "Capture Last Region" can repeat it.
+    // A snap arrives as selectionLogical == window.rect (a fixed rect), so it is
+    // recorded as a fixed region, not a live window reference.
+    LastRegionStore(Settings.instance.store).save(LastRegion(
+      displayId: d.displayId,
+      rect: resolveRecordedRect(
+          selectionLogical, window?.rect, d.width, d.height),
+    ));
     if (cap.shutterSound) {
       playShutter(); // shutter at the instant of capture (fire-and-forget)
     }

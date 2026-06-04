@@ -42,4 +42,21 @@ void main() {
     await fake.setString('last_region', 'not json');
     expect(await LastRegionStore(fake).load(), isNull);
   });
+
+  group('resolveRecordedRect', () {
+    test('prefers the explicit selection (a manual crop)', () {
+      final r = resolveRecordedRect(
+          const Rect.fromLTWH(5, 6, 100, 80), null, 1920, 1080);
+      expect(r, const Rect.fromLTWH(5, 6, 100, 80));
+    });
+    test('falls back to the snap window rect when there is no selection', () {
+      final r = resolveRecordedRect(
+          null, const Rect.fromLTWH(40, 50, 200, 150), 1920, 1080);
+      expect(r, const Rect.fromLTWH(40, 50, 200, 150));
+    });
+    test('falls back to the whole display when neither is present', () {
+      final r = resolveRecordedRect(null, null, 1920, 1080);
+      expect(r, const Rect.fromLTWH(0, 0, 1920, 1080));
+    });
+  });
 }
