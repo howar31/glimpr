@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
@@ -5,6 +6,7 @@ import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../editor/tool_style_store.dart';
 import '../output/deliver.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
@@ -51,10 +53,21 @@ class _OverlayAppState extends State<OverlayApp> {
   bool _applyingRemote = false;
   // Increments each capture so EditorCanvas is rebuilt fresh (see onCaptureReady).
   int _captureSeq = 0;
+  // Debounce timer for persisting _toolStyles to the store.
+  Timer? _persistTimer;
 
   @override
   void initState() {
     super.initState();
+    // Load persisted per-tool styles so the first capture resumes from the last
+    // session's style choices. A capture that begins before this completes simply
+    // starts from defaults; the next capture will have the loaded map.
+    try {
+      ToolStyleStore(Settings.instance.store).load().then((m) {
+        if (!mounted) return;
+        _toolStyles..clear()..addAll(m);
+      }).catchError((_) {/* async failure — start from defaults */});
+    } catch (_) {/* no platform store in test environments — start from defaults */}
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d) async {
         // Warm-decode the image both for the on-screen Image.memory and for the
@@ -135,11 +148,30 @@ class _OverlayAppState extends State<OverlayApp> {
   void _attachShared(EditorController e) {
     e.tool.addListener(_broadcastEditorState);
     e.style.addListener(_broadcastEditorState);
+    e.style.addListener(_schedulePersist);
   }
 
   void _detachShared() {
     _editor?.tool.removeListener(_broadcastEditorState);
     _editor?.style.removeListener(_broadcastEditorState);
+    _editor?.style.removeListener(_schedulePersist);
+  }
+
+  void _schedulePersist() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 400), () {
+      ToolStyleStore(Settings.instance.store).save(Map.of(_toolStyles));
+    });
+  }
+
+  @override
+  void dispose() {
+    _persistTimer?.cancel();
+    _detachShared();
+    _editor?.dispose();
+    _frozen?.dispose();
+    _activeSignal.dispose();
+    super.dispose();
   }
 
   /// Push the active tool + style to the other displays (skipped while applying
