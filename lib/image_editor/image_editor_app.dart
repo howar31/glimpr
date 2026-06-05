@@ -423,75 +423,36 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     );
   }
 
-  /// The canvas area: a checkerboard transparency backdrop with the fitted,
-  /// drop-shadowed [EditorCore] centred inside it. The image fits within ~72% of
-  /// the canvas width (and the available height) so it never crowds the edges or
-  /// the floating toolbar pill, and its drop shadow is never clipped.
+  /// The canvas area: a checkerboard transparency backdrop with [EditorCore]
+  /// filling the whole area. EditorCore now owns the viewport — it fits/centres
+  /// the native-sized image inside the area and paints the image's rounded
+  /// border + drop shadow itself (the owner's image card), so there is no
+  /// app-level fitted SizedBox or shadow frame here (it would double otherwise).
   Widget _canvas(
     GlimprTokens t,
     ui.Image image,
     Uint8List bytes,
     EditorController controller,
   ) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const inset = 28.0; // breathing room so the shadow isn't clipped
-        // Reserve room at the bottom for the floating pill (its bar + option
-        // row sit ~18px from the bottom) so the image stays clear of it.
-        const bottomReserve = 110.0;
-        final availW = (constraints.maxWidth * 0.72)
-            .clamp(1.0, double.infinity);
-        final availH =
-            (constraints.maxHeight - inset * 2 - bottomReserve)
-                .clamp(1.0, double.infinity);
-        final imgW = image.width.toDouble(), imgH = image.height.toDouble();
-        // Fit within the width budget AND the height budget, never upscaling.
-        final scale = (availW / imgW).clamp(0.0, availH / imgH).clamp(0.0, 1.0);
-        final fitted = Size(imgW * scale, imgH * scale);
-        final host = ImageEditorHost(
-          image: image,
-          bytes: bytes,
-          fittedSize: fitted,
-          onComplete: _save,
-          activeSignal: _active,
-        );
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Checkerboard(dark: t.isDark),
-            Center(
-              child: Container(
-                width: fitted.width,
-                height: fitted.height,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0x14FFFFFF), // 1px rgba(255,255,255,0.08)
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x8C000000), // rgba(0,0,0,0.55)
-                      blurRadius: 70,
-                      offset: Offset(0, 30),
-                    ),
-                  ],
-                ),
-                // Clip the EditorCore to the rounded frame so the corners match
-                // the border; the shadow lives outside the clip (on the parent).
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: EditorCore(
-                    key: ValueKey(image), // fresh State per loaded image
-                    controller: controller,
-                    editorBindings: _bindings,
-                    host: host,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    final host = ImageEditorHost(
+      image: image,
+      bytes: bytes,
+      onComplete: _save,
+      activeSignal: _active,
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Checkerboard(dark: t.isDark),
+        Positioned.fill(
+          child: EditorCore(
+            key: ValueKey(image), // fresh State per loaded image
+            controller: controller,
+            editorBindings: _bindings,
+            host: host,
+          ),
+        ),
+      ],
     );
   }
 

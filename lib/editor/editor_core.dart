@@ -19,6 +19,7 @@ import 'editor_host.dart';
 import 'hit_test.dart';
 import 'raster.dart';
 import 'text_metrics.dart';
+import 'viewport.dart';
 
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
@@ -56,6 +57,14 @@ class _EditorCoreState extends State<EditorCore> {
   bool _overCanvas = false;
   bool _lastHide = false; // last system-cursor-hidden value pushed to native
 
+  // ---- viewport (image editor only; identity for the overlay) ------------
+  // The display transform mapping the logical canvas (image space) to on-screen
+  // local coords. ONLY mutated inside `if (_interactive)` paths, so the overlay
+  // (viewportInteractive == false) always renders at identity 1:1.
+  EditorViewport _viewport = EditorViewport.identity;
+  Size _lastBoxSize = Size.zero; // last LayoutBuilder constraints.biggest
+  bool _didInitialFit = false; // fit-to-window done once per loaded image
+
   // New-shape preview (drag on empty).
   Drawable? _preview;
   Offset? _dragStart;
@@ -91,10 +100,35 @@ class _EditorCoreState extends State<EditorCore> {
   EditorController get c => widget.controller;
   bool get _inCrop => c.phase.value == EditorPhase.crop;
 
+  /// Whether this host drives a zoom/pan viewport (image editor) vs. identity
+  /// 1:1 (capture overlay). When false EVERY viewport seam degenerates to the
+  /// original behaviour: no Transform, `_toLogical` is identity.
+  bool get _interactive => widget.host.viewportInteractive;
+
+  /// The logical canvas size. A single seam so a later crop-trim block can flip
+  /// this to a mutable document canvas size in one place; today it is the host's
+  /// canvas size (display size for the overlay, native image size for the editor).
+  Size get _canvasSize => widget.host.size;
+
+  /// Map a pointer's on-screen local position to logical canvas coords. Identity
+  /// for the overlay (full-screen 1:1); applies the inverse viewport transform
+  /// for the image editor. Used at EVERY pointer->logical site so we never rely
+  /// on Flutter's transformHitTests (which would double-apply by scale).
+  Offset _toLogical(Offset local) =>
+      _interactive ? _viewport.toLogical(local) : local;
+
+  /// Re-fit the logical canvas centred inside the last laid-out box. Used by the
+  /// fit shortcut (later block) and crop-trim; no-op when non-interactive.
+  // ignore: unused_element  // wired by ⌘0 / crop-trim in a later block
+  void _refitViewport() {
+    if (!_interactive) return;
+    setState(() => _viewport = EditorViewport.fit(_canvasSize, _lastBoxSize));
+  }
+
   /// The whole-display rect (inset so its frame stays fully on-screen) — the
   /// snap target when hovering bare desktop (no window under the cursor).
   Rect get _fullDisplayRect =>
-      Rect.fromLTWH(2, 2, widget.host.size.width - 4, widget.host.size.height - 4);
+      Rect.fromLTWH(2, 2, _canvasSize.width - 4, _canvasSize.height - 4);
 
   /// Tools whose tap snaps to a hovered window's bounds (ShareX-style): crop
   /// captures it; blur/pixelate/rectangle/ellipse add a drawable spanning it.
@@ -123,8 +157,8 @@ class _EditorCoreState extends State<EditorCore> {
     // Seed the crosshair at the real cursor (native passes its display-local
     // position on the cursor display), not the display centre.
     final seed = widget.host.cursorSeed;
-    _cursor = seed ??
-        Offset(widget.host.size.width / 2, widget.host.size.height / 2);
+    _cursor =
+        seed ?? Offset(widget.host.size.width / 2, widget.host.size.height / 2);
     _toolbarPos = Offset(
       widget.host.size.width / 2 - 160,
       widget.host.size.height - 60, // dy = toolbar BOTTOM; options grow upward
@@ -212,6 +246,10 @@ class _EditorCoreState extends State<EditorCore> {
       _pixelatedFull = null;
       _windows = widget.host.snapWindows;
       _hoverWindow = null;
+      // Re-fit a re-loaded image (interactive editor). Usually moot because the
+      // app re-keys EditorCore by ValueKey(image) so a fresh State runs initial
+      // fit anyway, but kept correct for in-place baseImage swaps.
+      _didInitialFit = false;
       _ensureRasterFor(c.tool.value);
     }
   }
@@ -422,8 +460,8 @@ class _EditorCoreState extends State<EditorCore> {
       if (key == LogicalKeyboardKey.arrowDown) delta = Offset(0, step);
       if (delta != null) {
         final next = Offset(
-          (_cursor.dx + delta.dx).clamp(0.0, widget.host.size.width),
-          (_cursor.dy + delta.dy).clamp(0.0, widget.host.size.height),
+          (_cursor.dx + delta.dx).clamp(0.0, _canvasSize.width),
+          (_cursor.dy + delta.dy).clamp(0.0, _canvasSize.height),
         );
         final s = _dragStart;
         setState(() {
@@ -551,7 +589,7 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _onHover(PointerHoverEvent e) {
-    final p = e.localPosition;
+    final p = _toLogical(e.localPosition);
     setState(() => _cursor = p);
     if (_inCrop) return;
     final drawables = c.document.value.drawables;
@@ -572,7 +610,7 @@ class _EditorCoreState extends State<EditorCore> {
       _commitText();
       return;
     }
-    final p = d.localPosition;
+    final p = _toLogical(d.localPosition);
     // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
     // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
     // drawable spanning it. With NO window under the cursor the tools fall back
@@ -645,7 +683,7 @@ class _EditorCoreState extends State<EditorCore> {
     final right = (e.buttons & kSecondaryButton) != 0;
     if (right && !_rightLatched) {
       _rightLatched = true;
-      _onRightDown(e.localPosition);
+      _onRightDown(_toLogical(e.localPosition));
     } else if (!right) {
       _rightLatched = false;
     }
@@ -656,7 +694,7 @@ class _EditorCoreState extends State<EditorCore> {
   /// left button is still held after a right-click cancel.
   void _trackCursor(PointerEvent e) {
     if (!_active) return;
-    final p = e.localPosition;
+    final p = _toLogical(e.localPosition);
     // Window-snap: highlight the top-most window under the cursor for the snap
     // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging. The
     // full-screen crosshair / reticle follow the pointer on the active display.
@@ -706,8 +744,8 @@ class _EditorCoreState extends State<EditorCore> {
   /// handoff natively rather than warp the cursor each frame (which jittered), so
   /// clamping keeps the crosshair / marquee pinned cleanly at the edge.
   Offset _clampToDisplay(Offset p) => Offset(
-    p.dx.clamp(0.0, widget.host.size.width),
-    p.dy.clamp(0.0, widget.host.size.height),
+    p.dx.clamp(0.0, _canvasSize.width),
+    p.dy.clamp(0.0, _canvasSize.height),
   );
 
   void _onRightDown(Offset p) {
@@ -788,7 +826,7 @@ class _EditorCoreState extends State<EditorCore> {
     // broken by the pointer straying onto another display (released in _panEnd /
     // _panCancel). Spanning across displays is out of scope.
     widget.host.cursor.setDrawingLock(true);
-    final p = d.localPosition;
+    final p = _toLogical(d.localPosition);
     if (c.tool.value == ToolKind.crop) {
       _cropping = true;
       setState(() {
@@ -839,8 +877,9 @@ class _EditorCoreState extends State<EditorCore> {
   void _panUpdate(DragUpdateDetails d) {
     // Clamp to this display so a drag that pushes past the edge keeps the
     // marquee / shape / crosshair pinned at the boundary (the hardware cursor is
-    // free but the active handoff is frozen while dragging).
-    final p = _clampToDisplay(d.localPosition);
+    // free but the active handoff is frozen while dragging). Map to logical
+    // BEFORE clamping (the clamp bounds are logical-canvas coords).
+    final p = _clampToDisplay(_toLogical(d.localPosition));
     if (_cancelGesture) {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
@@ -1003,11 +1042,11 @@ class _EditorCoreState extends State<EditorCore> {
     const gap = 24.0;
     var lx = _cursor.dx + gap;
     var ly = _cursor.dy + gap;
-    if (lx + size > widget.host.size.width) lx = _cursor.dx - gap - size;
-    if (ly + size > widget.host.size.height) ly = _cursor.dy - gap - size;
+    if (lx + size > _canvasSize.width) lx = _cursor.dx - gap - size;
+    if (ly + size > _canvasSize.height) ly = _cursor.dy - gap - size;
     return Offset(
-      lx.clamp(0.0, widget.host.size.width - size),
-      ly.clamp(0.0, widget.host.size.height - size),
+      lx.clamp(0.0, _canvasSize.width - size),
+      ly.clamp(0.0, _canvasSize.height - size),
     );
   }
 
@@ -1036,277 +1075,357 @@ class _EditorCoreState extends State<EditorCore> {
         focusNode: _focus,
         autofocus: true,
         onKeyEvent: _onKey,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Layer 1: frozen image (full color, no dim in the annotate phase).
-            RepaintBoundary(
-              child: Image.memory(
-                widget.host.baseImageBytes,
-                fit: BoxFit.fill,
-                gaplessPlayback: true,
-              ),
-            ),
-            // Layer 2: annotation layer (+ a highlight box on the hovered/selected
-            // drawable in the annotate phase).
-            RepaintBoundary(
-              child: CustomPaint(
-                painter: DrawablePainter(
-                  // Annotations always paint (so an inactive display still shows
-                  // its drawings); only the selection highlight is gated on focus.
-                  drawables: _effectiveDrawables(),
-                  selectedIndex: (!_active || inCrop || _editingText)
-                      ? null
-                      : c.selectedIndex.value,
-                  blurredFull: _blurredFull,
-                  pixelatedFull: _pixelatedFull,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final box = constraints.biggest;
+            _lastBoxSize = box; // read later by _refitViewport (no setState)
+            // Fit-to-window once per loaded image: only for the interactive
+            // editor (the overlay stays at identity). Assigned during build (the
+            // new viewport is consumed immediately by the matrix below), never
+            // via setState.
+            if (_interactive &&
+                !_didInitialFit &&
+                box.isFinite &&
+                box.width > 0 &&
+                box.height > 0) {
+              _viewport = EditorViewport.fit(_canvasSize, box);
+              _didInitialFit = true;
+            }
+            final stack = Stack(
+              fit: StackFit.expand,
+              children: [
+                // Layer 1: frozen image (full color, no dim in the annotate phase).
+                // The overlay paints it plain full-screen; the image editor gives it
+                // a rounded border + drop shadow on the checkerboard (owner's image
+                // card), sized to the logical canvas inside the viewport transform.
+                RepaintBoundary(
+                  child: _interactive
+                      ? Container(
+                          width: _canvasSize.width,
+                          height: _canvasSize.height,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(
+                                0x14FFFFFF,
+                              ), // rgba(255,255,255,0.08)
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x8C000000), // rgba(0,0,0,0.55)
+                                blurRadius: 70,
+                                offset: Offset(0, 30),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.memory(
+                              widget.host.baseImageBytes,
+                              fit: BoxFit.fill,
+                              gaplessPlayback: true,
+                            ),
+                          ),
+                        )
+                      : Image.memory(
+                          widget.host.baseImageBytes,
+                          fit: BoxFit.fill,
+                          gaplessPlayback: true,
+                        ),
                 ),
-                size: Size.infinite,
-              ),
-            ),
-            // Our own text-selection highlight — shown when the inline field is
-            // blurred (e.g. while typing a pt value), so the selected range stays
-            // visible. When the field is focused it draws its own highlight.
-            if (_active &&
-                _editingText &&
-                _textCtl != null &&
-                _textPos != null &&
-                !_textFocus.hasFocus &&
-                !_textCtl!.selection.isCollapsed)
-              IgnorePointer(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: TextSelectionPainter(
-                    span: buildTextSpan(
-                      TextDrawable(_textPos!, _textCtl!.text, c.style.value),
+                // Layer 2: annotation layer (+ a highlight box on the hovered/selected
+                // drawable in the annotate phase).
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: DrawablePainter(
+                      // Annotations always paint (so an inactive display still shows
+                      // its drawings); only the selection highlight is gated on focus.
+                      drawables: _effectiveDrawables(),
+                      selectedIndex: (!_active || inCrop || _editingText)
+                          ? null
+                          : c.selectedIndex.value,
+                      blurredFull: _blurredFull,
+                      pixelatedFull: _pixelatedFull,
                     ),
-                    origin: _textPos!,
-                    selection: _textCtl!.selection,
+                    size: _canvasSize,
                   ),
                 ),
-              ),
-            // Layer 3: crop scrim — only once a selection drag exists (this
-            // display's HUD only shows while the cursor is over it).
-            if (_active && inCrop)
-              RepaintBoundary(
-                child: ValueListenableBuilder<Rect?>(
-                  valueListenable: _crop.rect,
-                  builder: (context, rect, _) {
-                    if (rect == null) return const SizedBox.shrink();
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CustomPaint(
-                          painter: SelectionScrimPainter(selection: rect),
-                        ),
-                        Positioned(
-                          left: rect.left,
-                          top: (rect.bottom + 4).clamp(
-                            0,
-                            widget.host.size.height,
+                // Our own text-selection highlight — shown when the inline field is
+                // blurred (e.g. while typing a pt value), so the selected range stays
+                // visible. When the field is focused it draws its own highlight.
+                if (_active &&
+                    _editingText &&
+                    _textCtl != null &&
+                    _textPos != null &&
+                    !_textFocus.hasFocus &&
+                    !_textCtl!.selection.isCollapsed)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      size: _canvasSize,
+                      painter: TextSelectionPainter(
+                        span: buildTextSpan(
+                          TextDrawable(
+                            _textPos!,
+                            _textCtl!.text,
+                            c.style.value,
                           ),
-                          child: Text(
-                            selectionLabel(rect),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              backgroundColor: Color(0xAA000000),
+                        ),
+                        origin: _textPos!,
+                        selection: _textCtl!.selection,
+                      ),
+                    ),
+                  ),
+                // Layer 3: crop scrim — only once a selection drag exists (this
+                // display's HUD only shows while the cursor is over it).
+                if (_active && inCrop)
+                  RepaintBoundary(
+                    child: ValueListenableBuilder<Rect?>(
+                      valueListenable: _crop.rect,
+                      builder: (context, rect, _) {
+                        if (rect == null) return const SizedBox.shrink();
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CustomPaint(
+                              painter: SelectionScrimPainter(selection: rect),
+                            ),
+                            Positioned(
+                              left: rect.left,
+                              top: (rect.bottom + 4).clamp(
+                                0,
+                                _canvasSize.height,
+                              ),
+                              child: Text(
+                                selectionLabel(rect),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  backgroundColor: Color(0xAA000000),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                // Window-snap highlight (Crop tool): the hovered window, or the whole
+                // display over bare desktop. The layer is ALWAYS present so the Stack
+                // child COUNT is stable (removing a child before the gesture detector
+                // when a drag starts would tear down its pan recognizer mid-drag).
+                // The rect tweens between targets so the frame glides from one window
+                // to the next; the painter is null when nothing should show.
+                // One child either way, so the Stack child COUNT stays stable.
+                // TweenAnimationBuilder asserts a non-null tween end, so only use it
+                // when there's a target; otherwise an empty box.
+                snapTarget == null
+                    ? const SizedBox.shrink()
+                    : TweenAnimationBuilder<Rect?>(
+                        tween: RectTween(end: snapTarget),
+                        duration: const Duration(milliseconds: 120),
+                        curve: Curves.easeOut,
+                        builder: (context, rect, _) => IgnorePointer(
+                          child: CustomPaint(
+                            size: _canvasSize,
+                            painter: rect == null
+                                ? null
+                                : WindowHighlightPainter(rect),
+                          ),
+                        ),
+                      ),
+                // Precision HUD: full-screen crosshair + pixel loupe — crop and the
+                // raster region tools (blur/pixelate), active display only.
+                if (_active && showsCrosshair)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      size: _canvasSize,
+                      painter: CrosshairPainter(_cursor),
+                    ),
+                  ),
+                // Loupe is bound to the crosshair — shown/hidden together, so it
+                // never flickers off when hovering over an existing region.
+                if (_active && showsCrosshair)
+                  Positioned(
+                    left: loupeOrigin.dx,
+                    top: loupeOrigin.dy,
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: const Size(120, 120),
+                        painter: LoupePainter(
+                          image: widget.host.baseImage,
+                          cursorLogical: _cursor,
+                          scaleFactor: widget.host.pixelScale,
+                          drawables: _effectiveDrawables(),
+                          blurredFull: _blurredFull,
+                          pixelatedFull: _pixelatedFull,
+                          logicalSize: Size(
+                            _canvasSize.width,
+                            _canvasSize.height,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Small reticle for the drawing tools (replaces the system arrow with
+                // a precise inverting cross). Region tools use the crosshair above.
+                if (_showsReticle)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      size: _canvasSize,
+                      painter: ReticlePainter(_cursor),
+                    ),
+                  ),
+                // Gesture + hover layer. A Listener catches the right button reliably
+                // even mid-drag (GestureDetector's secondary-tap loses the arena to an
+                // active pan), so right-click can cancel an in-progress crop/draw.
+                Positioned.fill(
+                  // Stable key so this layer (and its pan recognizer) is matched by
+                  // key and never re-created when sibling layers above (the animated
+                  // snap highlight) or below (the toolbar) toggle or change type
+                  // mid-drag. Without it the unkeyed Stack diff misaligns and tears
+                  // down the pan mid-gesture (crop stuck at 0x0).
+                  key: const ValueKey('editor-gesture-layer'),
+                  child: Listener(
+                    // Watch down/move/up: a right-button press DURING a left drag
+                    // arrives as a move (the pointer is already down), not a down — so
+                    // the old onPointerDown-only check never saw it and the crop
+                    // committed. The latch fires _onRightDown once per right press.
+                    onPointerDown: _onPointerButtons,
+                    onPointerMove: _onPointerButtons,
+                    onPointerUp: _onPointerButtons,
+                    child: MouseRegion(
+                      // Over the canvas we always draw our OWN cursor (full crosshair
+                      // for region tools, small reticle for drawing tools), so hide
+                      // the system cursor — except while editing text. Over the
+                      // toolbar this region isn't hit, so its normal click cursor
+                      // shows.
+                      cursor: (_active && !_editingText && !_isSelectTool)
+                          ? SystemMouseCursors.none
+                          : SystemMouseCursors.basic,
+                      onEnter: (_) => setState(() => _overCanvas = true),
+                      onExit: (_) => setState(() => _overCanvas = false),
+                      onHover: _onHover,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: _onTapUp,
+                        onPanStart: _panStart,
+                        onPanUpdate: _panUpdate,
+                        onPanEnd: _panEnd,
+                        // Safety net: if the pan is cancelled (never reaches
+                        // onPanEnd), still release the cursor confine + transient
+                        // state so the cursor is never stranded on one display.
+                        onPanCancel: () {
+                          widget.host.cursor.setDrawingLock(false);
+                          _cancelGesture = false;
+                          setState(() {
+                            _resetDrawState();
+                            _resetEditState();
+                            _cropping = false;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                // Inline multiline text editor (Enter commits, Shift+Enter newline).
+                if (_active &&
+                    _editingText &&
+                    _textPos != null &&
+                    _textCtl != null)
+                  Positioned(
+                    left: _textPos!.dx,
+                    top: _textPos!.dy,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: Focus(
+                        onKeyEvent: _onTextKey,
+                        child: IntrinsicWidth(
+                          child: TextField(
+                            controller: _textCtl,
+                            focusNode: _textFocus,
+                            autofocus: true,
+                            maxLines: null,
+                            // Don't auto-unfocus when tapping the toolbar: that's how
+                            // style controls adjust the text WHILE editing.
+                            // Canvas taps still commit explicitly (_onTapUp/_panStart);
+                            // switching tools commits via focus loss.
+                            onTapOutside: (_) {},
+                            cursorColor: c.style.value.color,
+                            // Glyphs are TRANSPARENT (the painter draws the visible
+                            // text in the real colour) at the real size/family, so the
+                            // caret/selection geometry matches the painted result and
+                            // commit causes zero shift. Disable strut to match.
+                            style: textStyleOf(
+                              c.style.value,
+                            ).copyWith(color: const Color(0x00000000)),
+                            strutStyle: StrutStyle.disabled,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ),
                         ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            // Window-snap highlight (Crop tool): the hovered window, or the whole
-            // display over bare desktop. The layer is ALWAYS present so the Stack
-            // child COUNT is stable (removing a child before the gesture detector
-            // when a drag starts would tear down its pan recognizer mid-drag).
-            // The rect tweens between targets so the frame glides from one window
-            // to the next; the painter is null when nothing should show.
-            // One child either way, so the Stack child COUNT stays stable.
-            // TweenAnimationBuilder asserts a non-null tween end, so only use it
-            // when there's a target; otherwise an empty box.
-            snapTarget == null
-                ? const SizedBox.shrink()
-                : TweenAnimationBuilder<Rect?>(
-                    tween: RectTween(end: snapTarget),
-                    duration: const Duration(milliseconds: 120),
-                    curve: Curves.easeOut,
-                    builder: (context, rect, _) => IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: rect == null
-                            ? null
-                            : WindowHighlightPainter(rect),
                       ),
                     ),
                   ),
-            // Precision HUD: full-screen crosshair + pixel loupe — crop and the
-            // raster region tools (blur/pixelate), active display only.
-            if (_active && showsCrosshair)
-              IgnorePointer(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: CrosshairPainter(_cursor),
-                ),
-              ),
-            // Loupe is bound to the crosshair — shown/hidden together, so it
-            // never flickers off when hovering over an existing region.
-            if (_active && showsCrosshair)
-              Positioned(
-                left: loupeOrigin.dx,
-                top: loupeOrigin.dy,
-                child: IgnorePointer(
-                  child: CustomPaint(
-                    size: const Size(120, 120),
-                    painter: LoupePainter(
-                      image: widget.host.baseImage,
-                      cursorLogical: _cursor,
-                      scaleFactor: widget.host.pixelScale,
-                      drawables: _effectiveDrawables(),
-                      blurredFull: _blurredFull,
-                      pixelatedFull: _pixelatedFull,
-                      logicalSize: Size(
-                        widget.host.size.width,
-                        widget.host.size.height,
+                // Draggable toolbar — only on the cursor's display (so it "follows"
+                // across displays), and hidden while a crop drag is in progress so the
+                // selection / screen isn't obscured. Suppressed when the host docks
+                // the toolbar itself (e.g. the standalone image editor).
+                if (_active && !_cropping && widget.host.showFloatingToolbar)
+                  Positioned(
+                    left: _toolbarPos.dx,
+                    // Bottom-anchored so the tool row (the Column's last/bottom child)
+                    // stays put while the options row above it grows upward.
+                    bottom: widget.host.size.height - _toolbarPos.dy,
+                    // Material ancestor for the toolbar's TextField (pt) + IconButtons.
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: EditorToolbar(
+                        controller: c,
+                        onMove: _moveToolbar,
+                        onPtEditingDone: () {
+                          // Hand keyboard focus back after a toolbar number field
+                          // commits: to the inline text field if editing text, else
+                          // to the editor so tool shortcuts / Enter-export work again.
+                          if (_editingText) {
+                            _textFocus.requestFocus();
+                          } else {
+                            _focus.requestFocus();
+                          }
+                        },
+                        editorBindings: widget.editorBindings,
                       ),
                     ),
                   ),
-                ),
+              ],
+            );
+            // Display transform: scale + centre the logical canvas inside the
+            // box for the image editor. The overlay (non-interactive) inserts NO
+            // Transform — its widget tree stays structurally identical, with the
+            // viewport at identity so _toLogical/painter sizes degenerate to the
+            // originals. transformHitTests:false because we map pointer->logical
+            // ourselves via _toLogical (relying on Flutter's hit-test transform
+            // too would double-apply the scale).
+            if (!_interactive) return stack;
+            final v = _viewport;
+            final matrix = Matrix4.identity()
+              ..translateByDouble(v.offset.dx, v.offset.dy, 0, 1)
+              ..scaleByDouble(v.scale, v.scale, 1, 1);
+            return Transform(
+              transform: matrix,
+              transformHitTests: false,
+              child: OverflowBox(
+                minWidth: 0,
+                minHeight: 0,
+                maxWidth: double.infinity,
+                maxHeight: double.infinity,
+                alignment: Alignment.topLeft,
+                child: SizedBox.fromSize(size: _canvasSize, child: stack),
               ),
-            // Small reticle for the drawing tools (replaces the system arrow with
-            // a precise inverting cross). Region tools use the crosshair above.
-            if (_showsReticle)
-              IgnorePointer(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: ReticlePainter(_cursor),
-                ),
-              ),
-            // Gesture + hover layer. A Listener catches the right button reliably
-            // even mid-drag (GestureDetector's secondary-tap loses the arena to an
-            // active pan), so right-click can cancel an in-progress crop/draw.
-            Positioned.fill(
-              // Stable key so this layer (and its pan recognizer) is matched by
-              // key and never re-created when sibling layers above (the animated
-              // snap highlight) or below (the toolbar) toggle or change type
-              // mid-drag. Without it the unkeyed Stack diff misaligns and tears
-              // down the pan mid-gesture (crop stuck at 0x0).
-              key: const ValueKey('editor-gesture-layer'),
-              child: Listener(
-                // Watch down/move/up: a right-button press DURING a left drag
-                // arrives as a move (the pointer is already down), not a down — so
-                // the old onPointerDown-only check never saw it and the crop
-                // committed. The latch fires _onRightDown once per right press.
-                onPointerDown: _onPointerButtons,
-                onPointerMove: _onPointerButtons,
-                onPointerUp: _onPointerButtons,
-                child: MouseRegion(
-                  // Over the canvas we always draw our OWN cursor (full crosshair
-                  // for region tools, small reticle for drawing tools), so hide
-                  // the system cursor — except while editing text. Over the
-                  // toolbar this region isn't hit, so its normal click cursor
-                  // shows.
-                  cursor: (_active && !_editingText && !_isSelectTool)
-                      ? SystemMouseCursors.none
-                      : SystemMouseCursors.basic,
-                  onEnter: (_) => setState(() => _overCanvas = true),
-                  onExit: (_) => setState(() => _overCanvas = false),
-                  onHover: _onHover,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: _onTapUp,
-                    onPanStart: _panStart,
-                    onPanUpdate: _panUpdate,
-                    onPanEnd: _panEnd,
-                    // Safety net: if the pan is cancelled (never reaches
-                    // onPanEnd), still release the cursor confine + transient
-                    // state so the cursor is never stranded on one display.
-                    onPanCancel: () {
-                      widget.host.cursor.setDrawingLock(false);
-                      _cancelGesture = false;
-                      setState(() {
-                        _resetDrawState();
-                        _resetEditState();
-                        _cropping = false;
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-            // Inline multiline text editor (Enter commits, Shift+Enter newline).
-            if (_active && _editingText && _textPos != null && _textCtl != null)
-              Positioned(
-                left: _textPos!.dx,
-                top: _textPos!.dy,
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: Focus(
-                    onKeyEvent: _onTextKey,
-                    child: IntrinsicWidth(
-                      child: TextField(
-                        controller: _textCtl,
-                        focusNode: _textFocus,
-                        autofocus: true,
-                        maxLines: null,
-                        // Don't auto-unfocus when tapping the toolbar: that's how
-                        // style controls adjust the text WHILE editing.
-                        // Canvas taps still commit explicitly (_onTapUp/_panStart);
-                        // switching tools commits via focus loss.
-                        onTapOutside: (_) {},
-                        cursorColor: c.style.value.color,
-                        // Glyphs are TRANSPARENT (the painter draws the visible
-                        // text in the real colour) at the real size/family, so the
-                        // caret/selection geometry matches the painted result and
-                        // commit causes zero shift. Disable strut to match.
-                        style: textStyleOf(
-                          c.style.value,
-                        ).copyWith(color: const Color(0x00000000)),
-                        strutStyle: StrutStyle.disabled,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            // Draggable toolbar — only on the cursor's display (so it "follows"
-            // across displays), and hidden while a crop drag is in progress so the
-            // selection / screen isn't obscured. Suppressed when the host docks
-            // the toolbar itself (e.g. the standalone image editor).
-            if (_active && !_cropping && widget.host.showFloatingToolbar)
-              Positioned(
-                left: _toolbarPos.dx,
-                // Bottom-anchored so the tool row (the Column's last/bottom child)
-                // stays put while the options row above it grows upward.
-                bottom: widget.host.size.height - _toolbarPos.dy,
-                // Material ancestor for the toolbar's TextField (pt) + IconButtons.
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: EditorToolbar(
-                    controller: c,
-                    onMove: _moveToolbar,
-                    onPtEditingDone: () {
-                      // Hand keyboard focus back after a toolbar number field
-                      // commits: to the inline text field if editing text, else
-                      // to the editor so tool shortcuts / Enter-export work again.
-                      if (_editingText) {
-                        _textFocus.requestFocus();
-                      } else {
-                        _focus.requestFocus();
-                      }
-                    },
-                    editorBindings: widget.editorBindings,
-                  ),
-                ),
-              ),
-          ],
+            );
+          },
         ),
       ),
     );

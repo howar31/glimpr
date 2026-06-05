@@ -17,15 +17,16 @@ void main() {
     final host = ImageEditorHost(
       image: image,
       bytes: Uint8List.fromList([1, 2, 3]),
-      fittedSize: const Size(900, 675), // aspect-preserved fit of 4000x3000
       onComplete: () async => completed = true,
-      activeSignal: ValueNotifier(
-        (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
-      ),
+      activeSignal: ValueNotifier((
+        id: ImageEditorHost.kImageEditorHostId,
+        cursor: Offset.zero,
+      )),
     );
-    expect(host.size, const Size(900, 675));
-    // pixelScale maps fitted-logical -> native pixels.
-    expect(host.pixelScale, closeTo(4000 / 900, 1e-9));
+    // The logical canvas IS the image's native pixel grid; EditorCore fits it
+    // via its viewport, so size == native size and pixelScale == 1.0.
+    expect(host.size, const Size(4000, 3000));
+    expect(host.pixelScale, 1.0);
     expect(host.baseImage, same(image));
     expect(host.baseImageBytes, isNotNull);
     expect(host.cursorSeed, isNull);
@@ -45,11 +46,11 @@ void main() {
     final host = ImageEditorHost(
       image: image,
       bytes: Uint8List.fromList([0]),
-      fittedSize: const Size(10, 10),
       onComplete: () async {},
-      activeSignal: ValueNotifier(
-        (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
-      ),
+      activeSignal: ValueNotifier((
+        id: ImageEditorHost.kImageEditorHostId,
+        cursor: Offset.zero,
+      )),
       onClose: () => closed = true,
     );
     host.onCancel();

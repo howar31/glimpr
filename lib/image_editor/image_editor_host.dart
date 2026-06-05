@@ -4,18 +4,18 @@ import 'package:flutter/widgets.dart' show Offset, Rect, Size, VoidCallback;
 import '../capture/captured_display.dart' show SnapWindow;
 import '../editor/editor_host.dart';
 
-/// [EditorHost] for the standalone Image Editor: a loaded image displayed at a
-/// fixed fitted size in a window. Reuses the overlay's (logicalSize + pixelScale
-/// + native baseImage) model — [size] is the fitted logical size, [pixelScale]
-/// maps it back to the image's native pixels for full-resolution export. No
-/// native cursor, no window-snap, no cross-display; always active.
+/// [EditorHost] for the standalone Image Editor: a loaded image whose logical
+/// canvas IS the image's native pixel grid ([size] = native size, [pixelScale]
+/// = 1.0). EditorCore drives a zoom/pan viewport (`viewportInteractive`) to fit
+/// the native-sized canvas inside the window, so there is no fixed on-screen
+/// fitted size here. No native cursor, no window-snap, no cross-display; always
+/// active.
 ///
 /// [activeSignal] must be injected by the caller (typically owned by the parent
 /// State) so that the stable notifier survives per-build host reconstruction.
 class ImageEditorHost implements EditorHost {
   final ui.Image image;
   final Uint8List bytes;
-  final Size fittedSize;
   final Future<void> Function() onComplete;
   final VoidCallback? onClose;
   @override
@@ -24,7 +24,6 @@ class ImageEditorHost implements EditorHost {
   ImageEditorHost({
     required this.image,
     required this.bytes,
-    required this.fittedSize,
     required this.onComplete,
     required this.activeSignal,
     this.onClose,
@@ -33,9 +32,9 @@ class ImageEditorHost implements EditorHost {
   static const int kImageEditorHostId = 0;
 
   @override
-  Size get size => fittedSize;
+  Size get size => Size(image.width.toDouble(), image.height.toDouble());
   @override
-  double get pixelScale => image.width / fittedSize.width;
+  double get pixelScale => 1.0;
   @override
   ui.Image get baseImage => image;
   @override
@@ -59,7 +58,8 @@ class ImageEditorHost implements EditorHost {
   @override
   bool get viewportInteractive => true;
   @override
-  Future<void> onExport(Rect? selectionLogical, SnapWindow? window) => onComplete();
+  Future<void> onExport(Rect? selectionLogical, SnapWindow? window) =>
+      onComplete();
   @override
   void onCancel() => onClose?.call();
 }
