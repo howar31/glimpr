@@ -35,3 +35,14 @@ class EditorViewport {
     );
   }
 }
+
+/// A thin handle the host (image editor) uses to drive [EditorCore]'s viewport
+/// from outside its widget tree — e.g. toolbar Fit / 100% buttons. EditorCore
+/// binds its handlers; the host calls [fit] / [actualSize]. No-ops until bound
+/// (and after the editor unloads, where the buttons are not shown anyway).
+class EditorViewportController {
+  VoidCallback? onFit;
+  VoidCallback? onActualSize;
+  void fit() => onFit?.call();
+  void actualSize() => onActualSize?.call();
+}

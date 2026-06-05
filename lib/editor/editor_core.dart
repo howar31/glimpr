@@ -30,11 +30,15 @@ class EditorCore extends StatefulWidget {
   final EditorController controller;
   final Map<String, HotkeyBinding?> editorBindings;
   final EditorHost host;
+  // Optional handle so a docked host toolbar (image editor) can drive the
+  // viewport's Fit / 100% from outside; null for the overlay.
+  final EditorViewportController? viewportController;
   const EditorCore({
     super.key,
     required this.controller,
     required this.editorBindings,
     required this.host,
+    this.viewportController,
   });
 
   @override
@@ -140,17 +144,30 @@ class _EditorCoreState extends State<EditorCore> {
     );
   }
 
-  /// Re-fit the canvas to the last laid-out box (⌘0). No-op when non-interactive.
+  /// Re-fit the canvas to the last laid-out box (⌘1). No-op when non-interactive.
   void _refitViewport() {
     if (!_interactive) return;
     setState(() => _viewport = _fittedViewport(_lastBoxSize));
   }
 
+  /// Zoom to 100% (1:1) anchored on the box centre (⌘2). No-op for the overlay.
+  void _zoomActualSize() {
+    if (!_interactive) return;
+    setState(
+      () => _viewport = _viewport.zoomedAround(
+        Offset(_lastBoxSize.width / 2, _lastBoxSize.height / 2),
+        1.0,
+      ),
+    );
+  }
+
   static const double _kMinScale = 0.1;
   static const double _kMaxScale = 16.0;
   double _panZoomBaseScale = 1.0;
+  bool _middlePanning = false; // middle mouse button (wheel press) viewport pan
 
-  /// Mouse-wheel / two-finger scroll: Cmd+scroll = cursor-anchored zoom, else pan.
+  /// Mouse-wheel / two-finger scroll: Cmd+scroll = cursor-anchored zoom;
+  /// Shift+scroll = horizontal pan (common convention); else pan.
   void _onPointerSignal(PointerSignalEvent e) {
     if (!_interactive || e is! PointerScrollEvent) return;
     if (HardwareKeyboard.instance.isMetaPressed) {
@@ -158,7 +175,14 @@ class _EditorCoreState extends State<EditorCore> {
           .clamp(_kMinScale, _kMaxScale);
       setState(() => _viewport = _viewport.zoomedAround(e.localPosition, ns));
     } else {
-      setState(() => _viewport = _viewport.pannedBy(-e.scrollDelta));
+      var delta = e.scrollDelta;
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        // Map the wheel's dominant axis to horizontal (most mice report the
+        // vertical wheel; some setups pre-swap to horizontal under Shift).
+        final mag = delta.dy.abs() >= delta.dx.abs() ? delta.dy : delta.dx;
+        delta = Offset(mag, 0);
+      }
+      setState(() => _viewport = _viewport.pannedBy(-delta));
     }
   }
 
@@ -174,6 +198,24 @@ class _EditorCoreState extends State<EditorCore> {
       () => _viewport =
           _viewport.zoomedAround(e.localPosition, ns).pannedBy(e.panDelta),
     );
+  }
+
+  // Middle mouse button (= pressing the scroll wheel) drag-pans the viewport.
+  // Handled on the OUTER full-window Listener so it works anywhere — over the
+  // image or the surrounding margins. The draw GestureDetector only claims the
+  // primary button, so a middle-drag never draws. Editor-only (gated by wiring).
+  void _onMiddleButtonDown(PointerDownEvent e) {
+    if ((e.buttons & kMiddleMouseButton) != 0) _middlePanning = true;
+  }
+
+  void _onMiddleButtonMove(PointerMoveEvent e) {
+    if (_middlePanning && (e.buttons & kMiddleMouseButton) != 0) {
+      setState(() => _viewport = _viewport.pannedBy(e.delta));
+    }
+  }
+
+  void _onMiddleButtonUp(PointerUpEvent e) {
+    _middlePanning = false;
   }
 
   /// The whole-display rect (inset so its frame stays fully on-screen) — the
@@ -447,21 +489,16 @@ class _EditorCoreState extends State<EditorCore> {
       if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
-    // Viewport zoom shortcuts (image editor only): Cmd+0 = fit, Cmd+1 = 100%.
+    // Viewport zoom shortcuts (image editor only): Cmd+1 = fit, Cmd+2 = 100%.
     if (_interactive &&
         pressed.length == 1 &&
         pressed.contains(HotkeyModifier.meta)) {
-      if (key == LogicalKeyboardKey.digit0) {
+      if (key == LogicalKeyboardKey.digit1) {
         _refitViewport();
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.digit1) {
-        setState(
-          () => _viewport = _viewport.zoomedAround(
-            Offset(_lastBoxSize.width / 2, _lastBoxSize.height / 2),
-            1.0,
-          ),
-        );
+      if (key == LogicalKeyboardKey.digit2) {
+        _zoomActualSize();
         return KeyEventResult.handled;
       }
     }
@@ -897,6 +934,10 @@ class _EditorCoreState extends State<EditorCore> {
     // _panCancel). Spanning across displays is out of scope.
     widget.host.cursor.setDrawingLock(true);
     final p = _toLogical(d.localPosition);
+    // The editor has no outer pointer tracker (the overlay uses _trackCursor on
+    // the full-window Listener), so the reticle/crosshair must advance from the
+    // pan stream here — otherwise it freezes at the drag's start point.
+    if (_interactive) setState(() => _cursor = p);
     if (c.tool.value == ToolKind.crop) {
       _cropping = true;
       setState(() {
@@ -957,6 +998,9 @@ class _EditorCoreState extends State<EditorCore> {
       if (_showsCrosshair) setState(() => _cursor = p);
       return;
     }
+    // Editor: advance the reticle/crosshair from the pan stream for EVERY tool
+    // (no outer tracker); the crop/blur/pixelate branches below also keep it.
+    if (_interactive) setState(() => _cursor = p);
     if (c.tool.value == ToolKind.crop) {
       setState(() => _cursor = p);
       _crop.update(p);
@@ -1123,6 +1167,13 @@ class _EditorCoreState extends State<EditorCore> {
   @override
   Widget build(BuildContext context) {
     _syncCursorHidden(); // reconcile system-cursor visibility (pushed on change)
+    // Let a docked host toolbar drive Fit / 100% (image editor). Rebound each
+    // build so the currently-mounted State always owns the handlers.
+    final vc = widget.viewportController;
+    if (vc != null) {
+      vc.onFit = _refitViewport;
+      vc.onActualSize = _zoomActualSize;
+    }
     final inCrop = _inCrop;
     final showsCrosshair = _showsCrosshair;
     final loupeOrigin = _loupeOrigin();
@@ -1143,7 +1194,12 @@ class _EditorCoreState extends State<EditorCore> {
       // crosshair/reticle is driven by the image-rect gesture layer's onHover, so
       // the outer tracker is overlay-only.
       onPointerHover: _interactive ? null : _trackCursor,
-      onPointerMove: _interactive ? null : _trackCursor,
+      // Editor: middle-button (wheel-press) drag-pan on the full-window stream;
+      // overlay: the cursor tracker. (A middle move with no middle button held
+      // is a no-op, so this never interferes with drawing.)
+      onPointerMove: _interactive ? _onMiddleButtonMove : _trackCursor,
+      onPointerDown: _interactive ? _onMiddleButtonDown : null,
+      onPointerUp: _interactive ? _onMiddleButtonUp : null,
       // Zoom/pan signals (image editor only): scroll = pan, Cmd+scroll = zoom,
       // trackpad pinch = zoom. The overlay passes null (no viewport).
       onPointerSignal: _interactive ? _onPointerSignal : null,

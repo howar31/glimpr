@@ -9,6 +9,7 @@ import '../editor/document.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
 import '../editor/tool_style_store.dart';
+import '../editor/viewport.dart';
 import '../overlay/toolbar.dart';
 import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -62,6 +63,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   final Map<ToolKind, DrawStyle> _toolStyles = {};
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
   CaptureSettings _cap = CaptureSettings.defaults;
+  // Drives EditorCore's Fit / 100% from the docked toolbar buttons.
+  final EditorViewportController _viewport = EditorViewportController();
 
   RecentImagesStore? _recentStore;
   List<String> _recent = const [];
@@ -487,38 +490,48 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// shows a brand-gradient dot + the "Image Editor" label. Drawn in Flutter
   /// because the native title is hidden + transparent (.fullSizeContentView).
   Widget _titleBar(GlimprTokens t) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: t.isDark
-            ? const Color(0x99020617) // rgba(2,6,23,0.6)-ish translucent slab
-            : const Color(0xCCFFFFFF),
-        border: Border(
-          bottom: BorderSide(
-            color: t.isDark
-                ? const Color(0x1AFFFFFF) // rgba(255,255,255,0.1)
-                : const Color(0x140F172A),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Left inset to clear the macOS traffic-light buttons.
-          const SizedBox(width: 78),
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: kGlimprLogoGradient, // match the wordmark's brand gradient
+    return GestureDetector(
+      // The Flutter title bar covers the native one, so AppKit never sees a
+      // double-click; forward it to native to run the system title-bar action.
+      behavior: HitTestBehavior.opaque,
+      onDoubleTap: () {
+        try {
+          _channel.invokeMethod('titleBarDoubleClick');
+        } catch (_) {}
+      },
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: t.isDark
+              ? const Color(0x99020617) // rgba(2,6,23,0.6)-ish translucent slab
+              : const Color(0xCCFFFFFF),
+          border: Border(
+            bottom: BorderSide(
+              color: t.isDark
+                  ? const Color(0x1AFFFFFF) // rgba(255,255,255,0.1)
+                  : const Color(0x140F172A),
             ),
           ),
-          const SizedBox(width: 9),
-          Text(
-            'Image Editor',
-            style: GlimprType.sansStyle(13, 600, t.fg2, letterSpacing: -0.1),
-          ),
-        ],
+        ),
+        child: Row(
+          children: [
+            // Left inset to clear the macOS traffic-light buttons.
+            const SizedBox(width: 78),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: kGlimprLogoGradient, // match the wordmark gradient
+              ),
+            ),
+            const SizedBox(width: 9),
+            Text(
+              'Image Editor',
+              style: GlimprType.sansStyle(13, 600, t.fg2, letterSpacing: -0.1),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -662,6 +675,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             controller: controller,
             editorBindings: _bindings,
             host: host,
+            viewportController: _viewport,
           ),
         ),
       ],
@@ -683,6 +697,18 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       onMove: (_) {}, // fixed — not draggable
       onPtEditingDone: () {}, // focus refinement is a later 微調
       trailing: [
+          // View controls: fit-to-window / actual size (also ⌘1 / ⌘2).
+          _IconAction(
+            icon: Icons.fit_screen_outlined,
+            tooltip: 'Fit to window (⌘1)',
+            onTap: _viewport.fit,
+          ),
+          _IconAction(
+            icon: Icons.crop_free,
+            tooltip: 'Actual size · 100% (⌘2)',
+            onTap: _viewport.actualSize,
+          ),
+          const SizedBox(width: 8),
           _HistoryButtons(controller: controller),
           const SizedBox(width: 8),
           _BarAction(
