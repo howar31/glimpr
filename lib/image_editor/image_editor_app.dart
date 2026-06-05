@@ -4,19 +4,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import '../editor/draw_style.dart';
+import '../editor/document.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
 import '../editor/tool_style_store.dart';
+import '../overlay/toolbar.dart';
 import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
+import '../theme/glimpr_controls.dart';
+import '../theme/glimpr_theme.dart';
+import 'checkerboard.dart';
 import 'image_editor_export.dart';
 import 'image_editor_host.dart';
 
-/// Standalone Image Editor window: landing state with "Open Image…" + loaded
-/// state with the shared [EditorCore] at fitted size + a "Complete" bar that
-/// delivers per capture settings.
+/// Standalone Image Editor window in the Aurora design language (same theme as
+/// the Settings window, following the system light/dark appearance).
+///
+/// Landing state: an Aurora card prompting the user to open an image. Loaded
+/// state: a checkerboard transparency canvas with the fitted image (drop-shadowed)
+/// above a DOCKED bottom toolbar — the shared [EditorToolbar] rendered without
+/// its drag handle, with undo/redo + Open/Copy/Save as trailing actions inside
+/// the same glass bar. Copy/Save composite the annotated image and deliver it.
 class ImageEditorApp extends StatefulWidget {
   const ImageEditorApp({super.key});
 
@@ -24,11 +34,13 @@ class ImageEditorApp extends StatefulWidget {
   State<ImageEditorApp> createState() => _ImageEditorAppState();
 }
 
-class _ImageEditorAppState extends State<ImageEditorApp> {
+class _ImageEditorAppState extends State<ImageEditorApp>
+    with WidgetsBindingObserver {
   ui.Image? _image;
   Uint8List? _bytes;
   String _sourceName = 'image';
   EditorController? _controller;
+  // Single in-flight guard shared by Copy + Save so rapid clicks never double-fire.
   bool _exporting = false;
   final GlobalKey<ScaffoldMessengerState> _messengerKey =
       GlobalKey<ScaffoldMessengerState>();
@@ -45,6 +57,7 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Prefetch per-tool styles, hotkey bindings, and capture settings.
     // Each block is in its own try/catch so a synchronous store construction
@@ -78,6 +91,10 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
     });
   }
 
+  // Follow the system appearance: rebuild when it flips so the token set swaps.
+  @override
+  void didChangePlatformBrightness() => setState(() {});
+
   /// Open the native file-picker panel; the native side returns the chosen path.
   Future<void> _openPanel() async {
     try {
@@ -94,9 +111,7 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
     try {
       bytes = await File(path).readAsBytes();
     } catch (e) {
-      _messengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text('Cannot read file: $e')),
-      );
+      _toast('Cannot read file: $e');
       return;
     }
 
@@ -107,9 +122,7 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
       img = frame.image;
       codec.dispose();
     } catch (e) {
-      _messengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text('Cannot decode image: $e')),
-      );
+      _toast('Cannot decode image: $e');
       return;
     }
 
@@ -131,12 +144,21 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
     });
   }
 
-  /// Export the annotated image and show a result snack bar.
-  Future<void> _complete() async {
+  /// Copy the annotated image to the clipboard.
+  Future<void> _copy() => _export(saveToFile: false, copyToClipboard: true);
+
+  /// Save the annotated image to the configured folder.
+  Future<void> _save() => _export(saveToFile: true, copyToClipboard: false);
+
+  /// Composite + deliver the annotated image and show a result toast. The shared
+  /// [_exporting] guard covers both Copy and Save so rapid clicks don't re-fire.
+  Future<void> _export({
+    required bool saveToFile,
+    required bool copyToClipboard,
+  }) async {
     final image = _image, controller = _controller;
-    if (image == null || controller == null) return;
-    if (_exporting) return;
-    _exporting = true;
+    if (image == null || controller == null || _exporting) return;
+    setState(() => _exporting = true);
     try {
       final cap = _cap;
       final result = await exportImage(
@@ -144,26 +166,35 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
         drawables: controller.document.value.drawables,
         jpeg: cap.isJpeg,
         jpegQuality: cap.jpegQuality,
-        saveToFile: cap.saveToFile,
-        copyToClipboard: cap.copyToClipboard,
+        saveToFile: saveToFile,
+        copyToClipboard: copyToClipboard,
         saveDir: cap.saveDir,
         sourceName: _sourceName,
       );
       if (!mounted) return;
-      final ok = (!cap.saveToFile || result.savedOk) &&
-          (!cap.copyToClipboard || result.copiedToClipboard);
-      _messengerKey.currentState?.showSnackBar(SnackBar(
-        content: Text(ok
-            ? 'Saved${result.savedPath != null ? ' to ${result.savedPath}' : ''}'
-            : 'Export failed'),
-      ));
+      if (copyToClipboard) {
+        _toast(result.copiedToClipboard
+            ? 'Copied to clipboard'
+            : 'Copy failed');
+      } else {
+        _toast(result.savedOk
+            ? 'Saved to ${result.savedPath}'
+            : 'Save failed');
+      }
     } finally {
-      _exporting = false;
+      if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  void _toast(String message) {
+    _messengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(_AuroraSnack.build(message));
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _image?.dispose();
     _controller?.dispose();
     _active.dispose();
@@ -172,51 +203,102 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final tokens = GlimprTokens.forBrightness(brightness);
     final image = _image;
     final bytes = _bytes;
     final controller = _controller;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: _messengerKey,
-      theme: ThemeData.dark(),
-      home: (image == null || bytes == null || controller == null)
-          ? _landing()
-          : Scaffold(body: _editor(image, bytes, controller)),
-    );
-  }
-
-  /// Landing state: prompt the user to open a file.
-  Widget _landing() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F1526),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FilledButton.icon(
-              icon: const Icon(Icons.image),
-              label: const Text('Open Image…'),
-              onPressed: _openPanel,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'or drag an image in (coming soon)',
-              style: TextStyle(color: Colors.white38, fontSize: 13),
-            ),
-          ],
+      theme: ThemeData(
+        brightness: brightness,
+        scaffoldBackgroundColor: Colors.transparent,
+        fontFamily: GlimprType.sans,
+      ),
+      home: GlimprTheme(
+        tokens: tokens,
+        child: Scaffold(
+          backgroundColor: tokens.isDark
+              ? const Color(0xFF0F1526)
+              : const Color(0xFFEFF2F7),
+          body: (image == null || bytes == null || controller == null)
+              ? _landing(tokens)
+              : _editor(tokens, image, bytes, controller),
         ),
       ),
     );
   }
 
-  /// Loaded state: fitted [EditorCore] centered above the "Complete" bar.
-  Widget _editor(ui.Image image, Uint8List bytes, EditorController controller) {
+  /// Landing state: an Aurora card prompting the user to open an image. Paste /
+  /// drag-drop / Open Recent are later blocks — only the static hint + the Open
+  /// button are wired now.
+  Widget _landing(GlimprTokens t) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: GlassCard.padded(
+          pad: 36,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const GlimprMark(size: 56),
+              const SizedBox(height: 22),
+              Text(
+                'Open an image to edit',
+                textAlign: TextAlign.center,
+                style: GlimprType.sansStyle(18, 700, t.fg1, letterSpacing: -0.3),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Annotate, crop, and re-export any image in the same toolkit you '
+                'use to capture.',
+                textAlign: TextAlign.center,
+                style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
+              ),
+              const SizedBox(height: 24),
+              AccentButton(
+                'Open Image…',
+                icon: Icons.image_outlined,
+                onTap: _openPanel,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Loaded state: a checkerboard transparency canvas with the fitted image
+  /// (drop-shadowed) above the docked bottom toolbar bar.
+  Widget _editor(
+    GlimprTokens t,
+    ui.Image image,
+    Uint8List bytes,
+    EditorController controller,
+  ) {
+    return Column(
+      children: [
+        Expanded(child: _canvas(t, image, bytes, controller)),
+        _bottomBar(t, controller),
+      ],
+    );
+  }
+
+  /// The canvas area: a checkerboard transparency backdrop with the fitted,
+  /// drop-shadowed [EditorCore] centred inside it.
+  Widget _canvas(
+    GlimprTokens t,
+    ui.Image image,
+    Uint8List bytes,
+    EditorController controller,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const barH = 56.0;
-        final availW = constraints.maxWidth;
-        final availH =
-            (constraints.maxHeight - barH).clamp(1.0, double.infinity);
+        const inset = 28.0; // breathing room so the shadow isn't clipped
+        final availW = (constraints.maxWidth - inset * 2).clamp(1.0, double.infinity);
+        final availH = (constraints.maxHeight - inset * 2).clamp(1.0, double.infinity);
         final imgW = image.width.toDouble(), imgH = image.height.toDouble();
         final scale = (availW / imgW).clamp(0.0, availH / imgH);
         final fitted = Size(imgW * scale, imgH * scale);
@@ -224,39 +306,31 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
           image: image,
           bytes: bytes,
           fittedSize: fitted,
-          onComplete: _complete,
+          onComplete: _save,
           activeSignal: _active,
         );
         return Stack(
+          fit: StackFit.expand,
           children: [
-            Positioned.fill(
-              bottom: barH,
-              child: Center(
-                child: SizedBox(
-                  width: fitted.width,
-                  height: fitted.height,
-                  child: EditorCore(
-                    key: ValueKey(image), // fresh State per loaded image
-                    controller: controller,
-                    editorBindings: _bindings,
-                    host: host,
-                  ),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
+            Checkerboard(dark: t.isDark),
+            Center(
               child: Container(
-                height: barH,
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                color: const Color(0xCC0F1526),
-                child: FilledButton(
-                  onPressed: _complete,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('Complete'),
-                  ),
+                width: fitted.width,
+                height: fitted.height,
+                decoration: const BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x59000000),
+                      blurRadius: 28,
+                      offset: Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: EditorCore(
+                  key: ValueKey(image), // fresh State per loaded image
+                  controller: controller,
+                  editorBindings: _bindings,
+                  host: host,
                 ),
               ),
             ),
@@ -265,4 +339,222 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
       },
     );
   }
+
+  /// The docked bottom bar: the shared [EditorToolbar] (no drag handle) with
+  /// undo/redo + Open/Copy/Save as trailing actions inside the same glass bar.
+  Widget _bottomBar(GlimprTokens t, EditorController controller) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      decoration: BoxDecoration(
+        color: t.sidebarBg,
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: EditorToolbar(
+            controller: controller,
+            editorBindings: _bindings,
+            showDragHandle: false,
+            onMove: (_) {}, // docked — not draggable
+            onPtEditingDone: () {}, // focus refinement is a later 微調
+            trailing: [
+              _HistoryButtons(controller: controller),
+              const SizedBox(width: 8),
+              _BarAction(
+                icon: Icons.folder_open_outlined,
+                label: 'Open',
+                onTap: _openPanel,
+              ),
+              const SizedBox(width: 4),
+              _BarAction(
+                icon: Icons.copy_outlined,
+                label: 'Copy',
+                onTap: _exporting ? null : _copy,
+              ),
+              const SizedBox(width: 4),
+              _BarAction(
+                icon: Icons.save_outlined,
+                label: 'Save',
+                accent: true,
+                onTap: _exporting ? null : _save,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Undo / redo icon pair styled to sit inside the toolbar's glass bar, enabled
+/// per the document's [EditorDocument.canUndo] / [EditorDocument.canRedo].
+class _HistoryButtons extends StatelessWidget {
+  const _HistoryButtons({required this.controller});
+  final EditorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<EditorDocument>(
+      valueListenable: controller.document,
+      builder: (_, doc, _) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _IconAction(
+            icon: Icons.undo,
+            tooltip: 'Undo',
+            onTap: doc.canUndo ? controller.undo : null,
+          ),
+          _IconAction(
+            icon: Icons.redo,
+            tooltip: 'Redo',
+            onTap: doc.canRedo ? controller.redo : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A compact icon-only action button matching the toolbar's foreground palette.
+/// Dims when [onTap] is null.
+class _IconAction extends StatefulWidget {
+  const _IconAction({required this.icon, required this.tooltip, this.onTap});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  State<_IconAction> createState() => _IconActionState();
+}
+
+class _IconActionState extends State<_IconAction> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final enabled = widget.onTap != null;
+    final color = !enabled ? t.fg4 : (_hover ? t.fg1 : t.fg2);
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
+      onExit: enabled ? (_) => setState(() => _hover = false) : null,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: widget.tooltip,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: enabled && _hover ? t.navHoverBg : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(widget.icon, size: 18, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A compact icon+label action for the bottom bar. The accent variant fills with
+/// the brand gradient (Save); the rest read as quiet glass actions (Open, Copy).
+class _BarAction extends StatefulWidget {
+  const _BarAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.accent = false,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool accent;
+
+  @override
+  State<_BarAction> createState() => _BarActionState();
+}
+
+class _BarActionState extends State<_BarAction> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final enabled = widget.onTap != null;
+    final accent = widget.accent;
+    final fg = accent
+        ? GlimprTokens.onAccent
+        : (!enabled ? t.fg4 : (_hover ? t.fg1 : t.fg2));
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: enabled ? (_) => setState(() => _hover = true) : null,
+        onExit: enabled ? (_) => setState(() => _hover = false) : null,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: accent ? GlimprTokens.accentGrad : null,
+              color: accent
+                  ? null
+                  : (_hover && enabled ? t.navHoverBg : Colors.transparent),
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: accent
+                  ? [
+                      BoxShadow(
+                        color: t.shadowAccent,
+                        blurRadius: 16,
+                        offset: const Offset(0, 5),
+                      ),
+                    ]
+                  : null,
+            ),
+            // Faint hover wash on the accent button (no movement), matching
+            // [AccentButton]'s highlight model.
+            foregroundDecoration: accent
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(9),
+                    color: _hover && enabled
+                        ? const Color(0x1FFFFFFF)
+                        : const Color(0x00FFFFFF),
+                  )
+                : null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, size: 16, color: fg),
+                const SizedBox(width: 7),
+                Text(widget.label, style: GlimprType.sansStyle(13.5, 600, fg)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Builds an Aurora-tinted confirmation [SnackBar] (floating, brand-bordered).
+class _AuroraSnack {
+  static SnackBar build(String message) => SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xF21A2236),
+        elevation: 8,
+        duration: const Duration(milliseconds: 2200),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: Color(0x3360A5FA)),
+        ),
+        content: Text(
+          message,
+          style: GlimprType.sansStyle(13.5, 600, const Color(0xF2FFFFFF)),
+        ),
+      );
 }

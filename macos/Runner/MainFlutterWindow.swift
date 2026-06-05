@@ -232,9 +232,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.ignoresMouseEvents = true
   }
 
-  /// Reveal the warm Image Editor window and present the file-open panel. On a
-  /// chosen path the path is pushed to Dart via the imageEditor channel; on
-  /// cancel the window stays revealed showing its landing state.
+  /// Reveal the warm Image Editor window in its landing state. Opening the editor
+  /// must NOT auto-pop a file dialog — the in-window Open button (and the
+  /// `openPanel` channel method) drive the actual file picking.
   func openImageEditor() {
     guard let w = imageEditorWindow else { return }
     w.alphaValue = 1
@@ -243,14 +243,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     updateActivationPolicy()
     NSApp.activate(ignoringOtherApps: true)
     w.makeKeyAndOrderFront(nil)
-    // Defer the modal one run-loop cycle so the (warm) window commits a display
-    // pass before the open panel appears — avoids a blank frame behind it.
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      if let path = self.presentOpenPanel() {
-        self.imageEditorChannel?.invokeMethod("loadPath", arguments: path)
-      }
-    }
   }
 
   /// Present a modal NSOpenPanel restricted to common image types and return the
