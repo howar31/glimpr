@@ -85,6 +85,7 @@ class _EditorCoreState extends State<EditorCore> {
   Drawable? _editPreview;
   Offset? _moveStart;
   int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable
+  int? _endpoint; // 0=start 1=end on a Segmented shape (line/arrow/highlighter)
 
   bool _cropping = false;
   // Editor crop-trim: adjusting a PENDING (drag-released) selection before
@@ -524,6 +525,14 @@ class _EditorCoreState extends State<EditorCore> {
     ToolKind.blur,
     ToolKind.pixelate,
     ToolKind.paste,
+  };
+
+  // Tools whose drawable is a Segmented shape (two endpoint handles, not box
+  // corners): line / arrow / highlighter.
+  static const _segmentTools = {
+    ToolKind.line,
+    ToolKind.arrow,
+    ToolKind.highlighter,
   };
 
   int? _hitActiveType(Offset p) =>
@@ -1039,6 +1048,7 @@ class _EditorCoreState extends State<EditorCore> {
     _editPreview = null;
     _moveStart = null;
     _resizeCorner = null;
+    _endpoint = null;
   }
 
   void _panStart(DragStartDetails d) {
@@ -1099,6 +1109,26 @@ class _EditorCoreState extends State<EditorCore> {
             _resizeCorner = ci;
             c.selectedIndex.value = idx;
             _pinned = true; // dragging an existing shape pins it
+            return;
+          }
+        }
+      }
+    }
+    // Segment endpoint-drag (line/arrow/highlighter): a press near a start/end
+    // handle moves just that endpoint; a press on the body falls through to move.
+    if (_segmentTools.contains(c.tool.value)) {
+      for (var idx = drawables.length - 1; idx >= 0; idx--) {
+        final d = drawables[idx];
+        if (d is! Segmented || (filter != null && !filter(d))) continue;
+        final ends = [(d as Segmented).start, (d as Segmented).end];
+        for (var ei = 0; ei < ends.length; ei++) {
+          if ((ends[ei] - p).distance <= 16) {
+            _editIndex = idx;
+            _editOriginal = drawables[idx];
+            _editPreview = drawables[idx];
+            _endpoint = ei;
+            c.selectedIndex.value = idx;
+            _pinned = true; // dragging an endpoint pins the shape
             return;
           }
         }
@@ -1217,7 +1247,12 @@ class _EditorCoreState extends State<EditorCore> {
   void _updateSelectDrag(Offset p) {
     final orig = _editOriginal;
     if (orig == null) return;
-    if (_resizeCorner != null && orig is RectShaped) {
+    if (_endpoint != null && orig is Segmented) {
+      final seg = orig as Segmented;
+      final start = _endpoint == 0 ? p : seg.start;
+      final end = _endpoint == 1 ? p : seg.end;
+      setState(() => _editPreview = seg.withEndpoints(start, end));
+    } else if (_resizeCorner != null && orig is RectShaped) {
       final shape = orig as RectShaped;
       final corners = _rectCorners(shape.rect);
       final opposite = corners[(_resizeCorner! + 2) % 4];

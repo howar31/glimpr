@@ -22,6 +22,15 @@ abstract interface class RectShaped {
   Drawable resizedTo(Rect r);
 }
 
+/// Shapes defined by two endpoints (start/end), adjustable via two endpoint
+/// handles rather than four box corners. Implemented by line/arrow/highlighter.
+/// The endpoint-drag gesture and the 2-handle selection style are shared.
+abstract interface class Segmented {
+  Offset get start;
+  Offset get end;
+  Drawable withEndpoints(Offset start, Offset end);
+}
+
 class RectangleDrawable extends Drawable implements RectShaped {
   @override
   final Rect rect;
@@ -56,9 +65,11 @@ class EllipseDrawable extends Drawable implements RectShaped {
   EllipseDrawable withStyle(DrawStyle s) => EllipseDrawable(rect, s);
 }
 
-/// A plain straight stroke (an arrow with no head). Move-only.
-class LineDrawable extends Drawable {
+/// A plain straight stroke (an arrow with no head). Two endpoint handles.
+class LineDrawable extends Drawable implements Segmented {
+  @override
   final Offset start;
+  @override
   final Offset end;
   const LineDrawable(this.start, this.end, DrawStyle style) : super(style);
 
@@ -68,6 +79,10 @@ class LineDrawable extends Drawable {
   @override
   LineDrawable moved(Offset d) => LineDrawable(start + d, end + d, style);
 
+  @override
+  LineDrawable withEndpoints(Offset start, Offset end) =>
+      LineDrawable(start, end, style);
+
   LineDrawable withStyle(DrawStyle s) => LineDrawable(start, end, s);
 }
 
@@ -75,9 +90,19 @@ class LineDrawable extends Drawable {
 /// The painter draws a wide rounded band and composites the WHOLE stroke at the
 /// colour's alpha in one layer, so self-overlap doesn't darken (the highlighter
 /// look) and the chosen alpha is honoured. Move-only.
-class HighlighterDrawable extends Drawable {
+class HighlighterDrawable extends Drawable implements Segmented {
   final List<Offset> points;
   const HighlighterDrawable(this.points, DrawStyle style) : super(style);
+
+  // The band is drawn from points.first to points.last, so the endpoints ARE the
+  // first/last points; an endpoint edit collapses it to a 2-point band.
+  @override
+  Offset get start => points.first;
+  @override
+  Offset get end => points.last;
+  @override
+  HighlighterDrawable withEndpoints(Offset start, Offset end) =>
+      HighlighterDrawable([start, end], style);
 
   @override
   Rect get bounds {
@@ -216,8 +241,10 @@ Rect _segmentBounds(Offset a, Offset b) => Rect.fromLTRB(
   a.dy > b.dy ? a.dy : b.dy,
 );
 
-class ArrowDrawable extends Drawable {
+class ArrowDrawable extends Drawable implements Segmented {
+  @override
   final Offset start;
+  @override
   final Offset end;
   const ArrowDrawable(this.start, this.end, DrawStyle style) : super(style);
 
@@ -231,6 +258,10 @@ class ArrowDrawable extends Drawable {
 
   @override
   ArrowDrawable moved(Offset d) => ArrowDrawable(start + d, end + d, style);
+
+  @override
+  ArrowDrawable withEndpoints(Offset start, Offset end) =>
+      ArrowDrawable(start, end, style);
 
   ArrowDrawable resized(Rect r) =>
       ArrowDrawable(r.topLeft, r.bottomRight, style);

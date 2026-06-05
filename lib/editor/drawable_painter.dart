@@ -401,6 +401,13 @@ class DrawablePainter extends CustomPainter {
   }
 
   void _paintSelection(Canvas canvas, Drawable d) {
+    // Segment shapes (line/arrow/highlighter) show two endpoint handles at the
+    // start/end points — not a bounding box — so each end can be dragged.
+    if (d is Segmented) {
+      final seg = d as Segmented;
+      _paintHandleDots(canvas, [seg.start, seg.end]);
+      return;
+    }
     final r = d.bounds.inflate(4);
     final line = Paint()
       ..color = const Color(0xFF2196F3)
@@ -408,7 +415,7 @@ class DrawablePainter extends CustomPainter {
       ..strokeWidth = 1;
     canvas.drawRect(r, line);
     // Corner resize handles only for rect-defined shapes (rectangle/ellipse and
-    // the raster regions); strokes/text are move-only, so handles would mislead.
+    // the raster regions); pen/text/step are move-only, so handles would mislead.
     if (d is! RectShaped) return;
     paintResizeHandles(canvas, r);
   }
@@ -424,13 +431,18 @@ class DrawablePainter extends CustomPainter {
 /// The shared corner-handle style — blue filled circle + white ring at each
 /// corner of [r]. Used by the drawable selection AND the editor crop selection
 /// so resize handles look identical everywhere.
-void paintResizeHandles(Canvas canvas, Rect r) {
+void paintResizeHandles(Canvas canvas, Rect r) =>
+    _paintHandleDots(canvas, [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]);
+
+/// Draws a handle (blue filled circle + white ring) at each point. Shared by the
+/// rect corner handles and the segment endpoint handles so they look identical.
+void _paintHandleDots(Canvas canvas, List<Offset> points) {
   final fill = Paint()..color = const Color(0xFF2196F3);
   final ring = Paint()
     ..color = const Color(0xFFFFFFFF)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5;
-  for (final c in [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]) {
+  for (final c in points) {
     canvas.drawCircle(c, 5.5, fill);
     canvas.drawCircle(c, 5.5, ring);
   }
