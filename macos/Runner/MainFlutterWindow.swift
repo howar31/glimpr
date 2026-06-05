@@ -12,6 +12,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   var overlayManager: OverlayManager?
   private var imageEditorWindow: NSWindow?
   private var imageEditorRole: FlutterMethodChannel?
+  private var imageEditorDelegate: ImageEditorWindowDelegate?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -101,6 +102,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       onSettings: { [weak self] in self?.revealSettings() },
       onOpenImage: { [weak self] in self?.openImageEditor() })
 
+    // Warm the Image Editor engine + window at launch. A post-launch (on-demand)
+    // engine never starts its render loop (only launch-born engines render — a
+    // spike confirmed this), so build it now and keep it hidden at alpha 0 (engine
+    // stays warm), revealed by "Open Image…". Mirrors this window's warm pattern.
+    setUpImageEditorWindow()
+
     // Resident: keep the engine warm (on-screen, transparent, click-through) so
     // main() runs + the hotkey registers, but present nothing until "Settings…".
     // Fixed-size settings window (NOT .resizable) with an inline, transparent
@@ -161,7 +168,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// visible the app becomes a regular app (Dock icon + Cmd-Tab); it reverts to a
   /// menu-bar accessory when the window is closed (see hideSettings).
   func revealSettings() {
-    NSApp.setActivationPolicy(.regular)
     updateAppIcon()
     alphaValue = 1
     ignoresMouseEvents = false
@@ -169,18 +175,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
     disableZoomButton()
+    updateActivationPolicy()
   }
 
-  /// Create (or re-front) the on-demand Image Editor window. SPIKE: mounts the
-  /// animating placeholder (role "image-editor"). This is the first window created
-  /// AFTER launch — used to verify the render loop ticks for a post-launch engine.
-  func openImageEditor() {
-    if let w = imageEditorWindow {
-      NSApp.setActivationPolicy(.regular)
-      w.makeKeyAndOrderFront(nil)
-      NSApp.activate(ignoringOtherApps: true)
-      return
-    }
+  private func setUpImageEditorWindow() {
     let vc = FlutterViewController()
     RegisterGeneratedPlugins(registry: vc)
     let role = FlutterMethodChannel(
@@ -195,29 +193,48 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.imageEditorRole = role
 
     let w = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 640),
+      contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
       styleMask: [.titled, .closable, .resizable, .miniaturizable],
       backing: .buffered, defer: false)
     w.title = "Image Editor"
     w.contentViewController = vc
-    w.center()
+    // contentViewController sizing collapses to the (zero-size) Flutter view;
+    // force a sensible content size + minimum so it never opens tiny.
+    w.setContentSize(NSSize(width: 980, height: 680))
+    w.contentMinSize = NSSize(width: 600, height: 420)
     w.isReleasedWhenClosed = false
+    w.center()
+    let delegate = ImageEditorWindowDelegate(onClose: { [weak self] in self?.hideImageEditor() })
+    w.delegate = delegate
+    self.imageEditorDelegate = delegate
     self.imageEditorWindow = w
 
-    // Release the window + engine on close, and drop back to accessory. Use a
-    // per-window observer (NOT self as delegate — self is the settings window's
-    // delegate, whose methods must not fire for this window).
-    NotificationCenter.default.addObserver(
-      forName: NSWindow.willCloseNotification, object: w, queue: .main
-    ) { [weak self] _ in
-      self?.imageEditorWindow = nil
-      self?.imageEditorRole = nil
-      NSApp.setActivationPolicy(.accessory)
-    }
+    // Warm order (same as this window + the overlays): on-screen front THEN alpha 0
+    // — an on-screen layout pass realizes the Metal surface + runs main(); alpha 0
+    // then hides it without dropping it off-screen. Click-through while hidden.
+    w.orderFrontRegardless()
+    w.alphaValue = 0
+    w.ignoresMouseEvents = true
+  }
 
-    NSApp.setActivationPolicy(.regular)
-    w.makeKeyAndOrderFront(nil)
+  /// Reveal the warm Image Editor window (built at launch). SPIKE: shows the
+  /// animating placeholder; Plan 2b mounts the real editor.
+  func openImageEditor() {
+    guard let w = imageEditorWindow else { return }
+    w.alphaValue = 1
+    w.ignoresMouseEvents = false
+    w.center()
+    updateActivationPolicy()
     NSApp.activate(ignoringOtherApps: true)
+    w.makeKeyAndOrderFront(nil)
+  }
+
+  private func hideImageEditor() {
+    guard let w = imageEditorWindow else { return }
+    w.alphaValue = 0
+    w.ignoresMouseEvents = true
+    w.orderBack(nil)
+    updateActivationPolicy()
   }
 
   private func hideSettings() {
@@ -228,7 +245,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     alphaValue = 0
     ignoresMouseEvents = true
     orderBack(nil)
-    NSApp.setActivationPolicy(.accessory)
+    updateActivationPolicy()
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -265,6 +282,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
   private func disableZoomButton() {
     standardWindowButton(.zoomButton)?.isEnabled = false
+  }
+
+  /// Regular app (Dock icon + Cmd-Tab) while EITHER the settings or the image
+  /// editor window is visible (alpha > 0); a menu-bar accessory at rest.
+  private func updateActivationPolicy() {
+    let editorVisible = (imageEditorWindow?.alphaValue ?? 0) > 0
+    let settingsVisible = alphaValue > 0
+    NSApp.setActivationPolicy(editorVisible || settingsVisible ? .regular : .accessory)
   }
 }
 
@@ -304,5 +329,17 @@ class GlassContentViewController: NSViewController {
     // vibrancy behind shows through the transparent parts of the UI.
     flutterViewController.backgroundColor = .clear
     view.addSubview(flutterView)
+  }
+}
+
+/// Routes the Image Editor window's close button to "hide" (keep the engine
+/// warm) instead of destroying the window — a dedicated delegate so it does not
+/// collide with MainFlutterWindow's own NSWindowDelegate (the settings window).
+final class ImageEditorWindowDelegate: NSObject, NSWindowDelegate {
+  private let onClose: () -> Void
+  init(onClose: @escaping () -> Void) { self.onClose = onClose }
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    onClose()
+    return false
   }
 }
