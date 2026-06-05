@@ -68,6 +68,10 @@ abstract class EditorHost {
   /// Right-click exits (overlay: setting; editor: configured by the host).
   bool get rightClickExits;
 
+  /// Whether EditorCore renders its own floating/draggable toolbar over the
+  /// canvas (overlay) or the host docks the toolbar itself (image editor).
+  bool get showFloatingToolbar;
+
   /// Commit the current selection/region (overlay: export screenshot; editor:
   /// trim/complete — supplied in later plans).
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window);

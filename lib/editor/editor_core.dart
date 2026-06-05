@@ -1278,8 +1278,9 @@ class _EditorCoreState extends State<EditorCore> {
               ),
             // Draggable toolbar — only on the cursor's display (so it "follows"
             // across displays), and hidden while a crop drag is in progress so the
-            // selection / screen isn't obscured.
-            if (_active && !_cropping)
+            // selection / screen isn't obscured. Suppressed when the host docks
+            // the toolbar itself (e.g. the standalone image editor).
+            if (_active && !_cropping && widget.host.showFloatingToolbar)
               Positioned(
                 left: _toolbarPos.dx,
                 // Bottom-anchored so the tool row (the Column's last/bottom child)

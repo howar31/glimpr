@@ -66,6 +66,8 @@ class OverlayEditorHost implements EditorHost {
   @override
   bool get rightClickExits => _rightClickExits;
   @override
+  bool get showFloatingToolbar => true;
+  @override
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window) =>
       _onExport(selectionLogical, window);
   @override

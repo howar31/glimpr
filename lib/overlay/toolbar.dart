@@ -36,12 +36,21 @@ class EditorToolbar extends StatelessWidget {
   // Effective editor.* bindings; the per-tool badge is derived from these so it
   // tracks the user's customized shortcut (Tier 2). Empty => no badges.
   final Map<String, HotkeyBinding?> editorBindings;
+  // When false the drag-handle icon is hidden (e.g. a docked toolbar that the
+  // host positions; the overlay always keeps the handle).
+  final bool showDragHandle;
+  // Extra action widgets appended inside the same glass tool-row bar, separated
+  // by a thin vertical divider (e.g. Copy/Save buttons in the image editor).
+  // Empty by default so all existing call sites are unchanged.
+  final List<Widget> trailing;
   const EditorToolbar({
     super.key,
     required this.controller,
     required this.onMove,
     required this.onPtEditingDone,
     this.editorBindings = const {},
+    this.showDragHandle = true,
+    this.trailing = const [],
   });
 
   @override
@@ -66,21 +75,23 @@ class EditorToolbar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Drag handle — move the whole toolbar out of the way.
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanUpdate: (d) => onMove(d.delta),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.move,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Icon(
-                        Icons.drag_indicator,
-                        color: palette.fgDim,
-                        size: 20,
+                // Hidden when the host docks the toolbar (showDragHandle=false).
+                if (showDragHandle)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanUpdate: (d) => onMove(d.delta),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.move,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Icon(
+                          Icons.drag_indicator,
+                          color: palette.fgDim,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
-                ),
                 for (final (kind, icon) in kEditorToolMeta)
                   _ToolButton(
                     controller: controller,
@@ -91,6 +102,19 @@ class EditorToolbar extends StatelessWidget {
                     shortcut: editorBindings[kEditorToolActionKey[kind]]
                         ?.label(),
                   ),
+                // Trailing action widgets (e.g. Copy/Save in the image editor),
+                // separated from the tool buttons by a thin vertical divider so
+                // they read as part of the same glass bar.
+                if (trailing.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 1,
+                    height: 24,
+                    color: palette.fgDim.withValues(alpha: 0.35),
+                  ),
+                  const SizedBox(width: 8),
+                  ...trailing,
+                ],
               ],
             ),
           ),
