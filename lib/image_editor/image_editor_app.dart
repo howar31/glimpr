@@ -29,6 +29,9 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
   Uint8List? _bytes;
   String _sourceName = 'image';
   EditorController? _controller;
+  bool _exporting = false;
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
   final ValueNotifier<({int id, Offset cursor})> _active = ValueNotifier(
     (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
   );
@@ -91,11 +94,9 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
     try {
       bytes = await File(path).readAsBytes();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot read file: $e')),
-        );
-      }
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('Cannot read file: $e')),
+      );
       return;
     }
 
@@ -106,11 +107,9 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
       img = frame.image;
       codec.dispose();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot decode image: $e')),
-        );
-      }
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('Cannot decode image: $e')),
+      );
       return;
     }
 
@@ -125,6 +124,10 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
       _sourceName = p.basenameWithoutExtension(path);
       _controller?.dispose();
       _controller = EditorController(toolStyles: _toolStyles);
+      // Open on the non-destructive SELECT tool, not crop — in this editor a
+      // crop tap would trigger Complete (export). Complete is the explicit
+      // export path; tapping the canvas must not save.
+      _controller!.selectTool(ToolKind.paste);
     });
   }
 
@@ -132,25 +135,31 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
   Future<void> _complete() async {
     final image = _image, controller = _controller;
     if (image == null || controller == null) return;
-    final cap = _cap;
-    final result = await exportImage(
-      image: image,
-      drawables: controller.document.value.drawables,
-      jpeg: cap.isJpeg,
-      jpegQuality: cap.jpegQuality,
-      saveToFile: cap.saveToFile,
-      copyToClipboard: cap.copyToClipboard,
-      saveDir: cap.saveDir,
-      sourceName: _sourceName,
-    );
-    if (!mounted) return;
-    final ok = (!cap.saveToFile || result.savedOk) &&
-        (!cap.copyToClipboard || result.copiedToClipboard);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok
-          ? 'Saved${result.savedPath != null ? ' to ${result.savedPath}' : ''}'
-          : 'Export failed'),
-    ));
+    if (_exporting) return;
+    _exporting = true;
+    try {
+      final cap = _cap;
+      final result = await exportImage(
+        image: image,
+        drawables: controller.document.value.drawables,
+        jpeg: cap.isJpeg,
+        jpegQuality: cap.jpegQuality,
+        saveToFile: cap.saveToFile,
+        copyToClipboard: cap.copyToClipboard,
+        saveDir: cap.saveDir,
+        sourceName: _sourceName,
+      );
+      if (!mounted) return;
+      final ok = (!cap.saveToFile || result.savedOk) &&
+          (!cap.copyToClipboard || result.copiedToClipboard);
+      _messengerKey.currentState?.showSnackBar(SnackBar(
+        content: Text(ok
+            ? 'Saved${result.savedPath != null ? ' to ${result.savedPath}' : ''}'
+            : 'Export failed'),
+      ));
+    } finally {
+      _exporting = false;
+    }
   }
 
   @override
@@ -168,6 +177,7 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
     final controller = _controller;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: _messengerKey,
       theme: ThemeData.dark(),
       home: (image == null || bytes == null || controller == null)
           ? _landing()
