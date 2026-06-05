@@ -10,6 +10,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var loginChannel: FlutterMethodChannel?
   private var appearanceObservation: NSKeyValueObservation?
   var overlayManager: OverlayManager?
+  private var imageEditorWindow: NSWindow?
+  private var imageEditorRole: FlutterMethodChannel?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -96,7 +98,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     self.statusItem = StatusItemController(
       onCapture: { [weak self] in self?.captureController?.triggerCapture() },
-      onSettings: { [weak self] in self?.revealSettings() })
+      onSettings: { [weak self] in self?.revealSettings() },
+      onOpenImage: { [weak self] in self?.openImageEditor() })
 
     // Resident: keep the engine warm (on-screen, transparent, click-through) so
     // main() runs + the hotkey registers, but present nothing until "Settings…".
@@ -166,6 +169,55 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
     disableZoomButton()
+  }
+
+  /// Create (or re-front) the on-demand Image Editor window. SPIKE: mounts the
+  /// animating placeholder (role "image-editor"). This is the first window created
+  /// AFTER launch — used to verify the render loop ticks for a post-launch engine.
+  func openImageEditor() {
+    if let w = imageEditorWindow {
+      NSApp.setActivationPolicy(.regular)
+      w.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+      return
+    }
+    let vc = FlutterViewController()
+    RegisterGeneratedPlugins(registry: vc)
+    let role = FlutterMethodChannel(
+      name: "glimpr/role", binaryMessenger: vc.engine.binaryMessenger)
+    role.setMethodCallHandler { call, result in
+      if call.method == "getRole" {
+        result("image-editor")
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.imageEditorRole = role
+
+    let w = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 900, height: 640),
+      styleMask: [.titled, .closable, .resizable, .miniaturizable],
+      backing: .buffered, defer: false)
+    w.title = "Image Editor"
+    w.contentViewController = vc
+    w.center()
+    w.isReleasedWhenClosed = false
+    self.imageEditorWindow = w
+
+    // Release the window + engine on close, and drop back to accessory. Use a
+    // per-window observer (NOT self as delegate — self is the settings window's
+    // delegate, whose methods must not fire for this window).
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.willCloseNotification, object: w, queue: .main
+    ) { [weak self] _ in
+      self?.imageEditorWindow = nil
+      self?.imageEditorRole = nil
+      NSApp.setActivationPolicy(.accessory)
+    }
+
+    NSApp.setActivationPolicy(.regular)
+    w.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
   }
 
   private func hideSettings() {

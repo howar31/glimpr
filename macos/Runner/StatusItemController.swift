@@ -6,10 +6,14 @@ final class StatusItemController: NSObject {
   private let item: NSStatusItem
   private let onCapture: () -> Void
   private let onSettings: () -> Void
+  private let onOpenImage: () -> Void
 
-  init(onCapture: @escaping () -> Void, onSettings: @escaping () -> Void) {
+  init(onCapture: @escaping () -> Void,
+       onSettings: @escaping () -> Void,
+       onOpenImage: @escaping () -> Void) {
     self.onCapture = onCapture
     self.onSettings = onSettings
+    self.onOpenImage = onOpenImage
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
     // Brand Viewfinder mark as a template image: macOS tints it to match the
@@ -29,6 +33,8 @@ final class StatusItemController: NSObject {
     menu.addItem(.separator())
     menu.addItem(menuItem(title: "Capture", action: #selector(capture), key: ""))
     menu.addItem(.separator())
+    menu.addItem(menuItem(title: "Open Image…", action: #selector(openImage), key: "o"))
+    menu.addItem(.separator())
     menu.addItem(menuItem(title: "Settings…", action: #selector(settings), key: ","))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: "Quit Glimpr", action: #selector(quit), key: "q"))
@@ -42,6 +48,7 @@ final class StatusItemController: NSObject {
   }
 
   @objc private func capture() { onCapture() }
+  @objc private func openImage() { onOpenImage() }
   @objc private func settings() { onSettings() }
   @objc private func quit() { NSApp.terminate(nil) }
 }
