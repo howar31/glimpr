@@ -201,6 +201,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       switch call.method {
       case "openPanel":
         result(self?.presentOpenPanel())
+      // Dart asks native to physically hide the editor window (engine stays warm).
+      case "hideEditor":
+        self?.hideImageEditor()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -211,7 +215,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
       styleMask: [.titled, .closable, .resizable, .miniaturizable],
       backing: .buffered, defer: false)
-    w.onCloseShortcut = { [weak self] in self?.hideImageEditor() }
+    w.onCloseShortcut = { [weak self] in self?.requestCloseImageEditor() }
     w.title = "Image Editor"
     w.contentViewController = vc
     // contentViewController sizing collapses to the (zero-size) Flutter view;
@@ -220,7 +224,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.contentMinSize = NSSize(width: 600, height: 420)
     w.isReleasedWhenClosed = false
     w.center()
-    let delegate = ImageEditorWindowDelegate(onClose: { [weak self] in self?.hideImageEditor() })
+    let delegate = ImageEditorWindowDelegate(onClose: { [weak self] in self?.requestCloseImageEditor() })
     w.delegate = delegate
     self.imageEditorDelegate = delegate
     self.imageEditorWindow = w
@@ -258,6 +262,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     panel.canChooseDirectories = false
     panel.allowedContentTypes = [.png, .jpeg, .gif, .tiff, .bmp, .heic, .image]
     return panel.runModal() == .OK ? panel.url?.path : nil
+  }
+
+  /// Ask Dart to handle a close request (dirty-check + dialog). Dart calls back
+  /// `hideEditor` if it decides to proceed; the window is never destroyed (engine
+  /// stays warm). Both the red button and Cmd-W route through here.
+  private func requestCloseImageEditor() {
+    imageEditorChannel?.invokeMethod("requestClose", arguments: nil)
   }
 
   private func hideImageEditor() {

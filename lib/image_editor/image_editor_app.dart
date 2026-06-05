@@ -42,8 +42,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   EditorController? _controller;
   // Single in-flight guard shared by Copy + Save so rapid clicks never double-fire.
   bool _exporting = false;
+  // True once the loaded image has any annotations; cleared on save or on unload.
+  bool _dirty = false;
+  bool _closePending = false;
   final GlobalKey<ScaffoldMessengerState> _messengerKey =
       GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final ValueNotifier<({int id, Offset cursor})> _active = ValueNotifier(
     (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
   );
@@ -81,12 +85,16 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       }).catchError((_) {});
     } catch (_) {}
 
-    // The native side sends 'loadPath' with a String path when the user chose a
-    // file via the system Open panel (or via Finder "Open With").
+    // The native side sends 'loadPath' or 'requestClose' via the editor channel.
+    // loadPath: user picked a file via the system Open panel (or Finder "Open With").
+    // requestClose: a close gesture (red button / Cmd-W) was intercepted natively;
+    // Dart runs the dirty-check dialog and, if the user confirms, calls hideEditor.
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'loadPath') {
         final path = call.arguments as String?;
         if (path != null) await _loadPath(path);
+      } else if (call.method == 'requestClose') {
+        await _requestClose();
       }
     });
   }
@@ -94,6 +102,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   // Follow the system appearance: rebuild when it flips so the token set swaps.
   @override
   void didChangePlatformBrightness() => setState(() {});
+
+  /// Mark the current image as having unsaved annotations.
+  void _markDirty() {
+    if (!_dirty && mounted) setState(() => _dirty = true);
+  }
 
   /// Open the native file-picker panel; the native side returns the chosen path.
   Future<void> _openPanel() async {
@@ -141,6 +154,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       // crop tap would trigger Complete (export). Complete is the explicit
       // export path; tapping the canvas must not save.
       _controller!.selectTool(ToolKind.paste);
+      // Listen for document mutations to flip _dirty. The previous controller
+      // was disposed above, which disposes its document and clears its listeners,
+      // so there is no duplicate subscription.
+      _controller!.document.addListener(_markDirty);
+      _dirty = false;
     });
   }
 
@@ -177,6 +195,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             ? 'Copied to clipboard'
             : 'Copy failed');
       } else {
+        // Clear dirty only on a confirmed file save, not on clipboard copy.
+        if (result.savedOk && mounted) setState(() => _dirty = false);
         _toast(result.savedOk
             ? 'Saved to ${result.savedPath}'
             : 'Save failed');
@@ -184,6 +204,60 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  /// Handle a close gesture from native (red button or Cmd-W). If the image has
+  /// unsaved annotations, shows a confirmation dialog; on confirm (or when clean)
+  /// calls [_closeAndReset] which hides the window and unloads the image.
+  Future<void> _requestClose() async {
+    // Guard against re-entrancy (e.g. Cmd-W pressed twice) so we never stack two
+    // confirm dialogs or run two resets.
+    if (_closePending) return;
+    _closePending = true;
+    try {
+      if (_dirty && _image != null) {
+        final ctx = _navigatorKey.currentContext;
+        final discard = ctx == null
+            ? true
+            : await showDialog<bool>(
+                context: ctx,
+                builder: (c) => AlertDialog(
+                  title: const Text('Discard changes?'),
+                  content: const Text(
+                      'You have unsaved annotations. Close without saving?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.of(c).pop(false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.of(c).pop(true),
+                        child: const Text('Discard')),
+                  ],
+                ),
+              );
+        if (discard != true) return;
+      }
+      await _closeAndReset();
+    } finally {
+      _closePending = false;
+    }
+  }
+
+  /// Tell native to hide the window (engine stays warm), then dispose + reset the
+  /// loaded image so the NEXT open shows the landing state.
+  Future<void> _closeAndReset() async {
+    try {
+      await _channel.invokeMethod('hideEditor');
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _image?.dispose();
+      _image = null;
+      _bytes = null;
+      _controller?.dispose();
+      _controller = null;
+      _dirty = false;
+    });
   }
 
   void _toast(String message) {
@@ -211,6 +285,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     final controller = _controller;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _messengerKey,
       theme: ThemeData(
         brightness: brightness,
