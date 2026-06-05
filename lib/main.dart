@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
+import 'image_editor/image_editor_spike.dart';
 import 'overlay/overlay_app.dart';
 import 'settings/settings.dart';
 import 'settings/settings_app.dart';
@@ -18,6 +19,10 @@ Future<void> main() async {
   final role = await _getRole();
   if (role == 'overlay') {
     runApp(const OverlayApp());
+    return;
+  }
+  if (role == 'image-editor') {
+    runApp(const ImageEditorSpikeApp());
     return;
   }
   // Control engine only: register the global capture hotkey (default ⌘⌥1) via
