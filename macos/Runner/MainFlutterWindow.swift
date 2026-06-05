@@ -213,11 +213,19 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     let w = ImageEditorPanel(
       contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
-      styleMask: [.titled, .closable, .resizable, .miniaturizable],
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered, defer: false)
     w.onCloseShortcut = { [weak self] in self?.requestCloseImageEditor() }
     w.title = "Image Editor"
-    w.contentViewController = vc
+    // Inline, transparent title bar so the Flutter content runs to the top edge
+    // behind the traffic lights (same recipe as the settings window). Flutter
+    // draws its own 44px title bar; the canvas/toolbar lay out below it.
+    w.titleVisibility = .hidden
+    w.titlebarAppearsTransparent = true
+    // Wrap the Flutter VC in the behind-window vibrancy controller so the editor
+    // window reads as dark frosted glass (mirrors the settings window). The
+    // Flutter view is transparent and composites its tint over the vibrancy.
+    w.contentViewController = GlassContentViewController(flutterViewController: vc)
     // contentViewController sizing collapses to the (zero-size) Flutter view;
     // force a sensible content size + minimum so it never opens tiny.
     w.setContentSize(NSSize(width: 980, height: 680))

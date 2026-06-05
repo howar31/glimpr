@@ -20,13 +20,17 @@ import 'image_editor_export.dart';
 import 'image_editor_host.dart';
 
 /// Standalone Image Editor window in the Aurora design language (same theme as
-/// the Settings window, following the system light/dark appearance).
+/// the Settings window, following the system light/dark appearance). The native
+/// window uses behind-window dark vibrancy with a hidden/transparent OS title,
+/// so a 44px Flutter title bar runs across the top in both states.
 ///
 /// Landing state: an Aurora card prompting the user to open an image. Loaded
-/// state: a checkerboard transparency canvas with the fitted image (drop-shadowed)
-/// above a DOCKED bottom toolbar — the shared [EditorToolbar] rendered without
-/// its drag handle, with undo/redo + Open/Copy/Save as trailing actions inside
-/// the same glass bar. Copy/Save composite the annotated image and deliver it.
+/// state: a checkerboard transparency canvas with the fitted image (rounded,
+/// bordered, drop-shadowed) filling the area, and a fixed, centered glass
+/// toolbar PILL floating over it near the bottom — the shared [EditorToolbar]
+/// rendered without its drag handle, with undo/redo + Open/Copy/Save as trailing
+/// actions inside the same glass bar. Copy/Save composite the annotated image
+/// and deliver it.
 class ImageEditorApp extends StatefulWidget {
   const ImageEditorApp({super.key});
 
@@ -298,10 +302,60 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           backgroundColor: tokens.isDark
               ? const Color(0xFF0F1526)
               : const Color(0xFFEFF2F7),
-          body: (image == null || bytes == null || controller == null)
-              ? _landing(tokens)
-              : _editor(tokens, image, bytes, controller),
+          // A 44px Flutter title bar runs across the top in BOTH states (the OS
+          // title is hidden + transparent), with the state content filling below.
+          body: Column(
+            children: [
+              _titleBar(tokens),
+              Expanded(
+                child: (image == null || bytes == null || controller == null)
+                    ? _landing(tokens)
+                    : _editor(tokens, image, bytes, controller),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  /// The 44px window title bar (both states). Translucent, with a hairline
+  /// bottom border; after a left inset clearing the macOS traffic lights it
+  /// shows a brand-gradient dot + the "Image Editor" label. Drawn in Flutter
+  /// because the native title is hidden + transparent (.fullSizeContentView).
+  Widget _titleBar(GlimprTokens t) {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: t.isDark
+            ? const Color(0x99020617) // rgba(2,6,23,0.6)-ish translucent slab
+            : const Color(0xCCFFFFFF),
+        border: Border(
+          bottom: BorderSide(
+            color: t.isDark
+                ? const Color(0x1AFFFFFF) // rgba(255,255,255,0.1)
+                : const Color(0x140F172A),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Left inset to clear the macOS traffic-light buttons.
+          const SizedBox(width: 78),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: kGlimprLogoGradient, // match the wordmark's brand gradient
+            ),
+          ),
+          const SizedBox(width: 9),
+          Text(
+            'Image Editor',
+            style: GlimprType.sansStyle(13, 600, t.fg2, letterSpacing: -0.1),
+          ),
+        ],
       ),
     );
   }
@@ -346,23 +400,33 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   }
 
   /// Loaded state: a checkerboard transparency canvas with the fitted image
-  /// (drop-shadowed) above the docked bottom toolbar bar.
+  /// (drop-shadowed) filling the area, and a fixed, centered glass toolbar PILL
+  /// floating over it near the bottom (the pill IS the shared [EditorToolbar]'s
+  /// own glass bar; its option row floats above it over the canvas).
   Widget _editor(
     GlimprTokens t,
     ui.Image image,
     Uint8List bytes,
     EditorController controller,
   ) {
-    return Column(
+    return Stack(
       children: [
-        Expanded(child: _canvas(t, image, bytes, controller)),
-        _bottomBar(t, controller),
+        Positioned.fill(child: _canvas(t, image, bytes, controller)),
+        // Fixed, centered floating pill ~18px from the bottom — not draggable.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 18,
+          child: Center(child: _toolbarPill(controller)),
+        ),
       ],
     );
   }
 
   /// The canvas area: a checkerboard transparency backdrop with the fitted,
-  /// drop-shadowed [EditorCore] centred inside it.
+  /// drop-shadowed [EditorCore] centred inside it. The image fits within ~72% of
+  /// the canvas width (and the available height) so it never crowds the edges or
+  /// the floating toolbar pill, and its drop shadow is never clipped.
   Widget _canvas(
     GlimprTokens t,
     ui.Image image,
@@ -372,10 +436,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     return LayoutBuilder(
       builder: (context, constraints) {
         const inset = 28.0; // breathing room so the shadow isn't clipped
-        final availW = (constraints.maxWidth - inset * 2).clamp(1.0, double.infinity);
-        final availH = (constraints.maxHeight - inset * 2).clamp(1.0, double.infinity);
+        // Reserve room at the bottom for the floating pill (its bar + option
+        // row sit ~18px from the bottom) so the image stays clear of it.
+        const bottomReserve = 110.0;
+        final availW = (constraints.maxWidth * 0.72)
+            .clamp(1.0, double.infinity);
+        final availH =
+            (constraints.maxHeight - inset * 2 - bottomReserve)
+                .clamp(1.0, double.infinity);
         final imgW = image.width.toDouble(), imgH = image.height.toDouble();
-        final scale = (availW / imgW).clamp(0.0, availH / imgH);
+        // Fit within the width budget AND the height budget, never upscaling.
+        final scale = (availW / imgW).clamp(0.0, availH / imgH).clamp(0.0, 1.0);
         final fitted = Size(imgW * scale, imgH * scale);
         final host = ImageEditorHost(
           image: image,
@@ -392,20 +463,29 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               child: Container(
                 width: fitted.width,
                 height: fitted.height,
-                decoration: const BoxDecoration(
-                  boxShadow: [
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0x14FFFFFF), // 1px rgba(255,255,255,0.08)
+                  ),
+                  boxShadow: const [
                     BoxShadow(
-                      color: Color(0x59000000),
-                      blurRadius: 28,
-                      offset: Offset(0, 12),
+                      color: Color(0x8C000000), // rgba(0,0,0,0.55)
+                      blurRadius: 70,
+                      offset: Offset(0, 30),
                     ),
                   ],
                 ),
-                child: EditorCore(
-                  key: ValueKey(image), // fresh State per loaded image
-                  controller: controller,
-                  editorBindings: _bindings,
-                  host: host,
+                // Clip the EditorCore to the rounded frame so the corners match
+                // the border; the shadow lives outside the clip (on the parent).
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: EditorCore(
+                    key: ValueKey(image), // fresh State per loaded image
+                    controller: controller,
+                    editorBindings: _bindings,
+                    host: host,
+                  ),
                 ),
               ),
             ),
@@ -415,49 +495,41 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     );
   }
 
-  /// The docked bottom bar: the shared [EditorToolbar] (no drag handle) with
-  /// undo/redo + Open/Copy/Save as trailing actions inside the same glass bar.
-  Widget _bottomBar(GlimprTokens t, EditorController controller) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      decoration: BoxDecoration(
-        color: t.sidebarBg,
-        border: Border(top: BorderSide(color: t.divider)),
-      ),
-      child: Center(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: EditorToolbar(
-            controller: controller,
-            editorBindings: _bindings,
-            showDragHandle: false,
-            onMove: (_) {}, // docked — not draggable
-            onPtEditingDone: () {}, // focus refinement is a later 微調
-            trailing: [
-              _HistoryButtons(controller: controller),
-              const SizedBox(width: 8),
-              _BarAction(
-                icon: Icons.folder_open_outlined,
-                label: 'Open',
-                onTap: _openPanel,
-              ),
-              const SizedBox(width: 4),
-              _BarAction(
-                icon: Icons.copy_outlined,
-                label: 'Copy',
-                onTap: _exporting ? null : _copy,
-              ),
-              const SizedBox(width: 4),
-              _BarAction(
-                icon: Icons.save_outlined,
-                label: 'Save',
-                accent: true,
-                onTap: _exporting ? null : _save,
-              ),
-            ],
+  /// The floating toolbar pill: the shared [EditorToolbar] (no drag handle, not
+  /// draggable) with undo/redo + Open/Copy/Save as trailing actions inside its
+  /// own glass bar. Its contextual option row grows UPWARD above the bar, over
+  /// the canvas. No wrapping background — the pill IS the toolbar's glass bar.
+  Widget _toolbarPill(EditorController controller) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: EditorToolbar(
+        controller: controller,
+        editorBindings: _bindings,
+        showDragHandle: false,
+        onMove: (_) {}, // fixed — not draggable
+        onPtEditingDone: () {}, // focus refinement is a later 微調
+        trailing: [
+          _HistoryButtons(controller: controller),
+          const SizedBox(width: 8),
+          _BarAction(
+            icon: Icons.folder_open_outlined,
+            label: 'Open',
+            onTap: _openPanel,
           ),
-        ),
+          const SizedBox(width: 4),
+          _BarAction(
+            icon: Icons.copy_outlined,
+            label: 'Copy',
+            onTap: _exporting ? null : _copy,
+          ),
+          const SizedBox(width: 4),
+          _BarAction(
+            icon: Icons.save_outlined,
+            label: 'Save',
+            accent: true,
+            onTap: _exporting ? null : _save,
+          ),
+        ],
       ),
     );
   }
