@@ -401,7 +401,9 @@ class _OptionsRowState extends State<_OptionsRow> {
     _showPopover(
       _OpenPopover.color,
       _barLink,
-      width: 240,
+      // Wide enough for the 7 preset swatches (26px + 6px gaps = 218px content)
+      // to sit on one row inside the 12px padding.
+      width: 264,
       child: ColorPickerPopover(
         color: _c.style.value.color,
         recents: recents,

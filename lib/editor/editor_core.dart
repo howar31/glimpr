@@ -110,19 +110,70 @@ class _EditorCoreState extends State<EditorCore> {
   /// canvas size (display size for the overlay, native image size for the editor).
   Size get _canvasSize => widget.host.size;
 
-  /// Map a pointer's on-screen local position to logical canvas coords. Identity
-  /// for the overlay (full-screen 1:1); applies the inverse viewport transform
-  /// for the image editor. Used at EVERY pointer->logical site so we never rely
-  /// on Flutter's transformHitTests (which would double-apply by scale).
+  /// Map a gesture-layer local position to logical canvas coords. The editor's
+  /// gesture layer is positioned EXACTLY over the on-screen image rect (offset +
+  /// scaled size), so its local coords are already image-relative — divide by the
+  /// viewport scale for logical. The overlay's gesture layer is full-screen 1:1.
   Offset _toLogical(Offset local) =>
-      _interactive ? _viewport.toLogical(local) : local;
+      _interactive ? local / _viewport.scale : local;
 
-  /// Re-fit the logical canvas centred inside the last laid-out box. Used by the
-  /// fit shortcut (later block) and crop-trim; no-op when non-interactive.
-  // ignore: unused_element  // wired by ⌘0 / crop-trim in a later block
+  static const _kDrawDevices = <PointerDeviceKind>{
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.touch,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+    PointerDeviceKind.unknown,
+  };
+
+  /// Fit the logical canvas centred inside [box] with a margin so the image is
+  /// never edge-to-edge.
+  EditorViewport _fittedViewport(Size box) {
+    const margin = 48.0;
+    final inner = Size(
+      (box.width - margin * 2).clamp(1.0, box.width),
+      (box.height - margin * 2).clamp(1.0, box.height),
+    );
+    final f = EditorViewport.fit(_canvasSize, inner);
+    return EditorViewport(
+      scale: f.scale,
+      offset: f.offset + const Offset(margin, margin),
+    );
+  }
+
+  /// Re-fit the canvas to the last laid-out box (⌘0). No-op when non-interactive.
   void _refitViewport() {
     if (!_interactive) return;
-    setState(() => _viewport = EditorViewport.fit(_canvasSize, _lastBoxSize));
+    setState(() => _viewport = _fittedViewport(_lastBoxSize));
+  }
+
+  static const double _kMinScale = 0.1;
+  static const double _kMaxScale = 16.0;
+  double _panZoomBaseScale = 1.0;
+
+  /// Mouse-wheel / two-finger scroll: Cmd+scroll = cursor-anchored zoom, else pan.
+  void _onPointerSignal(PointerSignalEvent e) {
+    if (!_interactive || e is! PointerScrollEvent) return;
+    if (HardwareKeyboard.instance.isMetaPressed) {
+      final ns = (_viewport.scale * (1 - e.scrollDelta.dy * 0.0015))
+          .clamp(_kMinScale, _kMaxScale);
+      setState(() => _viewport = _viewport.zoomedAround(e.localPosition, ns));
+    } else {
+      setState(() => _viewport = _viewport.pannedBy(-e.scrollDelta));
+    }
+  }
+
+  void _onPanZoomStart(PointerPanZoomStartEvent e) {
+    _panZoomBaseScale = _viewport.scale;
+  }
+
+  /// Trackpad pinch = cursor-anchored zoom; two-finger drag during pinch = pan.
+  void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (!_interactive) return;
+    final ns = (_panZoomBaseScale * e.scale).clamp(_kMinScale, _kMaxScale);
+    setState(
+      () => _viewport =
+          _viewport.zoomedAround(e.localPosition, ns).pannedBy(e.panDelta),
+    );
   }
 
   /// The whole-display rect (inset so its frame stays fully on-screen) — the
@@ -396,6 +447,25 @@ class _EditorCoreState extends State<EditorCore> {
       if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
+    // Viewport zoom shortcuts (image editor only): Cmd+0 = fit, Cmd+1 = 100%.
+    if (_interactive &&
+        pressed.length == 1 &&
+        pressed.contains(HotkeyModifier.meta)) {
+      if (key == LogicalKeyboardKey.digit0) {
+        _refitViewport();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.digit1) {
+        setState(
+          () => _viewport = _viewport.zoomedAround(
+            Offset(_lastBoxSize.width / 2, _lastBoxSize.height / 2),
+            1.0,
+          ),
+        );
+        return KeyEventResult.handled;
+      }
+    }
+
     final action = pickEditorAction(e, pressed, widget.editorBindings);
     if (action == kEditorUndoKey) {
       c.undo();
@@ -589,9 +659,7 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _onHover(PointerHoverEvent e) {
-    // Inside the viewport Transform (transformHitTests:true) localPosition is
-    // already logical; only the outer cursor tracker maps via _toLogical.
-    final p = e.localPosition;
+    final p = _toLogical(e.localPosition);
     setState(() => _cursor = p);
     if (_inCrop) return;
     final drawables = c.document.value.drawables;
@@ -612,7 +680,7 @@ class _EditorCoreState extends State<EditorCore> {
       _commitText();
       return;
     }
-    final p = d.localPosition;
+    final p = _toLogical(d.localPosition);
     // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
     // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
     // drawable spanning it. With NO window under the cursor the tools fall back
@@ -685,7 +753,7 @@ class _EditorCoreState extends State<EditorCore> {
     final right = (e.buttons & kSecondaryButton) != 0;
     if (right && !_rightLatched) {
       _rightLatched = true;
-      _onRightDown(e.localPosition);
+      _onRightDown(_toLogical(e.localPosition));
     } else if (!right) {
       _rightLatched = false;
     }
@@ -828,7 +896,7 @@ class _EditorCoreState extends State<EditorCore> {
     // broken by the pointer straying onto another display (released in _panEnd /
     // _panCancel). Spanning across displays is out of scope.
     widget.host.cursor.setDrawingLock(true);
-    final p = d.localPosition;
+    final p = _toLogical(d.localPosition);
     if (c.tool.value == ToolKind.crop) {
       _cropping = true;
       setState(() {
@@ -881,7 +949,7 @@ class _EditorCoreState extends State<EditorCore> {
     // marquee / shape / crosshair pinned at the boundary (the hardware cursor is
     // free but the active handoff is frozen while dragging). Map to logical
     // BEFORE clamping (the clamp bounds are logical-canvas coords).
-    final p = _clampToDisplay(d.localPosition);
+    final p = _clampToDisplay(_toLogical(d.localPosition));
     if (_cancelGesture) {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
@@ -1071,8 +1139,16 @@ class _EditorCoreState extends State<EditorCore> {
     // active display. WHICH display is active is decided by the native cursor
     // poll (_onActiveSignal), not by enter/exit here.
     return Listener(
-      onPointerHover: _trackCursor,
-      onPointerMove: _trackCursor,
+      // The overlay tracks the cursor here (full-screen crosshair); the editor's
+      // crosshair/reticle is driven by the image-rect gesture layer's onHover, so
+      // the outer tracker is overlay-only.
+      onPointerHover: _interactive ? null : _trackCursor,
+      onPointerMove: _interactive ? null : _trackCursor,
+      // Zoom/pan signals (image editor only): scroll = pan, Cmd+scroll = zoom,
+      // trackpad pinch = zoom. The overlay passes null (no viewport).
+      onPointerSignal: _interactive ? _onPointerSignal : null,
+      onPointerPanZoomStart: _interactive ? _onPanZoomStart : null,
+      onPointerPanZoomUpdate: _interactive ? _onPanZoomUpdate : null,
       child: Focus(
         focusNode: _focus,
         autofocus: true,
@@ -1090,20 +1166,48 @@ class _EditorCoreState extends State<EditorCore> {
                 box.isFinite &&
                 box.width > 0 &&
                 box.height > 0) {
-              // Fit with a margin so the image is clearly centred with breathing
-              // room (and never edge-to-edge) inside the canvas box.
-              const fitMargin = 48.0;
-              final inner = Size(
-                (box.width - fitMargin * 2).clamp(1.0, box.width),
-                (box.height - fitMargin * 2).clamp(1.0, box.height),
-              );
-              final f = EditorViewport.fit(_canvasSize, inner);
-              _viewport = EditorViewport(
-                scale: f.scale,
-                offset: f.offset + const Offset(fitMargin, fitMargin),
-              );
+              _viewport = _fittedViewport(box);
               _didInitialFit = true;
             }
+            // Gesture + hover layer. A Listener catches the right button reliably
+            // even mid-drag (GestureDetector's secondary-tap loses the arena to an
+            // active pan), so right-click can cancel an in-progress crop/draw.
+            // Stable key so its pan recognizer is never re-created mid-drag.
+            // For the EDITOR this is placed at BOX level (a sibling of the
+            // viewport-transformed painters), so its hit region always covers the
+            // window; for the OVERLAY it sits inside the stack at its original spot.
+            final gestureLayer = Listener(
+              onPointerDown: _onPointerButtons,
+              onPointerMove: _onPointerButtons,
+              onPointerUp: _onPointerButtons,
+              child: MouseRegion(
+                cursor: (_active && !_editingText && !_isSelectTool)
+                    ? SystemMouseCursors.none
+                    : SystemMouseCursors.basic,
+                onEnter: (_) => setState(() => _overCanvas = true),
+                onExit: (_) => setState(() => _overCanvas = false),
+                onHover: _onHover,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  // Editor: exclude trackpad so a two-finger pan/pinch zooms (handled
+                  // on the outer Listener) instead of being claimed as a draw drag.
+                  supportedDevices: _interactive ? _kDrawDevices : null,
+                  onTapUp: _onTapUp,
+                  onPanStart: _panStart,
+                  onPanUpdate: _panUpdate,
+                  onPanEnd: _panEnd,
+                  onPanCancel: () {
+                    widget.host.cursor.setDrawingLock(false);
+                    _cancelGesture = false;
+                    setState(() {
+                      _resetDrawState();
+                      _resetEditState();
+                      _cropping = false;
+                    });
+                  },
+                ),
+              ),
+            );
             final stack = Stack(
               fit: StackFit.expand,
               children: [
@@ -1288,58 +1392,17 @@ class _EditorCoreState extends State<EditorCore> {
                       painter: ReticlePainter(_cursor),
                     ),
                   ),
-                // Gesture + hover layer. A Listener catches the right button reliably
-                // even mid-drag (GestureDetector's secondary-tap loses the arena to an
-                // active pan), so right-click can cancel an in-progress crop/draw.
-                Positioned.fill(
-                  // Stable key so this layer (and its pan recognizer) is matched by
-                  // key and never re-created when sibling layers above (the animated
-                  // snap highlight) or below (the toolbar) toggle or change type
-                  // mid-drag. Without it the unkeyed Stack diff misaligns and tears
-                  // down the pan mid-gesture (crop stuck at 0x0).
-                  key: const ValueKey('editor-gesture-layer'),
-                  child: Listener(
-                    // Watch down/move/up: a right-button press DURING a left drag
-                    // arrives as a move (the pointer is already down), not a down — so
-                    // the old onPointerDown-only check never saw it and the crop
-                    // committed. The latch fires _onRightDown once per right press.
-                    onPointerDown: _onPointerButtons,
-                    onPointerMove: _onPointerButtons,
-                    onPointerUp: _onPointerButtons,
-                    child: MouseRegion(
-                      // Over the canvas we always draw our OWN cursor (full crosshair
-                      // for region tools, small reticle for drawing tools), so hide
-                      // the system cursor — except while editing text. Over the
-                      // toolbar this region isn't hit, so its normal click cursor
-                      // shows.
-                      cursor: (_active && !_editingText && !_isSelectTool)
-                          ? SystemMouseCursors.none
-                          : SystemMouseCursors.basic,
-                      onEnter: (_) => setState(() => _overCanvas = true),
-                      onExit: (_) => setState(() => _overCanvas = false),
-                      onHover: _onHover,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: _onTapUp,
-                        onPanStart: _panStart,
-                        onPanUpdate: _panUpdate,
-                        onPanEnd: _panEnd,
-                        // Safety net: if the pan is cancelled (never reaches
-                        // onPanEnd), still release the cursor confine + transient
-                        // state so the cursor is never stranded on one display.
-                        onPanCancel: () {
-                          widget.host.cursor.setDrawingLock(false);
-                          _cancelGesture = false;
-                          setState(() {
-                            _resetDrawState();
-                            _resetEditState();
-                            _cropping = false;
-                          });
-                        },
-                      ),
-                    ),
+                // Gesture layer: the overlay keeps it here (full display, box ==
+                // logical 1:1). For the editor it is lifted to a sibling scoped to
+                // the on-screen image rect (see the return below). The stable key
+                // MUST sit on the Stack's DIRECT child so the pan recognizer is
+                // matched by key and never torn down mid-drag when a sibling layer
+                // (e.g. the snap highlight) toggles — otherwise crop sticks at 0x0.
+                if (!_interactive)
+                  Positioned.fill(
+                    key: const ValueKey('editor-gesture-layer'),
+                    child: gestureLayer,
                   ),
-                ),
                 // Inline multiline text editor (Enter commits, Shift+Enter newline).
                 if (_active &&
                     _editingText &&
@@ -1414,32 +1477,47 @@ class _EditorCoreState extends State<EditorCore> {
                   ),
               ],
             );
-            // Display transform: scale + centre the logical canvas inside the
-            // box for the image editor. The overlay (non-interactive) inserts NO
-            // Transform — its widget tree stays structurally identical, with the
-            // viewport at identity so _toLogical/painter sizes degenerate to the
-            // originals. transformHitTests:true lets Flutter inverse-map pointer
-            // hits through the viewport, so the clickable region follows the
-            // scaled+centred image (works for images smaller AND larger than the
-            // box). In-transform gesture callbacks therefore receive already-
-            // logical coordinates (no _toLogical there); only the OUTER cursor-
-            // tracking Listener (outside this Transform) still maps via _toLogical.
+            // The overlay (non-interactive) inserts NO Transform — its widget tree
+            // stays structurally identical (gesture layer inline in `stack`).
             if (!_interactive) return stack;
+            // Editor: the viewport-transformed painters (fitted/scaled; they do not
+            // hit-test) UNDER a box-level gesture layer that always covers the
+            // window. Drawing maps via _toLogical at any zoom and for images smaller
+            // OR larger than the box — an in-transform gesture layer would be clipped
+            // by the Transform's hit box (Flutter cannot resize it for overflow).
             final v = _viewport;
             final matrix = Matrix4.identity()
               ..translateByDouble(v.offset.dx, v.offset.dy, 0, 1)
               ..scaleByDouble(v.scale, v.scale, 1, 1);
-            return Transform(
-              transform: matrix,
-              transformHitTests: true,
-              child: OverflowBox(
-                minWidth: 0,
-                minHeight: 0,
-                maxWidth: double.infinity,
-                maxHeight: double.infinity,
-                alignment: Alignment.topLeft,
-                child: SizedBox.fromSize(size: _canvasSize, child: stack),
-              ),
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Transform(
+                  transform: matrix,
+                  transformHitTests: false,
+                  child: OverflowBox(
+                    minWidth: 0,
+                    minHeight: 0,
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    alignment: Alignment.topLeft,
+                    child: SizedBox.fromSize(size: _canvasSize, child: stack),
+                  ),
+                ),
+                // Gesture layer scoped EXACTLY to the on-screen image rect, so
+                // drawing + the hidden/custom cursor apply only over the image (not
+                // the surrounding margins or behind the floating toolbar).
+                Positioned(
+                  // Stable key on the Stack's direct child so the pan recognizer
+                  // survives sibling/viewport rebuilds mid-drag.
+                  key: const ValueKey('editor-gesture-layer'),
+                  left: v.offset.dx,
+                  top: v.offset.dy,
+                  width: _canvasSize.width * v.scale,
+                  height: _canvasSize.height * v.scale,
+                  child: gestureLayer,
+                ),
+              ],
             );
           },
         ),

@@ -49,6 +49,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   // True once the loaded image has any annotations; cleared on save or on unload.
   bool _dirty = false;
   bool _closePending = false;
+  bool _confirming = false;
   final GlobalKey<ScaffoldMessengerState> _messengerKey =
       GlobalKey<ScaffoldMessengerState>();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -114,16 +115,22 @@ class _ImageEditorAppState extends State<ImageEditorApp>
 
   /// Open the native file-picker panel; the native side returns the chosen path.
   Future<void> _openPanel() async {
+    // Confirm BEFORE the file picker appears, so unsaved work isn't lost behind it.
+    if (!await _confirmDiscardIfDirty()) return;
     try {
       final path = await _channel.invokeMethod<String>('openPanel');
-      if (path != null && mounted) await _loadPath(path);
+      if (path != null && mounted) await _loadPath(path, confirmed: true);
     } catch (_) {
       // Channel unavailable (e.g. test environment) or user cancelled — ignore.
     }
   }
 
   /// Read, decode, and show [path] in the editor.
-  Future<void> _loadPath(String path) async {
+  Future<void> _loadPath(String path, {bool confirmed = false}) async {
+    // Replacing the current image: confirm if dirty — unless the caller already
+    // did (the Open button confirms BEFORE showing the file picker). Direct loads
+    // (Finder "Open With" / drag-drop, later) pass confirmed=false.
+    if (!confirmed && !await _confirmDiscardIfDirty()) return;
     late final Uint8List bytes;
     try {
       bytes = await File(path).readAsBytes();
@@ -210,37 +217,102 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     }
   }
 
-  /// Handle a close gesture from native (red button or Cmd-W). If the image has
-  /// unsaved annotations, shows a confirmation dialog; on confirm (or when clean)
-  /// calls [_closeAndReset] which hides the window and unloads the image.
+  /// Aurora-styled "discard unsaved changes?" confirmation. Returns true to
+  /// proceed (discard), false to cancel. Re-entrancy-guarded so two triggers
+  /// (e.g. Cmd-W + Open) never stack dialogs.
+  Future<bool> _confirmDiscard() async {
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null || _confirming) return false;
+    _confirming = true;
+    try {
+      final brightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      final t = GlimprTokens.forBrightness(brightness);
+      final result = await showDialog<bool>(
+        context: ctx,
+        barrierColor: const Color(0x99000000),
+        builder: (c) => GlimprTheme(
+          tokens: t,
+          child: Center(
+            child: Material(
+              type: MaterialType.transparency,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    // Frosted glass matching the toolbar (blur + tint + border) so
+                    // the dialog reads as a solid surface, not see-through.
+                    filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: brightness == Brightness.dark
+                            ? const Color(0xF2161A24)
+                            : const Color(0xF2EEF2F7),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: brightness == Brightness.dark
+                              ? const Color(0x33FFFFFF)
+                              : const Color(0x66FFFFFF),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Discard changes?',
+                            style: GlimprType.sansStyle(18, 700, t.fg1,
+                                letterSpacing: -0.3),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'You have unsaved annotations. Discard them?',
+                            style: GlimprType.sansStyle(13.5, 400, t.fg3,
+                                height: 1.45),
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              GhostButton('Cancel',
+                                  onTap: () => Navigator.of(c).pop(false)),
+                              const SizedBox(width: 10),
+                              AccentButton('Discard',
+                                  onTap: () => Navigator.of(c).pop(true)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return result ?? false;
+    } finally {
+      _confirming = false;
+    }
+  }
+
+  /// True when there is nothing to lose; otherwise prompts. Used before replacing
+  /// or unloading the current image (close, Open, and later paste / drag-drop).
+  Future<bool> _confirmDiscardIfDirty() async {
+    if (!_dirty || _image == null) return true;
+    return _confirmDiscard();
+  }
+
+  /// Handle a close gesture from native (red button or Cmd-W): confirm if dirty,
+  /// then hide + unload via [_closeAndReset].
   Future<void> _requestClose() async {
-    // Guard against re-entrancy (e.g. Cmd-W pressed twice) so we never stack two
-    // confirm dialogs or run two resets.
     if (_closePending) return;
     _closePending = true;
     try {
-      if (_dirty && _image != null) {
-        final ctx = _navigatorKey.currentContext;
-        final discard = ctx == null
-            ? true
-            : await showDialog<bool>(
-                context: ctx,
-                builder: (c) => AlertDialog(
-                  title: const Text('Discard changes?'),
-                  content: const Text(
-                      'You have unsaved annotations. Close without saving?'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.of(c).pop(false),
-                        child: const Text('Cancel')),
-                    FilledButton(
-                        onPressed: () => Navigator.of(c).pop(true),
-                        child: const Text('Discard')),
-                  ],
-                ),
-              );
-        if (discard != true) return;
-      }
+      if (!await _confirmDiscardIfDirty()) return;
       await _closeAndReset();
     } finally {
       _closePending = false;
@@ -461,15 +533,16 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// own glass bar. Its contextual option row grows UPWARD above the bar, over
   /// the canvas. No wrapping background — the pill IS the toolbar's glass bar.
   Widget _toolbarPill(EditorController controller) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: EditorToolbar(
-        controller: controller,
-        editorBindings: _bindings,
-        showDragHandle: false,
-        onMove: (_) {}, // fixed — not draggable
-        onPtEditingDone: () {}, // focus refinement is a later 微調
-        trailing: [
+    // The pill is the toolbar's own glass bar at its natural width (centred by the
+    // caller). NOT wrapped in a full-width horizontal scroll view — that scrollable
+    // intercepted the whole bottom strip, blocking drawing left/right of the pill.
+    return EditorToolbar(
+      controller: controller,
+      editorBindings: _bindings,
+      showDragHandle: false,
+      onMove: (_) {}, // fixed — not draggable
+      onPtEditingDone: () {}, // focus refinement is a later 微調
+      trailing: [
           _HistoryButtons(controller: controller),
           const SizedBox(width: 8),
           _BarAction(
@@ -491,8 +564,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             onTap: _exporting ? null : _save,
           ),
         ],
-      ),
-    );
+      );
   }
 }
 
