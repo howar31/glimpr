@@ -230,6 +230,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         self?.imageEditorReady = true
         self?.flushPendingOpen()
         result(nil)
+      // The Flutter title bar covers the native one, so a double-click never
+      // reaches AppKit; Dart forwards it here to run the system double-click action.
+      case "titleBarDoubleClick":
+        self?.handleTitleBarDoubleClick()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -237,7 +242,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.imageEditorChannel = editorChannel
 
     let w = ImageEditorPanel(
-      contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
+      contentRect: NSRect(x: 0, y: 0, width: 1280, height: 720),
       styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered, defer: false)
     w.onCloseShortcut = { [weak self] in self?.requestCloseImageEditor() }
@@ -259,11 +264,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         self?.imageEditorChannel?.invokeMethod("loadPath", arguments: path)
       })
     // contentViewController sizing collapses to the (zero-size) Flutter view;
-    // force a sensible content size + minimum so it never opens tiny.
-    w.setContentSize(NSSize(width: 980, height: 680))
-    w.contentMinSize = NSSize(width: 600, height: 420)
+    // force the default content size + a minimum. The min width must fit the
+    // bottom toolbar (12 tools + Fit/100% + undo/redo + Open/Copy/Save) so it
+    // never overflows; the min height keeps the landing card (with its recent
+    // list) from overflowing.
+    w.setContentSize(NSSize(width: 1280, height: 720))
+    w.contentMinSize = NSSize(width: 1060, height: 720)
     w.isReleasedWhenClosed = false
+    // Centre as the first-run default, THEN bind a frame-autosave name: AppKit
+    // restores the user's last size+position if present (overriding the centre),
+    // otherwise keeps the centred default — and persists every later move/resize.
     w.center()
+    w.setFrameAutosaveName("GlimprImageEditorWindow")
     let delegate = ImageEditorWindowDelegate(onClose: { [weak self] in self?.requestCloseImageEditor() })
     w.delegate = delegate
     self.imageEditorDelegate = delegate
@@ -284,7 +296,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     guard let w = imageEditorWindow else { return }
     w.alphaValue = 1
     w.ignoresMouseEvents = false
-    w.center()
+    // No re-centre: the frame-autosave name keeps the user's last size+position.
     updateActivationPolicy()
     NSApp.activate(ignoringOtherApps: true)
     w.makeKeyAndOrderFront(nil)
@@ -328,6 +340,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// stays warm). Both the red button and Cmd-W route through here.
   private func requestCloseImageEditor() {
     imageEditorChannel?.invokeMethod("requestClose", arguments: nil)
+  }
+
+  /// Run the user's configured title-bar double-click action on the editor
+  /// window (System Settings › Desktop & Dock › "Double-click a window's title
+  /// bar to"). Defaults to zoom when unset, matching AppKit.
+  private func handleTitleBarDoubleClick() {
+    guard let w = imageEditorWindow else { return }
+    switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+    case "Minimize": w.miniaturize(nil)
+    case "None": break
+    default: w.zoom(nil) // "Maximize" / unset
+    }
   }
 
   private func hideImageEditor() {
