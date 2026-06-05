@@ -16,8 +16,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var imageEditorChannel: FlutterMethodChannel?
   private var imageEditorDelegate: ImageEditorWindowDelegate?
   private var isPresentingOpenPanel = false
+  // A Finder "Open With" path that arrived before the editor Dart side signalled
+  // ready (cold start); flushed by the `editorReady` channel call.
+  private var pendingOpenPath: String?
+  private var imageEditorReady = false
+  // Reached from AppDelegate.application(_:open:) to route external opens.
+  static weak var shared: MainFlutterWindow?
 
   override func awakeFromNib() {
+    MainFlutterWindow.shared = self
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     // Frosted-glass window: host the Flutter view inside a vibrancy view
@@ -103,7 +110,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.statusItem = StatusItemController(
       onCapture: { [weak self] in self?.captureController?.triggerCapture() },
       onSettings: { [weak self] in self?.revealSettings() },
-      onOpenImage: { [weak self] in self?.openImageEditor() })
+      onOpenImage: { [weak self] in self?.openImageEditor() },
+      // A recent item reveals the editor (it may be hidden) then loads the file
+      // (confirmed:false → Dart dirty-confirms if an edited image is open).
+      onOpenRecent: { [weak self] path in
+        self?.openImageEditor()
+        self?.imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+      })
 
     // Warm the Image Editor engine + window at launch. A post-launch (on-demand)
     // engine never starts its render loop (only launch-born engines render — a
@@ -205,6 +218,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "hideEditor":
         self?.hideImageEditor()
         result(nil)
+      // Dart pushes the recent-images list → rebuild the menu-bar "Open Recent".
+      case "setRecentImages":
+        if let paths = call.arguments as? [String] {
+          self?.statusItem?.setRecentImages(paths)
+        }
+        result(nil)
+      // Dart signals its editor channel handler is installed → flush any path
+      // that a Finder "Open With" delivered during a cold start.
+      case "editorReady":
+        self?.imageEditorReady = true
+        self?.flushPendingOpen()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -225,7 +250,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Wrap the Flutter VC in the behind-window vibrancy controller so the editor
     // window reads as dark frosted glass (mirrors the settings window). The
     // Flutter view is transparent and composites its tint over the vibrancy.
-    w.contentViewController = GlassContentViewController(flutterViewController: vc)
+    // An image file dropped on the window forwards its path to Dart (loadPath
+    // confirmed:false → Dart dirty-confirms before replacing). Drops only land on
+    // a visible window (it is alpha 0 + click-through at rest), so no reveal here.
+    w.contentViewController = GlassContentViewController(
+      flutterViewController: vc,
+      onDropFile: { [weak self] path in
+        self?.imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+      })
     // contentViewController sizing collapses to the (zero-size) Flutter view;
     // force a sensible content size + minimum so it never opens tiny.
     w.setContentSize(NSSize(width: 980, height: 680))
@@ -256,6 +288,25 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     updateActivationPolicy()
     NSApp.activate(ignoringOtherApps: true)
     w.makeKeyAndOrderFront(nil)
+  }
+
+  /// Open an image that arrived from outside the app (Finder "Open With" / an
+  /// `openURLs` Apple event). If the editor Dart side has not signalled ready yet
+  /// (cold start), buffer the path and flush it on `editorReady`.
+  func openImageFromExternal(_ path: String) {
+    guard imageEditorReady else {
+      pendingOpenPath = path
+      return
+    }
+    openImageEditor()
+    imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+  }
+
+  private func flushPendingOpen() {
+    guard let path = pendingOpenPath else { return }
+    pendingOpenPath = nil
+    openImageEditor()
+    imageEditorChannel?.invokeMethod("loadPath", arguments: path)
   }
 
   /// Present a modal NSOpenPanel restricted to common image types and return the
@@ -352,20 +403,30 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 /// window transparent breaks mouse-event delivery).
 class GlassContentViewController: NSViewController {
   private let flutterViewController: FlutterViewController
+  private let onDropFile: ((String) -> Void)?
 
-  init(flutterViewController: FlutterViewController) {
+  init(flutterViewController: FlutterViewController,
+       onDropFile: ((String) -> Void)? = nil) {
     self.flutterViewController = flutterViewController
+    self.onDropFile = onDropFile
     super.init(nibName: nil, bundle: nil)
   }
 
   required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
   override func loadView() {
-    let effectView = NSVisualEffectView()
+    let effectView = DragDestinationEffectView()
     effectView.autoresizingMask = [.width, .height]
     effectView.blendingMode = .behindWindow
     effectView.state = .followsWindowActiveState
     effectView.material = .sidebar
+    // Only the Image Editor window passes a drop handler — register for file
+    // drags there so an image dropped anywhere on the window loads/replaces the
+    // canvas. The settings window passes nil and never accepts drops.
+    if let onDropFile = onDropFile {
+      effectView.onDropFile = onDropFile
+      effectView.registerForDraggedTypes([.fileURL])
+    }
     self.view = effectView
   }
 
@@ -379,6 +440,40 @@ class GlassContentViewController: NSViewController {
     // vibrancy behind shows through the transparent parts of the UI.
     flutterViewController.backgroundColor = .clear
     view.addSubview(flutterView)
+  }
+}
+
+/// An NSVisualEffectView that also acts as a file drag destination. The Flutter
+/// view sits on top but is NOT registered for dragged types, so AppKit falls
+/// through to this superview for drops. Used by the Image Editor window to accept
+/// an image file dropped anywhere on the canvas/landing area; the dropped path is
+/// forwarded to Dart (which dirty-confirms before replacing the current image).
+final class DragDestinationEffectView: NSVisualEffectView {
+  var onDropFile: ((String) -> Void)?
+
+  /// The first dropped file URL whose content conforms to public.image, or nil.
+  private func imageURL(_ sender: NSDraggingInfo) -> URL? {
+    let options: [NSPasteboard.ReadingOptionKey: Any] = [
+      .urlReadingFileURLsOnly: true,
+      .urlReadingContentsConformToTypes: [UTType.image.identifier],
+    ]
+    let urls = sender.draggingPasteboard.readObjects(
+      forClasses: [NSURL.self], options: options) as? [URL]
+    return urls?.first
+  }
+
+  override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    (onDropFile != nil && imageURL(sender) != nil) ? .copy : []
+  }
+
+  override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+    (onDropFile != nil && imageURL(sender) != nil) ? .copy : []
+  }
+
+  override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    guard let handler = onDropFile, let url = imageURL(sender) else { return false }
+    handler(url.path)
+    return true
   }
 }
 

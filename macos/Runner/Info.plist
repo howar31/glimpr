@@ -30,5 +30,22 @@
 	<string>NSApplication</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<!-- Alternate: appear in Finder "Open With" without hijacking the
+			     default image handler (Preview stays the default). -->
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as p;
 import '../editor/draw_style.dart';
 import '../editor/document.dart';
@@ -18,6 +19,7 @@ import '../theme/glimpr_theme.dart';
 import 'checkerboard.dart';
 import 'image_editor_export.dart';
 import 'image_editor_host.dart';
+import 'recent_images.dart';
 
 /// Standalone Image Editor window in the Aurora design language (same theme as
 /// the Settings window, following the system light/dark appearance). The native
@@ -61,6 +63,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
   CaptureSettings _cap = CaptureSettings.defaults;
 
+  RecentImagesStore? _recentStore;
+  List<String> _recent = const [];
+
   static const _channel = MethodChannel('glimpr/imageEditor');
 
   @override
@@ -90,6 +95,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       }).catchError((_) {});
     } catch (_) {}
 
+    // Load the recent-images list and push it to the native menu-bar submenu.
+    // The warm editor engine boots at launch, so this populates "Open Recent"
+    // even before the editor window is ever revealed.
+    try {
+      _recentStore = RecentImagesStore(Settings.instance.store);
+      _refreshRecent();
+    } catch (_) {}
+
     // The native side sends 'loadPath' or 'requestClose' via the editor channel.
     // loadPath: user picked a file via the system Open panel (or Finder "Open With").
     // requestClose: a close gesture (red button / Cmd-W) was intercepted natively;
@@ -102,6 +115,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         await _requestClose();
       }
     });
+    // Tell native the handler is installed so a Finder "Open With" that arrived
+    // during a cold start can be flushed to us.
+    try {
+      _channel.invokeMethod('editorReady');
+    } catch (_) {}
   }
 
   // Follow the system appearance: rebuild when it flips so the token set swaps.
@@ -154,11 +172,52 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       img.dispose();
       return;
     }
+    _setLoadedImage(bytes, img, p.basenameWithoutExtension(path));
+    await _recordRecent(path);
+  }
+
+  /// Record a successfully-opened file path in the recent list and refresh both
+  /// the landing list and the native menu. Pastes have no path → not recorded.
+  Future<void> _recordRecent(String path) async {
+    final store = _recentStore;
+    if (store == null) return;
+    try {
+      await store.add(path);
+    } catch (_) {
+      return;
+    }
+    await _refreshRecent();
+  }
+
+  /// Reload the recent list, drop entries whose file is gone, then update the
+  /// landing list and push the pruned list to the native "Open Recent" submenu.
+  Future<void> _refreshRecent() async {
+    final store = _recentStore;
+    if (store == null) return;
+    List<String> list;
+    try {
+      list = pruneMissing(await store.load(), (p) => File(p).existsSync());
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _recent = list);
+    try {
+      await _channel.invokeMethod('setRecentImages', list);
+    } catch (_) {
+      // Native handler not present (e.g. tests) — the landing list still works.
+    }
+  }
+
+  /// Load an image already decoded in memory (from a file read or a clipboard
+  /// paste) as the editor's base: swap the image/bytes/source name and start a
+  /// fresh controller on the non-destructive SELECT tool.
+  void _setLoadedImage(Uint8List bytes, ui.Image img, String name) {
     setState(() {
       _image?.dispose();
       _image = img;
       _bytes = bytes;
-      _sourceName = p.basenameWithoutExtension(path);
+      _sourceName = name;
       _controller?.dispose();
       _controller = EditorController(toolStyles: _toolStyles);
       // Open on the non-destructive SELECT tool, not crop — in this editor a
@@ -171,6 +230,38 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       _controller!.document.addListener(_markDirty);
       _dirty = false;
     });
+  }
+
+  /// Load the clipboard image as the base (landing-state ⌘V). When an image is
+  /// already loaded, EditorCore owns ⌘V (paste-as-annotation), so this handler is
+  /// only live on the landing state. Confirms-if-dirty (a no-op on landing).
+  Future<void> _pasteLoad() async {
+    if (!await _confirmDiscardIfDirty()) return;
+    Uint8List? bytes;
+    try {
+      bytes = await Pasteboard.image;
+    } catch (_) {
+      return; // clipboard plugin unavailable (e.g. tests)
+    }
+    if (bytes == null) {
+      _toast('No image in clipboard');
+      return;
+    }
+    ui.Image img;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      img = frame.image;
+      codec.dispose();
+    } catch (e) {
+      _toast('Cannot decode clipboard image');
+      return;
+    }
+    if (!mounted) {
+      img.dispose();
+      return;
+    }
+    _setLoadedImage(bytes, img, 'pasted');
   }
 
   /// Copy the annotated image to the clipboard.
@@ -436,38 +527,87 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// drag-drop / Open Recent are later blocks — only the static hint + the Open
   /// button are wired now.
   Widget _landing(GlimprTokens t) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: GlassCard.padded(
-          pad: 36,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const GlimprMark(size: 56),
-              const SizedBox(height: 22),
-              Text(
-                'Open an image to edit',
-                textAlign: TextAlign.center,
-                style: GlimprType.sansStyle(18, 700, t.fg1, letterSpacing: -0.3),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Annotate, crop, and re-export any image in the same toolkit you '
-                'use to capture.',
-                textAlign: TextAlign.center,
-                style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
-              ),
-              const SizedBox(height: 24),
-              AccentButton(
-                'Open Image…',
-                icon: Icons.image_outlined,
-                onTap: _openPanel,
-              ),
-            ],
+    // Landing-only ⌘V loads the clipboard image as the base (when loaded,
+    // EditorCore owns ⌘V for paste-as-annotation). Autofocus so the shortcut is
+    // live without a click; the field/canvas takes focus once an image loads.
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, e) {
+        if (e is KeyDownEvent &&
+            HardwareKeyboard.instance.isMetaPressed &&
+            e.logicalKey == LogicalKeyboardKey.keyV) {
+          _pasteLoad();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: GlassCard.padded(
+            pad: 36,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const GlimprMark(size: 56),
+                const SizedBox(height: 22),
+                Text(
+                  'Open an image to edit',
+                  textAlign: TextAlign.center,
+                  style: GlimprType.sansStyle(
+                    18,
+                    700,
+                    t.fg1,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Annotate, crop, and re-export any image in the same toolkit '
+                  'you use to capture.',
+                  textAlign: TextAlign.center,
+                  style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
+                ),
+                const SizedBox(height: 24),
+                AccentButton(
+                  'Open Image…',
+                  icon: Icons.image_outlined,
+                  onTap: _openPanel,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'or drag an image here · paste with ⌘V',
+                  textAlign: TextAlign.center,
+                  style: GlimprType.sansStyle(11.5, 500, t.fg4),
+                ),
+                _recentList(t),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Recent-files list shown on the landing card (up to 5). Tapping a row loads
+  /// that file; renders nothing when the list is empty.
+  Widget _recentList(GlimprTokens t) {
+    if (_recent.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 22),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Recent',
+            style: GlimprType.sansStyle(11, 700, t.fg4, letterSpacing: 0.4),
+          ),
+        ),
+        const SizedBox(height: 6),
+        for (final path in _recent.take(5))
+          _RecentRow(path: path, onTap: () => _loadPath(path)),
+      ],
     );
   }
 
@@ -714,6 +854,69 @@ class _BarActionState extends State<_BarAction> {
                 Text(widget.label, style: GlimprType.sansStyle(13.5, 600, fg)),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A tappable recent-file row on the landing card: image glyph + basename over a
+/// dim full path, with a hover wash matching the bar actions.
+class _RecentRow extends StatefulWidget {
+  const _RecentRow({required this.path, required this.onTap});
+  final String path;
+  final VoidCallback onTap;
+
+  @override
+  State<_RecentRow> createState() => _RecentRowState();
+}
+
+class _RecentRowState extends State<_RecentRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final name = p.basename(widget.path);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            color: _hover ? t.navHoverBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.image_outlined, size: 15, color: t.fg3),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GlimprType.sansStyle(13, 600, t.fg2),
+                    ),
+                    Text(
+                      widget.path,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GlimprType.sansStyle(10.5, 400, t.fg4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
