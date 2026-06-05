@@ -401,9 +401,9 @@ class _OptionsRowState extends State<_OptionsRow> {
     _showPopover(
       _OpenPopover.color,
       _barLink,
-      // Wide enough for the 7 preset swatches (26px + 6px gaps = 218px content)
-      // to sit on one row inside the 12px padding.
-      width: 264,
+      // Exact fit for the 7 preset swatches: 7*26 + 6*6 = 218px content + the
+      // 12px L/R padding = 242, so the row spans the panel with equal margins.
+      width: 242,
       child: ColorPickerPopover(
         color: _c.style.value.color,
         recents: recents,
@@ -565,6 +565,18 @@ class _OptionsRowState extends State<_OptionsRow> {
         final showsFont = tool == ToolKind.text || tool == ToolKind.step;
         // The font-FAMILY button is Text-only (Step has no editable family).
         final showsFontFamily = tool == ToolKind.text;
+        // Drop-shadow toggle: the drawing tools + text/step. Excludes the
+        // highlighter (a translucent marker) and the region/select tools.
+        const shadowTools = {
+          ToolKind.rectangle,
+          ToolKind.ellipse,
+          ToolKind.line,
+          ToolKind.arrow,
+          ToolKind.pen,
+          ToolKind.text,
+          ToolKind.step,
+        };
+        final showsShadow = shadowTools.contains(tool);
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
@@ -623,6 +635,14 @@ class _OptionsRowState extends State<_OptionsRow> {
                       key: const ValueKey('font-button'),
                       label: style.fontFamily ?? 'System',
                       onTap: _openFontPopover,
+                    ),
+                  ],
+                  if (showsShadow) ...[
+                    const SizedBox(width: 6),
+                    _ShadowToggle(
+                      key: const ValueKey('shadow-toggle'),
+                      on: style.shadow,
+                      onTap: () => _c.setShadow(!style.shadow),
                     ),
                   ],
                   // Reset the active tool's style to the factory default.
@@ -743,6 +763,71 @@ class _FontFamilyButton extends StatelessWidget {
             const SizedBox(width: 4),
             Icon(Icons.arrow_drop_down, size: 16, color: p.fgFaint),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Drop-shadow toggle: a small two-square glyph (a solid object casting an
+/// offset shadow) that turns the active tool's drop shadow on/off. Accent-tinted
+/// when ON, plus an active-state background ring. Shown for the drawing tools +
+/// text/step (see [shadowTools]).
+class _ShadowToggle extends StatefulWidget {
+  final bool on;
+  final VoidCallback onTap;
+  const _ShadowToggle({super.key, required this.on, required this.onTap});
+  @override
+  State<_ShadowToggle> createState() => _ShadowToggleState();
+}
+
+class _ShadowToggleState extends State<_ShadowToggle> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    final on = widget.on;
+    final base = on ? GlimprTokens.accent : p.fg;
+    Widget square(Color c) => DecoratedBox(
+      decoration: BoxDecoration(
+        color: c,
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+    final glyph = SizedBox(
+      width: 18,
+      height: 18,
+      child: Stack(
+        children: [
+          // The offset shadow square (drawn behind).
+          Positioned(
+            left: 5,
+            top: 5,
+            right: 0,
+            bottom: 0,
+            child: square(base.withValues(alpha: 0.4)),
+          ),
+          // The solid object square on top.
+          Positioned(left: 0, top: 0, right: 5, bottom: 5, child: square(base)),
+        ],
+      ),
+    );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: on ? 'Drop shadow: on' : 'Drop shadow: off',
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: (on || _hover) ? p.glassBorder : Colors.transparent,
+            ),
+            child: glyph,
+          ),
         ),
       ),
     );

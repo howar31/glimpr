@@ -79,14 +79,18 @@ class EditorController {
       _updateStyle(style.value.copyWith(texture: t));
   void setFontFamily(String? f) =>
       _updateStyle(style.value.copyWith(fontFamily: f));
+  void setShadow(bool s) => _updateStyle(style.value.copyWith(shadow: s));
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
-  // so we rebuild the style explicitly without a fontFamily.
+  // so we rebuild the style explicitly without a fontFamily. The other fields
+  // (incl. shadow + texture) carry over so clearing the font doesn't reset them.
   void resetFontFamily() => _updateStyle(
     DrawStyle(
       color: style.value.color,
       strokeWidth: style.value.strokeWidth,
       fontSize: style.value.fontSize,
+      texture: style.value.texture,
+      shadow: style.value.shadow,
     ),
   );
 

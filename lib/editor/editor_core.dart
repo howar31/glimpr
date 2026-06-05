@@ -325,6 +325,7 @@ class _EditorCoreState extends State<EditorCore> {
     _windows = widget.host.snapWindows;
     c.document.addListener(_rebuild);
     c.selectedIndex.addListener(_rebuild);
+    c.selectedIndex.addListener(_unpinIfCleared);
     c.tool.addListener(_rebuild);
     c.tool.addListener(_onToolChanged);
     c.phase.addListener(_rebuild);
@@ -340,6 +341,7 @@ class _EditorCoreState extends State<EditorCore> {
   void dispose() {
     c.document.removeListener(_rebuild);
     c.selectedIndex.removeListener(_rebuild);
+    c.selectedIndex.removeListener(_unpinIfCleared);
     c.tool.removeListener(_rebuild);
     c.tool.removeListener(_onToolChanged);
     c.phase.removeListener(_rebuild);
@@ -772,10 +774,27 @@ class _EditorCoreState extends State<EditorCore> {
     return d.bounds.inflate(8).contains(p);
   }
 
+  // Left-click PINS the selection: a clicked annotation stays selected even when
+  // the cursor leaves it (e.g. to reach the option bar to restyle it). Hover only
+  // previews a selection while nothing is pinned; clicking empty space unpins.
+  bool _pinned = false;
+
+  void _selectAndPin(int? idx) {
+    c.selectedIndex.value = idx;
+    _pinned = idx != null;
+  }
+
+  // Any deselection (undo/redo, delete, tool switch, capture reset, empty click)
+  // also drops the pin so hover-preview resumes.
+  void _unpinIfCleared() {
+    if (c.selectedIndex.value == null) _pinned = false;
+  }
+
   void _onHover(PointerHoverEvent e) {
     final p = _toLogical(e.localPosition);
     setState(() => _cursor = p);
     if (_inCrop) return;
+    if (_pinned) return; // a pinned (clicked) selection ignores hover changes
     final drawables = c.document.value.drawables;
     final cur = c.selectedIndex.value;
     // Keep the current selection while hovering its handle/edge zone so the
@@ -808,32 +827,44 @@ class _EditorCoreState extends State<EditorCore> {
         if (widget.host.cropTrims) return;
         widget.host.onExport(win?.rect, win); // null window -> whole display
         return;
+      // For the snap tools, selecting an existing same-type region WINS over
+      // snapping a new one — so you can click a committed region to re-select /
+      // restyle it even when it sits over a window. No hit + a window under the
+      // cursor -> snap a new region; nothing at all -> deselect.
       case ToolKind.blur:
-        if (win != null) {
+        if (_hitActiveType(p) case final hit?) {
+          _selectAndPin(hit);
+        } else if (win != null) {
           c.commitDrawable(BlurDrawable(win.rect, style));
         } else {
-          c.selectedIndex.value = _hitActiveType(p);
+          _selectAndPin(null);
         }
         return;
       case ToolKind.pixelate:
-        if (win != null) {
+        if (_hitActiveType(p) case final hit?) {
+          _selectAndPin(hit);
+        } else if (win != null) {
           c.commitDrawable(PixelateDrawable(win.rect, style));
         } else {
-          c.selectedIndex.value = _hitActiveType(p);
+          _selectAndPin(null);
         }
         return;
       case ToolKind.rectangle:
-        if (win != null) {
+        if (_hitActiveType(p) case final hit?) {
+          _selectAndPin(hit);
+        } else if (win != null) {
           c.commitDrawable(RectangleDrawable(win.rect, style));
         } else {
-          c.selectedIndex.value = _hitActiveType(p);
+          _selectAndPin(null);
         }
         return;
       case ToolKind.ellipse:
-        if (win != null) {
+        if (_hitActiveType(p) case final hit?) {
+          _selectAndPin(hit);
+        } else if (win != null) {
           c.commitDrawable(EllipseDrawable(win.rect, style));
         } else {
-          c.selectedIndex.value = _hitActiveType(p);
+          _selectAndPin(null);
         }
         return;
       case ToolKind.text:
@@ -849,7 +880,7 @@ class _EditorCoreState extends State<EditorCore> {
             StepDrawable(p, nextStepNumber(c.document.value.drawables), style),
           );
         } else {
-          c.selectedIndex.value = idx;
+          _selectAndPin(idx);
         }
         return;
       case ToolKind.arrow:
@@ -857,7 +888,7 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.pen:
       case ToolKind.highlighter:
       case ToolKind.paste:
-        c.selectedIndex.value = _hitActiveType(p);
+        _selectAndPin(_hitActiveType(p));
         return;
     }
   }
@@ -1067,6 +1098,7 @@ class _EditorCoreState extends State<EditorCore> {
             _editPreview = drawables[idx];
             _resizeCorner = ci;
             c.selectedIndex.value = idx;
+            _pinned = true; // dragging an existing shape pins it
             return;
           }
         }
@@ -1080,7 +1112,10 @@ class _EditorCoreState extends State<EditorCore> {
       _moveStart = p;
       _resizeCorner = null;
       c.selectedIndex.value = hit;
+      _pinned = true; // dragging an existing shape pins it
     } else {
+      // Starting a fresh drawing drops any pinned selection.
+      _selectAndPin(null);
       _dragStart = p; // start drawing a new same-type drawable (not for text)
       _preview = null;
       // Pen accumulates the stroke's points as the drag proceeds.

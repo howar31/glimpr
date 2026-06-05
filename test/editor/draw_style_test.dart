@@ -77,6 +77,19 @@ void main() {
     );
   });
 
+  test('shadow defaults off, round-trips, and tolerates an old blob', () {
+    expect(const DrawStyle().shadow, isFalse);
+    // copyWith toggles it; equality + round-trip include it.
+    final on = const DrawStyle().copyWith(shadow: true);
+    expect(on.shadow, isTrue);
+    expect(on == const DrawStyle(), isFalse);
+    expect(DrawStyle.fromJson(on.toJson()).shadow, isTrue);
+    // Default-off styles omit the key (compact JSON); old blobs load as off.
+    expect(const DrawStyle().toJson().containsKey('shadow'), isFalse);
+    final old = {'color': 0xFFFF3B30, 'strokeWidth': 4.0, 'fontSize': 18.0};
+    expect(DrawStyle.fromJson(old).shadow, isFalse);
+  });
+
   test('stroke range constants are sane', () {
     expect(kStrokeMin, lessThan(kStrokeMax));
     expect(kStrokeWidths.every((w) => w >= kStrokeMin && w <= kStrokeMax), isTrue);

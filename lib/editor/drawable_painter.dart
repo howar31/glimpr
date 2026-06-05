@@ -5,6 +5,40 @@ import 'draw_style.dart';
 import 'drawable.dart';
 import 'text_metrics.dart';
 
+// ---- drop-shadow tunables (DrawStyle.shadow) ---------------------------------
+// Matches the design reference CSS drop-shadow(2px 2px 2px rgba(0,0,0,.75)): a
+// tight, soft shadow. Shapes use a MaskFilter blur; text uses a ui.Shadow.
+const Color _kShadowColor = Color(0xBF000000); // 75% black
+const Offset _kShadowOffset = Offset(2, 2);
+const double _kShadowSigma = 1.0; // shape MaskFilter blur stddev (~CSS 2px blur)
+const double _kShadowTextBlur = 2.0; // text Shadow.blurRadius (CSS-style radius)
+
+/// Draws [geom] as a blurred, offset drop shadow beneath the real shape when
+/// [style.shadow] is on, then draws the real shape via the same closure. The
+/// shadow paint copies [base]'s stroke/fill geometry so caps/joins/width match.
+void _withShadow(
+  Canvas canvas,
+  DrawStyle style,
+  Paint base,
+  void Function(Canvas, Paint) geom,
+) {
+  if (style.shadow) {
+    final sp = Paint()
+      ..style = base.style
+      ..strokeWidth = base.strokeWidth
+      ..strokeCap = base.strokeCap
+      ..strokeJoin = base.strokeJoin
+      ..isAntiAlias = true
+      ..color = _kShadowColor
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _kShadowSigma);
+    canvas.save();
+    canvas.translate(_kShadowOffset.dx, _kShadowOffset.dy);
+    geom(canvas, sp);
+    canvas.restore();
+  }
+  geom(canvas, base);
+}
+
 /// Smooth, deterministic value noise for the procedural marker texture — same
 /// seed always yields the same curve, so a highlighter never shimmers on repaint.
 class _MarkerNoise {
@@ -175,19 +209,17 @@ class DrawablePainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round;
         // Rounded corners; radius eases down for small rectangles.
         final radius = (d.rect.shortestSide / 4).clamp(0.0, 12.0);
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(d.rect, Radius.circular(radius)),
-          paint,
-        );
+        final rrect = RRect.fromRectAndRadius(d.rect, Radius.circular(radius));
+        _withShadow(canvas, d.style, paint, (c, p) => c.drawRRect(rrect, p));
       case EllipseDrawable():
         final paint = Paint()
           ..color = d.style.color
           ..strokeWidth = d.style.strokeWidth
           ..style = PaintingStyle.stroke
           ..isAntiAlias = true;
-        canvas.drawOval(d.rect, paint);
+        _withShadow(canvas, d.style, paint, (c, p) => c.drawOval(d.rect, p));
       case ArrowDrawable():
-        _paintArrow(canvas, d.start, d.end, d.style.color, d.style.strokeWidth);
+        _paintArrow(canvas, d.start, d.end, d.style);
       case LineDrawable():
         final paint = Paint()
           ..color = d.style.color
@@ -195,14 +227,31 @@ class DrawablePainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..isAntiAlias = true;
-        canvas.drawLine(d.start, d.end, paint);
+        _withShadow(canvas, d.style, paint, (c, p) => c.drawLine(d.start, d.end, p));
       case HighlighterDrawable():
         _paintHighlighter(canvas, d);
       case PenDrawable():
         _paintPen(canvas, d);
       case TextDrawable():
+        // The shadow is injected only at paint time — NOT in textStyleOf, which
+        // the transparent inline editing field shares (it would float a shadow
+        // under invisible glyphs while typing).
+        final span = d.style.shadow
+            ? TextSpan(
+                text: d.text.isEmpty ? ' ' : d.text,
+                style: textStyleOf(d.style).copyWith(
+                  shadows: const [
+                    Shadow(
+                      color: _kShadowColor,
+                      offset: _kShadowOffset,
+                      blurRadius: _kShadowTextBlur,
+                    ),
+                  ],
+                ),
+              )
+            : buildTextSpan(d);
         final tp = TextPainter(
-          text: buildTextSpan(d),
+          text: span,
           textDirection: TextDirection.ltr,
           strutStyle: StrutStyle.disabled, // match the inline field's layout
         )..layout();
@@ -258,10 +307,14 @@ class DrawablePainter extends CustomPainter {
   void _paintPen(Canvas canvas, PenDrawable d) {
     if (d.points.isEmpty) return;
     if (d.points.length == 1) {
-      canvas.drawCircle(
-        d.points.first,
-        d.style.strokeWidth / 2,
-        Paint()..color = d.style.color,
+      final dot = Paint()
+        ..color = d.style.color
+        ..isAntiAlias = true;
+      _withShadow(
+        canvas,
+        d.style,
+        dot,
+        (c, p) => c.drawCircle(d.points.first, d.style.strokeWidth / 2, p),
       );
       return;
     }
@@ -276,19 +329,22 @@ class DrawablePainter extends CustomPainter {
     for (var i = 1; i < d.points.length; i++) {
       path.lineTo(d.points[i].dx, d.points[i].dy);
     }
-    canvas.drawPath(path, paint);
+    _withShadow(canvas, d.style, paint, (c, p) => c.drawPath(path, p));
   }
 
   void _paintHighlighter(Canvas canvas, HighlighterDrawable d) =>
       paintHighlighterStroke(canvas, d.points, d.style);
 
   void _paintStep(Canvas canvas, StepDrawable d) {
-    canvas.drawCircle(
-      d.center,
-      d.radius,
-      Paint()
-        ..color = d.style.color
-        ..isAntiAlias = true,
+    final circle = Paint()
+      ..color = d.style.color
+      ..isAntiAlias = true;
+    // The badge casts one shadow as a whole; the number rides on top, no shadow.
+    _withShadow(
+      canvas,
+      d.style,
+      circle,
+      (c, p) => c.drawCircle(d.center, d.radius, p),
     );
     final tp = TextPainter(
       text: TextSpan(
@@ -311,21 +367,16 @@ class DrawablePainter extends CustomPainter {
 
   /// Tapered, filled "brush" arrow: thin at the tail, swelling into a solid
   /// arrowhead — a marker-pen feel rather than a hairline.
-  void _paintArrow(
-    Canvas canvas,
-    Offset start,
-    Offset end,
-    Color color,
-    double w,
-  ) {
+  void _paintArrow(Canvas canvas, Offset start, Offset end, DrawStyle style) {
+    final w = style.strokeWidth;
     final fill = Paint()
-      ..color = color
+      ..color = style.color
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
     final dir = end - start;
     final len = dir.distance;
     if (len < 1) {
-      canvas.drawCircle(start, w / 2, fill);
+      _withShadow(canvas, style, fill, (c, p) => c.drawCircle(start, w / 2, p));
       return;
     }
     final u = Offset(dir.dx / len, dir.dy / len);
@@ -346,7 +397,7 @@ class DrawablePainter extends CustomPainter {
       ..lineTo(at(hb, n, -shaftHalf).dx, at(hb, n, -shaftHalf).dy)
       ..lineTo(at(start, n, -tailHalf).dx, at(start, n, -tailHalf).dy)
       ..close();
-    canvas.drawPath(path, fill);
+    _withShadow(canvas, style, fill, (c, p) => c.drawPath(path, p));
   }
 
   void _paintSelection(Canvas canvas, Drawable d) {

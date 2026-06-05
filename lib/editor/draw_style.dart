@@ -56,12 +56,14 @@ class DrawStyle {
   final double fontSize;
   final String? fontFamily; // null = system default
   final HighlighterTexture texture; // highlighter-only; ignored by other tools
+  final bool shadow; // drop shadow under the annotation (drawing tools + text/step)
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
     this.fontSize = 18,
     this.fontFamily,
     this.texture = HighlighterTexture.streaks,
+    this.shadow = false,
   });
 
   DrawStyle copyWith({
@@ -70,12 +72,14 @@ class DrawStyle {
     double? fontSize,
     String? fontFamily,
     HighlighterTexture? texture,
+    bool? shadow,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
     fontSize: fontSize ?? this.fontSize,
     fontFamily: fontFamily ?? this.fontFamily,
     texture: texture ?? this.texture,
+    shadow: shadow ?? this.shadow,
   );
 
   Map<String, dynamic> toJson() => {
@@ -84,6 +88,7 @@ class DrawStyle {
     'fontSize': fontSize,
     if (fontFamily != null) 'fontFamily': fontFamily,
     'texture': texture.name,
+    if (shadow) 'shadow': true,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -92,6 +97,7 @@ class DrawStyle {
     fontSize: (j['fontSize'] as num?)?.toDouble() ?? 18,
     fontFamily: j['fontFamily'] as String?,
     texture: _textureFromName(j['texture']),
+    shadow: j['shadow'] as bool? ?? false,
   );
 
   @override
@@ -101,8 +107,9 @@ class DrawStyle {
       other.strokeWidth == strokeWidth &&
       other.fontSize == fontSize &&
       other.fontFamily == fontFamily &&
-      other.texture == texture;
+      other.texture == texture &&
+      other.shadow == shadow;
   @override
   int get hashCode =>
-      Object.hash(color, strokeWidth, fontSize, fontFamily, texture);
+      Object.hash(color, strokeWidth, fontSize, fontFamily, texture, shadow);
 }
