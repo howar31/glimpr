@@ -87,6 +87,12 @@ class _EditorCoreState extends State<EditorCore> {
   int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable
 
   bool _cropping = false;
+  // Editor crop-trim: adjusting a PENDING (drag-released) selection before
+  // confirm — resize from a corner or move the whole rect.
+  int? _cropCorner; // 0=TL 1=TR 2=BR 3=BL during a corner-resize drag
+  Offset? _cropMoveStart; // logical press point when moving the whole selection
+  Rect? _cropMoveOrigin; // the pending rect at move-start
+  bool get _cropAdjusting => _cropCorner != null || _cropMoveStart != null;
 
   // Snappable windows for THIS display (capture-time snapshot) + the one the
   // cursor is currently over (crop tool, not mid-drag) — highlighted + snapped.
@@ -109,10 +115,19 @@ class _EditorCoreState extends State<EditorCore> {
   /// original behaviour: no Transform, `_toLogical` is identity.
   bool get _interactive => widget.host.viewportInteractive;
 
-  /// The logical canvas size. A single seam so a later crop-trim block can flip
-  /// this to a mutable document canvas size in one place; today it is the host's
-  /// canvas size (display size for the overlay, native image size for the editor).
-  Size get _canvasSize => widget.host.size;
+  /// The logical canvas size. For the editor it follows the document's mutable
+  /// canvas size after a crop-trim (null = the host's untrimmed size); the
+  /// overlay always uses the host size (it never trims).
+  Size get _canvasSize => _interactive
+      ? (c.document.value.canvasSize ?? widget.host.size)
+      : widget.host.size;
+
+  /// The current canvas image (loupe + raster + base layer). After a crop-trim
+  /// it is the smaller document image; otherwise the host base image. The overlay
+  /// never trims, so it is always the host base image.
+  ui.Image get _canvasImage => _interactive
+      ? (c.document.value.canvasImage ?? widget.host.baseImage)
+      : widget.host.baseImage;
 
   /// Map a gesture-layer local position to logical canvas coords. The editor's
   /// gesture layer is positioned EXACTLY over the on-screen image rect (offset +
@@ -159,6 +174,55 @@ class _EditorCoreState extends State<EditorCore> {
         1.0,
       ),
     );
+  }
+
+  /// Confirm a pending crop selection (image editor): destructively trim the
+  /// canvas to the rect — crop the current image to a new smaller [ui.Image],
+  /// shift every drawable by -rect.topLeft, push an undo step, then drop the
+  /// stale blur/pixelate pre-rasters and refit the viewport. Undo restores the
+  /// pre-crop image + size + drawables.
+  Future<void> _confirmTrim() async {
+    final r = _crop.rect.value;
+    if (r == null) return;
+    // A drag can run past the image edges — clamp to the canvas.
+    final rect = r.intersect(Offset.zero & _canvasSize);
+    if (rect.width < 1 || rect.height < 1) {
+      setState(() => _crop.clear());
+      return;
+    }
+    final cropped = await _cropImage(_canvasImage, rect);
+    if (!mounted) {
+      cropped.dispose();
+      return;
+    }
+    final shifted = [
+      for (final d in c.document.value.drawables) d.moved(-rect.topLeft),
+    ];
+    c.commitTrim(shifted, cropped, rect.size);
+    c.selectedIndex.value = null;
+    // Stale pre-rasters (old size) -> drop + recompute from the trimmed image.
+    _blurredFull?.dispose();
+    _pixelatedFull?.dispose();
+    _blurredFull = null;
+    _pixelatedFull = null;
+    setState(() {
+      _crop.clear();
+      _cropping = false;
+    });
+    _ensureRasterFor(c.tool.value);
+    _refitViewport();
+  }
+
+  /// Crop [src] to [rect] (logical == pixels for the editor, pixelScale 1.0) into
+  /// a new image. Base pixels only; annotations are not rasterized.
+  Future<ui.Image> _cropImage(ui.Image src, Rect rect) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawImageRect(src, rect, Offset.zero & rect.size, ui.Paint());
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(rect.width.round(), rect.height.round());
+    picture.dispose();
+    return img;
   }
 
   static const double _kMinScale = 0.1;
@@ -315,14 +379,15 @@ class _EditorCoreState extends State<EditorCore> {
   /// Compute the whole-frame blur / pixelate ONCE when its tool is first
   /// selected (the region drag then just masks it — no per-frame recompute).
   Future<void> _ensureRasterFor(ToolKind t) async {
+    // Use the CURRENT canvas image so blur/pixelate align after a crop-trim.
     if (t == ToolKind.blur && _blurredFull == null) {
       final img = await blurWhole(
-        widget.host.baseImage,
+        _canvasImage,
         kBlurSigmaLogical * widget.host.pixelScale,
       );
       if (mounted) setState(() => _blurredFull = img);
     } else if (t == ToolKind.pixelate && _pixelatedFull == null) {
-      final img = await pixelateWhole(widget.host.baseImage, kPixelCellNative);
+      final img = await pixelateWhole(_canvasImage, kPixelCellNative);
       if (mounted) setState(() => _pixelatedFull = img);
     }
   }
@@ -472,7 +537,10 @@ class _EditorCoreState extends State<EditorCore> {
     final key = e.logicalKey;
 
     if (key == LogicalKeyboardKey.escape) {
-      if (_inCrop && _cropping) {
+      // Clear an in-progress crop drag, or — for the editor's trim crop — a
+      // pending (drag-released, awaiting-confirm) selection.
+      if (_inCrop &&
+          (_cropping || (widget.host.cropTrims && _crop.rect.value != null))) {
         setState(() {
           _crop.clear();
           _cropping = false;
@@ -526,9 +594,18 @@ class _EditorCoreState extends State<EditorCore> {
         widget.editorBindings[kEditorConfirmKey]?.logicalKey ==
             LogicalKeyboardKey.enter;
     if ((action == kEditorConfirmKey || numpadConfirm) && !_dragging) {
-      // Confirm/Export is always a SCREENSHOT — never the tool's own click effect
-      // (so in blur/pixelate it screenshots rather than applies the effect).
-      // Skipped mid-gesture (a drag/edit in progress).
+      if (widget.host.cropTrims) {
+        // Image editor: Enter confirms a pending crop-trim; otherwise it does
+        // nothing (Complete is the explicit Save / Copy buttons, never Enter).
+        if (c.tool.value == ToolKind.crop && _crop.rect.value != null) {
+          _confirmTrim();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      // Overlay: Confirm/Export is always a SCREENSHOT — never the tool's own
+      // click effect (so in blur/pixelate it screenshots rather than applies the
+      // effect). Skipped mid-gesture (a drag/edit in progress).
       if (_showsCrosshair) {
         // Crosshair/loupe tools (crop/blur/pixelate + any future ones): capture
         // the snap target — the window under the cursor, or the whole display
@@ -726,6 +803,9 @@ class _EditorCoreState extends State<EditorCore> {
     final style = c.style.value;
     switch (c.tool.value) {
       case ToolKind.crop:
+        // Editor: crop is drag-to-trim (then Enter/✔ confirms); a bare tap does
+        // nothing. Overlay: a tap captures the snapped window / whole display.
+        if (widget.host.cropTrims) return;
         widget.host.onExport(win?.rect, win); // null window -> whole display
         return;
       case ToolKind.blur:
@@ -917,6 +997,9 @@ class _EditorCoreState extends State<EditorCore> {
     _preview = null;
     _dragStart = null;
     _strokePoints = null;
+    _cropCorner = null;
+    _cropMoveStart = null;
+    _cropMoveOrigin = null;
   }
 
   void _resetEditState() {
@@ -939,6 +1022,26 @@ class _EditorCoreState extends State<EditorCore> {
     // pan stream here — otherwise it freezes at the drag's start point.
     if (_interactive) setState(() => _cursor = p);
     if (c.tool.value == ToolKind.crop) {
+      // Editor: with a pending selection, a press on a corner resizes it and a
+      // press inside moves it; elsewhere starts a fresh selection.
+      final pending = widget.host.cropTrims ? _crop.rect.value : null;
+      if (pending != null) {
+        final tol = 16 / _viewport.scale; // ~16 screen px regardless of zoom
+        final corners = _rectCorners(pending);
+        for (var ci = 0; ci < corners.length; ci++) {
+          if ((corners[ci] - p).distance <= tol) {
+            _cropCorner = ci;
+            setState(() => _cursor = p);
+            return;
+          }
+        }
+        if (pending.contains(p)) {
+          _cropMoveStart = p;
+          _cropMoveOrigin = pending;
+          setState(() => _cursor = p);
+          return;
+        }
+      }
       _cropping = true;
       setState(() {
         _cursor = p;
@@ -986,11 +1089,14 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _panUpdate(DragUpdateDetails d) {
-    // Clamp to this display so a drag that pushes past the edge keeps the
-    // marquee / shape / crosshair pinned at the boundary (the hardware cursor is
-    // free but the active handoff is frozen while dragging). Map to logical
-    // BEFORE clamping (the clamp bounds are logical-canvas coords).
-    final p = _clampToDisplay(_toLogical(d.localPosition));
+    // Map to logical first. The overlay clamps to the display so the marquee /
+    // shape stays pinned at the boundary. The editor lets a DRAWING / MOVE run
+    // past the image edge (it is masked on screen + clipped on export), but keeps
+    // the CROP selection inside the image.
+    final logical = _toLogical(d.localPosition);
+    final p = (_interactive && c.tool.value != ToolKind.crop)
+        ? logical
+        : _clampToDisplay(logical);
     if (_cancelGesture) {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
@@ -1002,8 +1108,20 @@ class _EditorCoreState extends State<EditorCore> {
     // (no outer tracker); the crop/blur/pixelate branches below also keep it.
     if (_interactive) setState(() => _cursor = p);
     if (c.tool.value == ToolKind.crop) {
+      // Editor: resize a pending selection from its grabbed corner, or move the
+      // whole rect; otherwise extend the in-progress selection.
+      if (_cropCorner != null) {
+        final cur = _crop.rect.value;
+        if (cur != null) {
+          final opposite = _rectCorners(cur)[(_cropCorner! + 2) % 4];
+          _crop.set(Rect.fromPoints(opposite, p));
+        }
+      } else if (_cropMoveStart != null && _cropMoveOrigin != null) {
+        _crop.set(_cropMoveOrigin!.shift(p - _cropMoveStart!));
+      } else {
+        _crop.update(p);
+      }
       setState(() => _cursor = p);
-      _crop.update(p);
       return;
     }
     if (_editIndex != null) {
@@ -1093,9 +1211,22 @@ class _EditorCoreState extends State<EditorCore> {
     }
     if (c.tool.value == ToolKind.crop) {
       _cropping = false;
+      _cropCorner = null;
+      _cropMoveStart = null;
+      _cropMoveOrigin = null;
       final r = _crop.rect.value;
-      if (r != null && r.width >= 2 && r.height >= 2) {
-        // Window under the cursor at the drag-release point names the file.
+      final valid = r != null && r.width >= 2 && r.height >= 2;
+      if (widget.host.cropTrims) {
+        // Editor: leave a VALID selection pending (scrim + handles + ✔/✖ shown;
+        // Enter/✔ trims, Esc/✖ cancels); discard a too-small one. Rebuild so the
+        // pending-state HUD (handles + confirm buttons) appears.
+        if (!valid) setState(() => _crop.clear());
+        setState(() {});
+        return;
+      }
+      if (valid) {
+        // Overlay: the drag-release commits the export-region. Window under the
+        // cursor at the release point names the file.
         widget.host.onExport(r, topmostWindowAt(_windows, _cursor));
       } else {
         setState(() => _crop.clear());
@@ -1151,6 +1282,9 @@ class _EditorCoreState extends State<EditorCore> {
     });
   }
 
+  /// Loupe placement for the OVERLAY (clamped within the display, flipping near
+  /// the bottom/right edges). The editor positions its loupe in screen space
+  /// (see [_editorLoupe]) so it can float over the checkerboard margin.
   Offset _loupeOrigin() {
     const size = 120.0;
     const gap = 24.0;
@@ -1158,9 +1292,83 @@ class _EditorCoreState extends State<EditorCore> {
     var ly = _cursor.dy + gap;
     if (lx + size > _canvasSize.width) lx = _cursor.dx - gap - size;
     if (ly + size > _canvasSize.height) ly = _cursor.dy - gap - size;
-    return Offset(
-      lx.clamp(0.0, _canvasSize.width - size),
-      ly.clamp(0.0, _canvasSize.height - size),
+    // After a crop-trim the canvas can be smaller than the loupe; guard the
+    // upper clamp bound so it never goes negative (clamp throws if min > max).
+    final maxX = (_canvasSize.width - size).clamp(0.0, double.infinity);
+    final maxY = (_canvasSize.height - size).clamp(0.0, double.infinity);
+    return Offset(lx.clamp(0.0, maxX), ly.clamp(0.0, maxY));
+  }
+
+  /// The annotation layer, masked to the image rect for the editor (so a drawing
+  /// dragged past the edge is hidden + clipped on export) and left unwrapped for
+  /// the overlay (full-screen, structurally identical).
+  Widget _annotationLayer(bool inCrop) {
+    final layer = CustomPaint(
+      painter: DrawablePainter(
+        // Annotations always paint (so an inactive display still shows its
+        // drawings); only the selection highlight is gated on focus.
+        drawables: _effectiveDrawables(),
+        selectedIndex: (!_active || inCrop || _editingText)
+            ? null
+            : c.selectedIndex.value,
+        blurredFull: _blurredFull,
+        pixelatedFull: _pixelatedFull,
+      ),
+      size: _canvasSize,
+    );
+    return _interactive ? ClipRect(child: layer) : layer;
+  }
+
+  /// The editor's pixel loupe, positioned in SCREEN space at the cursor's
+  /// bottom-right (flipping near the window edges so it stays on-screen). It can
+  /// float over the checkerboard margin; the content magnifies the canvas around
+  /// the logical cursor.
+  Widget _editorLoupe(EditorViewport v) {
+    const size = 120.0, gap = 24.0;
+    final cs = v.toLocal(_cursor); // cursor in screen coords
+    var lx = cs.dx + gap;
+    var ly = cs.dy + gap;
+    if (lx + size > _lastBoxSize.width) lx = cs.dx - gap - size;
+    if (ly + size > _lastBoxSize.height) ly = cs.dy - gap - size;
+    return Positioned(
+      left: lx,
+      top: ly,
+      child: IgnorePointer(
+        child: CustomPaint(
+          size: const Size(size, size),
+          painter: LoupePainter(
+            image: _canvasImage,
+            cursorLogical: _cursor,
+            scaleFactor: widget.host.pixelScale,
+            drawables: _effectiveDrawables(),
+            blurredFull: _blurredFull,
+            pixelatedFull: _pixelatedFull,
+            logicalSize: _canvasSize,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The ✔/✖ confirm bar for a pending crop-trim, positioned just below the
+  /// selection's on-screen (viewport-mapped) bottom-right and clamped on-screen.
+  Widget _cropConfirmButtons(EditorViewport v) {
+    final r = _crop.rect.value!;
+    final screenLeft = v.offset.dx + r.left * v.scale;
+    final screenTop = v.offset.dy + r.top * v.scale;
+    final w = r.width * v.scale;
+    final h = r.height * v.scale;
+    const barW = 80.0, barH = 40.0, gap = 8.0;
+    return Positioned(
+      left: (screenLeft + w - barW).clamp(gap, _lastBoxSize.width - barW - gap),
+      top: (screenTop + h + gap).clamp(gap, _lastBoxSize.height - barH - gap),
+      child: _CropConfirmBar(
+        onConfirm: _confirmTrim,
+        onCancel: () => setState(() {
+          _crop.clear();
+          _cropping = false;
+        }),
+      ),
     );
   }
 
@@ -1177,12 +1385,24 @@ class _EditorCoreState extends State<EditorCore> {
     final inCrop = _inCrop;
     final showsCrosshair = _showsCrosshair;
     final loupeOrigin = _loupeOrigin();
+    // The precision crosshair + loupe show on the active display. For the editor
+    // they ALSO require the cursor to be over the image (or mid-gesture): off the
+    // image they hide instead of freezing at the edge. The overlay is full-screen,
+    // so this is always satisfied there.
+    final showHud =
+        _active &&
+        showsCrosshair &&
+        (!_interactive || _overCanvas || _dragging || _cropAdjusting);
     // Window-snap target: the hovered window, or — Crop only — the whole display
     // over bare desktop; null when no snap tool is active or while dragging.
     final snapTarget =
         (_active && _snapTools.contains(c.tool.value) && !_dragging)
         ? (_hoverWindow ??
-              (c.tool.value == ToolKind.crop ? _fullDisplayRect : null))
+              // Whole-display crop fallback is an overlay affordance only; the
+              // editor's crop is a freeform drag (no window list to snap to).
+              (!_interactive && c.tool.value == ToolKind.crop
+                  ? _fullDisplayRect
+                  : null))
         : null;
     // Outermost listener tracks the cursor for the crosshair from the RAW
     // pointer stream — fires everywhere (incl. over the toolbar, and after a
@@ -1291,12 +1511,15 @@ class _EditorCoreState extends State<EditorCore> {
                               ),
                             ],
                           ),
+                          // Render the CURRENT canvas image (cropped after a trim,
+                          // else the host base) so a trim updates the display.
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.memory(
-                              widget.host.baseImageBytes,
+                            child: RawImage(
+                              image: _canvasImage,
+                              width: _canvasSize.width,
+                              height: _canvasSize.height,
                               fit: BoxFit.fill,
-                              gaplessPlayback: true,
                             ),
                           ),
                         )
@@ -1307,22 +1530,12 @@ class _EditorCoreState extends State<EditorCore> {
                         ),
                 ),
                 // Layer 2: annotation layer (+ a highlight box on the hovered/selected
-                // drawable in the annotate phase).
-                RepaintBoundary(
-                  child: CustomPaint(
-                    painter: DrawablePainter(
-                      // Annotations always paint (so an inactive display still shows
-                      // its drawings); only the selection highlight is gated on focus.
-                      drawables: _effectiveDrawables(),
-                      selectedIndex: (!_active || inCrop || _editingText)
-                          ? null
-                          : c.selectedIndex.value,
-                      blurredFull: _blurredFull,
-                      pixelatedFull: _pixelatedFull,
-                    ),
-                    size: _canvasSize,
-                  ),
-                ),
+                // drawable in the annotate phase). For the editor it is MASKED to the
+                // image rect: a drawing can be dragged past the edge (over the
+                // checkerboard) but the out-of-bounds part is hidden (and clipped on
+                // export). Only this layer is clipped, so the base image keeps its
+                // drop shadow. The overlay is unwrapped (structurally identical).
+                RepaintBoundary(child: _annotationLayer(inCrop)),
                 // Our own text-selection highlight — shown when the inline field is
                 // blurred (e.g. while typing a pt value), so the selected range stays
                 // visible. When the field is focused it draws its own highlight.
@@ -1362,6 +1575,12 @@ class _EditorCoreState extends State<EditorCore> {
                             CustomPaint(
                               painter: SelectionScrimPainter(selection: rect),
                             ),
+                            // Editor: corner handles on a pending selection so it
+                            // can be resized/moved before confirming the trim.
+                            if (widget.host.cropTrims && !_cropping)
+                              CustomPaint(
+                                painter: _CropHandlesPainter(rect),
+                              ),
                             Positioned(
                               left: rect.left,
                               top: (rect.bottom + 4).clamp(
@@ -1407,8 +1626,10 @@ class _EditorCoreState extends State<EditorCore> {
                         ),
                       ),
                 // Precision HUD: full-screen crosshair + pixel loupe — crop and the
-                // raster region tools (blur/pixelate), active display only.
-                if (_active && showsCrosshair)
+                // raster region tools (blur/pixelate), active display only. OVERLAY
+                // only (canvas-space); the editor renders its HUD in the outer
+                // stack (screen-space) so it floats over the whole window.
+                if (showHud && !_interactive)
                   IgnorePointer(
                     child: CustomPaint(
                       size: _canvasSize,
@@ -1417,7 +1638,7 @@ class _EditorCoreState extends State<EditorCore> {
                   ),
                 // Loupe is bound to the crosshair — shown/hidden together, so it
                 // never flickers off when hovering over an existing region.
-                if (_active && showsCrosshair)
+                if (showHud && !_interactive)
                   Positioned(
                     left: loupeOrigin.dx,
                     top: loupeOrigin.dy,
@@ -1425,7 +1646,7 @@ class _EditorCoreState extends State<EditorCore> {
                       child: CustomPaint(
                         size: const Size(120, 120),
                         painter: LoupePainter(
-                          image: widget.host.baseImage,
+                          image: _canvasImage,
                           cursorLogical: _cursor,
                           scaleFactor: widget.host.pixelScale,
                           drawables: _effectiveDrawables(),
@@ -1439,9 +1660,10 @@ class _EditorCoreState extends State<EditorCore> {
                       ),
                     ),
                   ),
-                // Small reticle for the drawing tools (replaces the system arrow with
-                // a precise inverting cross). Region tools use the crosshair above.
-                if (_showsReticle)
+                // Small reticle for the drawing tools (replaces the system arrow
+                // with a precise inverting cross). Region tools use the crosshair
+                // above. OVERLAY only; the editor renders it in the outer stack.
+                if (_showsReticle && !_interactive)
                   IgnorePointer(
                     child: CustomPaint(
                       size: _canvasSize,
@@ -1573,6 +1795,36 @@ class _EditorCoreState extends State<EditorCore> {
                   height: _canvasSize.height * v.scale,
                   child: gestureLayer,
                 ),
+                // Editor HUD in SCREEN space (cursor mapped through the viewport)
+                // so the crosshair / reticle / loupe float over the WHOLE window —
+                // incl. the checkerboard margin — instead of being clipped to the
+                // image like the annotations. Hidden when the cursor leaves the
+                // image (showHud / _showsReticle gate on _overCanvas).
+                if (showHud)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: CrosshairPainter(v.toLocal(_cursor)),
+                      ),
+                    ),
+                  ),
+                if (_showsReticle)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: ReticlePainter(v.toLocal(_cursor)),
+                      ),
+                    ),
+                  ),
+                if (showHud) _editorLoupe(v),
+                // On-canvas crop confirm/cancel — ABOVE the gesture layer so the
+                // ✔/✖ are tappable. Shown only for a pending (drag-released) trim
+                // selection (Enter/Esc do the same).
+                if (c.tool.value == ToolKind.crop &&
+                    !_cropping &&
+                    !_cropAdjusting &&
+                    _crop.rect.value != null)
+                  _cropConfirmButtons(v),
               ],
             );
           },
@@ -1580,4 +1832,90 @@ class _EditorCoreState extends State<EditorCore> {
       ),
     );
   }
+}
+
+/// A small frosted ✔ / ✖ bar shown beside a pending crop-trim selection in the
+/// image editor: ✔ confirms the trim (also Enter), ✖ cancels (also Esc).
+class _CropConfirmBar extends StatelessWidget {
+  const _CropConfirmBar({required this.onConfirm, required this.onCancel});
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: const Color(0xF21A2236),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0x33FFFFFF)),
+          boxShadow: const [
+            BoxShadow(color: Color(0x66000000), blurRadius: 12, offset: Offset(0, 4)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CropBtn(
+              icon: Icons.check,
+              color: const Color(0xFF34D399),
+              tooltip: 'Crop (Enter)',
+              onTap: onConfirm,
+            ),
+            const SizedBox(width: 2),
+            _CropBtn(
+              icon: Icons.close,
+              color: const Color(0xFFF87171),
+              tooltip: 'Cancel (Esc)',
+              onTap: onCancel,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CropBtn extends StatelessWidget {
+  const _CropBtn({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onTap,
+  });
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, color: color, size: 20),
+        ),
+      ),
+    );
+  }
+}
+
+/// Draws the four corner handles on a pending editor crop selection — the SAME
+/// blue-circle + white-ring style as the rectangle / blur / pixelate selection
+/// handles ([paintResizeHandles]), so they look identical.
+class _CropHandlesPainter extends CustomPainter {
+  _CropHandlesPainter(this.rect);
+  final Rect rect;
+
+  @override
+  void paint(Canvas canvas, Size size) => paintResizeHandles(canvas, rect);
+
+  @override
+  bool shouldRepaint(_CropHandlesPainter old) => old.rect != rect;
 }

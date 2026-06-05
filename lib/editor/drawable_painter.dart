@@ -359,15 +359,7 @@ class DrawablePainter extends CustomPainter {
     // Corner resize handles only for rect-defined shapes (rectangle/ellipse and
     // the raster regions); strokes/text are move-only, so handles would mislead.
     if (d is! RectShaped) return;
-    final fill = Paint()..color = const Color(0xFF2196F3);
-    final ring = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    for (final c in [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]) {
-      canvas.drawCircle(c, 5.5, fill);
-      canvas.drawCircle(c, 5.5, ring);
-    }
+    paintResizeHandles(canvas, r);
   }
 
   @override
@@ -376,4 +368,19 @@ class DrawablePainter extends CustomPainter {
       old.selectedIndex != selectedIndex ||
       old.blurredFull != blurredFull ||
       old.pixelatedFull != pixelatedFull;
+}
+
+/// The shared corner-handle style — blue filled circle + white ring at each
+/// corner of [r]. Used by the drawable selection AND the editor crop selection
+/// so resize handles look identical everywhere.
+void paintResizeHandles(Canvas canvas, Rect r) {
+  final fill = Paint()..color = const Color(0xFF2196F3);
+  final ring = Paint()
+    ..color = const Color(0xFFFFFFFF)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
+  for (final c in [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]) {
+    canvas.drawCircle(c, 5.5, fill);
+    canvas.drawCircle(c, 5.5, ring);
+  }
 }

@@ -70,6 +70,8 @@ class OverlayEditorHost implements EditorHost {
   @override
   bool get viewportInteractive => false;
   @override
+  bool get cropTrims => false;
+  @override
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window) =>
       _onExport(selectionLogical, window);
   @override

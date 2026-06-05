@@ -1,4 +1,4 @@
-import 'dart:ui' show Color;
+import 'dart:ui' show Color, Image, Size;
 import 'package:flutter/foundation.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
@@ -131,6 +131,11 @@ class EditorController {
   }
 
   void commitDrawable(Drawable d) => document.value = document.value.add(d);
+
+  /// Destructive crop-trim (image editor): push an undo snapshot with the new
+  /// (already-shifted) drawables AND the cropped canvas [image] + [size].
+  void commitTrim(List<Drawable> shifted, Image image, Size size) =>
+      document.value = document.value.trimmed(shifted, image, size);
 
   void replaceSelected(Drawable d) {
     final i = selectedIndex.value;

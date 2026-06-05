@@ -18,6 +18,13 @@ class SelectionController {
     if (a != null) rect.value = Rect.fromPoints(a, to);
   }
 
+  /// Replace the rectangle outright (used to resize / move a pending selection),
+  /// anchoring at its top-left so a subsequent [update] extends from there.
+  void set(Rect r) {
+    _anchor = r.topLeft;
+    rect.value = r;
+  }
+
   void clear() {
     _anchor = null;
     rect.value = null;

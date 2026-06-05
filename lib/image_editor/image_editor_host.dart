@@ -58,6 +58,8 @@ class ImageEditorHost implements EditorHost {
   @override
   bool get viewportInteractive => true;
   @override
+  bool get cropTrims => true;
+  @override
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window) =>
       onComplete();
   @override

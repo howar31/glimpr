@@ -279,14 +279,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     required bool saveToFile,
     required bool copyToClipboard,
   }) async {
-    final image = _image, controller = _controller;
-    if (image == null || controller == null || _exporting) return;
+    final baseImage = _image, controller = _controller;
+    if (baseImage == null || controller == null || _exporting) return;
     setState(() => _exporting = true);
     try {
       final cap = _cap;
+      // After a crop-trim the document carries the smaller canvas image; export
+      // that (and the already-shifted drawables), else the untrimmed base.
+      final doc = controller.document.value;
       final result = await exportImage(
-        image: image,
-        drawables: controller.document.value.drawables,
+        image: doc.canvasImage ?? baseImage,
+        drawables: doc.drawables,
         jpeg: cap.isJpeg,
         jpegQuality: cap.jpegQuality,
         saveToFile: saveToFile,
@@ -500,7 +503,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         } catch (_) {}
       },
       child: Container(
-        height: 44,
+        // Height tuned so the centred logo + title line up vertically with the
+        // native traffic-light buttons (their centre sits ~16px from the top):
+        // content centres at height/2, so 32px puts it at 16px. (44px was too
+        // low, 28px slightly too high.)
+        height: 32,
         decoration: BoxDecoration(
           color: t.isDark
               ? const Color(0x99020617) // rgba(2,6,23,0.6)-ish translucent slab
@@ -517,14 +524,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           children: [
             // Left inset to clear the macOS traffic-light buttons.
             const SizedBox(width: 78),
-            Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: kGlimprLogoGradient, // match the wordmark gradient
-              ),
-            ),
+            // The Viewfinder logo mark (same as the Settings sidebar), replacing
+            // the former decorative brand dot.
+            const GlimprMark(size: 18),
             const SizedBox(width: 9),
             Text(
               'Image Editor',

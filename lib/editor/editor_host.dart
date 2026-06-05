@@ -76,6 +76,11 @@ abstract class EditorHost {
   /// identity 1:1 (capture overlay).
   bool get viewportInteractive;
 
+  /// Whether the crop tool destructively trims the canvas (image editor) instead
+  /// of committing an export-region (capture overlay). When true, a crop drag
+  /// leaves a pending selection that Enter / on-canvas ✔ confirms.
+  bool get cropTrims;
+
   /// Commit the current selection/region (overlay: export screenshot; editor:
   /// trim/complete — supplied in later plans).
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window);
