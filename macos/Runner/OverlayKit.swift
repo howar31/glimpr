@@ -109,22 +109,33 @@ final class ScreenCapturer {
   }
 
   /// Snappable top-level windows on [displayID], as display-local logical rects
-  /// [x, y, w, h] (top-left origin), front-to-back. Filters to normal app windows
-  /// (layer 0), excludes invisible windows, the menu bar/Dock, tiny helpers, and
-  /// clamps to the display. Window bounds/alpha/layer need no Screen-Recording
-  /// permission. CGWindowBounds and CGDisplayBounds are both CG global top-left.
+  /// [x, y, w, h] (top-left origin), front-to-back. Filters to snappable window
+  /// levels — normal app windows (0), floating panels (3), and standalone modal
+  /// alerts (8, e.g. the CoreServicesUIAgent "file can't be found" dialog) —
+  /// excludes invisible windows, the menu bar/Dock/notification layer, tiny
+  /// helpers, and clamps to the display. Window bounds/alpha/layer need no
+  /// Screen-Recording permission. CGWindowBounds and CGDisplayBounds are both CG
+  /// global top-left.
   /// NOTE: our OWN visible windows (settings, future editor windows) ARE
   /// snappable — the freeze overlay is already excluded because it lives above
-  /// layer 0 (shielding level), and the warm control window is excluded by the
-  /// alpha filter below, so there's no need to exclude our whole process.
+  /// these levels (shielding level), and the warm control window is excluded by
+  /// the alpha filter below, so there's no need to exclude our whole process.
+  /// NOTE: notifications can't be snapped — their on-screen CGWindow is the
+  /// full-screen Notification Center container (layer 21), not the banner rect,
+  /// so admitting that level would only yield a whole-screen target.
   static func snappableWindows(displayID: CGDirectDisplayID) -> [[String: Any]] {
     let dispBounds = CGDisplayBounds(displayID)
     guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
       as? [[String: Any]] else { return [] }
+    // Normal app windows (0), floating panels (kCGFloatingWindowLevel 3), and
+    // standalone modal alerts (kCGModalPanelWindowLevel 8). Higher levels are
+    // deliberately excluded: Dock (20), notifications (21), menu bar (24),
+    // status items (25), pop-up menus (101), and our own freeze overlay.
+    let snappableLevels: Set<Int> = [0, 3, 8]
     var out: [[String: Any]] = []
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
-            layer == 0 else { continue }
+            snappableLevels.contains(layer) else { continue }
       // Skip effectively-invisible windows (e.g. our own warm control window at
       // alpha 0) so they don't become phantom snap targets.
       guard let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
