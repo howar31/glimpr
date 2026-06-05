@@ -207,10 +207,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     self.imageEditorChannel = editorChannel
 
-    let w = NSWindow(
+    let w = ImageEditorPanel(
       contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
       styleMask: [.titled, .closable, .resizable, .miniaturizable],
       backing: .buffered, defer: false)
+    w.onCloseShortcut = { [weak self] in self?.hideImageEditor() }
     w.title = "Image Editor"
     w.contentViewController = vc
     // contentViewController sizing collapses to the (zero-size) Flutter view;
@@ -359,6 +360,25 @@ class GlassContentViewController: NSViewController {
     // vibrancy behind shows through the transparent parts of the UI.
     flutterViewController.backgroundColor = .clear
     view.addSubview(flutterView)
+  }
+}
+
+/// The Image Editor window. Subclassed only to intercept Cmd-W at the window
+/// level so it hides the editor (keeping the engine warm), exactly like the
+/// settings window — a focused Flutter text field can swallow the in-Flutter
+/// shortcut, so the close key must be handled natively. Mirrors
+/// MainFlutterWindow.performKeyEquivalent.
+final class ImageEditorPanel: NSWindow {
+  var onCloseShortcut: (() -> Void)?
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if alphaValue > 0,
+      event.modifierFlags.contains(.command),
+      event.charactersIgnoringModifiers?.lowercased() == "w"
+    {
+      onCloseShortcut?()
+      return true
+    }
+    return super.performKeyEquivalent(with: event)
   }
 }
 
