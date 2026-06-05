@@ -589,7 +589,9 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _onHover(PointerHoverEvent e) {
-    final p = _toLogical(e.localPosition);
+    // Inside the viewport Transform (transformHitTests:true) localPosition is
+    // already logical; only the outer cursor tracker maps via _toLogical.
+    final p = e.localPosition;
     setState(() => _cursor = p);
     if (_inCrop) return;
     final drawables = c.document.value.drawables;
@@ -610,7 +612,7 @@ class _EditorCoreState extends State<EditorCore> {
       _commitText();
       return;
     }
-    final p = _toLogical(d.localPosition);
+    final p = d.localPosition;
     // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
     // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
     // drawable spanning it. With NO window under the cursor the tools fall back
@@ -683,7 +685,7 @@ class _EditorCoreState extends State<EditorCore> {
     final right = (e.buttons & kSecondaryButton) != 0;
     if (right && !_rightLatched) {
       _rightLatched = true;
-      _onRightDown(_toLogical(e.localPosition));
+      _onRightDown(e.localPosition);
     } else if (!right) {
       _rightLatched = false;
     }
@@ -826,7 +828,7 @@ class _EditorCoreState extends State<EditorCore> {
     // broken by the pointer straying onto another display (released in _panEnd /
     // _panCancel). Spanning across displays is out of scope.
     widget.host.cursor.setDrawingLock(true);
-    final p = _toLogical(d.localPosition);
+    final p = d.localPosition;
     if (c.tool.value == ToolKind.crop) {
       _cropping = true;
       setState(() {
@@ -879,7 +881,7 @@ class _EditorCoreState extends State<EditorCore> {
     // marquee / shape / crosshair pinned at the boundary (the hardware cursor is
     // free but the active handoff is frozen while dragging). Map to logical
     // BEFORE clamping (the clamp bounds are logical-canvas coords).
-    final p = _clampToDisplay(_toLogical(d.localPosition));
+    final p = _clampToDisplay(d.localPosition);
     if (_cancelGesture) {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
@@ -1088,7 +1090,18 @@ class _EditorCoreState extends State<EditorCore> {
                 box.isFinite &&
                 box.width > 0 &&
                 box.height > 0) {
-              _viewport = EditorViewport.fit(_canvasSize, box);
+              // Fit with a margin so the image is clearly centred with breathing
+              // room (and never edge-to-edge) inside the canvas box.
+              const fitMargin = 48.0;
+              final inner = Size(
+                (box.width - fitMargin * 2).clamp(1.0, box.width),
+                (box.height - fitMargin * 2).clamp(1.0, box.height),
+              );
+              final f = EditorViewport.fit(_canvasSize, inner);
+              _viewport = EditorViewport(
+                scale: f.scale,
+                offset: f.offset + const Offset(fitMargin, fitMargin),
+              );
               _didInitialFit = true;
             }
             final stack = Stack(
@@ -1405,9 +1418,12 @@ class _EditorCoreState extends State<EditorCore> {
             // box for the image editor. The overlay (non-interactive) inserts NO
             // Transform — its widget tree stays structurally identical, with the
             // viewport at identity so _toLogical/painter sizes degenerate to the
-            // originals. transformHitTests:false because we map pointer->logical
-            // ourselves via _toLogical (relying on Flutter's hit-test transform
-            // too would double-apply the scale).
+            // originals. transformHitTests:true lets Flutter inverse-map pointer
+            // hits through the viewport, so the clickable region follows the
+            // scaled+centred image (works for images smaller AND larger than the
+            // box). In-transform gesture callbacks therefore receive already-
+            // logical coordinates (no _toLogical there); only the OUTER cursor-
+            // tracking Listener (outside this Transform) still maps via _toLogical.
             if (!_interactive) return stack;
             final v = _viewport;
             final matrix = Matrix4.identity()
@@ -1415,7 +1431,7 @@ class _EditorCoreState extends State<EditorCore> {
               ..scaleByDouble(v.scale, v.scale, 1, 1);
             return Transform(
               transform: matrix,
-              transformHitTests: false,
+              transformHitTests: true,
               child: OverflowBox(
                 minWidth: 0,
                 minHeight: 0,
