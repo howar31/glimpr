@@ -76,15 +76,25 @@ void main() {
     expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(12));
   });
 
-  testWidgets('Editor section renders its command + tool rows', (tester) async {
+  testWidgets('Tools / Commands / Reserved sections render their rows',
+      (tester) async {
+    // The three editor cards are taller than the default 600px test viewport
+    // (a lazy ListView would leave the lower sections unbuilt); enlarge the
+    // surface so the whole pane renders for the structural assertions.
+    tester.view.physicalSize = const Size(1000, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    // The Editor section sits below the Global card. SectionLabel uppercases its
-    // text, so the header reads 'TOOLBAR/EDITOR'. The command rows (e.g. Undo),
-    // tool rows (e.g. Crop), and the reserved Cancel / Exit row with its static
-    // 'esc' cap all render below it.
-    expect(find.text('TOOLBAR/EDITOR'), findsOneWidget);
+    // The editor shortcuts are split into three labelled cards below the Capture
+    // card. SectionLabel uppercases its text. Tool rows (e.g. Crop) live under
+    // TOOLS, command rows (e.g. Undo) under COMMANDS, and the reserved fixed
+    // keys (e.g. Cancel / Exit, Commit text) under RESERVED.
+    expect(find.text('TOOLS'), findsOneWidget);
+    expect(find.text('COMMANDS'), findsOneWidget);
+    expect(find.text('RESERVED'), findsOneWidget);
     expect(find.text('Undo'), findsOneWidget);
     expect(find.text('Crop'), findsOneWidget);
     expect(find.text('Cancel / Exit'), findsOneWidget);

@@ -663,7 +663,7 @@ class _SettingsAppState extends State<SettingsApp>
 
     return [
       _h1('Shortcuts', t),
-      const SectionLabel('Global', icon: Icons.public),
+      const SectionLabel('Capture', icon: Icons.crop_free),
       GlassCard.rows([
         for (final a in kGlobalActions)
           SettingRow(
@@ -679,7 +679,25 @@ class _SettingsAppState extends State<SettingsApp>
           ),
       ]),
       const SizedBox(height: 24),
-      const SectionLabel('Toolbar/Editor', icon: Icons.edit_outlined),
+      // Tools — tool-selection keys (rebindable), in toolbar order.
+      const SectionLabel('Tools', icon: Icons.palette_outlined),
+      GlassCard.rows([
+        for (final (tool, icon) in kEditorToolMeta)
+          SettingRow(
+            title: _toolLabel(tool),
+            icon: icon,
+            trailing: _bindingRow(
+              t: t,
+              actionKey: kEditorToolActionKey[tool]!,
+              requireModifier: false,
+              reserved: kEditorReservedKeys,
+              dupes: dupes,
+            ),
+          ),
+      ]),
+      const SizedBox(height: 24),
+      // Commands — annotation / document commands (rebindable).
+      const SectionLabel('Commands', icon: Icons.edit_outlined),
       GlassCard.rows([
         for (final cmd in const <(String, String, String?)>[
           (kEditorUndoKey, 'Undo', null),
@@ -703,26 +721,23 @@ class _SettingsAppState extends State<SettingsApp>
               dupes: dupes,
             ),
           ),
-        // Tools, in toolbar order, each with its toolbar icon (shared SSOT).
-        for (final (tool, icon) in kEditorToolMeta)
-          SettingRow(
-            title: _toolLabel(tool),
-            icon: icon,
-            trailing: _bindingRow(
-              t: t,
-              actionKey: kEditorToolActionKey[tool]!,
-              requireModifier: false,
-              reserved: kEditorReservedKeys,
-              dupes: dupes,
-            ),
-          ),
-        // Reserved (read-only) — fixed keys that cannot be rebound. Rendered in a
-        // field-shaped box matching the recorder so the caps line up with the
-        // editable rows (a lock glyph replaces the recorder's keyboard/✕ glyph).
+      ]),
+      const SizedBox(height: 24),
+      // Reserved — fixed keys that cannot be rebound (the per-row hint notes the
+      // surface each applies to). Rendered in a field-shaped box matching the
+      // recorder so the caps line up with the editable rows (a lock glyph
+      // replaces the recorder's keyboard/✕ glyph).
+      const SectionLabel('Reserved', icon: Icons.lock_outline),
+      GlassCard.rows([
         SettingRow(
           title: 'Cancel / Exit',
           hint: 'Reserved',
           trailing: _reservedField(t, const [KeyCap('esc')]),
+        ),
+        SettingRow(
+          title: 'Close window',
+          hint: 'Reserved · editor / settings',
+          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('W')]),
         ),
         SettingRow(
           title: 'Nudge crosshair',
@@ -731,6 +746,17 @@ class _SettingsAppState extends State<SettingsApp>
             t,
             const [KeyCap('←'), KeyCap('↑'), KeyCap('↓'), KeyCap('→')],
           ),
+        ),
+        // Image-editor viewport zoom — fixed keys (the capture overlay is 1:1).
+        SettingRow(
+          title: 'Fit to window',
+          hint: 'Reserved · image editor',
+          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('1')]),
+        ),
+        SettingRow(
+          title: 'Zoom to 100%',
+          hint: 'Reserved · image editor',
+          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('2')]),
         ),
         // Text-input semantics, fixed while editing a text annotation — one row
         // per action so the keys don't read as a single chord.
