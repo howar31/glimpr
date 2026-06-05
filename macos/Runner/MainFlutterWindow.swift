@@ -1,6 +1,7 @@
 import Cocoa
 import FlutterMacOS
 import ServiceManagement
+import UniformTypeIdentifiers
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureChannel: CaptureChannel?
@@ -12,7 +13,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   var overlayManager: OverlayManager?
   private var imageEditorWindow: NSWindow?
   private var imageEditorRole: FlutterMethodChannel?
+  private var imageEditorChannel: FlutterMethodChannel?
   private var imageEditorDelegate: ImageEditorWindowDelegate?
+  private var isPresentingOpenPanel = false
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -192,6 +195,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     self.imageEditorRole = role
 
+    let editorChannel = FlutterMethodChannel(
+      name: "glimpr/imageEditor", binaryMessenger: vc.engine.binaryMessenger)
+    editorChannel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "openPanel":
+        result(self?.presentOpenPanel())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.imageEditorChannel = editorChannel
+
     let w = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 980, height: 680),
       styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -217,8 +232,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.ignoresMouseEvents = true
   }
 
-  /// Reveal the warm Image Editor window (built at launch). SPIKE: shows the
-  /// animating placeholder; Plan 2b mounts the real editor.
+  /// Reveal the warm Image Editor window and present the file-open panel. On a
+  /// chosen path the path is pushed to Dart via the imageEditor channel; on
+  /// cancel the window stays revealed showing its landing state.
   func openImageEditor() {
     guard let w = imageEditorWindow else { return }
     w.alphaValue = 1
@@ -227,6 +243,28 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     updateActivationPolicy()
     NSApp.activate(ignoringOtherApps: true)
     w.makeKeyAndOrderFront(nil)
+    // Defer the modal one run-loop cycle so the (warm) window commits a display
+    // pass before the open panel appears — avoids a blank frame behind it.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      if let path = self.presentOpenPanel() {
+        self.imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+      }
+    }
+  }
+
+  /// Present a modal NSOpenPanel restricted to common image types and return the
+  /// chosen file path, or nil if the user cancelled. A re-entrancy guard prevents
+  /// stacking a second panel if the channel or menu fires while one is already up.
+  private func presentOpenPanel() -> String? {
+    guard !isPresentingOpenPanel else { return nil }
+    isPresentingOpenPanel = true
+    defer { isPresentingOpenPanel = false }
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.allowedContentTypes = [.png, .jpeg, .gif, .tiff, .bmp, .heic, .image]
+    return panel.runModal() == .OK ? panel.url?.path : nil
   }
 
   private func hideImageEditor() {
