@@ -29,6 +29,9 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
   Uint8List? _bytes;
   String _sourceName = 'image';
   EditorController? _controller;
+  final ValueNotifier<({int id, Offset cursor})> _active = ValueNotifier(
+    (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
+  );
 
   final Map<ToolKind, DrawStyle> _toolStyles = {};
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
@@ -154,6 +157,7 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
   void dispose() {
     _image?.dispose();
     _controller?.dispose();
+    _active.dispose();
     super.dispose();
   }
 
@@ -211,6 +215,7 @@ class _ImageEditorAppState extends State<ImageEditorApp> {
           bytes: bytes,
           fittedSize: fitted,
           onComplete: _complete,
+          activeSignal: _active,
         );
         return Stack(
           children: [

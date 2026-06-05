@@ -9,24 +9,28 @@ import '../editor/editor_host.dart';
 /// + native baseImage) model — [size] is the fitted logical size, [pixelScale]
 /// maps it back to the image's native pixels for full-resolution export. No
 /// native cursor, no window-snap, no cross-display; always active.
+///
+/// [activeSignal] must be injected by the caller (typically owned by the parent
+/// State) so that the stable notifier survives per-build host reconstruction.
 class ImageEditorHost implements EditorHost {
   final ui.Image image;
   final Uint8List bytes;
   final Size fittedSize;
   final Future<void> Function() onComplete;
   final VoidCallback? onClose;
+  @override
+  final ValueListenable<({int id, Offset cursor})> activeSignal;
 
   ImageEditorHost({
     required this.image,
     required this.bytes,
     required this.fittedSize,
     required this.onComplete,
+    required this.activeSignal,
     this.onClose,
   });
 
-  static const int _hostId = 0;
-  final ValueNotifier<({int id, Offset cursor})> _active =
-      ValueNotifier((id: _hostId, cursor: Offset.zero));
+  static const int kImageEditorHostId = 0;
 
   @override
   Size get size => fittedSize;
@@ -41,13 +45,11 @@ class ImageEditorHost implements EditorHost {
   @override
   bool get startsActive => true;
   @override
-  int get hostId => _hostId;
+  int get hostId => kImageEditorHostId;
   @override
   Offset get globalOrigin => Offset.zero;
   @override
   List<SnapWindow> get snapWindows => const [];
-  @override
-  ValueListenable<({int id, Offset cursor})> get activeSignal => _active;
   @override
   EditorCursorController get cursor => const NoopCursorController();
   @override

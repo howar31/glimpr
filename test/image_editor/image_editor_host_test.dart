@@ -19,6 +19,9 @@ void main() {
       bytes: Uint8List.fromList([1, 2, 3]),
       fittedSize: const Size(900, 675), // aspect-preserved fit of 4000x3000
       onComplete: () async => completed = true,
+      activeSignal: ValueNotifier(
+        (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
+      ),
     );
     expect(host.size, const Size(900, 675));
     // pixelScale maps fitted-logical -> native pixels.
@@ -43,6 +46,9 @@ void main() {
       bytes: Uint8List.fromList([0]),
       fittedSize: const Size(10, 10),
       onComplete: () async {},
+      activeSignal: ValueNotifier(
+        (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
+      ),
       onClose: () => closed = true,
     );
     host.onCancel();
