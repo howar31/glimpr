@@ -57,6 +57,8 @@ class ImageEditorHost implements EditorHost {
   @override
   bool get showFloatingToolbar => false;
   @override
+  bool get viewportInteractive => true;
+  @override
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window) => onComplete();
   @override
   void onCancel() => onClose?.call();

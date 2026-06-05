@@ -32,6 +32,7 @@ void main() {
     expect(host.startsActive, isTrue);
     expect(host.snapWindows, isEmpty);
     expect(host.rightClickExits, isFalse);
+    expect(host.viewportInteractive, isTrue);
     // The active signal's id matches hostId, so EditorCore stays active.
     expect(host.activeSignal.value.id, host.hostId);
     await host.onExport(null, null);

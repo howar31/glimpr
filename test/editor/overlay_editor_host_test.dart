@@ -54,6 +54,7 @@ void main() {
     expect(host.snapWindows.length, 1);
     expect(host.activeSignal, same(signal));
     expect(host.rightClickExits, isFalse);
+    expect(host.viewportInteractive, isFalse);
 
     await host.onExport(null, null);
     host.onCancel();

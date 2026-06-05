@@ -72,6 +72,10 @@ abstract class EditorHost {
   /// canvas (overlay) or the host docks the toolbar itself (image editor).
   bool get showFloatingToolbar;
 
+  /// Whether EditorCore drives a zoom/pan viewport (image editor) or stays at
+  /// identity 1:1 (capture overlay).
+  bool get viewportInteractive;
+
   /// Commit the current selection/region (overlay: export screenshot; editor:
   /// trim/complete — supplied in later plans).
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window);
