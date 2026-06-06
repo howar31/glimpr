@@ -586,10 +586,12 @@ class _EditorCoreState extends State<EditorCore> {
     final key = e.logicalKey;
 
     if (key == LogicalKeyboardKey.escape) {
-      // Clear an in-progress crop drag, or — for the editor's trim crop — a
-      // pending (drag-released, awaiting-confirm) selection.
-      if (_inCrop &&
-          (_cropping || (widget.host.cropTrims && _crop.rect.value != null))) {
+      // A gesture in progress -> cancel just that gesture (like a right-click),
+      // staying in capture rather than exiting.
+      if (_cancelActiveGesture()) return KeyEventResult.handled;
+      // Editor trim crop: a pending (drag-released, awaiting-confirm) selection
+      // -> clear it.
+      if (_inCrop && widget.host.cropTrims && _crop.rect.value != null) {
         setState(() {
           _crop.clear();
           _cropping = false;
@@ -1025,6 +1027,28 @@ class _EditorCoreState extends State<EditorCore> {
     p.dy.clamp(0.0, _canvasSize.height),
   );
 
+  /// Cancel an in-progress gesture (crop/draw/move/resize/endpoint) WITHOUT
+  /// leaving capture: revert it, release the cursor confine, and flag the pending
+  /// pan-end so it won't commit. Returns true if a gesture was cancelled. Shared
+  /// by right-click and Esc.
+  bool _cancelActiveGesture() {
+    if (!(_cropping ||
+        _dragStart != null ||
+        _preview != null ||
+        _editIndex != null)) {
+      return false;
+    }
+    widget.host.cursor.setDrawingLock(false); // release the cursor confine
+    setState(() {
+      _cancelGesture = true; // a pending pan-end must not commit
+      _crop.clear();
+      _cropping = false;
+      _resetDrawState();
+      _resetEditState();
+    });
+    return true;
+  }
+
   void _onRightDown(Offset p) {
     // While editing text, right-click just commits the in-progress text — it
     // does NOT delete/exit, which would discard the unfinished text.
@@ -1039,20 +1063,7 @@ class _EditorCoreState extends State<EditorCore> {
     //     mirroring left-click selection) -> DELETE it, stay;
     //  3) otherwise -> EXIT the capture, like Esc (nothing of the active tool's
     //     type is under the cursor, so for that tool the spot is "empty").
-    if (_cropping ||
-        _dragStart != null ||
-        _preview != null ||
-        _editIndex != null) {
-      widget.host.cursor.setDrawingLock(false); // release the cursor confine
-      setState(() {
-        _cancelGesture = true; // a pending pan-end must not commit
-        _crop.clear();
-        _cropping = false;
-        _resetDrawState();
-        _resetEditState();
-      });
-      return;
-    }
+    if (_cancelActiveGesture()) return;
     // Crop (and any tool with no own drawable type: _typeFilter() == null) never
     // deletes — right-click falls through to exit, over a drawable or empty space
     // alike. For a tool WITH a type, prefer the drawable whose handles are showing:
