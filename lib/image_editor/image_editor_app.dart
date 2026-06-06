@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -61,6 +62,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   );
 
   final Map<ToolKind, DrawStyle> _toolStyles = {};
+  Timer? _persistTimer; // debounces saving _toolStyles to the shared store
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
   CaptureSettings _cap = CaptureSettings.defaults;
   // Drives EditorCore's Fit / 100% from the docked toolbar buttons.
@@ -215,14 +217,33 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Load an image already decoded in memory (from a file read or a clipboard
   /// paste) as the editor's base: swap the image/bytes/source name and start a
   /// fresh controller on the non-destructive SELECT tool.
-  void _setLoadedImage(Uint8List bytes, ui.Image img, String name) {
+  Future<void> _setLoadedImage(
+    Uint8List bytes,
+    ui.Image img,
+    String name,
+  ) async {
+    // Refresh the shared per-tool styles before building this session's
+    // controller, so edits made in the capture overlay since this window loaded
+    // are picked up (the overlay does the same reseed per capture). The map
+    // instance is shared with the controller, so mutate it in place.
+    try {
+      final styles = await ToolStyleStore(Settings.instance.store).load();
+      _toolStyles
+        ..clear()
+        ..addAll(styles);
+    } catch (_) {}
+    if (!mounted) return;
     setState(() {
       _image?.dispose();
       _image = img;
       _bytes = bytes;
       _sourceName = name;
+      _controller?.style.removeListener(_schedulePersist);
       _controller?.dispose();
       _controller = EditorController(toolStyles: _toolStyles);
+      // Persist this surface's style edits to the shared store (debounced) so
+      // the capture overlay picks them up on its next capture.
+      _controller!.style.addListener(_schedulePersist);
       // Open on the non-destructive SELECT tool, not crop — in this editor a
       // crop tap would trigger Complete (export). Complete is the explicit
       // export path; tapping the canvas must not save.
@@ -232,6 +253,13 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       // so there is no duplicate subscription.
       _controller!.document.addListener(_markDirty);
       _dirty = false;
+    });
+  }
+
+  void _schedulePersist() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 400), () {
+      ToolStyleStore(Settings.instance.store).save(Map.of(_toolStyles));
     });
   }
 
@@ -427,6 +455,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       _image?.dispose();
       _image = null;
       _bytes = null;
+      _controller?.style.removeListener(_schedulePersist);
       _controller?.dispose();
       _controller = null;
       _dirty = false;
@@ -442,7 +471,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _persistTimer?.cancel();
     _image?.dispose();
+    _controller?.style.removeListener(_schedulePersist);
     _controller?.dispose();
     _active.dispose();
     super.dispose();
