@@ -8,6 +8,10 @@ class SelectionController {
   final ValueNotifier<Rect?> rect = ValueNotifier<Rect?>(null);
   Offset? _anchor;
 
+  /// The drag's anchor (begin point, or the top-left after a [set]); used to
+  /// constrain an in-progress selection (e.g. Shift -> square).
+  Offset? get anchor => _anchor;
+
   void begin(Offset at) {
     _anchor = at;
     rect.value = Rect.fromPoints(at, at);

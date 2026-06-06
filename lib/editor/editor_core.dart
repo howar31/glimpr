@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,40 @@ import 'hit_test.dart';
 import 'raster.dart';
 import 'text_metrics.dart';
 import 'viewport.dart';
+
+/// Shift-constrain a box drag to a SQUARE from anchor [a] toward [p]: side =
+/// the larger of the two deltas, keeping the drag's quadrant. (Square bounding
+/// box => a circle for the ellipse tool.)
+Offset _squareCorner(Offset a, Offset p) {
+  final dx = p.dx - a.dx;
+  final dy = p.dy - a.dy;
+  final s = math.max(dx.abs(), dy.abs());
+  return Offset(a.dx + (dx < 0 ? -s : s), a.dy + (dy < 0 ? -s : s));
+}
+
+/// Like [_squareCorner] but capped so the corner stays inside [bounds] — used
+/// for the crop selection, which (unlike annotations) must not leave the canvas.
+Offset _squareCornerIn(Offset a, Offset p, Size bounds) {
+  final dx = p.dx - a.dx;
+  final dy = p.dy - a.dy;
+  final availX = dx < 0 ? a.dx : bounds.width - a.dx;
+  final availY = dy < 0 ? a.dy : bounds.height - a.dy;
+  final s = math.min(math.min(dx.abs(), dy.abs()), math.min(availX, availY));
+  return Offset(a.dx + (dx < 0 ? -s : s), a.dy + (dy < 0 ? -s : s));
+}
+
+/// Shift-constrain a segment drag to the nearest of 8 directions (multiples of
+/// 45°) from anchor [a]: the moving point is projected onto that ray, so the tip
+/// tracks the cursor along an axis/diagonal.
+Offset _snap8(Offset a, Offset p) {
+  final v = p - a;
+  if (v.distance == 0) return p;
+  const step = math.pi / 4; // 45°
+  final snapped = (math.atan2(v.dy, v.dx) / step).round() * step;
+  final dir = Offset(math.cos(snapped), math.sin(snapped));
+  final proj = v.dx * dir.dx + v.dy * dir.dy; // |v| component along the ray
+  return a + dir * proj;
+}
 
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
@@ -86,6 +121,7 @@ class _EditorCoreState extends State<EditorCore> {
   Offset? _moveStart;
   int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable
   int? _endpoint; // 0=start 1=end on a Segmented shape (line/arrow/highlighter)
+  Offset? _dragPos; // last drag position, to re-apply a mid-drag Shift toggle
 
   bool _cropping = false;
   // Editor crop-trim: adjusting a PENDING (drag-released) selection before
@@ -329,6 +365,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.selectedIndex.addListener(_unpinIfCleared);
     c.tool.addListener(_rebuild);
     c.tool.addListener(_onToolChanged);
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
     _textFocus.addListener(_rebuild); // repaint our selection on focus changes
@@ -345,6 +382,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.selectedIndex.removeListener(_unpinIfCleared);
     c.tool.removeListener(_rebuild);
     c.tool.removeListener(_onToolChanged);
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
     _textFocus.removeListener(_rebuild);
@@ -1051,6 +1089,19 @@ class _EditorCoreState extends State<EditorCore> {
     _endpoint = null;
   }
 
+  // Re-apply the active drag's constraint when Shift is pressed/released MID-drag
+  // without moving the mouse — no pointer event fires, so the preview would
+  // otherwise not refresh until the next move. Observe-only (returns false).
+  bool _onHardwareKey(KeyEvent e) {
+    if (e is KeyRepeatEvent) return false;
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.shiftLeft || k == LogicalKeyboardKey.shiftRight) {
+      final p = _dragPos;
+      if (p != null && (_dragging || _cropAdjusting)) _applyDrag(p);
+    }
+    return false;
+  }
+
   void _panStart(DragStartDetails d) {
     _cancelGesture = false;
     // A drag begins: confine the cursor to this display so the stroke can't be
@@ -1162,6 +1213,14 @@ class _EditorCoreState extends State<EditorCore> {
     final p = (_interactive && c.tool.value != ToolKind.crop)
         ? logical
         : _clampToDisplay(logical);
+    _applyDrag(p);
+  }
+
+  // Apply the drag at logical position [p]. Saved as [_dragPos] so a mid-drag
+  // Shift press/release (which produces no pointer event) can re-run the same
+  // constraint at the same point — see [_onHardwareKey].
+  void _applyDrag(Offset p) {
+    _dragPos = p;
     if (_cancelGesture) {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
@@ -1174,17 +1233,22 @@ class _EditorCoreState extends State<EditorCore> {
     if (_interactive) setState(() => _cursor = p);
     if (c.tool.value == ToolKind.crop) {
       // Editor: resize a pending selection from its grabbed corner, or move the
-      // whole rect; otherwise extend the in-progress selection.
+      // whole rect; otherwise extend the in-progress selection. Shift squares the
+      // resize / draw (capped to the canvas), like a rectangle drag.
+      final shift = HardwareKeyboard.instance.isShiftPressed;
       if (_cropCorner != null) {
         final cur = _crop.rect.value;
         if (cur != null) {
           final opposite = _rectCorners(cur)[(_cropCorner! + 2) % 4];
-          _crop.set(Rect.fromPoints(opposite, p));
+          final cp = shift ? _squareCornerIn(opposite, p, _canvasSize) : p;
+          _crop.set(Rect.fromPoints(opposite, cp));
         }
       } else if (_cropMoveStart != null && _cropMoveOrigin != null) {
         _crop.set(_cropMoveOrigin!.shift(p - _cropMoveStart!));
       } else {
-        _crop.update(p);
+        final a = _crop.anchor;
+        final to = (shift && a != null) ? _squareCornerIn(a, p, _canvasSize) : p;
+        _crop.update(to);
       }
       setState(() => _cursor = p);
       return;
@@ -1195,45 +1259,52 @@ class _EditorCoreState extends State<EditorCore> {
     }
     final s = _dragStart;
     if (s == null) return;
+    // Shift constrains the drag: box tools -> square (circle for the ellipse),
+    // two-point tools -> snap to the nearest of 8 directions.
+    final shift = HardwareKeyboard.instance.isShiftPressed;
     switch (c.tool.value) {
       case ToolKind.rectangle:
+        final cp = shift ? _squareCorner(s, p) : p;
         setState(
-          () => _preview = RectangleDrawable(
-            Rect.fromPoints(s, p),
-            c.style.value,
-          ),
+          () =>
+              _preview = RectangleDrawable(Rect.fromPoints(s, cp), c.style.value),
         );
         break;
       case ToolKind.ellipse:
+        final cp = shift ? _squareCorner(s, p) : p;
         setState(
-          () =>
-              _preview = EllipseDrawable(Rect.fromPoints(s, p), c.style.value),
+          () => _preview = EllipseDrawable(Rect.fromPoints(s, cp), c.style.value),
         );
         break;
       case ToolKind.arrow:
-        setState(() => _preview = ArrowDrawable(s, p, c.style.value));
+        final cp = shift ? _snap8(s, p) : p;
+        setState(() => _preview = ArrowDrawable(s, cp, c.style.value));
         break;
       case ToolKind.line:
-        setState(() => _preview = LineDrawable(s, p, c.style.value));
+        final cp = shift ? _snap8(s, p) : p;
+        setState(() => _preview = LineDrawable(s, cp, c.style.value));
         break;
       case ToolKind.highlighter:
         // Straight marker swipe: a 2-point band from the drag start to here.
-        setState(() => _preview = HighlighterDrawable([s, p], c.style.value));
+        final cp = shift ? _snap8(s, p) : p;
+        setState(() => _preview = HighlighterDrawable([s, cp], c.style.value));
         break;
       case ToolKind.pen:
         _strokePoints = [...?_strokePoints, p];
         setState(() => _preview = PenDrawable(_strokePoints!, c.style.value));
         break;
       case ToolKind.blur:
+        final cp = shift ? _squareCorner(s, p) : p;
         setState(() {
           _cursor = p; // keep the crosshair/loupe on the dragging corner
-          _preview = BlurDrawable(Rect.fromPoints(s, p), c.style.value);
+          _preview = BlurDrawable(Rect.fromPoints(s, cp), c.style.value);
         });
         break;
       case ToolKind.pixelate:
+        final cp = shift ? _squareCorner(s, p) : p;
         setState(() {
           _cursor = p;
-          _preview = PixelateDrawable(Rect.fromPoints(s, p), c.style.value);
+          _preview = PixelateDrawable(Rect.fromPoints(s, cp), c.style.value);
         });
         break;
       case ToolKind.text:
@@ -1247,17 +1318,23 @@ class _EditorCoreState extends State<EditorCore> {
   void _updateSelectDrag(Offset p) {
     final orig = _editOriginal;
     if (orig == null) return;
+    // Shift constrains an edit drag too: endpoint -> 8 directions from the fixed
+    // end; corner-resize -> square (circle) from the opposite corner.
+    final shift = HardwareKeyboard.instance.isShiftPressed;
     if (_endpoint != null && orig is Segmented) {
       final seg = orig as Segmented;
-      final start = _endpoint == 0 ? p : seg.start;
-      final end = _endpoint == 1 ? p : seg.end;
+      final anchor = _endpoint == 0 ? seg.end : seg.start; // the fixed end
+      final moved = shift ? _snap8(anchor, p) : p;
+      final start = _endpoint == 0 ? moved : seg.start;
+      final end = _endpoint == 1 ? moved : seg.end;
       setState(() => _editPreview = seg.withEndpoints(start, end));
     } else if (_resizeCorner != null && orig is RectShaped) {
       final shape = orig as RectShaped;
       final corners = _rectCorners(shape.rect);
       final opposite = corners[(_resizeCorner! + 2) % 4];
+      final cp = shift ? _squareCorner(opposite, p) : p;
       setState(
-        () => _editPreview = shape.resizedTo(Rect.fromPoints(opposite, p)),
+        () => _editPreview = shape.resizedTo(Rect.fromPoints(opposite, cp)),
       );
     } else {
       final start = _moveStart;
