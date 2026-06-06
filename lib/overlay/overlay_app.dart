@@ -7,6 +7,7 @@ import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../output/deliver.dart';
 import '../output/sounds.dart';
@@ -43,6 +44,7 @@ class _OverlayAppState extends State<OverlayApp> {
   // first overlay appears (the async load below only layers in user overrides);
   // ShortcutStore.all() returns the same merged shape.
   Map<String, HotkeyBinding?> _editorBindings = {...kDefaultBindings};
+  LoupeConfig _loupe = const LoupeConfig();
   EditorController? _editor;
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
@@ -152,6 +154,10 @@ class _OverlayAppState extends State<OverlayApp> {
         // (ValueKey already bumped) rebuilds with the loaded map.
         ShortcutStore(Settings.instance.store).all().then((b) {
           if (mounted) setState(() => _editorBindings = b);
+        });
+        // Loupe geometry (size + magnification); same per-capture prefetch.
+        Settings.instance.loadLoupe().then((l) {
+          if (mounted) setState(() => _loupe = l);
         });
       },
       onCaptureFailed: (reason, msg) {
@@ -393,6 +399,7 @@ class _OverlayAppState extends State<OverlayApp> {
                   activeSignal: _activeSignal,
                   rightClickExits: _capture.rightClickExits,
                   editorBindings: _editorBindings,
+                  loupe: _loupe,
                   cursorImage: _cursorImage,
                   cursorTopLeft: _cursorTopLeft,
                 ),

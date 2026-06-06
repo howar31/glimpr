@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../capture/capture_kind.dart';
+import '../editor/loupe_config.dart';
 import '../output/filename.dart';
 import 'settings_store.dart';
 
@@ -91,6 +92,8 @@ class Settings {
   static const _decorateLastRegionKey = 'decorate_last_region';
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
+  static const _loupeSpanKey = 'loupe_span';
+  static const _loupeZoomKey = 'loupe_zoom';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -180,6 +183,26 @@ class Settings {
       (await store.getBool(_captureCursorKey)) ?? false;
   Future<void> setCaptureCursor(bool v) =>
       store.setBool(_captureCursorKey, v);
+
+  // Loupe geometry (shared by overlay + image editor) ----------------------
+  // Getters clamp on read too, so a corrupt / out-of-range stored value stays
+  // safe.
+  Future<int> getLoupeSpan() async =>
+      ((await store.getInt(_loupeSpanKey)) ?? kLoupeSpanDefault)
+          .clamp(kLoupeSpanMin, kLoupeSpanMax);
+  Future<void> setLoupeSpan(int v) =>
+      store.setInt(_loupeSpanKey, v.clamp(kLoupeSpanMin, kLoupeSpanMax));
+
+  Future<int> getLoupeZoom() async =>
+      ((await store.getInt(_loupeZoomKey)) ?? kLoupeZoomDefault)
+          .clamp(kLoupeZoomMin, kLoupeZoomMax);
+  Future<void> setLoupeZoom(int v) =>
+      store.setInt(_loupeZoomKey, v.clamp(kLoupeZoomMin, kLoupeZoomMax));
+
+  /// One-shot loupe geometry snapshot, read by the overlay (per capture) and the
+  /// image editor (per open).
+  Future<LoupeConfig> loadLoupe() async =>
+      LoupeConfig(span: await getLoupeSpan(), zoom: await getLoupeZoom());
 
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
   Future<CaptureSettings> loadCapture() async => CaptureSettings(

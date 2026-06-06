@@ -63,65 +63,71 @@ class GlimprMark extends StatelessWidget {
       CustomPaint(size: Size.square(size), painter: _MarkPainter(color));
 }
 
+/// Paints the Viewfinder mark (brackets + spark) into [canvas] at [size].
+/// Shared by [GlimprMark] and any offscreen renderer (e.g. the loupe preview).
+/// [color] flattens it to a single colour; null uses the brand logo gradient.
+void paintGlimprMark(Canvas canvas, Size size, {Color? color}) {
+  final s = size.width / 72.0;
+  canvas.save();
+  canvas.translate(-12 * s, -12 * s);
+  canvas.scale(s);
+
+  final brackets = Path()
+    ..moveTo(36, 18)
+    ..lineTo(23, 18)
+    ..arcToPoint(const Offset(18, 23),
+        radius: const Radius.circular(5), clockwise: false)
+    ..lineTo(18, 36)
+    ..moveTo(60, 18)
+    ..lineTo(73, 18)
+    ..arcToPoint(const Offset(78, 23),
+        radius: const Radius.circular(5), clockwise: true)
+    ..lineTo(78, 36)
+    ..moveTo(78, 60)
+    ..lineTo(78, 73)
+    ..arcToPoint(const Offset(73, 78),
+        radius: const Radius.circular(5), clockwise: true)
+    ..lineTo(60, 78)
+    ..moveTo(18, 60)
+    ..lineTo(18, 73)
+    ..arcToPoint(const Offset(23, 78),
+        radius: const Radius.circular(5), clockwise: false)
+    ..lineTo(36, 78);
+
+  final spark = Path()
+    ..moveTo(48, 31)
+    ..cubicTo(49.7, 43, 53, 46.3, 65, 48)
+    ..cubicTo(53, 49.7, 49.7, 53, 48, 65)
+    ..cubicTo(46.3, 53, 43, 49.7, 31, 48)
+    ..cubicTo(43, 46.3, 46.3, 43, 48, 31)
+    ..close();
+
+  const rect = Rect.fromLTRB(18, 18, 78, 78);
+  final stroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 8.5
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final fill = Paint()..style = PaintingStyle.fill;
+  if (color != null) {
+    stroke.color = color;
+    fill.color = color;
+  } else {
+    stroke.shader = kGlimprLogoGradient.createShader(rect);
+    fill.shader = kGlimprLogoGradient.createShader(rect);
+  }
+  canvas.drawPath(brackets, stroke);
+  canvas.drawPath(spark, fill);
+  canvas.restore();
+}
+
 class _MarkPainter extends CustomPainter {
   _MarkPainter(this.color);
   final Color? color;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width / 72.0;
-    canvas.save();
-    canvas.translate(-12 * s, -12 * s);
-    canvas.scale(s);
-
-    final brackets = Path()
-      ..moveTo(36, 18)
-      ..lineTo(23, 18)
-      ..arcToPoint(const Offset(18, 23),
-          radius: const Radius.circular(5), clockwise: false)
-      ..lineTo(18, 36)
-      ..moveTo(60, 18)
-      ..lineTo(73, 18)
-      ..arcToPoint(const Offset(78, 23),
-          radius: const Radius.circular(5), clockwise: true)
-      ..lineTo(78, 36)
-      ..moveTo(78, 60)
-      ..lineTo(78, 73)
-      ..arcToPoint(const Offset(73, 78),
-          radius: const Radius.circular(5), clockwise: true)
-      ..lineTo(60, 78)
-      ..moveTo(18, 60)
-      ..lineTo(18, 73)
-      ..arcToPoint(const Offset(23, 78),
-          radius: const Radius.circular(5), clockwise: false)
-      ..lineTo(36, 78);
-
-    final spark = Path()
-      ..moveTo(48, 31)
-      ..cubicTo(49.7, 43, 53, 46.3, 65, 48)
-      ..cubicTo(53, 49.7, 49.7, 53, 48, 65)
-      ..cubicTo(46.3, 53, 43, 49.7, 31, 48)
-      ..cubicTo(43, 46.3, 46.3, 43, 48, 31)
-      ..close();
-
-    const rect = Rect.fromLTRB(18, 18, 78, 78);
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8.5
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    final fill = Paint()..style = PaintingStyle.fill;
-    if (color != null) {
-      stroke.color = color!;
-      fill.color = color!;
-    } else {
-      stroke.shader = kGlimprLogoGradient.createShader(rect);
-      fill.shader = kGlimprLogoGradient.createShader(rect);
-    }
-    canvas.drawPath(brackets, stroke);
-    canvas.drawPath(spark, fill);
-    canvas.restore();
-  }
+  void paint(Canvas canvas, Size size) =>
+      paintGlimprMark(canvas, size, color: color);
 
   @override
   bool shouldRepaint(_MarkPainter old) => old.color != color;

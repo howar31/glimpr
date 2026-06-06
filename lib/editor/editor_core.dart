@@ -17,6 +17,7 @@ import 'drawable_painter.dart';
 import 'editor_controller.dart';
 import 'editor_host.dart';
 import 'hit_test.dart';
+import 'loupe_config.dart';
 import 'raster.dart';
 import 'text_metrics.dart';
 import 'viewport.dart';
@@ -67,12 +68,16 @@ class EditorCore extends StatefulWidget {
   // Optional handle so a docked host toolbar (image editor) can drive the
   // viewport's Fit / 100% from outside; null for the overlay.
   final EditorViewportController? viewportController;
+  // Pixel-loupe geometry (size + magnification), loaded from settings by the
+  // host app; shared so the overlay and the image editor look identical.
+  final LoupeConfig loupe;
   const EditorCore({
     super.key,
     required this.controller,
     required this.editorBindings,
     required this.host,
     this.viewportController,
+    this.loupe = const LoupeConfig(),
   });
 
   @override
@@ -1525,9 +1530,9 @@ class _EditorCoreState extends State<EditorCore> {
   /// the bottom/right edges). The editor positions its loupe in screen space
   /// (see [_editorLoupe]) so it can float over the checkerboard margin.
   Offset _loupeOrigin() {
-    const size = 120.0;
+    final size = widget.loupe.box;
     const gap = 24.0;
-    const tall = size + _kLoupeReadoutReserve; // loupe + readout below it
+    final tall = size + _kLoupeReadoutReserve; // loupe + readout below it
     var lx = _cursor.dx + gap;
     var ly = _cursor.dy + gap;
     if (lx + size > _canvasSize.width) lx = _cursor.dx - gap - size;
@@ -1564,8 +1569,9 @@ class _EditorCoreState extends State<EditorCore> {
   /// float over the checkerboard margin; the content magnifies the canvas around
   /// the logical cursor.
   Widget _editorLoupe(EditorViewport v) {
-    const size = 120.0, gap = 24.0;
-    const tall = size + _kLoupeReadoutReserve; // loupe + readout below it
+    final size = widget.loupe.box;
+    const gap = 24.0;
+    final tall = size + _kLoupeReadoutReserve; // loupe + readout below it
     final cs = v.toLocal(_cursor); // cursor in screen coords
     var lx = cs.dx + gap;
     var ly = cs.dy + gap;
@@ -1580,11 +1586,12 @@ class _EditorCoreState extends State<EditorCore> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             CustomPaint(
-              size: const Size(size, size),
+              size: Size(size, size),
               painter: LoupePainter(
                 image: _canvasImage,
                 cursorLogical: _cursor,
                 scaleFactor: widget.host.pixelScale,
+                zoom: widget.loupe.zoom.toDouble(),
                 drawables: _effectiveDrawables(),
                 blurredFull: _blurredFull,
                 pixelatedFull: _pixelatedFull,
@@ -1964,11 +1971,12 @@ class _EditorCoreState extends State<EditorCore> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           CustomPaint(
-                            size: const Size(120, 120),
+                            size: Size(widget.loupe.box, widget.loupe.box),
                             painter: LoupePainter(
                               image: _canvasImage,
                               cursorLogical: _cursor,
                               scaleFactor: widget.host.pixelScale,
+                              zoom: widget.loupe.zoom.toDouble(),
                               drawables: _effectiveDrawables(),
                               blurredFull: _blurredFull,
                               pixelatedFull: _pixelatedFull,

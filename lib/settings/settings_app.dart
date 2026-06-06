@@ -1,8 +1,12 @@
+import 'dart:ui' as ui;
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../editor/editor_controller.dart';
+import '../editor/loupe_config.dart';
 import '../editor/tool_meta.dart';
+import '../overlay/crop_hud.dart';
 import '../output/filename.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/hotkey_service.dart';
@@ -74,6 +78,8 @@ class _SettingsAppState extends State<SettingsApp>
   bool _decorateDisplay = false;
   bool _decorateLastRegion = false;
   int _decorationJpegFill = 0xFFFFFFFF;
+  int _loupeSpan = kLoupeSpanDefault;
+  int _loupeZoom = kLoupeZoomDefault;
   final _filenameController = TextEditingController();
 
   // Shortcuts draft: null until the user first opens the Shortcuts pane. Only
@@ -126,6 +132,8 @@ class _SettingsAppState extends State<SettingsApp>
     final decDisplay = await _s.getDecorateDisplay();
     final decLast = await _s.getDecorateLastRegion();
     final decFill = await _s.getDecorationJpegFill();
+    final loupeSpan = await _s.getLoupeSpan();
+    final loupeZoom = await _s.getLoupeZoom();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -144,6 +152,8 @@ class _SettingsAppState extends State<SettingsApp>
       _decorateDisplay = decDisplay;
       _decorateLastRegion = decLast;
       _decorationJpegFill = decFill;
+      _loupeSpan = loupeSpan;
+      _loupeZoom = loupeZoom;
     });
     _filenameController.text = template;
     // Login state comes from the OS (SMAppService) over a native channel; query
@@ -366,6 +376,9 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
       const SizedBox(height: 15),
+      const SectionLabel('Loupe', icon: Icons.zoom_in),
+      GlassCard.padded(child: _loupeBody(t)),
+      const SizedBox(height: 15),
       const SectionLabel('Startup', icon: Icons.power_settings_new),
       GlassCard.rows([
         SettingRow(
@@ -381,6 +394,142 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
     ];
+  }
+
+  // The Loupe section body: a live preview that grows with the size, plus the
+  // size + magnification sliders. The preview renders the REAL LoupePainter so
+  // it is pixel-accurate to the in-capture loupe.
+  Widget _loupeBody(GlimprTokens t) {
+    final isDefault =
+        _loupeSpan == kLoupeSpanDefault && _loupeZoom == kLoupeZoomDefault;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Pixel magnifier for crop / blur / pixelate — in the capture overlay '
+          'and the Image Editor.',
+          style: GlimprType.sansStyle(12.5, 400, t.fg3),
+        ),
+        const SizedBox(height: 16),
+        // Horizontal: live preview on the left, the controls on the right. Top-
+        // aligned so the preview's top lines up with the Size label; the sliders
+        // get full column width so their labels never wrap.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _loupePreviewStage(t),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _loupeSlider(
+                    t,
+                    title: 'Size',
+                    hint: 'Pixels shown per side',
+                    value: _loupeSpan,
+                    min: kLoupeSpanMin,
+                    max: kLoupeSpanMax,
+                    suffix: ' px',
+                    onChanged: (v) => setState(() => _loupeSpan = v),
+                    onEnd: (v) => _s.setLoupeSpan(v),
+                  ),
+                  const SizedBox(height: 16),
+                  _loupeSlider(
+                    t,
+                    title: 'Magnification',
+                    hint: 'How big each pixel is drawn',
+                    value: _loupeZoom,
+                    min: kLoupeZoomMin,
+                    max: kLoupeZoomMax,
+                    suffix: '×',
+                    onChanged: (v) => setState(() => _loupeZoom = v),
+                    onEnd: (v) => _s.setLoupeZoom(v),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    // Dimmed (disabled) at the defaults, so it reads as inactive
+                    // — same idiom as the per-shortcut Reset.
+                    child: GhostButton(
+                      'Reset to default',
+                      onTap: isDefault ? null : _resetLoupe,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _resetLoupe() async {
+    await _s.setLoupeSpan(kLoupeSpanDefault);
+    await _s.setLoupeZoom(kLoupeZoomDefault);
+    if (mounted) {
+      setState(() {
+        _loupeSpan = kLoupeSpanDefault;
+        _loupeZoom = kLoupeZoomDefault;
+      });
+    }
+  }
+
+  // Compact fixed-size preview frame. The loupe is shown at its REAL size and
+  // centred (so both sliders visibly change it and it is faithful), and only an
+  // unusually large combo is scaled down to fit — never clipped. Fixed frame =
+  // the surrounding UI never reflows while dragging.
+  Widget _loupePreviewStage(GlimprTokens t) {
+    const stage = 200.0;
+    final box = (_loupeSpan * _loupeZoom).toDouble();
+    final Widget content = _LoupePreview(span: _loupeSpan, zoom: _loupeZoom);
+    return Container(
+      width: stage,
+      height: stage,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: t.fg1.withValues(alpha: 0.04),
+        border: Border.all(color: t.divider),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: box <= stage
+          ? content // real on-screen size
+          : FittedBox(fit: BoxFit.contain, child: content), // extreme: scale down
+    );
+  }
+
+  // One control: title + hint above a full-width slider (which shows its own
+  // value), so nothing is crammed into a narrow column and the label never wraps.
+  Widget _loupeSlider(
+    GlimprTokens t, {
+    required String title,
+    required String hint,
+    required int value,
+    required int min,
+    required int max,
+    required String suffix,
+    required ValueChanged<int> onChanged,
+    required ValueChanged<int> onEnd,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: GlimprType.sansStyle(13.5, 600, t.fg1)),
+        const SizedBox(height: 2),
+        Text(hint, style: GlimprType.sansStyle(12, 400, t.fg3)),
+        const SizedBox(height: 6),
+        GlimprSlider(
+          value: value.toDouble(),
+          min: min.toDouble(),
+          max: max.toDouble(),
+          suffix: suffix,
+          onChanged: (v) => onChanged(v.round()),
+          onChangeEnd: (v) => onEnd(v.round()),
+        ),
+      ],
+    );
   }
 
   List<Widget> _outputPane(GlimprTokens t) {
@@ -1174,6 +1323,83 @@ class _DecorationFillSwatch extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Live, pixel-accurate loupe preview for the settings pane. Renders the real
+/// [LoupePainter] over a fixed synthetic sample so changing the size /
+/// magnification sliders shows exactly what the in-capture loupe will look like.
+/// The on-screen box is span * zoom, so it grows with the size (model B).
+class _LoupePreview extends StatefulWidget {
+  final int span;
+  final int zoom;
+  const _LoupePreview({required this.span, required this.zoom});
+
+  @override
+  State<_LoupePreview> createState() => _LoupePreviewState();
+}
+
+class _LoupePreviewState extends State<_LoupePreview> {
+  ui.Image? _sample;
+
+  // Sample size in native px — must exceed the largest span (20) so the loupe's
+  // centered window always lands inside the image.
+  static const int _n = 40;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildSample();
+  }
+
+  Future<void> _buildSample() async {
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec);
+    // Dark glass tile (matching the app icon) so the gradient mark pops.
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 0, 40, 40),
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(0, 0),
+          const Offset(0, 40),
+          const [Color(0xFF1B2138), Color(0xFF0A0E1A)],
+        ),
+    );
+    // Our Viewfinder logo as the loupe subject: magnified, it shows the brand
+    // mark's gradient + crisp bracket / spark edges as clean pixels. The loupe
+    // centres on the spark, so smaller sizes zoom into it and larger sizes
+    // reveal the surrounding brackets.
+    paintGlimprMark(canvas, const Size(40, 40));
+    final pic = rec.endRecording();
+    final img = await pic.toImage(_n, _n);
+    pic.dispose();
+    if (!mounted) {
+      img.dispose();
+      return;
+    }
+    setState(() => _sample = img);
+  }
+
+  @override
+  void dispose() {
+    _sample?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final box = (widget.span * widget.zoom).toDouble();
+    final img = _sample;
+    if (img == null) return SizedBox(width: box, height: box);
+    return CustomPaint(
+      size: Size(box, box),
+      painter: LoupePainter(
+        image: img,
+        cursorLogical: const Offset(_n / 2, _n / 2),
+        scaleFactor: 1,
+        zoom: widget.zoom.toDouble(),
+      ),
     );
   }
 }

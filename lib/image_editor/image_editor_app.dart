@@ -9,6 +9,7 @@ import '../editor/draw_style.dart';
 import '../editor/document.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
+import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
 import '../overlay/toolbar.dart';
@@ -64,6 +65,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   final Map<ToolKind, DrawStyle> _toolStyles = {};
   Timer? _persistTimer; // debounces saving _toolStyles to the shared store
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
+  LoupeConfig _loupe = const LoupeConfig();
   CaptureSettings _cap = CaptureSettings.defaults;
   // Drives EditorCore's Fit / 100% from the docked toolbar buttons.
   final EditorViewportController _viewport = EditorViewportController();
@@ -97,6 +99,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     try {
       Settings.instance.loadCapture().then((c) {
         if (mounted) setState(() => _cap = c);
+      }).catchError((_) {});
+    } catch (_) {}
+
+    try {
+      Settings.instance.loadLoupe().then((l) {
+        if (mounted) setState(() => _loupe = l);
       }).catchError((_) {});
     } catch (_) {}
 
@@ -707,6 +715,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             key: ValueKey(image), // fresh State per loaded image
             controller: controller,
             editorBindings: _bindings,
+            loupe: _loupe,
             host: host,
             viewportController: _viewport,
           ),

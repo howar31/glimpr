@@ -78,4 +78,48 @@ void main() {
     expect(cap.copyToClipboard, isFalse);
     expect(cap.rightClickExits, isFalse);
   });
+
+  test('loadLoupe defaults to span 12 / zoom 8 when unset', () async {
+    final l = await Settings(FakeStore()).loadLoupe();
+    expect(l.span, 12);
+    expect(l.zoom, 8);
+    expect(l.box, 96.0);
+  });
+
+  test('loupe span + zoom round-trip into loadLoupe', () async {
+    final s = Settings(FakeStore());
+    await s.setLoupeSpan(7);
+    await s.setLoupeZoom(12);
+    expect(await s.getLoupeSpan(), 7);
+    expect(await s.getLoupeZoom(), 12);
+    final l = await s.loadLoupe();
+    expect(l.span, 7);
+    expect(l.zoom, 12);
+  });
+
+  test('loupe span is clamped to 5..20 on write', () async {
+    final s = Settings(FakeStore());
+    await s.setLoupeSpan(99);
+    expect(await s.getLoupeSpan(), 20);
+    await s.setLoupeSpan(1);
+    expect(await s.getLoupeSpan(), 5);
+  });
+
+  test('loupe zoom is clamped to 4..16 on write', () async {
+    final s = Settings(FakeStore());
+    await s.setLoupeZoom(99);
+    expect(await s.getLoupeZoom(), 16);
+    await s.setLoupeZoom(1);
+    expect(await s.getLoupeZoom(), 4);
+  });
+
+  test('loupe getters clamp an out-of-range stored value on read', () async {
+    final store = FakeStore();
+    // Simulate a corrupt / out-of-range persisted value (bypassing the setter).
+    await store.setInt('loupe_span', 999);
+    await store.setInt('loupe_zoom', 0);
+    final s = Settings(store);
+    expect(await s.getLoupeSpan(), 20);
+    expect(await s.getLoupeZoom(), 4);
+  });
 }
