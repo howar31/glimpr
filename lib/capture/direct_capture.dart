@@ -5,6 +5,7 @@ import '../output/sounds.dart';
 import '../overlay/export.dart';
 import '../settings/settings.dart';
 import 'capture_bridge.dart';
+import 'capture_kind.dart';
 import 'captured_display.dart';
 import 'last_region.dart';
 
@@ -14,11 +15,13 @@ import 'last_region.dart';
 class CaptureTarget {
   const CaptureTarget({
     required this.display,
+    required this.kind,
     this.selectionLogical,
     this.windowTitle,
     this.appName,
   });
   final CapturedDisplay display;
+  final CaptureKind kind;
   final Rect? selectionLogical;
   final String? windowTitle;
   final String? appName;
@@ -36,6 +39,7 @@ CaptureTarget? resolveScreenTarget(List<CapturedDisplay> frames) {
   final d = frames.firstWhere((f) => f.isCursorDisplay, orElse: () => frames.first);
   return CaptureTarget(
       display: d,
+      kind: CaptureKind.display,
       windowTitle: kDisplayCaptureLabel,
       appName: kDisplayCaptureLabel);
 }
@@ -49,6 +53,7 @@ CaptureTarget? resolveWindowTarget(
     if (f.displayId == window.displayId) {
       return CaptureTarget(
         display: f,
+        kind: CaptureKind.focusedWindow,
         selectionLogical: window.rect,
         windowTitle: window.title,
         appName: window.app,
@@ -67,6 +72,7 @@ CaptureTarget? resolveLastRegionTarget(
     if (f.displayId == region.displayId) {
       return CaptureTarget(
           display: f,
+          kind: CaptureKind.lastRegion,
           selectionLogical: region.rect,
           windowTitle: kLastRegionCaptureLabel,
           appName: kLastRegionCaptureLabel);
@@ -91,6 +97,7 @@ Future<DeliveryResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) asy
       drawables: const [],
       selectionLogical: t.selectionLogical,
       cap: cap,
+      kind: t.kind,
       windowTitle: t.windowTitle,
       appName: t.appName,
     );

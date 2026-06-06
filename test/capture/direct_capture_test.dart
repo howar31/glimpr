@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/capture/capture_kind.dart';
 import 'package:glimpr/capture/captured_display.dart';
 import 'package:glimpr/capture/direct_capture.dart';
 import 'package:glimpr/capture/last_region.dart';
@@ -43,6 +44,7 @@ void main() {
     test('picks the cursor display, labelled DISPLAY', () {
       final t = resolveScreenTarget([_disp(1), _disp(2, cursor: true)]);
       expect(t!.display.displayId, 2);
+      expect(t.kind, CaptureKind.display);
       expect(t.selectionLogical, isNull);
       expect(t.windowTitle, 'DISPLAY');
       expect(t.appName, 'DISPLAY');
@@ -65,6 +67,7 @@ void main() {
               title: 'Editor',
               app: 'Code'));
       expect(t!.display.displayId, 2);
+      expect(t.kind, CaptureKind.focusedWindow);
       expect(t.selectionLogical, const Rect.fromLTWH(30, 40, 500, 360));
       expect(t.windowTitle, 'Editor');
       expect(t.appName, 'Code');
@@ -72,6 +75,7 @@ void main() {
     test('no focused window -> falls back to the cursor display, whole screen', () {
       final t = resolveWindowTarget([_disp(1), _disp(2, cursor: true)], null);
       expect(t!.display.displayId, 2);
+      expect(t.kind, CaptureKind.display); // fallback is a plain display capture
       expect(t.selectionLogical, isNull);
     });
     test('focused window on an uncaptured display -> falls back to screen', () {
@@ -91,6 +95,7 @@ void main() {
       final t = resolveLastRegionTarget([_disp(3), _disp(4)],
           const LastRegion(displayId: 4, rect: Rect.fromLTWH(1, 2, 300, 200)));
       expect(t!.display.displayId, 4);
+      expect(t.kind, CaptureKind.lastRegion);
       expect(t.selectionLogical, const Rect.fromLTWH(1, 2, 300, 200));
       expect(t.windowTitle, 'LAST');
       expect(t.appName, 'LAST');

@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../capture/capture_kind.dart';
 import '../output/filename.dart';
 import 'settings_store.dart';
 
@@ -19,6 +20,12 @@ class CaptureSettings {
     this.copyToClipboard = true,
     this.rightClickExits = true,
     this.filenameTemplate = defaultFilenameTemplate,
+    this.decorateSnap = false,
+    this.decorateCrop = false,
+    this.decorateWindow = false,
+    this.decorateDisplay = false,
+    this.decorateLastRegion = false,
+    this.decorationJpegFill = 0xFFFFFFFF,
   });
 
   final Directory? saveDir;
@@ -31,10 +38,30 @@ class CaptureSettings {
   final bool rightClickExits; // right-click on empty space leaves capture mode
   final String filenameTemplate; // tokens: {date} {time} {title} {app}
 
+  // Opt-in capture decoration (margin + rounded corners + drop shadow), gated
+  // per capture scenario. All off by default => output is byte-identical.
+  final bool decorateSnap; // overlay snap-to-window
+  final bool decorateCrop; // overlay freehand crop rect
+  final bool decorateWindow; // direct focused-window capture
+  final bool decorateDisplay; // direct display capture
+  final bool decorateLastRegion; // direct last-region capture
+  final int decorationJpegFill; // ARGB; the JPEG margin fill colour
+
   static const defaults = CaptureSettings();
 
   bool get isJpeg => format == ImageFormat.jpeg;
   String get fileExtension => isJpeg ? 'jpg' : 'png';
+
+  /// Whether [kind]'s scenario has decoration enabled. The whole-display overlay
+  /// export and any non-listed kind are never decorated.
+  bool decorateFor(CaptureKind kind) => switch (kind) {
+    CaptureKind.overlaySnap => decorateSnap,
+    CaptureKind.overlayCrop => decorateCrop,
+    CaptureKind.focusedWindow => decorateWindow,
+    CaptureKind.display => decorateDisplay,
+    CaptureKind.lastRegion => decorateLastRegion,
+    CaptureKind.overlayWholeDisplay => false,
+  };
 }
 
 /// Typed access to persisted settings, shared by the settings UI (writes) and
@@ -55,6 +82,12 @@ class Settings {
   static const _copyToClipboardKey = 'copy_to_clipboard';
   static const _rightClickExitsKey = 'right_click_exits';
   static const _filenameTemplateKey = 'filename_template';
+  static const _decorateSnapKey = 'decorate_snap';
+  static const _decorateCropKey = 'decorate_crop';
+  static const _decorateWindowKey = 'decorate_window';
+  static const _decorateDisplayKey = 'decorate_display';
+  static const _decorateLastRegionKey = 'decorate_last_region';
+  static const _decorationJpegFillKey = 'decoration_jpeg_fill';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -110,6 +143,35 @@ class Settings {
   Future<void> setFilenameTemplate(String v) =>
       store.setString(_filenameTemplateKey, v);
 
+  // Capture decoration (opt-in, per scenario) ----------------------------
+  Future<bool> getDecorateSnap() async =>
+      (await store.getBool(_decorateSnapKey)) ?? false;
+  Future<void> setDecorateSnap(bool v) => store.setBool(_decorateSnapKey, v);
+
+  Future<bool> getDecorateCrop() async =>
+      (await store.getBool(_decorateCropKey)) ?? false;
+  Future<void> setDecorateCrop(bool v) => store.setBool(_decorateCropKey, v);
+
+  Future<bool> getDecorateWindow() async =>
+      (await store.getBool(_decorateWindowKey)) ?? false;
+  Future<void> setDecorateWindow(bool v) =>
+      store.setBool(_decorateWindowKey, v);
+
+  Future<bool> getDecorateDisplay() async =>
+      (await store.getBool(_decorateDisplayKey)) ?? false;
+  Future<void> setDecorateDisplay(bool v) =>
+      store.setBool(_decorateDisplayKey, v);
+
+  Future<bool> getDecorateLastRegion() async =>
+      (await store.getBool(_decorateLastRegionKey)) ?? false;
+  Future<void> setDecorateLastRegion(bool v) =>
+      store.setBool(_decorateLastRegionKey, v);
+
+  Future<int> getDecorationJpegFill() async =>
+      (await store.getInt(_decorationJpegFillKey)) ?? 0xFFFFFFFF;
+  Future<void> setDecorationJpegFill(int argb) =>
+      store.setInt(_decorationJpegFillKey, argb);
+
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
   Future<CaptureSettings> loadCapture() async => CaptureSettings(
     saveDir: resolveSaveDir(await getSaveDirectory()),
@@ -121,6 +183,12 @@ class Settings {
     copyToClipboard: await getCopyToClipboard(),
     rightClickExits: await getRightClickExits(),
     filenameTemplate: await getFilenameTemplate(),
+    decorateSnap: await getDecorateSnap(),
+    decorateCrop: await getDecorateCrop(),
+    decorateWindow: await getDecorateWindow(),
+    decorateDisplay: await getDecorateDisplay(),
+    decorateLastRegion: await getDecorateLastRegion(),
+    decorationJpegFill: await getDecorationJpegFill(),
   );
 }
 

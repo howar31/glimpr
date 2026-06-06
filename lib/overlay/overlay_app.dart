@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
+import '../capture/capture_kind.dart';
 import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../editor/draw_style.dart';
@@ -256,6 +257,15 @@ class _OverlayAppState extends State<OverlayApp> {
       playShutter(); // shutter at the instant of capture (fire-and-forget)
     }
     final drawables = editor.document.value.drawables;
+    // Classify the scenario so decoration can be gated per capture kind. A snap
+    // commits the window's OWN rect as the selection; a freehand crop carries its
+    // own dragged selection (the window, if any, only names the file); neither =>
+    // the whole annotated display (never decorated).
+    final kind = overlayCaptureKind(
+      selectionIsWindowRect:
+          window != null && selectionLogical == window.rect,
+      hasSelection: selectionLogical != null,
+    );
     _frozen = null;
     _dismiss();
     try {
@@ -265,6 +275,7 @@ class _OverlayAppState extends State<OverlayApp> {
         drawables: drawables,
         selectionLogical: selectionLogical,
         cap: cap,
+        kind: kind,
         windowTitle: window?.title,
         appName: window?.app,
       );

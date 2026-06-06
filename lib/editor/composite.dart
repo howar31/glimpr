@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as imglib;
+import 'decoration.dart';
 import 'drawable.dart';
 import 'drawable_painter.dart';
 import 'raster.dart';
@@ -40,6 +41,8 @@ Future<Uint8List> compositeAndCrop({
   required Rect? selectionLogical,
   bool jpeg = false,
   int jpegQuality = 90,
+  DecorationStyle? decoration,
+  ui.Color decorationJpegFill = const ui.Color(0xFFFFFFFF),
 }) async {
   final crop = nativeCropRect(
     selectionLogical: selectionLogical,
@@ -74,22 +77,39 @@ Future<Uint8List> compositeAndCrop({
   final picture = recorder.endRecording();
   final outW = crop.width.round();
   final outH = crop.height.round();
-  final img = await picture.toImage(outW, outH);
+  final cropped = await picture.toImage(outW, outH);
   picture.dispose();
-  // The whole-frame blur/pixelate (if any) are now rasterised into `img`;
+  // The whole-frame blur/pixelate (if any) are now rasterised into `cropped`;
   // release their native memory rather than waiting for GC finalizers.
   blurredFull?.dispose();
   pixelatedFull?.dispose();
+
+  // Opt-in decoration: wrap the cropped content in margin + rounded corners +
+  // drop shadow. JPEG (no alpha) fills the transparent region with the fill
+  // colour; PNG keeps it transparent. The output is larger than the crop, so the
+  // encoder uses the decorated image's own dimensions below.
+  ui.Image output = cropped;
+  if (decoration != null) {
+    output = await applyDecoration(
+      cropped,
+      decoration,
+      fill: jpeg ? decorationJpegFill : null,
+    );
+    cropped.dispose(); // the un-decorated intermediate
+  }
+  final ow = output.width;
+  final oh = output.height;
+
   if (jpeg) {
     // dart:ui can only encode PNG; for JPEG pull the raw RGBA and encode via
     // the image package. This runs on the background path (overlay already
     // hidden), so the extra encode cost is off the user-facing hot path.
-    final raw = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
-    img.dispose();
+    final raw = await output.toByteData(format: ui.ImageByteFormat.rawRgba);
+    output.dispose();
     final encoded = imglib.encodeJpg(
       imglib.Image.fromBytes(
-        width: outW,
-        height: outH,
+        width: ow,
+        height: oh,
         bytes: raw!.buffer,
         numChannels: 4,
         order: imglib.ChannelOrder.rgba,
@@ -98,7 +118,7 @@ Future<Uint8List> compositeAndCrop({
     );
     return Uint8List.fromList(encoded);
   }
-  final data = await img.toByteData(format: ui.ImageByteFormat.png);
-  img.dispose();
+  final data = await output.toByteData(format: ui.ImageByteFormat.png);
+  output.dispose();
   return data!.buffer.asUint8List();
 }

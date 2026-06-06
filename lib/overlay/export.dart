@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
 import 'dart:ui' show Rect, Size;
+import '../capture/capture_kind.dart';
 import '../capture/captured_display.dart';
 import '../editor/composite.dart';
+import '../editor/decoration.dart';
 import '../editor/drawable.dart';
 import '../output/deliver.dart';
 import '../output/filename.dart';
@@ -19,9 +21,15 @@ Future<DeliveryResult> exportAnnotated({
   required List<Drawable> drawables,
   required Rect? selectionLogical,
   required CaptureSettings cap,
+  required CaptureKind kind,
   String? windowTitle,
   String? appName,
 }) async {
+  // Opt-in decoration for this scenario (null = plain, byte-identical output).
+  // The appearance is scaled to the display so it looks the same at any DPI.
+  final decoration = cap.decorateFor(kind)
+      ? DecorationStyle.scaled(display.scaleFactor)
+      : null;
   final bytes = await compositeAndCrop(
     frozen: frozenImage,
     drawables: drawables,
@@ -30,6 +38,8 @@ Future<DeliveryResult> exportAnnotated({
     selectionLogical: selectionLogical,
     jpeg: cap.isJpeg,
     jpegQuality: cap.jpegQuality,
+    decoration: decoration,
+    decorationJpegFill: ui.Color(cap.decorationJpegFill),
   );
   return deliverCapture(
     pngBytes: bytes,

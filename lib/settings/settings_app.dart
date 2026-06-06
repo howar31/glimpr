@@ -66,6 +66,13 @@ class _SettingsAppState extends State<SettingsApp>
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
   String _filenameTemplate = defaultFilenameTemplate;
+  // Opt-in capture decoration, per scenario (all off by default).
+  bool _decorateSnap = false;
+  bool _decorateCrop = false;
+  bool _decorateWindow = false;
+  bool _decorateDisplay = false;
+  bool _decorateLastRegion = false;
+  int _decorationJpegFill = 0xFFFFFFFF;
   final _filenameController = TextEditingController();
 
   // Shortcuts draft: null until the user first opens the Shortcuts pane. Only
@@ -111,6 +118,12 @@ class _SettingsAppState extends State<SettingsApp>
     final complete = await _s.getCompletionSound();
     final rightClick = await _s.getRightClickExits();
     final template = await _s.getFilenameTemplate();
+    final decSnap = await _s.getDecorateSnap();
+    final decCrop = await _s.getDecorateCrop();
+    final decWindow = await _s.getDecorateWindow();
+    final decDisplay = await _s.getDecorateDisplay();
+    final decLast = await _s.getDecorateLastRegion();
+    final decFill = await _s.getDecorationJpegFill();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -122,6 +135,12 @@ class _SettingsAppState extends State<SettingsApp>
       _completionSound = complete;
       _rightClickExits = rightClick;
       _filenameTemplate = template;
+      _decorateSnap = decSnap;
+      _decorateCrop = decCrop;
+      _decorateWindow = decWindow;
+      _decorateDisplay = decDisplay;
+      _decorateLastRegion = decLast;
+      _decorationJpegFill = decFill;
     });
     _filenameController.text = template;
     // Login state comes from the OS (SMAppService) over a native channel; query
@@ -427,6 +446,81 @@ class _SettingsAppState extends State<SettingsApp>
       const SizedBox(height: 15),
       const SectionLabel('Filename', icon: Icons.text_fields_outlined),
       GlassCard.padded(child: _filenameBody(t)),
+      const SizedBox(height: 15),
+      const SectionLabel('Decoration', icon: Icons.filter_frames_outlined),
+      GlassCard.rows([
+        SettingRow(
+          title: 'Window snap',
+          hint: 'Shadow + margin when snapping to a window',
+          trailing: GlassToggle(
+            value: _decorateSnap,
+            onChanged: (v) async {
+              await _s.setDecorateSnap(v);
+              if (mounted) setState(() => _decorateSnap = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Freehand crop',
+          hint: 'Shadow + margin on a dragged crop region',
+          trailing: GlassToggle(
+            value: _decorateCrop,
+            onChanged: (v) async {
+              await _s.setDecorateCrop(v);
+              if (mounted) setState(() => _decorateCrop = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Focused window',
+          hint: 'Capture-focused-window mode (⌘⌥2)',
+          trailing: GlassToggle(
+            value: _decorateWindow,
+            onChanged: (v) async {
+              await _s.setDecorateWindow(v);
+              if (mounted) setState(() => _decorateWindow = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Display',
+          hint: 'Capture-display mode (⌘⌥3)',
+          trailing: GlassToggle(
+            value: _decorateDisplay,
+            onChanged: (v) async {
+              await _s.setDecorateDisplay(v);
+              if (mounted) setState(() => _decorateDisplay = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Last region',
+          hint: 'Capture-last-region mode (⌘⌥4)',
+          trailing: GlassToggle(
+            value: _decorateLastRegion,
+            onChanged: (v) async {
+              await _s.setDecorateLastRegion(v);
+              if (mounted) setState(() => _decorateLastRegion = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'JPEG background fill',
+          hint: 'Colour behind the margin when saving as JPEG',
+          trailing: _DecorationFillSwatch(
+            argb: _decorationJpegFill,
+            onChanged: (argb) async {
+              await _s.setDecorationJpegFill(argb);
+              if (mounted) setState(() => _decorationJpegFill = argb);
+            },
+          ),
+        ),
+      ]),
     ];
   }
 
@@ -1012,6 +1106,56 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
         Text(path.substring(i), maxLines: 1, softWrap: false, style: style),
+      ],
+    );
+  }
+}
+
+/// JPEG background-fill picker: a compact row of preset opaque swatches. The fill
+/// only applies to decorated JPEG output (PNG keeps its transparency). Kept to a
+/// small palette by design — a free colour picker can be added if needed.
+class _DecorationFillSwatch extends StatelessWidget {
+  final int argb;
+  final ValueChanged<int> onChanged;
+  const _DecorationFillSwatch({required this.argb, required this.onChanged});
+
+  static const _palette = <int>[
+    0xFFFFFFFF, // white
+    0xFFE2E5E9, // light grey
+    0xFF808080, // mid grey
+    0xFF202327, // dark grey
+    0xFF000000, // black
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < _palette.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          GestureDetector(
+            onTap: () => onChanged(_palette[i]),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Color(_palette[i]),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: argb == _palette[i]
+                        ? GlimprTokens.accent
+                        : t.divider,
+                    width: argb == _palette[i] ? 2 : 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
