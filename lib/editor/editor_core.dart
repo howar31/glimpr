@@ -621,6 +621,18 @@ class _EditorCoreState extends State<EditorCore> {
     }
 
     final action = pickEditorAction(e, pressed, widget.editorBindings);
+    // While a gesture is in progress, swallow action keys that would desync it
+    // (a mid-drag tool switch left e.g. a rectangle drag with crop suddenly
+    // active). Esc (cancel) is handled above; the region arrow-nudge below is
+    // intentionally still allowed mid-drag.
+    if ((_dragging || _cropAdjusting) &&
+        (action == kEditorUndoKey ||
+            action == kEditorRedoKey ||
+            action == kEditorPasteKey ||
+            action == kEditorDeleteKey ||
+            (action != null && kEditorToolActionKey.containsValue(action)))) {
+      return KeyEventResult.handled;
+    }
     if (action == kEditorUndoKey) {
       c.undo();
       c.selectedIndex.value = null;
