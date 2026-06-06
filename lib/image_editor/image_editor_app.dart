@@ -124,6 +124,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       if (call.method == 'loadPath') {
         final path = call.arguments as String?;
         if (path != null) await _loadPath(path);
+      } else if (call.method == 'loadClipboard') {
+        // Open-Editor-with-Clipboard global hotkey: load the clipboard image
+        // (same path as the landing ⌘V; toasts + stays on landing if empty).
+        await _pasteLoad();
       } else if (call.method == 'requestClose') {
         await _requestClose();
       }

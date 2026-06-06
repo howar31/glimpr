@@ -28,12 +28,23 @@ void main() {
     expect(b.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
   });
 
-  test('global registry contains the 4 global capture actions', () {
+  test('global registry contains the capture + open-editor actions', () {
     expect(kGlobalActions.map((a) => a.actionKey), [
       kCaptureAreaKey,
       kCaptureWindowKey,
       kCaptureScreenKey,
       kCaptureLastRegionKey,
+      kOpenEditorKey,
+      kOpenEditorClipboardKey,
     ]);
+  });
+
+  test('open-editor defaults: empty = Cmd+Opt+6, clipboard = Cmd+Opt+5', () {
+    final empty = kDefaultBindings[kOpenEditorKey]!;
+    expect(empty.logicalKey, LogicalKeyboardKey.digit6);
+    expect(empty.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
+    final clip = kDefaultBindings[kOpenEditorClipboardKey]!;
+    expect(clip.logicalKey, LogicalKeyboardKey.digit5);
+    expect(clip.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
   });
 }

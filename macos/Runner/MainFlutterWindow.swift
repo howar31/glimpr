@@ -19,6 +19,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   // A Finder "Open With" path that arrived before the editor Dart side signalled
   // ready (cold start); flushed by the `editorReady` channel call.
   private var pendingOpenPath: String?
+  private var pendingClipboard = false
   private var imageEditorReady = false
   // Reached from AppDelegate.application(_:open:) to route external opens.
   static weak var shared: MainFlutterWindow?
@@ -68,6 +69,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           UserDefaults.standard.set(max(1, min(8, v)), forKey: "overlayWarmTarget")
         }
         result(nil)
+      // Open-Editor global hotkeys (control engine → reveal the warm editor).
+      case "openImageEditor": self?.openImageEditor(); result(nil)
+      case "openImageEditorClipboard": self?.openImageEditorClipboard(); result(nil)
       default: result(FlutterMethodNotImplemented)
       }
     }
@@ -314,11 +318,29 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     imageEditorChannel?.invokeMethod("loadPath", arguments: path)
   }
 
-  private func flushPendingOpen() {
-    guard let path = pendingOpenPath else { return }
-    pendingOpenPath = nil
+  /// Reveal the editor and ask it to load the clipboard image. If the editor
+  /// Dart is not ready yet (cold start), buffer the request and flush it on
+  /// `editorReady`. Mirrors `openImageFromExternal`.
+  func openImageEditorClipboard() {
+    guard imageEditorReady else {
+      pendingClipboard = true
+      return
+    }
     openImageEditor()
-    imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+    imageEditorChannel?.invokeMethod("loadClipboard", arguments: nil)
+  }
+
+  private func flushPendingOpen() {
+    if let path = pendingOpenPath {
+      pendingOpenPath = nil
+      openImageEditor()
+      imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+    }
+    if pendingClipboard {
+      pendingClipboard = false
+      openImageEditor()
+      imageEditorChannel?.invokeMethod("loadClipboard", arguments: nil)
+    }
   }
 
   /// Present a modal NSOpenPanel restricted to common image types and return the

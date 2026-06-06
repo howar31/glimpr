@@ -32,6 +32,9 @@ Future<void> main() async {
   final shortcutStore = ShortcutStore(Settings.instance.store);
   final bindings = await shortcutStore.all();
   final direct = DirectCapture();
+  // Reveal the warm Image-Editor window from a global hotkey (the control
+  // engine owns the role channel that MainFlutterWindow handles).
+  const control = MethodChannel('glimpr/role');
   final hotkeyService = HotkeyService(
     registrar: HotkeyManagerRegistrar(),
     bindings: bindings,
@@ -45,6 +48,10 @@ Future<void> main() async {
           direct.window();
         case kCaptureLastRegionKey:
           direct.lastRegion();
+        case kOpenEditorKey:
+          control.invokeMethod('openImageEditor');
+        case kOpenEditorClipboardKey:
+          control.invokeMethod('openImageEditorClipboard');
       }
     },
   );

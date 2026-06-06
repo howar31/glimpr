@@ -71,9 +71,9 @@ void main() {
     // it for a host-platform-stable check. Scope to the Global card: the Editor
     // section also has a bare '1' (the Rectangle tool).
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    // The global card now has 4 rows (captureArea + 3 Phase-4 modes), each with
-    // 3 caps (⌘⌥ modifier pair + one digit) = 12 caps total.
-    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(12));
+    // The global card now has 6 rows (captureArea + 3 Phase-4 modes + 2 open-
+    // editor actions), each with 3 caps (⌘⌥ modifier pair + one digit) = 18.
+    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(18));
   });
 
   testWidgets('Tools / Commands / Reserved sections render their rows',
@@ -227,10 +227,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Back to default => clean => Apply hidden (footer is empty), ⌘⌥1 shown again
-    // (two modifiers + the digit '1'; all 4 global rows back to their defaults).
+    // (two modifiers + the digit '1'; all 6 global rows back to their defaults).
     expect(find.text('Apply'), findsNothing);
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(12));
+    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(18));
   });
 
   testWidgets('clearing during recording disables the global hotkey',

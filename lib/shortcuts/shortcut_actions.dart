@@ -7,6 +7,8 @@ const kCaptureAreaKey = 'global.captureArea';
 const kCaptureScreenKey = 'global.captureScreen';
 const kCaptureWindowKey = 'global.captureWindow';
 const kCaptureLastRegionKey = 'global.captureLastRegion';
+const kOpenEditorKey = 'global.openEditor';
+const kOpenEditorClipboardKey = 'global.openEditorClipboard';
 
 // Editor command keys.
 const kEditorUndoKey = 'editor.undo';
@@ -48,6 +50,11 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kCaptureScreenKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kCaptureLastRegionKey: _b(PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  kOpenEditorKey: _b(PhysicalKeyboardKey.digit6, LogicalKeyboardKey.digit6,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  kOpenEditorClipboardKey: _b(
+      PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   // Editor commands
   kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
@@ -131,6 +138,16 @@ const kGlobalActions = <GlobalAction>[
     actionKey: kCaptureLastRegionKey,
     label: 'Capture Last Region',
     hint: 'Repeat the last capture region',
+  ),
+  GlobalAction(
+    actionKey: kOpenEditorKey,
+    label: 'Open Editor',
+    hint: 'Open the Image Editor',
+  ),
+  GlobalAction(
+    actionKey: kOpenEditorClipboardKey,
+    label: 'Open Editor with Clipboard',
+    hint: 'Open the Image Editor and load the clipboard image',
   ),
 ];
 
