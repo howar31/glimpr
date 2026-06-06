@@ -365,8 +365,10 @@ class DrawablePainter extends CustomPainter {
     );
   }
 
-  /// Tapered, filled "brush" arrow: thin at the tail, swelling into a solid
-  /// arrowhead — a marker-pen feel rather than a hairline.
+  /// Classic barbed arrow: a uniform thin shaft and a long, pointed head whose
+  /// back edge cuts inward (the barbs sweep back slightly past where the shaft
+  /// joins). One filled polygon, so it casts a single drop shadow. The multipliers
+  /// below are the tunables for in-app polish.
   void _paintArrow(Canvas canvas, Offset start, Offset end, DrawStyle style) {
     final w = style.strokeWidth;
     final fill = Paint()
@@ -381,21 +383,23 @@ class DrawablePainter extends CustomPainter {
     }
     final u = Offset(dir.dx / len, dir.dy / len);
     final n = Offset(-u.dy, u.dx); // unit normal
-    final headLen = (w * 3.2).clamp(8.0, len);
-    final headHalf = w * 1.6; // arrowhead half-width
-    final shaftHalf = w * 0.7; // shaft half-width at the head base
-    final tailHalf = w * 0.25; // thin tail
-    final hb = end - u * headLen; // head base
-    Offset at(Offset base, Offset normal, double s) =>
-        Offset(base.dx + normal.dx * s, base.dy + normal.dy * s);
+    // ---- tunables (iterate in-app) ----
+    final headHalf = w * 1.6; // head half-width at the barbs (~3.2x the shaft)
+    final headLen = (w * 4.9).clamp(headHalf, len); // tip -> barb line (long/pointed)
+    final shaftHalf = w / 2; // uniform shaft (= the stroke width)
+    final back = headLen * 0.15; // shallow barb sweep -> concave back
+    final barbR = end - u * headLen + n * headHalf;
+    final barbL = end - u * headLen - n * headHalf;
+    final j = end - u * (headLen - back); // shaft <-> head junction (concave notch)
+    Offset at(Offset b, double s) => Offset(b.dx + n.dx * s, b.dy + n.dy * s);
     final path = Path()
-      ..moveTo(at(start, n, tailHalf).dx, at(start, n, tailHalf).dy)
-      ..lineTo(at(hb, n, shaftHalf).dx, at(hb, n, shaftHalf).dy)
-      ..lineTo(at(hb, n, headHalf).dx, at(hb, n, headHalf).dy)
+      ..moveTo(at(start, shaftHalf).dx, at(start, shaftHalf).dy)
+      ..lineTo(at(j, shaftHalf).dx, at(j, shaftHalf).dy)
+      ..lineTo(barbR.dx, barbR.dy)
       ..lineTo(end.dx, end.dy)
-      ..lineTo(at(hb, n, -headHalf).dx, at(hb, n, -headHalf).dy)
-      ..lineTo(at(hb, n, -shaftHalf).dx, at(hb, n, -shaftHalf).dy)
-      ..lineTo(at(start, n, -tailHalf).dx, at(start, n, -tailHalf).dy)
+      ..lineTo(barbL.dx, barbL.dy)
+      ..lineTo(at(j, -shaftHalf).dx, at(j, -shaftHalf).dy)
+      ..lineTo(at(start, -shaftHalf).dx, at(start, -shaftHalf).dy)
       ..close();
     _withShadow(canvas, style, fill, (c, p) => c.drawPath(path, p));
   }
