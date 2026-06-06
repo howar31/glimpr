@@ -94,4 +94,8 @@ abstract class EditorHost {
 
   /// Dismiss/close (overlay: hide overlay; editor: close window).
   void onCancel();
+
+  /// Open the Settings window (⌘,). The overlay must dismiss the capture first
+  /// (it sits above normal windows); the image editor reveals it directly.
+  void openSettings();
 }

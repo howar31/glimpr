@@ -1000,6 +1000,11 @@ class _SettingsAppState extends State<SettingsApp>
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('W')]),
         ),
         SettingRow(
+          title: 'Open Settings',
+          hint: 'Reserved · overlay / editor',
+          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap(',')]),
+        ),
+        SettingRow(
           title: 'Nudge crosshair',
           hint: 'Reserved · region tools',
           trailing: _reservedField(

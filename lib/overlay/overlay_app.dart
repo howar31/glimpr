@@ -12,6 +12,7 @@ import '../editor/tool_style_store.dart';
 import '../output/deliver.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
+import '../settings/settings_mask.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
@@ -45,6 +46,8 @@ class _OverlayAppState extends State<OverlayApp> {
   // ShortcutStore.all() returns the same merged shape.
   Map<String, HotkeyBinding?> _editorBindings = {...kDefaultBindings};
   LoupeConfig _loupe = const LoupeConfig();
+  // True while a ⌘, Settings detour has paused this freeze -> show the dim mask.
+  bool _settingsOpen = false;
   EditorController? _editor;
   // Last-used style per tool, persisted across captures (in-session).
   final Map<ToolKind, DrawStyle> _toolStyles = {};
@@ -167,7 +170,29 @@ class _OverlayAppState extends State<OverlayApp> {
         if (mounted) _activeSignal.value = (id: activeId, cursor: cursor);
       },
       onEditorState: _applyRemoteEditorState,
+      onSettingsOpen: () {
+        if (mounted) setState(() => _settingsOpen = true);
+      },
+      onResume: () {
+        if (mounted) setState(() => _settingsOpen = false);
+        _reloadSettings();
+      },
     );
+  }
+
+  /// Hot-reload after a ⌘, Settings detour. RE-READS the settings that affect a
+  /// LIVE capture: loupe geometry + the capture/output snapshot (`_capture`).
+  /// Deliberately does NOT re-read in-session interaction state, because that
+  /// would clobber what the user is doing: the per-capture mouse-pointer toggle
+  /// (they may have flipped it this shot), the in-progress tool styles, and the
+  /// current tool/selection. Those stay as the session left them.
+  void _reloadSettings() {
+    Settings.instance.loadLoupe().then((l) {
+      if (mounted) setState(() => _loupe = l);
+    });
+    Settings.instance.loadCapture().then((c) {
+      if (mounted) setState(() => _capture = c);
+    });
   }
 
   /// Loads the persisted per-tool styles, or null when the store is unavailable
@@ -403,6 +428,8 @@ class _OverlayAppState extends State<OverlayApp> {
                   cursorImage: _cursorImage,
                   cursorTopLeft: _cursorTopLeft,
                 ),
+                // Dim + lock the freeze while a ⌘, Settings detour is open.
+                if (_settingsOpen) const SettingsMask(),
               ],
             ),
     );

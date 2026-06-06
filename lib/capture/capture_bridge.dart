@@ -46,6 +46,10 @@ class CaptureBridge {
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
+  /// Reveal the Settings window (⌘, from the capture overlay). The caller
+  /// dismisses the overlay first, since it sits above normal windows.
+  Future<void> openSettings() => _channel.invokeMethod('openSettings');
+
   /// Show a native error alert — used when a BACKGROUND export fails after the
   /// overlay was already hidden (so the in-overlay toast is no longer available).
   Future<void> showError(String message) =>
@@ -84,6 +88,8 @@ class CaptureBridge {
     required void Function(String reason, String message) onCaptureFailed,
     void Function(int activeId, Offset cursor)? onActiveDisplay,
     void Function(Map<String, dynamic> state)? onEditorState,
+    void Function()? onSettingsOpen,
+    void Function()? onResume,
   }) {
     _overlay.setMethodCallHandler((call) async {
       switch (call.method) {
@@ -114,6 +120,15 @@ class CaptureBridge {
         case 'onEditorState':
           // Another display changed tool/style -> mirror it here.
           onEditorState?.call((call.arguments as Map).cast<String, dynamic>());
+          return null;
+        case 'onSettingsOpen':
+          // ⌘, paused this freeze for Settings -> show the dim mask.
+          onSettingsOpen?.call();
+          return null;
+        case 'onResume':
+          // The freeze was resumed after a ⌘, Settings detour -> drop the mask +
+          // re-read settings.
+          onResume?.call();
           return null;
         default:
           return null; // onWindowsRefreshed etc. are Phase 4 — ignore.

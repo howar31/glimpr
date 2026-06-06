@@ -82,4 +82,12 @@ class OverlayEditorHost implements EditorHost {
       _onExport(selectionLogical, window);
   @override
   void onCancel() => _onCancel();
+  @override
+  void openSettings() {
+    // SUSPEND the capture (native hides the freeze windows but keeps them +
+    // this Dart state resident) and reveal Settings. When Settings closes the
+    // freeze is resumed unchanged; do NOT cancel — that would discard the
+    // frozen frame + annotations.
+    CaptureBridge().openSettings();
+  }
 }

@@ -39,6 +39,26 @@ void main() {
     ]);
   });
 
+  test('isOpenSettingsChord matches Cmd+comma only', () {
+    final comma = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.comma,
+      logicalKey: LogicalKeyboardKey.comma,
+      timeStamp: Duration.zero,
+    );
+    expect(isOpenSettingsChord(comma, {HotkeyModifier.meta}), isTrue);
+    expect(isOpenSettingsChord(comma, const {}), isFalse); // bare comma
+    expect(
+      isOpenSettingsChord(comma, {HotkeyModifier.meta, HotkeyModifier.shift}),
+      isFalse, // an extra modifier is not the chord
+    );
+    final keyA = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.keyA,
+      logicalKey: LogicalKeyboardKey.keyA,
+      timeStamp: Duration.zero,
+    );
+    expect(isOpenSettingsChord(keyA, {HotkeyModifier.meta}), isFalse);
+  });
+
   test('open-editor defaults: empty = Cmd+Opt+6, clipboard = Cmd+Opt+5', () {
     final empty = kDefaultBindings[kOpenEditorKey]!;
     expect(empty.logicalKey, LogicalKeyboardKey.digit6);

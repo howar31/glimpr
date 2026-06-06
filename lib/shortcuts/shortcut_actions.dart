@@ -151,6 +151,15 @@ const kGlobalActions = <GlobalAction>[
   ),
 ];
 
+/// The FIXED (reserved, not rebindable) Open-Settings chord: ⌘, (the macOS
+/// Preferences convention). True only for a key-down of comma with EXACTLY the
+/// meta modifier held.
+bool isOpenSettingsChord(KeyEvent e, Set<HotkeyModifier> pressed) =>
+    e is KeyDownEvent &&
+    e.logicalKey == LogicalKeyboardKey.comma &&
+    pressed.length == 1 &&
+    pressed.contains(HotkeyModifier.meta);
+
 /// Pure Tier-2 dispatch: given a key-down event, the currently-pressed modifier
 /// set, and the effective editor bindings, return the matching editor action key
 /// (a command key or a tool action key), or null. Commands are checked before

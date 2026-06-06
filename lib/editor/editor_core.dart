@@ -657,6 +657,12 @@ class _EditorCoreState extends State<EditorCore> {
       if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
+    // ⌘, opens Settings (fixed macOS Preferences convention; reserved). The host
+    // decides whether to dismiss first (the overlay does, the editor doesn't).
+    if (isOpenSettingsChord(e, pressed)) {
+      widget.host.openSettings();
+      return KeyEventResult.handled;
+    }
     // Viewport zoom shortcuts (image editor only): Cmd+1 = fit, Cmd+2 = 100%.
     if (_interactive &&
         pressed.length == 1 &&

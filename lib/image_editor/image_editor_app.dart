@@ -14,6 +14,7 @@ import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
 import '../overlay/toolbar.dart';
 import '../settings/settings.dart';
+import '../settings/settings_mask.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
@@ -67,6 +68,13 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
   LoupeConfig _loupe = const LoupeConfig();
   CaptureSettings _cap = CaptureSettings.defaults;
+  // Mask state derived from the GLOBAL "Settings open" signal + this window's
+  // active state: mask when Settings is open AND the editor isn't the active
+  // window. So it is correct regardless of order (e.g. Settings opened from the
+  // menu first, then the editor).
+  bool _settingsVisible = false;
+  bool _windowActive = false;
+  bool get _showSettingsMask => _settingsVisible && !_windowActive;
   // Drives EditorCore's Fit / 100% from the docked toolbar buttons.
   final EditorViewportController _viewport = EditorViewportController();
 
@@ -128,6 +136,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         // Open-Editor-with-Clipboard global hotkey: load the clipboard image
         // (same path as the landing ⌘V; toasts + stays on landing if empty).
         await _pasteLoad();
+      } else if (call.method == 'settingsOpened') {
+        if (mounted) setState(() => _settingsVisible = true);
+      } else if (call.method == 'settingsClosed') {
+        if (mounted) setState(() => _settingsVisible = false);
+        _reload();
+      } else if (call.method == 'windowBecameKey') {
+        // Returning to the editor (e.g. from Settings) picks up any change.
+        if (mounted) setState(() => _windowActive = true);
+        _reload();
+      } else if (call.method == 'windowResignedKey') {
+        if (mounted) setState(() => _windowActive = false);
       } else if (call.method == 'requestClose') {
         await _requestClose();
       }
@@ -305,6 +324,30 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       return;
     }
     _setLoadedImage(bytes, img, 'pasted');
+  }
+
+  /// Reveal the Settings window (⌘, — from the editor canvas or the landing).
+  /// The mask + state come from the native settingsOpened / window-key broadcasts
+  /// (single source of truth), so this only requests the reveal.
+  void _openSettings() {
+    try {
+      _channel.invokeMethod('openSettings');
+    } catch (_) {}
+  }
+
+  /// Hot-reload the settings that affect a live editor session: loupe geometry +
+  /// the capture/output snapshot (`_cap`). Deliberately does NOT re-read
+  /// in-session interaction state (the in-progress tool styles, the current
+  /// tool / selection), so returning never clobbers what the user is doing.
+  void _reload() {
+    try {
+      Settings.instance.loadLoupe().then((l) {
+        if (mounted) setState(() => _loupe = l);
+      }).catchError((_) {});
+      Settings.instance.loadCapture().then((c) {
+        if (mounted) setState(() => _cap = c);
+      }).catchError((_) {});
+    } catch (_) {}
   }
 
   /// Copy the annotated image to the clipboard.
@@ -516,14 +559,22 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               : const Color(0xFFEFF2F7),
           // A 44px Flutter title bar runs across the top in BOTH states (the OS
           // title is hidden + transparent), with the state content filling below.
-          body: Column(
+          body: Stack(
             children: [
-              _titleBar(tokens),
-              Expanded(
-                child: (image == null || bytes == null || controller == null)
-                    ? _landing(tokens)
-                    : _editor(tokens, image, bytes, controller),
+              Column(
+                children: [
+                  _titleBar(tokens),
+                  Expanded(
+                    child:
+                        (image == null || bytes == null || controller == null)
+                        ? _landing(tokens)
+                        : _editor(tokens, image, bytes, controller),
+                  ),
+                ],
               ),
+              // Dim + lock the editor while Settings is open and the editor
+              // isn't the active window (correct regardless of open order).
+              if (_showSettingsMask) const SettingsMask(),
             ],
           ),
         ),
@@ -591,6 +642,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     return Focus(
       autofocus: true,
       onKeyEvent: (node, e) {
+        if (e is KeyDownEvent &&
+            HardwareKeyboard.instance.isMetaPressed &&
+            e.logicalKey == LogicalKeyboardKey.comma) {
+          _openSettings(); // ⌘, works on the landing too (EditorCore unmounted)
+          return KeyEventResult.handled;
+        }
         if (e is KeyDownEvent &&
             HardwareKeyboard.instance.isMetaPressed &&
             e.logicalKey == LogicalKeyboardKey.keyV) {
@@ -709,6 +766,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       bytes: bytes,
       onComplete: _save,
       activeSignal: _active,
+      onOpenSettings: _openSettings,
     );
     return Stack(
       fit: StackFit.expand,

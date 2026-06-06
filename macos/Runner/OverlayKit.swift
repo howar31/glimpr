@@ -320,10 +320,14 @@ final class ScreenCapturer {
 /// NSScreen. One instance per display (a single window cannot span displays
 /// when "Displays have separate Spaces" is ON — the macOS default).
 final class OverlayWindow: NSWindow {
+  // While Settings is open over a paused freeze (⌘,) the window is LOCKED: it
+  // stays visible but must not become key on a stray click, or it would steal
+  // keyboard focus from the Settings window (e.g. the shortcut recorder).
+  var locked = false
   // Borderless windows are not key/main by default; without these overrides,
   // keyboard events (Esc, future arrow-nudge) never arrive.
-  override var canBecomeKey: Bool { true }
-  override var canBecomeMain: Bool { true }
+  override var canBecomeKey: Bool { !locked }
+  override var canBecomeMain: Bool { !locked }
 
   init(screen: NSScreen) {
     // Borderless, transparent, above-everything overlay covering the FULL
@@ -363,6 +367,11 @@ final class OverlayManager {
   // The display the cursor is on at capture = the interactive editor. Only its
   // window takes key/active focus on reveal (see show()). nil = unknown.
   private var keyDisplayID: CGDirectDisplayID?
+
+  // True while a capture is paused for ⌘, Settings (suspend/resume): the freeze
+  // windows are hidden but resident, and the Dart state is intact, so resume()
+  // restores the exact same session.
+  private(set) var isSuspended = false
 
   // Launch-born warm spares (see buildUnits): healthy, vsync-seeded engines parked
   // alpha-0, re-homed onto displays hot-plugged AFTER launch. A unit created fresh
@@ -497,6 +506,13 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self.dismiss(); result(nil)
+        // ⌘, from the capture overlay: PAUSE the freeze (keep it visible, masked)
+        // and reveal Settings ABOVE the shield-level overlay; hideSettings resumes
+        // when Settings closes.
+        case "openSettings":
+          self.suspend()
+          MainFlutterWindow.shared?.revealSettings(aboveOverlay: true)
+          result(nil)
         case "showError":
           if let a = call.arguments as? [String: Any],
              let msg = a["message"] as? String {
@@ -823,9 +839,42 @@ final class OverlayManager {
     stopCursorTracking()
     setCursorHidden(false) // always restore the system cursor when the overlay closes
     pendingShow.removeAll()
+    isSuspended = false
     for (_, u) in units {
       u.window.alphaValue = 0
       u.window.ignoresMouseEvents = true
+    }
+  }
+
+  /// ⌘, from the overlay: PAUSE the freeze for the Settings detour. The windows
+  /// stay VISIBLE (so it never looks cancelled) — a Dart mask dims them and
+  /// absorbs input; the Settings window is raised above the shield so it shows on
+  /// top. We only: stop the cursor poll (no key theft), restore the system cursor
+  /// (so it's usable over Settings), and LOCK the windows (a stray click can't
+  /// steal key focus). The Dart frame + annotations are untouched.
+  func suspend() {
+    isSuspended = true
+    stopCursorTracking()
+    setCursorHidden(false)
+    pendingShow.removeAll()
+    for (_, u) in units {
+      u.window.locked = true
+      u.overlay.invokeMethod("onSettingsOpen", arguments: nil)
+    }
+  }
+
+  /// Settings closed after a suspend: unlock + re-arm the cursor poll (the
+  /// windows were never hidden) and tell each overlay engine to drop the mask +
+  /// re-read settings, so e.g. a new loupe size applies immediately.
+  func resume() {
+    guard isSuspended else { return }
+    isSuspended = false
+    for (_, u) in units {
+      u.window.locked = false
+    }
+    startCursorTracking()
+    for (_, u) in units {
+      u.overlay.invokeMethod("onResume", arguments: nil)
     }
   }
 }

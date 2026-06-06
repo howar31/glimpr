@@ -18,6 +18,7 @@ class ImageEditorHost implements EditorHost {
   final Uint8List bytes;
   final Future<void> Function() onComplete;
   final VoidCallback? onClose;
+  final VoidCallback? onOpenSettings;
   @override
   final ValueListenable<({int id, Offset cursor})> activeSignal;
 
@@ -27,6 +28,7 @@ class ImageEditorHost implements EditorHost {
     required this.onComplete,
     required this.activeSignal,
     this.onClose,
+    this.onOpenSettings,
   });
 
   static const int kImageEditorHostId = 0;
@@ -68,4 +70,6 @@ class ImageEditorHost implements EditorHost {
       onComplete();
   @override
   void onCancel() => onClose?.call();
+  @override
+  void openSettings() => onOpenSettings?.call();
 }

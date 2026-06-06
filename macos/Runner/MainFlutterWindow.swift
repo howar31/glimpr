@@ -187,8 +187,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// Show the settings window on the user's CURRENT Space, in front. While it is
   /// visible the app becomes a regular app (Dock icon + Cmd-Tab); it reverts to a
   /// menu-bar accessory when the window is closed (see hideSettings).
-  func revealSettings() {
+  func revealSettings(aboveOverlay: Bool = false) {
     updateAppIcon()
+    // Over a paused capture, the freeze sits at the shielding level; raise
+    // Settings just above it so it shows on top (restored in hideSettings).
+    level = aboveOverlay
+      ? NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
+      : .normal
     alphaValue = 1
     ignoresMouseEvents = false
     center()
@@ -196,6 +201,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     makeKeyAndOrderFront(nil)
     disableZoomButton()
     updateActivationPolicy()
+    // Tell the editor Settings is open (ANY path: menu / ⌘,). The editor masks
+    // itself while Settings is open AND it isn't the active window.
+    imageEditorChannel?.invokeMethod("settingsOpened", arguments: nil)
   }
 
   private func setUpImageEditorWindow() {
@@ -239,6 +247,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "titleBarDoubleClick":
         self?.handleTitleBarDoubleClick()
         result(nil)
+      // ⌘, from the Image Editor (or its landing) reveals the Settings window.
+      case "openSettings":
+        self?.revealSettings()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -280,7 +292,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // otherwise keeps the centred default — and persists every later move/resize.
     w.center()
     w.setFrameAutosaveName("GlimprImageEditorWindow")
-    let delegate = ImageEditorWindowDelegate(onClose: { [weak self] in self?.requestCloseImageEditor() })
+    let delegate = ImageEditorWindowDelegate(
+      onClose: { [weak self] in self?.requestCloseImageEditor() },
+      onBecomeKey: { [weak self] in
+        self?.imageEditorChannel?.invokeMethod("windowBecameKey", arguments: nil)
+      },
+      onResignKey: { [weak self] in
+        self?.imageEditorChannel?.invokeMethod("windowResignedKey", arguments: nil)
+      })
     w.delegate = delegate
     self.imageEditorDelegate = delegate
     self.imageEditorWindow = w
@@ -391,8 +410,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // which also keeps the overlay's activate from switching Spaces during capture.
     alphaValue = 0
     ignoresMouseEvents = true
+    level = .normal // restore from a possible aboveOverlay raise
     orderBack(nil)
     updateActivationPolicy()
+    // If ⌘, paused a capture, resume the freeze now that Settings is gone.
+    if overlayManager?.isSuspended == true {
+      overlayManager?.resume()
+    }
+    // Settings closed (any path) → the editor drops its mask + hot-reloads.
+    imageEditorChannel?.invokeMethod("settingsClosed", arguments: nil)
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -547,9 +573,21 @@ final class ImageEditorPanel: NSWindow {
 /// collide with MainFlutterWindow's own NSWindowDelegate (the settings window).
 final class ImageEditorWindowDelegate: NSObject, NSWindowDelegate {
   private let onClose: () -> Void
-  init(onClose: @escaping () -> Void) { self.onClose = onClose }
+  private let onBecomeKey: () -> Void
+  private let onResignKey: () -> Void
+  init(onClose: @escaping () -> Void,
+       onBecomeKey: @escaping () -> Void,
+       onResignKey: @escaping () -> Void) {
+    self.onClose = onClose
+    self.onBecomeKey = onBecomeKey
+    self.onResignKey = onResignKey
+  }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     onClose()
     return false
   }
+  // Active-window tracking → the editor derives its mask from (Settings open AND
+  // not active) and hot-reloads when it becomes active.
+  func windowDidBecomeKey(_ notification: Notification) { onBecomeKey() }
+  func windowDidResignKey(_ notification: Notification) { onResignKey() }
 }
