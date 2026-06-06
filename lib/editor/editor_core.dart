@@ -345,6 +345,42 @@ class _EditorCoreState extends State<EditorCore> {
     return t == ToolKind.crop || t == ToolKind.blur || t == ToolKind.pixelate;
   }
 
+  /// Eyedropper (colour sampler) mode is on for THIS (active) canvas.
+  bool get _eyedropper => _active && c.eyedropperActive.value;
+
+  /// Sample the base image's pixel under [logical] and set it as the tool colour
+  /// (keeping the tool's current alpha so e.g. the highlighter stays translucent),
+  /// then leave eyedropper mode. Reads ONE pixel via a 1x1 render — no full-image
+  /// byte copy, so it stays light even for a 5K capture.
+  Future<void> _sampleColorAt(Offset logical) async {
+    final img = widget.host.baseImage;
+    final px = (logical.dx * widget.host.pixelScale).round().clamp(
+      0,
+      img.width - 1,
+    );
+    final py = (logical.dy * widget.host.pixelScale).round().clamp(
+      0,
+      img.height - 1,
+    );
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(
+      recorder,
+    ).drawImage(img, Offset(-px.toDouble(), -py.toDouble()), ui.Paint());
+    final pic = recorder.endRecording();
+    final one = await pic.toImage(1, 1);
+    pic.dispose();
+    final data = await one.toByteData(format: ui.ImageByteFormat.rawRgba);
+    one.dispose();
+    if (data != null) {
+      final b = data.buffer.asUint8List(); // rawRgba: R, G, B, A
+      final keepAlpha = c.style.value.color.a; // preserve the tool's alpha (0..1)
+      c.setColor(
+        Color.fromARGB(255, b[0], b[1], b[2]).withValues(alpha: keepAlpha),
+      );
+    }
+    c.stopEyedropper();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -365,6 +401,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.selectedIndex.addListener(_unpinIfCleared);
     c.tool.addListener(_rebuild);
     c.tool.addListener(_onToolChanged);
+    c.eyedropperActive.addListener(_rebuild);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
@@ -382,6 +419,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.selectedIndex.removeListener(_unpinIfCleared);
     c.tool.removeListener(_rebuild);
     c.tool.removeListener(_onToolChanged);
+    c.eyedropperActive.removeListener(_rebuild);
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
@@ -586,6 +624,11 @@ class _EditorCoreState extends State<EditorCore> {
     final key = e.logicalKey;
 
     if (key == LogicalKeyboardKey.escape) {
+      // Eyedropper active -> just leave sampling mode (don't exit capture).
+      if (_eyedropper) {
+        c.stopEyedropper();
+        return KeyEventResult.handled;
+      }
       // A gesture in progress -> cancel just that gesture (like a right-click),
       // staying in capture rather than exiting.
       if (_cancelActiveGesture()) return KeyEventResult.handled;
@@ -656,6 +699,10 @@ class _EditorCoreState extends State<EditorCore> {
         e.logicalKey == LogicalKeyboardKey.numpadEnter &&
         widget.editorBindings[kEditorConfirmKey]?.logicalKey ==
             LogicalKeyboardKey.enter;
+    if ((action == kEditorConfirmKey || numpadConfirm) && _eyedropper) {
+      _sampleColorAt(_cursor); // Enter samples (handy after an arrow-nudge)
+      return KeyEventResult.handled;
+    }
     if ((action == kEditorConfirmKey || numpadConfirm) && !_dragging) {
       if (widget.host.cropTrims) {
         // Image editor: Enter confirms a pending crop-trim; otherwise it does
@@ -693,12 +740,12 @@ class _EditorCoreState extends State<EditorCore> {
       return KeyEventResult.handled;
     }
 
-    // Arrow-nudge for the region tools (crop + blur/pixelate): move the crosshair
-    // by ONE PHYSICAL pixel (= 1 / scaleFactor logical points — a single pixel on
-    // Retina, not 2-3) and warp the OS cursor to match so a later physical move
-    // continues from the nudged point. Also nudges the in-progress region's
-    // dragging corner.
-    if (_showsCrosshair) {
+    // Arrow-nudge for the region tools (crop + blur/pixelate) AND the eyedropper:
+    // move the crosshair by ONE PHYSICAL pixel (= 1 / scaleFactor logical points —
+    // a single pixel on Retina, not 2-3) and warp the OS cursor to match so a
+    // later physical move continues from the nudged point. Also nudges the
+    // in-progress region's dragging corner.
+    if (_showsCrosshair || _eyedropper) {
       final step = 1.0 / widget.host.pixelScale;
       Offset? delta;
       if (key == LogicalKeyboardKey.arrowLeft) delta = Offset(-step, 0);
@@ -874,6 +921,10 @@ class _EditorCoreState extends State<EditorCore> {
       _commitText();
       return;
     }
+    if (_eyedropper) {
+      _sampleColorAt(_cursor); // sample where the loupe is (respects arrow-nudge)
+      return;
+    }
     final p = _toLogical(d.localPosition);
     // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
     // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
@@ -997,6 +1048,7 @@ class _EditorCoreState extends State<EditorCore> {
   bool get _showsReticle =>
       _active &&
       !_showsCrosshair &&
+      !_eyedropper && // eyedropper uses the full crosshair+loupe, not the reticle
       !_isSelectTool &&
       _overCanvas &&
       !_editingText;
@@ -1050,6 +1102,11 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _onRightDown(Offset p) {
+    // Eyedropper active -> right-click cancels sampling (stays in capture).
+    if (_eyedropper) {
+      c.stopEyedropper();
+      return;
+    }
     // While editing text, right-click just commits the in-progress text — it
     // does NOT delete/exit, which would discard the unfinished text.
     if (_editingText) {
@@ -1132,6 +1189,13 @@ class _EditorCoreState extends State<EditorCore> {
     // _panCancel). Spanning across displays is out of scope.
     widget.host.cursor.setDrawingLock(true);
     final p = _toLogical(d.localPosition);
+    // Eyedropper: a drag doesn't draw — just track the cursor (so the loupe
+    // follows); _panEnd samples at the release point.
+    if (_eyedropper) {
+      widget.host.cursor.setDrawingLock(false);
+      setState(() => _cursor = p);
+      return;
+    }
     // The editor has no outer pointer tracker (the overlay uses _trackCursor on
     // the full-window Listener), so the reticle/crosshair must advance from the
     // pan stream here — otherwise it freezes at the drag's start point.
@@ -1371,6 +1435,10 @@ class _EditorCoreState extends State<EditorCore> {
     widget.host.cursor.setDrawingLock(
       false,
     ); // drag finished -> release the cursor confine
+    if (_eyedropper) {
+      _sampleColorAt(_cursor); // a drag in eyedropper samples at the release
+      return;
+    }
     if (_cancelGesture) {
       _cancelGesture = false;
       setState(() {
@@ -1561,7 +1629,7 @@ class _EditorCoreState extends State<EditorCore> {
     // so this is always satisfied there.
     final showHud =
         _active &&
-        showsCrosshair &&
+        (showsCrosshair || _eyedropper) &&
         (!_interactive || _overCanvas || _dragging || _cropAdjusting);
     // Window-snap target: the hovered window, or — Crop only — the whole display
     // over bare desktop; null when no snap tool is active or while dragging.
@@ -1627,7 +1695,9 @@ class _EditorCoreState extends State<EditorCore> {
               onPointerMove: _onPointerButtons,
               onPointerUp: _onPointerButtons,
               child: MouseRegion(
-                cursor: (_active && !_editingText && !_isSelectTool)
+                cursor:
+                    (_eyedropper ||
+                        (_active && !_editingText && !_isSelectTool))
                     ? SystemMouseCursors.none
                     : SystemMouseCursors.basic,
                 onEnter: (_) => setState(() => _overCanvas = true),

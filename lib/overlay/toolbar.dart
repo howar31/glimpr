@@ -407,10 +407,21 @@ class _OptionsRowState extends State<_OptionsRow> {
       child: ColorPickerPopover(
         color: _c.style.value.color,
         recents: recents,
+        // The highlighter shows its translucent quick-picks; everything else the
+        // standard palette. (These used to live in the option bar.)
+        presets: _c.tool.value == ToolKind.highlighter
+            ? kHighlighterPresets
+            : kColorPresets,
         onChanged: _c.setColor,
         onCommit: (color) => ToolStyleStore(
           Settings.instance.store,
         ).pushRecentColor(color.toARGB32()),
+        // Start eyedropper sampling on the canvas; close the popover so the
+        // whole frozen frame / editor image is pickable.
+        onPickFromScreen: () {
+          _c.startEyedropper();
+          _closePopover();
+        },
       ),
     );
   }
@@ -585,13 +596,10 @@ class _OptionsRowState extends State<_OptionsRow> {
               builder: (_, style, _) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final c
-                      in (tool == ToolKind.highlighter
-                          ? kHighlighterPresets
-                          : kColorPresets))
-                    _ColorSwatch(_c, style, c),
-                  // Custom-colour "+" swatch — opens the HSV picker.
-                  _CustomColorSwatch(onTap: _openColorPopover),
+                  // Single colour button: shows the current colour over a
+                  // checkerboard (translucency reads) and opens the picker. The
+                  // presets live inside the picker now.
+                  _ColorButton(color: style.color, onTap: _openColorPopover),
                   if (showsWidth) ...[
                     const SizedBox(width: 10),
                     _NumberStepper(
@@ -692,39 +700,71 @@ class _TextureButton extends StatelessWidget {
   }
 }
 
-/// A small "+" swatch (rainbow gradient with a centred plus) that opens the
-/// bespoke HSV colour picker for a fully custom colour.
-class _CustomColorSwatch extends StatelessWidget {
+/// The single colour control: a rounded-rect button showing the current colour
+/// over an alpha checkerboard (so a translucent colour reads as translucent),
+/// tapped to open the colour picker. No selection ring / glyph — the fill IS the
+/// state; the presets live inside the picker.
+class _ColorButton extends StatelessWidget {
+  final Color color;
   final VoidCallback onTap;
-  const _CustomColorSwatch({required this.onTap});
+  const _ColorButton({required this.color, required this.onTap});
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 18,
-        height: 18,
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const SweepGradient(
-            colors: [
-              Color(0xFFFF0000),
-              Color(0xFFFFFF00),
-              Color(0xFF00FF00),
-              Color(0xFF00FFFF),
-              Color(0xFF0000FF),
-              Color(0xFFFF00FF),
-              Color(0xFFFF0000),
-            ],
+      child: Tooltip(
+        message: 'Colour',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: 36,
+            height: 22,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: p.swatchUnselectedBorder),
+            ),
+            // Checker + colour as sibling fill layers — StackFit.expand forces
+            // both to the identical rect, so the colour can't end up narrower
+            // than the checker. A translucent colour lets the checker read
+            // through uniformly; an opaque one fully covers it.
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const CustomPaint(painter: _CheckerPainter()),
+                ColoredBox(color: color),
+              ],
+            ),
           ),
-          border: Border.all(color: p.swatchUnselectedBorder),
         ),
-        child: Icon(Icons.add, size: 12, color: p.fg),
       ),
     );
   }
+}
+
+/// An alpha checkerboard, drawn behind the colour so transparency reads the way
+/// image editors show it.
+class _CheckerPainter extends CustomPainter {
+  const _CheckerPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = 5.0;
+    canvas.clipRect(Offset.zero & size); // never paint past our own bounds
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFFFFFFF));
+    final dark = Paint()..color = const Color(0xFFC8C8C8);
+    for (var y = 0.0; y < size.height; y += cell) {
+      for (var x = 0.0; x < size.width; x += cell) {
+        if (((x ~/ cell) + (y ~/ cell)).isOdd) {
+          canvas.drawRect(Rect.fromLTWH(x, y, cell, cell), dark);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckerPainter old) => false;
 }
 
 /// A compact pill showing the current font family; tapping opens the font
@@ -879,36 +919,6 @@ class _ResetToolButtonState extends State<_ResetToolButton> {
               color: _hover ? p.glassBorder : Colors.transparent,
             ),
             child: icon,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ColorSwatch extends StatelessWidget {
-  final EditorController controller;
-  final DrawStyle style;
-  final Color color;
-  const _ColorSwatch(this.controller, this.style, this.color);
-  @override
-  Widget build(BuildContext context) {
-    final p = _ToolbarTheme.of(context);
-    final selected = style.color == color;
-    return GestureDetector(
-      onTap: () => controller.setColor(color),
-      child: Container(
-        width: 18,
-        height: 18,
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        decoration: BoxDecoration(
-          // Composite over white so a translucent (highlighter) colour reads as
-          // ink on paper; opaque colours are unchanged.
-          color: Color.alphaBlend(color, Colors.white),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: selected ? p.fg : p.swatchUnselectedBorder,
-            width: selected ? 2 : 1,
           ),
         ),
       ),

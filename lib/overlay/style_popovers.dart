@@ -29,9 +29,15 @@ class ColorPickerPopover extends StatefulWidget {
     required this.recents,
     required this.onChanged,
     required this.onCommit,
+    this.onPickFromScreen,
+    this.presets = kColorPresets,
   }) : super(key: key);
 
   final Color color;
+
+  /// Quick-pick swatches shown at the top (tool-dependent: e.g. the highlighter
+  /// passes its translucent palette).
+  final List<Color> presets;
 
   /// MRU list of ARGB ints to show as recent swatches.
   final List<int> recents;
@@ -41,6 +47,10 @@ class ColorPickerPopover extends StatefulWidget {
 
   /// Called when an interaction completes (drag end, tap, field submit).
   final ValueChanged<Color> onCommit;
+
+  /// Tapped the eyedropper button — start sampling a colour from the canvas.
+  /// Null hides the button (e.g. surfaces with no canvas to sample).
+  final VoidCallback? onPickFromScreen;
 
   @override
   State<ColorPickerPopover> createState() => _ColorPickerPopoverState();
@@ -123,7 +133,7 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: kColorPresets.map((c) {
+      children: widget.presets.map((c) {
         final argb = c.toARGB32();
         final keyStr = 'preset-0x${argb.toRadixString(16).toUpperCase()}';
         return GestureDetector(
@@ -223,23 +233,67 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
   // ---- hex field -----------------------------------------------------------
 
   Widget _buildHexField() {
+    if (widget.onPickFromScreen == null) return _hexTextField();
+    // Hex field + eyedropper as two equal-height (34px) bordered boxes so the row
+    // reads as one unit; the TextField itself is borderless inside its box.
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 34,
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: _hexTextField(bordered: false),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: 'Pick a colour from the screen',
+          child: InkResponse(
+            onTap: widget.onPickFromScreen,
+            radius: 20,
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: const Icon(Icons.colorize, size: 18, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _hexTextField({bool bordered = true}) {
+    const outline = OutlineInputBorder(
+      borderSide: BorderSide(color: Colors.white24),
+    );
     return TextField(
       key: const ValueKey('hex-field'),
       controller: _hexCtrl,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        border: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.white24),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.white24),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.white54),
-        ),
+        contentPadding: bordered
+            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 8)
+            : const EdgeInsets.symmetric(horizontal: 4),
+        // Borderless when embedded in a bordered Container (height-matched with
+        // the eyedropper); standalone keeps its own outline.
+        border: bordered ? outline : InputBorder.none,
+        enabledBorder: bordered ? outline : InputBorder.none,
+        focusedBorder: bordered
+            ? const OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.white54),
+              )
+            : InputBorder.none,
         hintText: '#RRGGBB or #AARRGGBB',
-        hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
+        hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
       ),
       cursorColor: Colors.white,
       style: const TextStyle(

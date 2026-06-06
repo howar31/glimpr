@@ -44,6 +44,14 @@ class EditorController {
   final selectedIndex = ValueNotifier<int?>(null);
   final phase = ValueNotifier<EditorPhase>(EditorPhase.crop);
 
+  /// Eyedropper (colour sampler) mode: set by the colour picker's eyedropper
+  /// button, consumed by EditorCore (which samples the base image on the next
+  /// click, sets the colour, and clears this). A shared notifier is the channel
+  /// between the popover and the canvas.
+  final eyedropperActive = ValueNotifier<bool>(false);
+  void startEyedropper() => eyedropperActive.value = true;
+  void stopEyedropper() => eyedropperActive.value = false;
+
   EditorController({Map<ToolKind, DrawStyle>? toolStyles})
     : toolStyles = toolStyles ?? {} {
     // Seed the active style from any remembered tool so a fresh capture keeps
@@ -163,5 +171,6 @@ class EditorController {
     document.dispose();
     selectedIndex.dispose();
     phase.dispose();
+    eyedropperActive.dispose();
   }
 }

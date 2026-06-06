@@ -6,7 +6,7 @@ import 'editor_controller.dart';
 
 const _kStylesKey = 'tool_styles';
 const _kRecentsKey = 'recent_colors';
-const int kRecentColorsCap = 8;
+const int kRecentColorsCap = 14; // two rows of 7 in the picker
 
 /// Persists `Map<ToolKind, DrawStyle>` as one JSON object keyed by ToolKind.name,
 /// plus a global recent-colours MRU list. Same single-key pattern as
