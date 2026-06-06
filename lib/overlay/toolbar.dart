@@ -150,17 +150,22 @@ class _ToolbarPalette {
   // Dark halo behind white marks; light halo behind dark marks — so the toolbar
   // stays legible over any screenshot region in either theme.
   static const _darkShadows = <Shadow>[
-    Shadow(color: Color(0xCC000000), blurRadius: 2),
-    Shadow(color: Color(0x80000000), blurRadius: 5),
+    Shadow(color: Color(0xB3000000), blurRadius: 1.5),
+    Shadow(color: Color(0x4D000000), blurRadius: 2.5),
   ];
   static const _lightShadows = <Shadow>[
-    Shadow(color: Color(0xE6FFFFFF), blurRadius: 2),
-    Shadow(color: Color(0x99FFFFFF), blurRadius: 5),
+    Shadow(color: Color(0xCCFFFFFF), blurRadius: 1.5),
+    Shadow(color: Color(0x66FFFFFF), blurRadius: 2.5),
   ];
 
   static const dark = _ToolbarPalette(
-    glassTint: Color(0x1A222226),
-    glassBorder: Color(0x33FFFFFF),
+    // Match the settings window's Aurora glass — the same navy tint + bright
+    // white border — but at a higher alpha than its winBg (0.10): the settings
+    // window gets its translucency from NATIVE desktop vibrancy, whereas the
+    // toolbar/popovers only blur the screenshot via Flutter, so a thin tint
+    // washes out over light captures. ~0.55 stays frosted yet readable.
+    glassTint: Color.fromRGBO(15, 21, 38, 0.55),
+    glassBorder: Color.fromRGBO(255, 255, 255, 0.22),
     shadows: _darkShadows,
     fg: Colors.white,
     fgDim: Colors.white54,
@@ -170,8 +175,11 @@ class _ToolbarPalette {
   );
 
   static const light = _ToolbarPalette(
-    glassTint: Color(0x40EEF2F7),
-    glassBorder: Color(0x66FFFFFF),
+    // Match the settings window's light Aurora glass (near-white tint + bright
+    // border) at a higher alpha than its winBg (0.12) — same reason as dark: no
+    // native vibrancy here, so a thin tint washes out over a screenshot.
+    glassTint: Color.fromRGBO(249, 251, 253, 0.66),
+    glassBorder: Color.fromRGBO(255, 255, 255, 0.70),
     shadows: _lightShadows,
     fg: Color(0xFF14223B),
     fgDim: Color(0xFF64748B),
