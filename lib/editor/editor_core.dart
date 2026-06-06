@@ -9,7 +9,6 @@ import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../overlay/crop_hud.dart';
 import '../overlay/selection_controller.dart';
-import '../overlay/selection_label.dart';
 import '../overlay/selection_scrim.dart';
 import '../overlay/toolbar.dart';
 import '../overlay/window_snap.dart';
@@ -1526,14 +1525,15 @@ class _EditorCoreState extends State<EditorCore> {
   Offset _loupeOrigin() {
     const size = 120.0;
     const gap = 24.0;
+    const tall = size + _kLoupeReadoutReserve; // loupe + readout below it
     var lx = _cursor.dx + gap;
     var ly = _cursor.dy + gap;
     if (lx + size > _canvasSize.width) lx = _cursor.dx - gap - size;
-    if (ly + size > _canvasSize.height) ly = _cursor.dy - gap - size;
+    if (ly + tall > _canvasSize.height) ly = _cursor.dy - gap - tall;
     // After a crop-trim the canvas can be smaller than the loupe; guard the
     // upper clamp bound so it never goes negative (clamp throws if min > max).
     final maxX = (_canvasSize.width - size).clamp(0.0, double.infinity);
-    final maxY = (_canvasSize.height - size).clamp(0.0, double.infinity);
+    final maxY = (_canvasSize.height - tall).clamp(0.0, double.infinity);
     return Offset(lx.clamp(0.0, maxX), ly.clamp(0.0, maxY));
   }
 
@@ -1563,27 +1563,69 @@ class _EditorCoreState extends State<EditorCore> {
   /// the logical cursor.
   Widget _editorLoupe(EditorViewport v) {
     const size = 120.0, gap = 24.0;
+    const tall = size + _kLoupeReadoutReserve; // loupe + readout below it
     final cs = v.toLocal(_cursor); // cursor in screen coords
     var lx = cs.dx + gap;
     var ly = cs.dy + gap;
     if (lx + size > _lastBoxSize.width) lx = cs.dx - gap - size;
-    if (ly + size > _lastBoxSize.height) ly = cs.dy - gap - size;
+    if (ly + tall > _lastBoxSize.height) ly = cs.dy - gap - tall;
     return Positioned(
       left: lx,
       top: ly,
       child: IgnorePointer(
-        child: CustomPaint(
-          size: const Size(size, size),
-          painter: LoupePainter(
-            image: _canvasImage,
-            cursorLogical: _cursor,
-            scaleFactor: widget.host.pixelScale,
-            drawables: _effectiveDrawables(),
-            blurredFull: _blurredFull,
-            pixelatedFull: _pixelatedFull,
-            logicalSize: _canvasSize,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CustomPaint(
+              size: const Size(size, size),
+              painter: LoupePainter(
+                image: _canvasImage,
+                cursorLogical: _cursor,
+                scaleFactor: widget.host.pixelScale,
+                drawables: _effectiveDrawables(),
+                blurredFull: _blurredFull,
+                pixelatedFull: _pixelatedFull,
+                logicalSize: _canvasSize,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _loupeReadout(),
+          ],
         ),
+      ),
+    );
+  }
+
+  /// Logical -> native px (the readouts show native pixels, matching the loupe's
+  /// pixel grid + the saved image).
+  int _toPx(double v) => (v * widget.host.pixelScale).round();
+
+  /// The loupe readout — the cursor's current pixel position. The box size +
+  /// drag-start are shown at the selection's corner instead (see [BoxSizeLabel]),
+  /// not stacked under the loupe.
+  Widget _loupeReadout() => LoupeReadout(x: _toPx(_cursor.dx), y: _toPx(_cursor.dy));
+
+  // Vertical space reserved below the loupe for the readout, so the loupe flips
+  // above the cursor early enough that the readout stays on-screen too.
+  static const double _kLoupeReadoutReserve = 64.0;
+
+  /// The editor's box size + drag-start label, in SCREEN space at the selection's
+  /// viewport-mapped bottom-left corner — so its text stays a constant size under
+  /// zoom (unlike the canvas-space scrim/handles). Values are native px.
+  Widget _editorBoxLabel(EditorViewport v) {
+    final r = _crop.rect.value!;
+    final a = _crop.anchor ?? r.topLeft;
+    final sx = v.offset.dx + r.left * v.scale;
+    final sy = v.offset.dy + r.bottom * v.scale + 4;
+    return Positioned(
+      left: sx.clamp(0.0, _lastBoxSize.width),
+      top: sy.clamp(0.0, _lastBoxSize.height),
+      child: BoxSizeLabel(
+        w: _toPx(r.width),
+        h: _toPx(r.height),
+        startX: _toPx(a.dx),
+        startY: _toPx(a.dy),
       ),
     );
   }
@@ -1827,13 +1869,26 @@ class _EditorCoreState extends State<EditorCore> {
                                 0,
                                 _canvasSize.height,
                               ),
-                              child: Text(
-                                selectionLabel(rect),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  backgroundColor: Color(0xAA000000),
-                                ),
+                              // Box size + drag-start origin, at the selection's
+                              // bottom-left corner (native px). The drag start is
+                              // the crop anchor; fall back to the rect's top-left
+                              // for a released/pending selection with no anchor.
+                              child: Builder(
+                                builder: (_) {
+                                  // Overlay only: canvas == screen (1:1). The
+                                  // editor draws this in SCREEN space (constant
+                                  // size under zoom) via [_editorBoxLabel].
+                                  if (_interactive) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final a = _crop.anchor ?? rect.topLeft;
+                                  return BoxSizeLabel(
+                                    w: _toPx(rect.width),
+                                    h: _toPx(rect.height),
+                                    startX: _toPx(a.dx),
+                                    startY: _toPx(a.dy),
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -1883,20 +1938,28 @@ class _EditorCoreState extends State<EditorCore> {
                     left: loupeOrigin.dx,
                     top: loupeOrigin.dy,
                     child: IgnorePointer(
-                      child: CustomPaint(
-                        size: const Size(120, 120),
-                        painter: LoupePainter(
-                          image: _canvasImage,
-                          cursorLogical: _cursor,
-                          scaleFactor: widget.host.pixelScale,
-                          drawables: _effectiveDrawables(),
-                          blurredFull: _blurredFull,
-                          pixelatedFull: _pixelatedFull,
-                          logicalSize: Size(
-                            _canvasSize.width,
-                            _canvasSize.height,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          CustomPaint(
+                            size: const Size(120, 120),
+                            painter: LoupePainter(
+                              image: _canvasImage,
+                              cursorLogical: _cursor,
+                              scaleFactor: widget.host.pixelScale,
+                              drawables: _effectiveDrawables(),
+                              blurredFull: _blurredFull,
+                              pixelatedFull: _pixelatedFull,
+                              logicalSize: Size(
+                                _canvasSize.width,
+                                _canvasSize.height,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 6),
+                          _loupeReadout(),
+                        ],
                       ),
                     ),
                   ),
@@ -2057,6 +2120,10 @@ class _EditorCoreState extends State<EditorCore> {
                     ),
                   ),
                 if (showHud) _editorLoupe(v),
+                // Box size + drag-start label in screen space (constant size
+                // under zoom), at the crop selection's corner.
+                if (_active && inCrop && _crop.rect.value != null)
+                  _editorBoxLabel(v),
                 // On-canvas crop confirm/cancel — ABOVE the gesture layer so the
                 // ✔/✖ are tappable. Shown only for a pending (drag-released) trim
                 // selection (Enter/Esc do the same).

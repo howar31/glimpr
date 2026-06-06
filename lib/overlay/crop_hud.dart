@@ -217,6 +217,84 @@ class LoupePainter extends CustomPainter {
       old.pixelatedFull != pixelatedFull;
 }
 
+// Shared HUD pill (loupe readout + box-size label): dark body + thin light frame,
+// matching the loupe. Wrapped in a transparent Material so its text always gets a
+// real default style — identically in the overlay (no Scaffold ancestor) and the
+// image editor — instead of Flutter's "missing DefaultTextStyle" yellow underline.
+const Color _kHudPillColor = Color(0xF2202020);
+const Color _kHudPillBorder = Color(0x55FFFFFF);
+const TextStyle _kHudText = TextStyle(
+  color: Color(0xFFFFFFFF),
+  fontSize: 11,
+  height: 1.3,
+  decoration: TextDecoration.none, // kill the stray fallback underline
+  fontFeatures: [FontFeature.tabularFigures()], // steady digit columns
+);
+
+Widget _hudPill(Widget child) => IgnorePointer(
+  child: Material(
+    type: MaterialType.transparency,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _kHudPillColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _kHudPillBorder, width: 1),
+      ),
+      child: child,
+    ),
+  ),
+);
+
+/// The cursor's pixel position, shown directly under the loupe (NATIVE pixels —
+/// matching the loupe's pixel grid and the saved image). The same widget/style is
+/// used by the overlay and the image editor so the two surfaces look identical.
+class LoupeReadout extends StatelessWidget {
+  final int x;
+  final int y;
+  const LoupeReadout({super.key, required this.x, required this.y});
+
+  @override
+  Widget build(BuildContext context) =>
+      _hudPill(Text('$x, $y', style: _kHudText));
+}
+
+/// The label at a drag selection's bottom-left corner: the box size and its
+/// drag-start origin, in NATIVE pixels. Same pill style as [LoupeReadout]; the
+/// `×` and the north-west corner icon keep the two lines self-explanatory.
+class BoxSizeLabel extends StatelessWidget {
+  final int w;
+  final int h;
+  final int startX;
+  final int startY;
+  const BoxSizeLabel({
+    super.key,
+    required this.w,
+    required this.h,
+    required this.startX,
+    required this.startY,
+  });
+
+  @override
+  Widget build(BuildContext context) => _hudPill(
+    Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$w × $h', style: _kHudText.copyWith(fontWeight: FontWeight.w700)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.north_west, size: 11, color: Color(0xFFFFFFFF)),
+            const SizedBox(width: 2),
+            Text('$startX, $startY', style: _kHudText),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 /// A snap highlight around a hovered window: a single rounded outline drawn with
 /// an inverting blend (BlendMode.difference), like the crosshair/reticle, so a
 /// thin line stays visible on any backdrop. Center is untouched (transparent),
