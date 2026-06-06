@@ -36,7 +36,7 @@ Future<void> main() async {
   // engine owns the role channel that MainFlutterWindow handles).
   const control = MethodChannel('glimpr/role');
   final hotkeyService = HotkeyService(
-    registrar: HotkeyManagerRegistrar(),
+    registrar: NativeHotkeyRegistrar(),
     bindings: bindings,
     onAction: (actionKey) {
       switch (actionKey) {

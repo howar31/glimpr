@@ -1,16 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart' as hk;
 
-/// Our platform-neutral modifier set — a deliberate subset of hotkey_manager's
-/// 6 (omits capsLock + fn, which are not used for shortcuts). `meta` = Command
-/// on macOS / Win key on Windows (mapped per-platform by the registrar + label).
+/// Our platform-neutral modifier set (omits capsLock + fn, which are not used
+/// for shortcuts). `meta` = Command on macOS / Win key on Windows (mapped
+/// per-platform by the registrar + label).
 enum HotkeyModifier { meta, alt, control, shift }
 
 /// A key combination. Stores BOTH key representations because the two tiers need
-/// different ones: Tier 1 (global, hotkey_manager) registers by PHYSICAL key
-/// (position-based, layout-independent); Tier 2 (editor) matches by LOGICAL key
-/// (the existing _onKey behavior) and uses it for the display label.
+/// different ones: Tier 1 (global) registers by PHYSICAL key (position-based,
+/// layout-independent, mapped to a native keycode by the registrar); Tier 2
+/// (editor) matches by LOGICAL key (the existing _onKey behavior) and uses it
+/// for the display label.
 @immutable
 class HotkeyBinding {
   const HotkeyBinding({
@@ -48,13 +48,6 @@ class HotkeyBinding {
     }
     return HotkeyBinding(physicalKey: phys, logicalKey: logi, modifiers: mods);
   }
-
-  /// Tier-1 only: a hotkey_manager HotKey for system registration.
-  hk.HotKey toHotKey() => hk.HotKey(
-        key: physicalKey,
-        modifiers: modifiers.map(_toPkgModifier).toList(),
-        scope: hk.HotKeyScope.system,
-      );
 
   /// Tier-2 only: exact match against a key event + the currently-pressed
   /// modifier set. Exact modifier equality means bare-C never matches Cmd-C.
@@ -97,13 +90,6 @@ const _canonicalOrder = [
   HotkeyModifier.shift,
   HotkeyModifier.meta,
 ];
-
-hk.HotKeyModifier _toPkgModifier(HotkeyModifier m) => switch (m) {
-      HotkeyModifier.meta => hk.HotKeyModifier.meta,
-      HotkeyModifier.alt => hk.HotKeyModifier.alt,
-      HotkeyModifier.control => hk.HotKeyModifier.control,
-      HotkeyModifier.shift => hk.HotKeyModifier.shift,
-    };
 
 String _modifierSymbol(HotkeyModifier m, TargetPlatform p) {
   final mac = p == TargetPlatform.macOS;

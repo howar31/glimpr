@@ -21,12 +21,19 @@ class HotkeyRecorderField extends StatefulWidget {
     required this.requireModifier,
     this.reservedKeys = const {},
     this.emptyLabel = 'Disabled',
+    this.onRecordingChanged,
   });
 
   final HotkeyBinding? value;
   final ValueChanged<HotkeyBinding?> onChanged;
   final bool requireModifier;
   final Set<LogicalKeyboardKey> reservedKeys;
+
+  /// Fired when recording starts / stops. The Shortcuts pane uses it to SUSPEND
+  /// the live global hotkeys while recording — otherwise a system-registered
+  /// combo (e.g. ⌘⌥1) is swallowed by the OS + fires its action instead of
+  /// being captured here.
+  final ValueChanged<bool>? onRecordingChanged;
 
   /// Shown (as muted text, not a cap) when [value] is null — e.g. "Disabled" for
   /// the global hotkey, "None" for an editor tool with no shortcut.
@@ -43,6 +50,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
 
   final _focus = FocusNode();
   bool _recording = false;
+  bool _lastNotifiedRecording = false;
   String? _error;
 
   @override
@@ -66,6 +74,9 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
 
   @override
   void dispose() {
+    // Disposed mid-recording (e.g. switching tabs) — balance the notification so
+    // the paused global hotkeys are resumed.
+    if (_lastNotifiedRecording) widget.onRecordingChanged?.call(false);
     _focus.removeListener(_onFocusChange);
     _focus.dispose();
     super.dispose();
@@ -157,6 +168,16 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
 
   @override
   Widget build(BuildContext context) {
+    // Notify on a recording transition (covers every start/stop site) — deferred
+    // so it never calls setState mid-build.
+    if (_recording != _lastNotifiedRecording) {
+      _lastNotifiedRecording = _recording;
+      final cb = widget.onRecordingChanged;
+      final recording = _recording;
+      if (cb != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => cb(recording));
+      }
+    }
     final t = GlimprTheme.of(context);
     final hasError = _error != null;
     final borderColor = hasError

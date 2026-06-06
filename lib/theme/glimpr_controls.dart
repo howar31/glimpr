@@ -211,9 +211,13 @@ class _NavItemState extends State<NavItem> {
 
 /// Uppercase eyebrow label, optionally led by an icon.
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.label, {super.key, this.icon});
+  const SectionLabel(this.label, {super.key, this.icon, this.note});
   final String label;
   final IconData? icon;
+
+  /// Optional muted note shown after the label (normal case), e.g. a section-wide
+  /// rule like "Needs a modifier".
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +234,16 @@ class SectionLabel extends StatelessWidget {
             label.toUpperCase(),
             style: GlimprType.sansStyle(11.5, 700, t.fg3, letterSpacing: 1.0),
           ),
+          if (note != null) ...[
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                note!,
+                overflow: TextOverflow.ellipsis,
+                style: GlimprType.sansStyle(11.5, 400, t.fg4),
+              ),
+            ),
+          ],
         ],
       ),
     );

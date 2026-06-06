@@ -93,6 +93,17 @@ class _SettingsAppState extends State<SettingsApp>
   late final _shortcutStore = ShortcutStore(widget.settings.store);
   Map<String, HotkeyBinding?>? _shortcutsDraft;
   Map<String, HotkeyBinding?> _shortcutsBaseline = const {};
+  // While any recorder is recording, the live global hotkeys are suspended so a
+  // system-registered combo reaches the recorder instead of firing its action.
+  int _activeRecorders = 0;
+
+  void _onRecordingChanged(bool recording) {
+    final wasRecording = _activeRecorders > 0;
+    _activeRecorders = (_activeRecorders + (recording ? 1 : -1)).clamp(0, 999);
+    final nowRecording = _activeRecorders > 0;
+    if (nowRecording && !wasRecording) widget.hotkeyService?.pauseAll();
+    if (!nowRecording && wasRecording) widget.hotkeyService?.resumeAll();
+  }
 
   Settings get _s => widget.settings;
 
@@ -942,7 +953,8 @@ class _SettingsAppState extends State<SettingsApp>
 
     return [
       _h1('Shortcuts', t),
-      const SectionLabel('Capture', icon: Icons.crop_free),
+      const SectionLabel('Capture', icon: Icons.crop_free,
+          note: 'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)'),
       GlassCard.rows([
         for (final a in kGlobalActions)
           SettingRow(
@@ -1123,6 +1135,7 @@ class _SettingsAppState extends State<SettingsApp>
           requireModifier: requireModifier,
           reservedKeys: reserved,
           onChanged: (b) => setState(() => draft[actionKey] = b),
+          onRecordingChanged: _onRecordingChanged,
         ),
         const SizedBox(width: 4),
         // Reset to default — disabled + dimmed when the binding already is the

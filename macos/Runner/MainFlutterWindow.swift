@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Cocoa
 import FlutterMacOS
 import ServiceManagement
@@ -9,6 +10,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
   private var loginChannel: FlutterMethodChannel?
+  private var hotkeyController: HotkeyController?
   private var appearanceObservation: NSKeyValueObservation?
   var overlayManager: OverlayManager?
   private var imageEditorWindow: NSWindow?
@@ -51,6 +53,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       capture: capture,
       manager: { [weak self] in self?.overlayManager }
     )
+
+    // Native global hotkeys (Carbon RegisterEventHotKey), driven by the control
+    // engine's NativeHotkeyRegistrar over `glimpr/hotkeys`.
+    hotkeyController = HotkeyController(
+      messenger: flutterViewController.engine.binaryMessenger)
 
     // This window is the debug control; tell its Dart GlimprRoot which role to show.
     let roleChannel = FlutterMethodChannel(
@@ -590,4 +597,101 @@ final class ImageEditorWindowDelegate: NSObject, NSWindowDelegate {
   // not active) and hot-reloads when it becomes active.
   func windowDidBecomeKey(_ notification: Notification) { onBecomeKey() }
   func windowDidResignKey(_ notification: Notification) { onResignKey() }
+}
+
+/// Native global hotkeys via Carbon `RegisterEventHotKey` (replaces the
+/// hotkey_manager plugin). The control engine's Dart `NativeHotkeyRegistrar`
+/// sends a keyCode + Carbon modifier mask over `glimpr/hotkeys`; a fired hotkey
+/// invokes `onHotkey(actionKey)` back to Dart. Carbon is non-exclusive (no
+/// third-party-conflict detection), matching the previous plugin behaviour.
+final class HotkeyController {
+  private let channel: FlutterMethodChannel
+  private var refs: [String: EventHotKeyRef] = [:] // actionKey -> ref
+  private var actionForId: [UInt32: String] = [:] // EventHotKeyID.id -> actionKey
+  private var nextId: UInt32 = 1
+  private var handlerInstalled = false
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: "glimpr/hotkeys", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      self?.handle(call, result)
+    }
+  }
+
+  private func handle(_ call: FlutterMethodCall, _ result: FlutterResult) {
+    switch call.method {
+    case "register":
+      guard let a = call.arguments as? [String: Any],
+        let id = a["id"] as? String,
+        let keyCode = a["keyCode"] as? Int,
+        let modifiers = a["modifiers"] as? Int
+      else { result(false); return }
+      result(register(actionKey: id, keyCode: UInt32(keyCode), modifiers: UInt32(modifiers)))
+    case "unregister":
+      if let a = call.arguments as? [String: Any], let id = a["id"] as? String {
+        unregister(actionKey: id)
+      }
+      result(nil)
+    case "unregisterAll":
+      unregisterAll()
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  /// One process-wide Carbon handler that routes a fired hotkey by its id.
+  private func ensureHandler() {
+    guard !handlerInstalled else { return }
+    handlerInstalled = true
+    var spec = EventTypeSpec(
+      eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+    InstallEventHandler(
+      GetApplicationEventTarget(),
+      { (_, event, userData) -> OSStatus in
+        guard let userData = userData, let event = event else { return noErr }
+        var hkID = EventHotKeyID()
+        GetEventParameter(
+          event, EventParamName(kEventParamDirectObject),
+          EventParamType(typeEventHotKeyID), nil,
+          MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+        Unmanaged<HotkeyController>.fromOpaque(userData).takeUnretainedValue().fire(hkID.id)
+        return noErr
+      }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), nil)
+  }
+
+  private func fire(_ id: UInt32) {
+    guard let actionKey = actionForId[id] else { return }
+    channel.invokeMethod("onHotkey", arguments: actionKey)
+  }
+
+  private func register(actionKey: String, keyCode: UInt32, modifiers: UInt32) -> Bool {
+    ensureHandler()
+    unregister(actionKey: actionKey) // replace any existing binding for this action
+    let id = nextId
+    nextId += 1
+    let hotKeyID = EventHotKeyID(signature: OSType(0x474C_4D52 /* 'GLMR' */), id: id)
+    var ref: EventHotKeyRef?
+    let status = RegisterEventHotKey(
+      keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+    if status == noErr, let ref = ref {
+      refs[actionKey] = ref
+      actionForId[id] = actionKey
+      return true
+    }
+    return false
+  }
+
+  private func unregister(actionKey: String) {
+    if let ref = refs.removeValue(forKey: actionKey) {
+      UnregisterEventHotKey(ref)
+      actionForId = actionForId.filter { $0.value != actionKey }
+    }
+  }
+
+  private func unregisterAll() {
+    for (_, ref) in refs { UnregisterEventHotKey(ref) }
+    refs.removeAll()
+    actionForId.removeAll()
+  }
 }

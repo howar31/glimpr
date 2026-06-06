@@ -35,6 +35,20 @@ class HotkeyService {
     }
   }
 
+  /// Temporarily unregister ALL global hotkeys (so the Settings recorder can
+  /// capture a system-registered combo instead of the OS firing its action).
+  /// Never throws. Restore with [resumeAll].
+  Future<void> pauseAll() async {
+    try {
+      await registrar.unregisterAll();
+    } catch (e, st) {
+      debugPrint('HotkeyService.pauseAll failed: $e\n$st');
+    }
+  }
+
+  /// Re-register everything from the current bindings after a [pauseAll].
+  Future<void> resumeAll() => start();
+
   /// Live re-register of one action (no restart). Null = disable.
   Future<RegisterResult> rebind(String actionKey, HotkeyBinding? binding) async {
     _bindings[actionKey] = binding;

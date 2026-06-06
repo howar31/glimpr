@@ -1,10 +1,12 @@
-import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:flutter/services.dart';
 import 'hotkey_binding.dart';
+import 'macos_hotkey_codes.dart';
 import 'register_result.dart';
 
-/// Platform seam for global-hotkey registration. macOS wraps hotkey_manager;
-/// Windows (Phase 6) implements this with Win32 RegisterHotKey and returns
-/// RegisterResult.unavailable(alreadyInUse) on ERROR_HOTKEY_ALREADY_REGISTERED.
+/// Platform seam for global-hotkey registration. macOS uses a native Carbon
+/// `RegisterEventHotKey` registrar; Windows (Phase 6) implements this with Win32
+/// RegisterHotKey and returns RegisterResult.unavailable(alreadyInUse) on
+/// ERROR_HOTKEY_ALREADY_REGISTERED.
 abstract class HotkeyRegistrar {
   Future<RegisterResult> register(
     String actionKey,
@@ -15,12 +17,26 @@ abstract class HotkeyRegistrar {
   Future<void> unregisterAll();
 }
 
-/// macOS registrar. hotkey_manager registration is non-exclusive and cannot
-/// detect conflicts, so this always returns RegisterResult.ok (or rethrows —
-/// HotkeyService wraps start() in try/catch). Tracks HotKey per actionKey so a
-/// rebind unregisters only that action.
-class HotkeyManagerRegistrar implements HotkeyRegistrar {
-  final _byAction = <String, HotKey>{};
+/// macOS registrar over native Carbon (`glimpr/hotkeys` channel). Carbon
+/// RegisterEventHotKey is non-exclusive and cannot find a third-party owner, so
+/// a successful native registration returns [RegisterResult.ok]; an unmappable
+/// key or a native failure returns [UnavailableReason.error]. The native side
+/// fires `onHotkey(actionKey)`, dispatched here to the stored callback.
+class NativeHotkeyRegistrar implements HotkeyRegistrar {
+  NativeHotkeyRegistrar([MethodChannel? channel])
+      : _channel = channel ?? const MethodChannel('glimpr/hotkeys') {
+    _channel.setMethodCallHandler(_onNative);
+  }
+
+  final MethodChannel _channel;
+  final _byAction = <String, void Function()>{};
+
+  Future<dynamic> _onNative(MethodCall call) async {
+    if (call.method == 'onHotkey') {
+      _byAction[call.arguments as String]?.call();
+    }
+    return null;
+  }
 
   @override
   Future<RegisterResult> register(
@@ -28,21 +44,30 @@ class HotkeyManagerRegistrar implements HotkeyRegistrar {
     HotkeyBinding binding,
     void Function() onTrigger,
   ) async {
-    final hotKey = binding.toHotKey();
-    _byAction[actionKey] = hotKey;
-    await hotKeyManager.register(hotKey, keyDownHandler: (_) => onTrigger());
-    return const RegisterResult.ok();
+    final keyCode = macOSKeyCode(binding.physicalKey);
+    if (keyCode == null) {
+      return const RegisterResult.unavailable(UnavailableReason.error);
+    }
+    _byAction[actionKey] = onTrigger;
+    final ok = await _channel.invokeMethod<bool>('register', {
+      'id': actionKey,
+      'keyCode': keyCode,
+      'modifiers': carbonModifierMask(binding.modifiers),
+    });
+    if (ok == true) return const RegisterResult.ok();
+    _byAction.remove(actionKey);
+    return const RegisterResult.unavailable(UnavailableReason.error);
   }
 
   @override
   Future<void> unregister(String actionKey) async {
-    final hotKey = _byAction.remove(actionKey);
-    if (hotKey != null) await hotKeyManager.unregister(hotKey);
+    _byAction.remove(actionKey);
+    await _channel.invokeMethod('unregister', {'id': actionKey});
   }
 
   @override
   Future<void> unregisterAll() async {
     _byAction.clear();
-    await hotKeyManager.unregisterAll();
+    await _channel.invokeMethod('unregisterAll');
   }
 }
