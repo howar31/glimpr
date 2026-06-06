@@ -44,6 +44,10 @@ class SettingsApp extends StatefulWidget {
 // Reserved at the top for the transparent title bar / traffic lights.
 const _kTitleBarInset = 52.0;
 
+// Side of the square Loupe preview frame. A loupe larger than this is scaled
+// down to fit (and flagged), so the section never reflows while dragging.
+const double _kLoupePreviewStage = 200;
+
 const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
   ('Output', Icons.image_outlined),
@@ -402,12 +406,16 @@ class _SettingsAppState extends State<SettingsApp>
   Widget _loupeBody(GlimprTokens t) {
     final isDefault =
         _loupeSpan == kLoupeSpanDefault && _loupeZoom == kLoupeZoomDefault;
+    // The loupe exceeds the preview frame, so the preview is shown scaled down
+    // (not at its real on-screen size) — flagged next to Reset.
+    final scaledPreview = _loupeSpan * _loupeZoom > _kLoupePreviewStage;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Pixel magnifier for crop / blur / pixelate — in the capture overlay '
-          'and the Image Editor.',
+          'and the Image Editor. Nudge the cursor a pixel at a time with the '
+          'arrow keys.',
           style: GlimprType.sansStyle(12.5, 400, t.fg3),
         ),
         const SizedBox(height: 16),
@@ -448,14 +456,25 @@ class _SettingsAppState extends State<SettingsApp>
                     onEnd: (v) => _s.setLoupeZoom(v),
                   ),
                   const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    // Dimmed (disabled) at the defaults, so it reads as inactive
-                    // — same idiom as the per-shortcut Reset.
-                    child: GhostButton(
-                      'Reset to default',
-                      onTap: isDefault ? null : _resetLoupe,
-                    ),
+                  Row(
+                    children: [
+                      // Dark-grey note (only when the preview is scaled down):
+                      // the preview is smaller than the real loupe, for display.
+                      Expanded(
+                        child: scaledPreview
+                            ? Text(
+                                'Preview reduced to fit',
+                                style: GlimprType.sansStyle(11.5, 400, t.fg4),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      // Dimmed (disabled) at the defaults — same idiom as the
+                      // per-shortcut Reset.
+                      GhostButton(
+                        'Reset',
+                        onTap: isDefault ? null : _resetLoupe,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -482,7 +501,7 @@ class _SettingsAppState extends State<SettingsApp>
   // unusually large combo is scaled down to fit — never clipped. Fixed frame =
   // the surrounding UI never reflows while dragging.
   Widget _loupePreviewStage(GlimprTokens t) {
-    const stage = 200.0;
+    const stage = _kLoupePreviewStage;
     final box = (_loupeSpan * _loupeZoom).toDouble();
     final Widget content = _LoupePreview(span: _loupeSpan, zoom: _loupeZoom);
     return Container(
@@ -496,7 +515,7 @@ class _SettingsAppState extends State<SettingsApp>
       ),
       child: box <= stage
           ? content // real on-screen size
-          : FittedBox(fit: BoxFit.contain, child: content), // extreme: scale down
+          : FittedBox(fit: BoxFit.contain, child: content), // scaled down to fit
     );
   }
 
