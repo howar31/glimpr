@@ -11,8 +11,11 @@ class CaptureBridge {
 
   /// Capture every display and RETURN the frames to this (control) engine,
   /// WITHOUT showing the overlay — for the direct (non-interactive) modes.
-  Future<List<CapturedDisplay>> captureFrames() async {
-    final res = await _channel.invokeMethod('captureFrames');
+  Future<List<CapturedDisplay>> captureFrames({bool showsCursor = false}) async {
+    final res = await _channel.invokeMethod(
+      'captureFrames',
+      {'showsCursor': showsCursor},
+    );
     final list = (res as List).cast<dynamic>();
     return list
         .map((e) => CapturedDisplay.fromMap((e as Map).cast<dynamic, dynamic>()))
@@ -28,10 +31,13 @@ class CaptureBridge {
 
   /// Capture a single window with real alpha (rounded corners), or null when no
   /// such window / the native capture failed -> callers fall back to a rect crop.
-  Future<WindowImage?> captureWindowImage(int windowId) async {
+  Future<WindowImage?> captureWindowImage(
+    int windowId, {
+    bool showsCursor = false,
+  }) async {
     final res = await _channel.invokeMethod(
       'captureWindowImage',
-      {'windowId': windowId},
+      {'windowId': windowId, 'showsCursor': showsCursor},
     );
     if (res == null) return null;
     return WindowImage.fromMap((res as Map).cast<dynamic, dynamic>());

@@ -38,6 +38,10 @@ class ImageEditorHost implements EditorHost {
   @override
   ui.Image get baseImage => image;
   @override
+  ui.Image? get cursorImage => null; // no captured cursor in the image editor
+  @override
+  Offset? get cursorTopLeft => null;
+  @override
   Uint8List get baseImageBytes => bytes;
   @override
   Offset? get cursorSeed => null; // EditorCore seeds at centre

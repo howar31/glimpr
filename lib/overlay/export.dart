@@ -23,6 +23,8 @@ Future<DeliveryResult> exportAnnotated({
   required CaptureSettings cap,
   required CaptureKind kind,
   ui.Image? windowMask,
+  ui.Image? cursorImage,
+  ui.Offset? cursorTopLeftNative,
   String? windowTitle,
   String? appName,
 }) async {
@@ -45,6 +47,8 @@ Future<DeliveryResult> exportAnnotated({
     // decoration shadow then follows that silhouette.
     windowMask: windowMask,
     decorationShapeFromAlpha: windowMask != null,
+    cursorImage: cursorImage,
+    cursorTopLeftNative: cursorTopLeftNative,
   );
   return deliverCapture(
     pngBytes: bytes,

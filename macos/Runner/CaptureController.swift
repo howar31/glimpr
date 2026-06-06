@@ -13,20 +13,23 @@ final class CaptureController {
   /// Capture all displays and RETURN the frame dicts (no overlay) — for the
   /// direct (non-interactive) capture modes. Throws if permission is missing or
   /// there are no displays.
-  func captureFrames() async throws -> [[String: Any]] {
+  func captureFrames(showsCursor: Bool) async throws -> [[String: Any]] {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
-    return try await capturer.captureAll()
+    // Direct modes bake the cursor (atomic capture) per the setting; no separate
+    // cursor image (that is the overlay's toggleable path).
+    return try await capturer.captureAll(showsCursor: showsCursor, includeCursorImage: false)
   }
 
   /// Capture a single window with real alpha (rounded corners), or nil when no
   /// such window — for the direct "Capture Window" mode and the overlay snap mask.
-  func captureWindowImage(windowID: CGWindowID) async throws -> [String: Any]? {
+  func captureWindowImage(windowID: CGWindowID, showsCursor: Bool) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
-    return try await ScreenCapturer.captureWindowImage(windowID: windowID)
+    return try await ScreenCapturer.captureWindowImage(
+      windowID: windowID, showsCursor: showsCursor)
   }
 
   func triggerCapture() {
@@ -43,7 +46,10 @@ final class CaptureController {
       // Safety net: a warm overlay unit for every CURRENT display before capture.
       self.manager()?.syncUnitsToScreens()
       do {
-        let frames = try await self.capturer.captureAll()
+        // Overlay: clean base (cursor is the toggleable layer) + the OS cursor
+        // image for that toggle.
+        let frames = try await self.capturer.captureAll(
+          showsCursor: false, includeCursorImage: true)
         guard let manager = self.manager() else {
           Self.alert("Overlay manager not ready"); return
         }

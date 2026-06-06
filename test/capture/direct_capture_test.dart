@@ -129,7 +129,7 @@ void main() {
       completes = 0;
       errors = [];
       return DirectCapture(
-        captureFrames: () async => frames,
+        captureFrames: ({bool showsCursor = false}) async => frames,
         focusedWindow: () async => window,
         settings: Settings(store),
         regionStore: regionStore,
@@ -179,14 +179,15 @@ void main() {
       WindowImage? deliveredWi;
       var completes = 0;
       final dc = DirectCapture(
-        captureFrames: () async => [_disp(1, cursor: true)],
+        captureFrames: ({bool showsCursor = false}) async =>
+            [_disp(1, cursor: true)],
         focusedWindow: () async => const FocusedWindowInfo(
             displayId: 1,
             rect: Rect.fromLTWH(5, 6, 100, 80),
             title: 'W',
             app: 'App',
             windowId: 99),
-        captureWindowImage: (id) async {
+        captureWindowImage: (id, {bool showsCursor = false}) async {
           expect(id, 99);
           return WindowImage(
               pngBytes: Uint8List(0), width: 200, height: 160, scale: 2);

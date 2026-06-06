@@ -136,9 +136,9 @@ Future<DeliveryResult> _defaultDeliverWindow(
 /// native channel or a real image.
 class DirectCapture {
   DirectCapture({
-    Future<List<CapturedDisplay>> Function()? captureFrames,
+    Future<List<CapturedDisplay>> Function({bool showsCursor})? captureFrames,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
-    Future<WindowImage?> Function(int)? captureWindowImage,
+    Future<WindowImage?> Function(int, {bool showsCursor})? captureWindowImage,
     Settings? settings,
     LastRegionStore? regionStore,
     Future<DeliveryResult> Function(CaptureTarget, CaptureSettings)? deliver,
@@ -159,9 +159,9 @@ class DirectCapture {
         _complete = complete ?? (() => playComplete()),
         _showError = showError ?? ((m) => CaptureBridge().showError(m));
 
-  final Future<List<CapturedDisplay>> Function() _captureFrames;
+  final Future<List<CapturedDisplay>> Function({bool showsCursor}) _captureFrames;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
-  final Future<WindowImage?> Function(int) _captureWindowImage;
+  final Future<WindowImage?> Function(int, {bool showsCursor}) _captureWindowImage;
   final Settings _settings;
   final LastRegionStore _regionStore;
   final Future<DeliveryResult> Function(CaptureTarget, CaptureSettings) _deliver;
@@ -183,7 +183,10 @@ class DirectCapture {
       final cap = await _settings.loadCapture();
       WindowImage? wi;
       try {
-        wi = await _captureWindowImage(info!.windowId!);
+        wi = await _captureWindowImage(
+          info!.windowId!,
+          showsCursor: cap.captureCursor,
+        );
       } catch (_) {
         wi = null; // fall through to the rectangular crop
       }
@@ -220,7 +223,7 @@ class DirectCapture {
     final cap = await _settings.loadCapture();
     final List<CapturedDisplay> frames;
     try {
-      frames = await _captureFrames();
+      frames = await _captureFrames(showsCursor: cap.captureCursor);
     } catch (e) {
       _showError('Capture failed: $e');
       return;

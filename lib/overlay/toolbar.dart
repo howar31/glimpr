@@ -43,6 +43,9 @@ class EditorToolbar extends StatelessWidget {
   // by a thin vertical divider (e.g. Copy/Save buttons in the image editor).
   // Empty by default so all existing call sites are unchanged.
   final List<Widget> trailing;
+  // Whether to show the mouse-pointer toggle (the capture carried a cursor image —
+  // overlay only). Toggles `controller.showCursor`.
+  final bool showCursorToggle;
   const EditorToolbar({
     super.key,
     required this.controller,
@@ -51,6 +54,7 @@ class EditorToolbar extends StatelessWidget {
     this.editorBindings = const {},
     this.showDragHandle = true,
     this.trailing = const [],
+    this.showCursorToggle = false,
   });
 
   @override
@@ -102,6 +106,9 @@ class EditorToolbar extends StatelessWidget {
                     shortcut: editorBindings[kEditorToolActionKey[kind]]
                         ?.label(),
                   ),
+                // Mouse-pointer toggle (overlay, when the capture carried a
+                // cursor) — not a tool: shows/hides the captured cursor layer.
+                if (showCursorToggle) _CursorToggle(controller: controller),
                 // Trailing action widgets (e.g. Copy/Save in the image editor),
                 // separated from the tool buttons by a thin vertical divider so
                 // they read as part of the same glass bar.
@@ -286,6 +293,26 @@ class _ToolButton extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Mouse-pointer toggle: shows/hides the captured cursor layer (overlay only).
+/// Accent-tinted when on, like an active tool.
+class _CursorToggle extends StatelessWidget {
+  final EditorController controller;
+  const _CursorToggle({required this.controller});
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: controller.showCursor,
+      builder: (_, on, _) => IconButton(
+        icon: const Icon(Icons.mouse),
+        color: on ? GlimprTokens.accent : p.fg,
+        tooltip: on ? 'Mouse pointer: shown' : 'Mouse pointer: hidden',
+        onPressed: () => controller.showCursor.value = !on,
+      ),
     );
   }
 }

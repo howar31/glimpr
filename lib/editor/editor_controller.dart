@@ -52,6 +52,11 @@ class EditorController {
   void startEyedropper() => eyedropperActive.value = true;
   void stopEyedropper() => eyedropperActive.value = false;
 
+  /// Whether the captured mouse-pointer layer (overlay only) is shown. Initialised
+  /// per capture from the "capture mouse pointer" setting; flipped by the toolbar
+  /// cursor button; read by EditorCore (render) + the export.
+  final showCursor = ValueNotifier<bool>(false);
+
   EditorController({Map<ToolKind, DrawStyle>? toolStyles})
     : toolStyles = toolStyles ?? {} {
     // Seed the active style from any remembered tool so a fresh capture keeps

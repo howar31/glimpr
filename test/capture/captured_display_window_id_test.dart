@@ -38,6 +38,23 @@ void main() {
     expect(f.windowId, 7);
   });
 
+  test('CapturedDisplay parses the cursor image + position (and tolerates absence)',
+      () {
+    final withCursor = CapturedDisplay.fromMap({
+      ..._base(const []),
+      'cursorImage': Uint8List.fromList([1, 2, 3]),
+      'cursorLeft': 100.5,
+      'cursorTop': 200.5,
+    });
+    expect(withCursor.cursorImageBytes, isNotNull);
+    expect(withCursor.cursorLeft, 100.5);
+    expect(withCursor.cursorTop, 200.5);
+
+    final without = CapturedDisplay.fromMap(_base(const []));
+    expect(without.cursorImageBytes, isNull);
+    expect(without.cursorLeft, isNull);
+  });
+
   test('WindowImage.fromMap parses geometry', () {
     final wi = WindowImage.fromMap({
       'pngBytes': Uint8List(0), 'width': 200, 'height': 160, 'scale': 2.0,

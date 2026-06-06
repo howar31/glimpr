@@ -30,6 +30,10 @@ class _OverlayAppState extends State<OverlayApp> {
   final _bridge = CaptureBridge();
   CapturedDisplay? _display;
   ui.Image? _frozen; // decoded once per capture, used for export compositing
+  // The captured OS mouse pointer (toggleable cursor layer) decoded per capture +
+  // its display-local LOGICAL top-left; null when the capture had no cursor.
+  ui.Image? _cursorImage;
+  Offset? _cursorTopLeft;
   // Capture-time settings, prefetched per capture (in onCaptured) so the
   // shutter sound + delivery never await the store on the commit hot path.
   CaptureSettings _capture = CaptureSettings.defaults;
@@ -87,11 +91,25 @@ class _OverlayAppState extends State<OverlayApp> {
         } catch (_) {
           // If decode fails the export will be skipped; the overlay still shows.
         }
+        // Decode the OS cursor image (toggleable layer), if any.
+        ui.Image? cursorImg;
+        final cursorBytes = d.cursorImageBytes;
+        if (cursorBytes != null) {
+          try {
+            final codec = await ui.instantiateImageCodec(cursorBytes);
+            cursorImg = (await codec.getNextFrame()).image;
+            codec.dispose();
+          } catch (_) {/* no cursor layer on decode failure */}
+        }
+        final cursorTl = (d.cursorLeft != null && d.cursorTop != null)
+            ? Offset(d.cursorLeft!, d.cursorTop!)
+            : null;
         final loadedStyles = await stylesFuture;
         if (!mounted) return;
         _detachShared();
         _editor?.dispose();
         _frozen?.dispose();
+        _cursorImage?.dispose();
         // Reseed BEFORE building the controller so the freshly-loaded styles
         // (incl. a reset that emptied the map) seed this capture's initial tool
         // style. The map instance is shared with the controller, so mutate it in
@@ -103,6 +121,8 @@ class _OverlayAppState extends State<OverlayApp> {
         }
         setState(() {
           _frozen = frozen;
+          _cursorImage = cursorImg;
+          _cursorTopLeft = cursorTl;
           _editor = EditorController(toolStyles: _toolStyles);
           _display = d;
           // Bump so EditorCanvas gets a fresh State each capture (re-runs
@@ -121,7 +141,11 @@ class _OverlayAppState extends State<OverlayApp> {
           // setState so a fresh capture's EditorCanvas picks up settings that
           // affect interaction (e.g. rightClickExits); shutter/delivery read
           // _capture directly at export time.
-          if (mounted) setState(() => _capture = c);
+          if (mounted) {
+            setState(() => _capture = c);
+            // Initialise this capture's cursor-layer toggle from the setting.
+            _editor?.showCursor.value = c.captureCursor;
+          }
         });
         // Prefetch the editor hotkey bindings the same way; EditorCanvas reads
         // widget.editorBindings live in _onKey, so the in-flight capture's State
@@ -155,10 +179,12 @@ class _OverlayAppState extends State<OverlayApp> {
     _detachShared();
     _editor?.dispose();
     _frozen?.dispose();
+    _cursorImage?.dispose();
     setState(() {
       _display = null;
       _editor = null;
       _frozen = null;
+      _cursorImage = null;
     });
   }
 
@@ -189,6 +215,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _detachShared();
     _editor?.dispose();
     _frozen?.dispose();
+    _cursorImage?.dispose();
     _activeSignal.dispose();
     super.dispose();
   }
@@ -266,16 +293,26 @@ class _OverlayAppState extends State<OverlayApp> {
           window != null && selectionLogical == window.rect,
       hasSelection: selectionLogical != null,
     );
+    // Snapshot the toggleable cursor layer; this export takes over its disposal
+    // so a following capture / dismiss can't dispose it mid-composite.
+    final cursorImg = _cursorImage;
+    _cursorImage = null;
+    final cursorOn = editor.showCursor.value && cursorImg != null;
+    final cursorTopLeftNative = (cursorOn && _cursorTopLeft != null)
+        ? _cursorTopLeft! * d.scaleFactor
+        : null;
     _frozen = null;
     _dismiss();
     // For a window snap, capture the window's real alpha so the export takes the
     // window's rounded-corner silhouette (frozen pixels + live alpha mask). The
     // window can't move during the freeze, so the mask aligns with the crop.
+    // showsCursor:false — the cursor must NOT pollute the window-shape mask.
     // Best effort — any failure falls back to the rectangular crop.
     ui.Image? windowMask;
     if (kind == CaptureKind.overlaySnap && window?.windowId != null) {
       try {
-        final wi = await _bridge.captureWindowImage(window!.windowId!);
+        final wi =
+            await _bridge.captureWindowImage(window!.windowId!, showsCursor: false);
         if (wi != null) {
           final codec = await ui.instantiateImageCodec(wi.pngBytes);
           windowMask = (await codec.getNextFrame()).image;
@@ -294,6 +331,8 @@ class _OverlayAppState extends State<OverlayApp> {
         cap: cap,
         kind: kind,
         windowMask: windowMask,
+        cursorImage: cursorOn ? cursorImg : null,
+        cursorTopLeftNative: cursorTopLeftNative,
         windowTitle: window?.title,
         appName: window?.app,
       );
@@ -312,6 +351,7 @@ class _OverlayAppState extends State<OverlayApp> {
       _bridge.showError('Capture failed: $e');
     } finally {
       windowMask?.dispose();
+      cursorImg?.dispose();
       frozen.dispose();
     }
   }
@@ -353,6 +393,8 @@ class _OverlayAppState extends State<OverlayApp> {
                   activeSignal: _activeSignal,
                   rightClickExits: _capture.rightClickExits,
                   editorBindings: _editorBindings,
+                  cursorImage: _cursorImage,
+                  cursorTopLeft: _cursorTopLeft,
                 ),
               ],
             ),

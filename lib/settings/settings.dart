@@ -26,6 +26,7 @@ class CaptureSettings {
     this.decorateDisplay = false,
     this.decorateLastRegion = false,
     this.decorationJpegFill = 0xFFFFFFFF,
+    this.captureCursor = false,
   });
 
   final Directory? saveDir;
@@ -46,6 +47,7 @@ class CaptureSettings {
   final bool decorateDisplay; // direct display capture
   final bool decorateLastRegion; // direct last-region capture
   final int decorationJpegFill; // ARGB; the JPEG margin fill colour
+  final bool captureCursor; // include the mouse pointer in the capture
 
   static const defaults = CaptureSettings();
 
@@ -88,6 +90,7 @@ class Settings {
   static const _decorateDisplayKey = 'decorate_display';
   static const _decorateLastRegionKey = 'decorate_last_region';
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
+  static const _captureCursorKey = 'capture_cursor';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -172,6 +175,12 @@ class Settings {
   Future<void> setDecorationJpegFill(int argb) =>
       store.setInt(_decorationJpegFillKey, argb);
 
+  // Capture mouse pointer ---------------------------------------------------
+  Future<bool> getCaptureCursor() async =>
+      (await store.getBool(_captureCursorKey)) ?? false;
+  Future<void> setCaptureCursor(bool v) =>
+      store.setBool(_captureCursorKey, v);
+
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
   Future<CaptureSettings> loadCapture() async => CaptureSettings(
     saveDir: resolveSaveDir(await getSaveDirectory()),
@@ -189,6 +198,7 @@ class Settings {
     decorateDisplay: await getDecorateDisplay(),
     decorateLastRegion: await getDecorateLastRegion(),
     decorationJpegFill: await getDecorationJpegFill(),
+    captureCursor: await getCaptureCursor(),
   );
 }
 

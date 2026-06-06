@@ -47,6 +47,13 @@ void main() {
     expect(s.decorateFor(CaptureKind.overlayWholeDisplay), false);
   });
 
+  test('captureCursor defaults false and round-trips', () async {
+    expect(const CaptureSettings().captureCursor, false);
+    final settings = Settings(_MapStore());
+    await settings.setCaptureCursor(true);
+    expect((await settings.loadCapture()).captureCursor, true);
+  });
+
   test('Settings round-trips the flags + fill into a snapshot', () async {
     final settings = Settings(_MapStore());
     await settings.setDecorateSnap(true);

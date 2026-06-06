@@ -20,6 +20,10 @@ class EditorCanvas extends StatelessWidget {
   final ValueListenable<({int id, Offset cursor})> activeSignal;
   final bool rightClickExits;
   final Map<String, HotkeyBinding?> editorBindings;
+  // The captured OS mouse pointer (toggleable cursor layer) + its logical
+  // top-left; null when there is none.
+  final ui.Image? cursorImage;
+  final Offset? cursorTopLeft;
 
   const EditorCanvas({
     super.key,
@@ -31,6 +35,8 @@ class EditorCanvas extends StatelessWidget {
     required this.activeSignal,
     required this.editorBindings,
     this.rightClickExits = true,
+    this.cursorImage,
+    this.cursorTopLeft,
   });
 
   @override
@@ -45,6 +51,8 @@ class EditorCanvas extends StatelessWidget {
         rightClickExits: rightClickExits,
         onExport: onExport,
         onCancel: onCancel,
+        cursorImage: cursorImage,
+        cursorTopLeft: cursorTopLeft,
       ),
     );
   }

@@ -24,9 +24,11 @@ final class CaptureChannel {
       case "captureFrames":
         // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
         // and the channel reply must land on the platform (main) thread.
+        let cursor = ((call.arguments as? [String: Any])?["showsCursor"] as? Bool)
+          ?? false
         Task { @MainActor in
           do {
-            let frames = try await self?.capture.captureFrames() ?? []
+            let frames = try await self?.capture.captureFrames(showsCursor: cursor) ?? []
             result(frames)
           } catch {
             result(FlutterError(
@@ -36,12 +38,13 @@ final class CaptureChannel {
       case "focusedWindow":
         result(ScreenCapturer.focusedWindow())
       case "captureWindowImage":
-        let wid = ((call.arguments as? [String: Any])?["windowId"] as? NSNumber)?
-          .uint32Value ?? 0
+        let a = call.arguments as? [String: Any]
+        let wid = (a?["windowId"] as? NSNumber)?.uint32Value ?? 0
+        let cursor = (a?["showsCursor"] as? Bool) ?? false
         Task { @MainActor in
           do {
             let img = try await self?.capture.captureWindowImage(
-              windowID: CGWindowID(wid))
+              windowID: CGWindowID(wid), showsCursor: cursor)
             result(img) // nil -> Dart treats as "no image" and falls back
           } catch {
             result(FlutterError(

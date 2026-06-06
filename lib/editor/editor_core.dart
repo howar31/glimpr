@@ -401,6 +401,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.addListener(_rebuild);
     c.tool.addListener(_onToolChanged);
     c.eyedropperActive.addListener(_rebuild);
+    c.showCursor.addListener(_rebuild);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
@@ -419,6 +420,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.removeListener(_rebuild);
     c.tool.removeListener(_onToolChanged);
     c.eyedropperActive.removeListener(_rebuild);
+    c.showCursor.removeListener(_rebuild);
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
@@ -1817,6 +1819,25 @@ class _EditorCoreState extends State<EditorCore> {
                 // checkerboard) but the out-of-bounds part is hidden (and clipped on
                 // export). Only this layer is clipped, so the base image keeps its
                 // drop shadow. The overlay is unwrapped (structurally identical).
+                // Cursor layer (overlay, toggled on): the captured OS pointer,
+                // treated as part of the base image — between the frozen frame and
+                // the annotations. Non-interactive (IgnorePointer, never hit-tested).
+                if (c.showCursor.value &&
+                    widget.host.cursorImage != null &&
+                    widget.host.cursorTopLeft != null)
+                  Positioned(
+                    left: widget.host.cursorTopLeft!.dx,
+                    top: widget.host.cursorTopLeft!.dy,
+                    child: IgnorePointer(
+                      child: RawImage(
+                        image: widget.host.cursorImage,
+                        width:
+                            widget.host.cursorImage!.width / widget.host.pixelScale,
+                        height: widget.host.cursorImage!.height /
+                            widget.host.pixelScale,
+                      ),
+                    ),
+                  ),
                 RepaintBoundary(child: _annotationLayer(inCrop)),
                 // Our own text-selection highlight — shown when the inline field is
                 // blurred (e.g. while typing a pt value), so the selected range stays
@@ -2053,6 +2074,7 @@ class _EditorCoreState extends State<EditorCore> {
                           }
                         },
                         editorBindings: widget.editorBindings,
+                        showCursorToggle: widget.host.cursorImage != null,
                       ),
                     ),
                   ),

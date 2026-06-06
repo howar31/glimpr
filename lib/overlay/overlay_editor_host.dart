@@ -28,6 +28,10 @@ class OverlayEditorHost implements EditorHost {
   final Future<void> Function(Rect? selectionLogical, SnapWindow? window) _onExport;
   final VoidCallback _onCancel;
   final EditorCursorController _cursor;
+  @override
+  final ui.Image? cursorImage;
+  @override
+  final Offset? cursorTopLeft;
 
   OverlayEditorHost({
     required this.display,
@@ -37,6 +41,8 @@ class OverlayEditorHost implements EditorHost {
     required this._onExport,
     required this._onCancel,
     EditorCursorController? cursor,
+    this.cursorImage,
+    this.cursorTopLeft,
   }) : _cursor = cursor ?? OverlayCursorController();
 
   @override

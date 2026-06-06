@@ -60,6 +60,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _shutterSound = true;
   bool _completionSound = true;
   bool _rightClickExits = true;
+  bool _captureCursor = false;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
   // The warm target active SINCE launch (what OverlayManager actually built with).
@@ -117,6 +118,7 @@ class _SettingsAppState extends State<SettingsApp>
     final shutter = await _s.getShutterSound();
     final complete = await _s.getCompletionSound();
     final rightClick = await _s.getRightClickExits();
+    final captureCursor = await _s.getCaptureCursor();
     final template = await _s.getFilenameTemplate();
     final decSnap = await _s.getDecorateSnap();
     final decCrop = await _s.getDecorateCrop();
@@ -134,6 +136,7 @@ class _SettingsAppState extends State<SettingsApp>
       _shutterSound = shutter;
       _completionSound = complete;
       _rightClickExits = rightClick;
+      _captureCursor = captureCursor;
       _filenameTemplate = template;
       _decorateSnap = decSnap;
       _decorateCrop = decCrop;
@@ -337,6 +340,20 @@ class _SettingsAppState extends State<SettingsApp>
       const SectionLabel('Capture', icon: Icons.photo_camera_outlined),
       GlassCard.rows([
         SettingRow(
+          title: 'Mouse pointer',
+          hint: 'Include the mouse pointer in captures. This is the default; '
+              'in the capture overlay a toolbar button shows/hides it per '
+              'shot without changing this setting.',
+          trailing: GlassToggle(
+            value: _captureCursor,
+            onChanged: (v) async {
+              await _s.setCaptureCursor(v);
+              if (mounted) setState(() => _captureCursor = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
           title: 'Right-click exits',
           hint: 'Right-click leaves capture mode (Esc always works)',
           trailing: GlassToggle(

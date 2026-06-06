@@ -38,7 +38,8 @@ final class ScreenCapturer {
   enum CaptureError: Error { case noDisplays }
 
   /// Captures every display. Throws CaptureError.noDisplays or rethrows SCK errors.
-  func captureAll() async throws -> [[String: Any]] {
+  func captureAll(showsCursor: Bool = false, includeCursorImage: Bool = false)
+    async throws -> [[String: Any]] {
     // Trust the cache only while its display SET still matches the current
     // screens; otherwise refetch fresh (the cache goes stale across a display
     // add/remove, which would drop a hot-plugged display from the capture).
@@ -73,7 +74,7 @@ final class ScreenCapturer {
       let cfg = SCStreamConfiguration()
       cfg.width = Int(CGFloat(d.width) * scale)
       cfg.height = Int(CGFloat(d.height) * scale)
-      cfg.showsCursor = false
+      cfg.showsCursor = showsCursor
       // Capture in sRGB. SCK otherwise tags frames with the display's native
       // wide-gamut profile (e.g. "LG ULTRAFINE"), but Flutter's Image widget
       // ignores embedded ICC profiles and treats pixels as sRGB — so a wide-
@@ -99,8 +100,20 @@ final class ScreenCapturer {
       // setActiveDisplay (NSEvent.mouseLocation + NSScreen.frame, bottom-left).
       if isCursor,
          let s = NSScreen.screens.first(where: { Self.screenNumber($0) == d.displayID }) {
-        dict["cursorX"] = Double(mouse.x - s.frame.minX)
-        dict["cursorY"] = Double(s.frame.maxY - mouse.y)
+        let curX = Double(mouse.x - s.frame.minX) // display-local, top-left origin
+        let curY = Double(s.frame.maxY - mouse.y)
+        dict["cursorX"] = curX
+        dict["cursorY"] = curY
+        // The OS cursor image (no second screen capture -> no race): rendered to a
+        // native-scale PNG with its display-local top-left. Absent for non-system
+        // (custom) cursors -> the overlay simply shows no cursor.
+        if includeCursorImage, let cursor = NSCursor.currentSystem,
+           let png = Self.cursorPNG(cursor, scale: scale) {
+          let hot = cursor.hotSpot // points, top-left origin for cursors
+          dict["cursorImage"] = FlutterStandardTypedData(bytes: png)
+          dict["cursorLeft"] = curX - Double(hot.x)
+          dict["cursorTop"] = curY - Double(hot.y)
+        }
       }
       dict["windows"] = Self.snappableWindows(displayID: d.displayID)
       out.append(dict)
@@ -116,7 +129,8 @@ final class ScreenCapturer {
   // Static so BOTH the control engine (CaptureController) and EVERY overlay
   // engine (the snap mask) can call it — each Flutter engine has its own
   // `glimpr/capture` handler, so the overlay can't reach the control engine's.
-  static func captureWindowImage(windowID: CGWindowID) async throws -> [String: Any]? {
+  static func captureWindowImage(windowID: CGWindowID, showsCursor: Bool)
+    async throws -> [String: Any]? {
     // Fetch shareable content fresh (window sets change between captures) and
     // find the target window.
     let shareable = try await SCShareableContent.current
@@ -129,7 +143,7 @@ final class ScreenCapturer {
     let cfg = SCStreamConfiguration()
     cfg.width = max(1, Int((window.frame.width * scale).rounded()))
     cfg.height = max(1, Int((window.frame.height * scale).rounded()))
-    cfg.showsCursor = false
+    cfg.showsCursor = showsCursor
     cfg.colorSpaceName = CGColorSpace.sRGB
     let filter = SCContentFilter(desktopIndependentWindow: window)
     let cg = try await SCScreenshotManager.captureImage(
@@ -275,6 +289,28 @@ final class ScreenCapturer {
 
   static func pngData(from cgImage: CGImage) -> Data? {
     NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+  }
+
+  /// Render an OS cursor's image to a native-scale PNG (alpha-preserving), drawn at
+  /// the display's backing [scale] so it stays crisp regardless of the cursor's own
+  /// representation. nil on a zero-sized image / allocation failure.
+  static func cursorPNG(_ cursor: NSCursor, scale: CGFloat) -> Data? {
+    let img = cursor.image
+    let size = img.size // points
+    let pxW = Int((size.width * scale).rounded())
+    let pxH = Int((size.height * scale).rounded())
+    guard pxW > 0, pxH > 0,
+          let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: pxW, pixelsHigh: pxH,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+    else { return nil }
+    rep.size = size
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    img.draw(in: NSRect(origin: .zero, size: size))
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])
   }
 }
 
@@ -495,12 +531,13 @@ final class OverlayManager {
         case "captureWindowImage":
           // The overlay snap fetches the window's real alpha here (this engine
           // has its OWN glimpr/capture handler, separate from the control one).
-          let wid = ((call.arguments as? [String: Any])?["windowId"] as? NSNumber)?
-            .uint32Value ?? 0
+          let a = call.arguments as? [String: Any]
+          let wid = (a?["windowId"] as? NSNumber)?.uint32Value ?? 0
+          let cursor = (a?["showsCursor"] as? Bool) ?? false
           Task { @MainActor in
             do {
               let img = try await ScreenCapturer.captureWindowImage(
-                windowID: CGWindowID(wid))
+                windowID: CGWindowID(wid), showsCursor: cursor)
               result(img)
             } catch {
               result(FlutterError(

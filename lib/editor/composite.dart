@@ -45,6 +45,8 @@ Future<Uint8List> compositeAndCrop({
   ui.Color decorationJpegFill = const ui.Color(0xFFFFFFFF),
   ui.Image? windowMask,
   bool decorationShapeFromAlpha = false,
+  ui.Image? cursorImage,
+  ui.Offset? cursorTopLeftNative,
 }) async {
   final crop = nativeCropRect(
     selectionLogical: selectionLogical,
@@ -57,6 +59,11 @@ Future<Uint8List> compositeAndCrop({
   canvas.translate(-crop.left, -crop.top);
   // Layer 1: frozen image at native pixels (1:1).
   canvas.drawImage(frozen, ui.Offset.zero, ui.Paint());
+  // Mouse pointer (overlay, when the toggle is on): part of the BASE — drawn over
+  // the frozen pixels and UNDER the annotations, at its native top-left.
+  if (cursorImage != null && cursorTopLeftNative != null) {
+    canvas.drawImage(cursorImage, cursorTopLeftNative, ui.Paint());
+  }
   // Pre-compute the whole-frame blur / pixelate once (only if used) so the
   // region drawables can just mask them — same path as on-screen.
   final blurredFull = drawables.any((d) => d is BlurDrawable)

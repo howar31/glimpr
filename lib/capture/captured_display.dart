@@ -95,6 +95,12 @@ class CapturedDisplay {
   // Snappable top-level windows on THIS display at capture time, display-local
   // logical (top-left origin), front-to-back z-order. Empty if none.
   final List<SnapWindow> windows;
+  // The OS mouse pointer image (native px PNG, with alpha) + its display-local
+  // LOGICAL top-left, captured for the OVERLAY's toggleable cursor layer. Only on
+  // the cursor display, and only when the current cursor is a system cursor.
+  final Uint8List? cursorImageBytes;
+  final double? cursorLeft;
+  final double? cursorTop;
 
   const CapturedDisplay({
     required this.displayId,
@@ -108,6 +114,9 @@ class CapturedDisplay {
     this.cursorX,
     this.cursorY,
     this.windows = const [],
+    this.cursorImageBytes,
+    this.cursorLeft,
+    this.cursorTop,
   });
 
   factory CapturedDisplay.fromMap(Map<dynamic, dynamic> m) => CapturedDisplay(
@@ -121,6 +130,9 @@ class CapturedDisplay {
     isCursorDisplay: m['isCursorDisplay'] as bool,
     cursorX: (m['cursorX'] as num?)?.toDouble(),
     cursorY: (m['cursorY'] as num?)?.toDouble(),
+    cursorImageBytes: m['cursorImage'] as Uint8List?,
+    cursorLeft: (m['cursorLeft'] as num?)?.toDouble(),
+    cursorTop: (m['cursorTop'] as num?)?.toDouble(),
     windows: ((m['windows'] as List<dynamic>?) ?? const [])
         .map((e) => (e as Map).cast<dynamic, dynamic>())
         .map((w) => SnapWindow(

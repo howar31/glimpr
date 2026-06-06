@@ -41,6 +41,13 @@ abstract class EditorHost {
   /// Base image at native pixels (frozen frame / loaded image) — loupe + raster.
   ui.Image get baseImage;
 
+  /// The OS mouse-pointer image (native px, alpha) for the toggleable cursor
+  /// layer, or null when there is none (image editor; non-system cursor).
+  ui.Image? get cursorImage => null;
+
+  /// The cursor image's display-local LOGICAL top-left, or null when no cursor.
+  Offset? get cursorTopLeft => null;
+
   /// Encoded bytes for the cheap on-screen `Image.memory` layer.
   Uint8List get baseImageBytes;
 
