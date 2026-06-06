@@ -830,7 +830,7 @@ class TexturePickerPopover extends StatelessWidget {
                                   horizontal: 10,
                                 ),
                                 child: Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Text(
                                     textureLabel(tex),
                                     style: TextStyle(
