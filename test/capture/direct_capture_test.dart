@@ -173,6 +173,43 @@ void main() {
       expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
     });
 
+    test('window(): uses the per-window image when a windowId is present',
+        () async {
+      final s = _FakeStore();
+      WindowImage? deliveredWi;
+      var completes = 0;
+      final dc = DirectCapture(
+        captureFrames: () async => [_disp(1, cursor: true)],
+        focusedWindow: () async => const FocusedWindowInfo(
+            displayId: 1,
+            rect: Rect.fromLTWH(5, 6, 100, 80),
+            title: 'W',
+            app: 'App',
+            windowId: 99),
+        captureWindowImage: (id) async {
+          expect(id, 99);
+          return WindowImage(
+              pngBytes: Uint8List(0), width: 200, height: 160, scale: 2);
+        },
+        deliverWindow: (wi, cap, info) async {
+          deliveredWi = wi;
+          return const DeliveryResult(
+              savedPath: '/x.png', copiedToClipboard: true, soundPlayed: true);
+        },
+        settings: Settings(s),
+        regionStore: LastRegionStore(s),
+        shutter: () {},
+        complete: () => completes++,
+        showError: (_) {},
+      );
+      await dc.window();
+      expect(deliveredWi, isNotNull);
+      expect(deliveredWi!.width, 200);
+      expect(completes, 1);
+      final saved = await LastRegionStore(s).load();
+      expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
+    });
+
     test('lastRegion(): no stored region -> no delivery, no sound', () async {
       final dc = build(frames: [_disp(1, cursor: true)]);
       await dc.lastRegion();

@@ -53,6 +53,7 @@ Future<ui.Image> applyDecoration(
   ui.Image content,
   DecorationStyle style, {
   ui.Color? fill,
+  bool shapeFromContentAlpha = false,
 }) async {
   final m = style.effectiveMargin;
   final cw = content.width.toDouble();
@@ -70,29 +71,50 @@ Future<ui.Image> applyDecoration(
     );
   }
 
-  final contentRect = ui.Rect.fromLTWH(m, m, cw, ch);
-  final rrect = ui.RRect.fromRectAndRadius(
-    contentRect,
-    ui.Radius.circular(style.cornerRadius),
-  );
-
-  // Drop shadow: a blurred fill of the rounded rect, offset behind the content.
-  if (style.shadowBlur > 0 || style.shadowColor.a > 0) {
-    final paint = ui.Paint()..color = style.shadowColor;
-    if (style.shadowBlur > 0) {
-      paint.maskFilter = ui.MaskFilter.blur(
-        ui.BlurStyle.normal,
-        style.shadowBlur,
-      );
+  if (shapeFromContentAlpha) {
+    // The content already carries its REAL shape (a window's alpha). Draw the
+    // drop shadow from the content's OWN silhouette (tint to the shadow colour +
+    // blur), then the content on top — NO rounded-rect clip (the alpha is truth).
+    if (style.shadowBlur > 0 || style.shadowColor.a > 0) {
+      final shadowPaint = ui.Paint()
+        ..colorFilter = ui.ColorFilter.mode(
+          style.shadowColor,
+          ui.BlendMode.srcIn,
+        );
+      if (style.shadowBlur > 0) {
+        shadowPaint.maskFilter = ui.MaskFilter.blur(
+          ui.BlurStyle.normal,
+          style.shadowBlur,
+        );
+      }
+      canvas.drawImage(content, ui.Offset(m, m) + style.shadowOffset, shadowPaint);
     }
-    canvas.drawRRect(rrect.shift(style.shadowOffset), paint);
-  }
+    canvas.drawImage(content, ui.Offset(m, m), ui.Paint());
+  } else {
+    final contentRect = ui.Rect.fromLTWH(m, m, cw, ch);
+    final rrect = ui.RRect.fromRectAndRadius(
+      contentRect,
+      ui.Radius.circular(style.cornerRadius),
+    );
 
-  // Content, corners rounded (also clips a snapped window's corner-gap pixels).
-  canvas.save();
-  canvas.clipRRect(rrect);
-  canvas.drawImage(content, ui.Offset(m, m), ui.Paint());
-  canvas.restore();
+    // Drop shadow: a blurred fill of the rounded rect, offset behind the content.
+    if (style.shadowBlur > 0 || style.shadowColor.a > 0) {
+      final paint = ui.Paint()..color = style.shadowColor;
+      if (style.shadowBlur > 0) {
+        paint.maskFilter = ui.MaskFilter.blur(
+          ui.BlurStyle.normal,
+          style.shadowBlur,
+        );
+      }
+      canvas.drawRRect(rrect.shift(style.shadowOffset), paint);
+    }
+
+    // Content, corners rounded (also clips a snapped window's corner-gap pixels).
+    canvas.save();
+    canvas.clipRRect(rrect);
+    canvas.drawImage(content, ui.Offset(m, m), ui.Paint());
+    canvas.restore();
+  }
 
   final picture = recorder.endRecording();
   final img = await picture.toImage(outW, outH);

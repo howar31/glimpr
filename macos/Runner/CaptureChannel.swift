@@ -35,6 +35,19 @@ final class CaptureChannel {
         }
       case "focusedWindow":
         result(ScreenCapturer.focusedWindow())
+      case "captureWindowImage":
+        let wid = ((call.arguments as? [String: Any])?["windowId"] as? NSNumber)?
+          .uint32Value ?? 0
+        Task { @MainActor in
+          do {
+            let img = try await self?.capture.captureWindowImage(
+              windowID: CGWindowID(wid))
+            result(img) // nil -> Dart treats as "no image" and falls back
+          } catch {
+            result(FlutterError(
+              code: "capture_failed", message: "\(error)", details: nil))
+          }
+        }
       default: result(FlutterMethodNotImplemented)
       }
     }

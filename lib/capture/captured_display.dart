@@ -7,7 +7,16 @@ class SnapWindow {
   final Rect rect;
   final String title;
   final String app;
-  const SnapWindow({required this.rect, required this.title, required this.app});
+  // The CGWindowID (kCGWindowNumber), used to request a native per-window
+  // capture (real alpha / rounded corners). Null when the native side didn't
+  // emit it -> callers fall back to a rectangular crop.
+  final int? windowId;
+  const SnapWindow({
+    required this.rect,
+    required this.title,
+    required this.app,
+    this.windowId,
+  });
 
   /// Best human label: the window title, or the app name when the title is
   /// unavailable (kCGWindowName can be empty even with Screen-Recording access).
@@ -24,11 +33,15 @@ class FocusedWindowInfo {
     required this.rect,
     required this.title,
     required this.app,
+    this.windowId,
   });
   final int displayId;
   final Rect rect;
   final String title;
   final String app;
+  // CGWindowID (kCGWindowNumber) for a native per-window capture; null -> the
+  // direct "Capture Window" path falls back to a display capture.
+  final int? windowId;
 
   factory FocusedWindowInfo.fromMap(Map<dynamic, dynamic> m) => FocusedWindowInfo(
         displayId: (m['displayId'] as num).toInt(),
@@ -36,6 +49,30 @@ class FocusedWindowInfo {
             (m['w'] as num).toDouble(), (m['h'] as num).toDouble()),
         title: (m['title'] as String?) ?? '',
         app: (m['app'] as String?) ?? '',
+        windowId: (m['windowNumber'] as num?)?.toInt(),
+      );
+}
+
+/// A single window captured natively WITH its real alpha (rounded corners
+/// transparent outside the window shape). [pngBytes] are NATIVE-resolution;
+/// [scale] maps native px -> logical points.
+class WindowImage {
+  const WindowImage({
+    required this.pngBytes,
+    required this.width,
+    required this.height,
+    required this.scale,
+  });
+  final Uint8List pngBytes;
+  final int width;
+  final int height;
+  final double scale;
+
+  factory WindowImage.fromMap(Map<dynamic, dynamic> m) => WindowImage(
+        pngBytes: m['pngBytes'] as Uint8List,
+        width: (m['width'] as num).toInt(),
+        height: (m['height'] as num).toInt(),
+        scale: (m['scale'] as num).toDouble(),
       );
 }
 
@@ -95,6 +132,7 @@ class CapturedDisplay {
               ),
               title: (w['title'] as String?) ?? '',
               app: (w['app'] as String?) ?? '',
+              windowId: (w['windowNumber'] as num?)?.toInt(),
             ))
         .toList(growable: false),
   );

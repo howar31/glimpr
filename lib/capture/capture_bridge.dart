@@ -26,6 +26,17 @@ class CaptureBridge {
     return FocusedWindowInfo.fromMap((res as Map).cast<dynamic, dynamic>());
   }
 
+  /// Capture a single window with real alpha (rounded corners), or null when no
+  /// such window / the native capture failed -> callers fall back to a rect crop.
+  Future<WindowImage?> captureWindowImage(int windowId) async {
+    final res = await _channel.invokeMethod(
+      'captureWindowImage',
+      {'windowId': windowId},
+    );
+    if (res == null) return null;
+    return WindowImage.fromMap((res as Map).cast<dynamic, dynamic>());
+  }
+
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 

@@ -108,6 +108,41 @@ final class ScreenCapturer {
     return out
   }
 
+  /// Capture a SINGLE window with its REAL alpha — the area outside the window's
+  /// rounded-corner shape is transparent (a desktop-independent window filter
+  /// composites only this window). Returns PNG bytes (alpha-preserving) + geometry,
+  /// or nil if no SCWindow matches [windowID] so the caller falls back to a rect
+  /// crop. Faithful to the OS-provided window shape (no assumed corner radius).
+  // Static so BOTH the control engine (CaptureController) and EVERY overlay
+  // engine (the snap mask) can call it — each Flutter engine has its own
+  // `glimpr/capture` handler, so the overlay can't reach the control engine's.
+  static func captureWindowImage(windowID: CGWindowID) async throws -> [String: Any]? {
+    // Fetch shareable content fresh (window sets change between captures) and
+    // find the target window.
+    let shareable = try await SCShareableContent.current
+    guard let window = shareable.windows.first(where: { $0.windowID == windowID })
+    else { return nil }
+
+    // Scale from the window's display (fallback: the main display).
+    let scale = Self.displayForRect(window.frame).map(Self.scaleFactor(for:))
+      ?? Self.scaleFactor(for: CGMainDisplayID())
+    let cfg = SCStreamConfiguration()
+    cfg.width = max(1, Int((window.frame.width * scale).rounded()))
+    cfg.height = max(1, Int((window.frame.height * scale).rounded()))
+    cfg.showsCursor = false
+    cfg.colorSpaceName = CGColorSpace.sRGB
+    let filter = SCContentFilter(desktopIndependentWindow: window)
+    let cg = try await SCScreenshotManager.captureImage(
+      contentFilter: filter, configuration: cfg)
+    guard let png = Self.pngData(from: cg) else { return nil }
+    return [
+      "pngBytes": FlutterStandardTypedData(bytes: png),
+      "width": cfg.width,
+      "height": cfg.height,
+      "scale": Double(scale),
+    ]
+  }
+
   /// Snappable top-level windows on [displayID], as display-local logical rects
   /// [x, y, w, h] (top-left origin), front-to-back. Filters to snappable window
   /// levels — normal app windows (0), floating panels (3), and standalone modal
@@ -161,6 +196,7 @@ final class ScreenCapturer {
         "h": Double(inter.height),
         "title": title,
         "app": app,
+        "windowNumber": (w[kCGWindowNumber as String] as? NSNumber)?.intValue ?? 0,
       ])
     }
     return out
@@ -218,6 +254,7 @@ final class ScreenCapturer {
         "h": Double(inter.height),
         "title": title,
         "app": app,
+        "windowNumber": (w[kCGWindowNumber as String] as? NSNumber)?.intValue ?? 0,
       ]
     }
     return nil
@@ -455,6 +492,21 @@ final class OverlayManager {
             CGAssociateMouseAndMouseCursorPosition(1)
           }
           result(nil)
+        case "captureWindowImage":
+          // The overlay snap fetches the window's real alpha here (this engine
+          // has its OWN glimpr/capture handler, separate from the control one).
+          let wid = ((call.arguments as? [String: Any])?["windowId"] as? NSNumber)?
+            .uint32Value ?? 0
+          Task { @MainActor in
+            do {
+              let img = try await ScreenCapturer.captureWindowImage(
+                windowID: CGWindowID(wid))
+              result(img)
+            } catch {
+              result(FlutterError(
+                code: "capture_failed", message: "\(error)", details: nil))
+            }
+          }
         default: result(FlutterMethodNotImplemented)
         }
       }

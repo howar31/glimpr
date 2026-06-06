@@ -268,6 +268,23 @@ class _OverlayAppState extends State<OverlayApp> {
     );
     _frozen = null;
     _dismiss();
+    // For a window snap, capture the window's real alpha so the export takes the
+    // window's rounded-corner silhouette (frozen pixels + live alpha mask). The
+    // window can't move during the freeze, so the mask aligns with the crop.
+    // Best effort — any failure falls back to the rectangular crop.
+    ui.Image? windowMask;
+    if (kind == CaptureKind.overlaySnap && window?.windowId != null) {
+      try {
+        final wi = await _bridge.captureWindowImage(window!.windowId!);
+        if (wi != null) {
+          final codec = await ui.instantiateImageCodec(wi.pngBytes);
+          windowMask = (await codec.getNextFrame()).image;
+          codec.dispose();
+        }
+      } catch (_) {
+        /* fall back to a rectangular crop */
+      }
+    }
     try {
       final result = await exportAnnotated(
         display: d,
@@ -276,6 +293,7 @@ class _OverlayAppState extends State<OverlayApp> {
         selectionLogical: selectionLogical,
         cap: cap,
         kind: kind,
+        windowMask: windowMask,
         windowTitle: window?.title,
         appName: window?.app,
       );
@@ -293,6 +311,7 @@ class _OverlayAppState extends State<OverlayApp> {
     } catch (e) {
       _bridge.showError('Capture failed: $e');
     } finally {
+      windowMask?.dispose();
       frozen.dispose();
     }
   }

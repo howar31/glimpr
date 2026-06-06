@@ -75,4 +75,23 @@ void main() {
     expect(s.shadowBlur, kDecorShadowBlurLogical * 2.0);
     expect(s.shadowOffset, kDecorShadowOffsetLogical * 2.0);
   });
+
+  test('shapeFromContentAlpha keeps the content alpha (no re-clip)', () async {
+    // Content with a hard transparent right half (a stand-in window silhouette).
+    final rec = ui.PictureRecorder();
+    ui.Canvas(rec).drawRect(
+      const ui.Rect.fromLTWH(0, 0, 50, 60),
+      ui.Paint()..color = const ui.Color(0xFFFF0000),
+    );
+    final pic = rec.endRecording();
+    final content = await pic.toImage(100, 60); // right half transparent
+    pic.dispose();
+    final out = await applyDecoration(content, _plain, shapeFromContentAlpha: true);
+    expect(out.width, 140); // size = content + 2*margin
+    expect(out.height, 100);
+    // over the content's transparent half -> stays transparent (margin 20 +x=90)
+    expect((await _pixel(out, 110, 50))[3], 0);
+    // over the opaque half -> red (margin 20 + content x=10)
+    expect(await _pixel(out, 30, 50), [255, 0, 0, 255]);
+  });
 }

@@ -106,6 +106,31 @@ Future<DeliveryResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) asy
   }
 }
 
+/// Decodes a natively-captured window image (real alpha / rounded corners) and
+/// delivers it directly — the "Capture Window" path. No display crop.
+Future<DeliveryResult> _defaultDeliverWindow(
+    WindowImage wi, CaptureSettings cap, FocusedWindowInfo info) async {
+  final codec = await ui.instantiateImageCodec(wi.pngBytes);
+  final ui.Image image;
+  try {
+    image = (await codec.getNextFrame()).image;
+  } finally {
+    codec.dispose();
+  }
+  try {
+    return await exportWindowImage(
+      windowImage: image,
+      scaleFactor: wi.scale,
+      cap: cap,
+      kind: CaptureKind.focusedWindow,
+      windowTitle: info.title.isEmpty ? null : info.title,
+      appName: info.app.isEmpty ? null : info.app,
+    );
+  } finally {
+    image.dispose();
+  }
+}
+
 /// Orchestrates the three non-interactive capture modes in the control engine.
 /// Collaborators are injectable so the control flow is unit-tested without the
 /// native channel or a real image.
@@ -113,26 +138,35 @@ class DirectCapture {
   DirectCapture({
     Future<List<CapturedDisplay>> Function()? captureFrames,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
+    Future<WindowImage?> Function(int)? captureWindowImage,
     Settings? settings,
     LastRegionStore? regionStore,
     Future<DeliveryResult> Function(CaptureTarget, CaptureSettings)? deliver,
+    Future<DeliveryResult> Function(WindowImage, CaptureSettings, FocusedWindowInfo)?
+        deliverWindow,
     void Function()? shutter,
     void Function()? complete,
     void Function(String)? showError,
   })  : _captureFrames = captureFrames ?? CaptureBridge().captureFrames,
         _focusedWindow = focusedWindow ?? CaptureBridge().focusedWindow,
+        _captureWindowImage =
+            captureWindowImage ?? CaptureBridge().captureWindowImage,
         _settings = settings ?? Settings.instance,
         _regionStore = regionStore ?? LastRegionStore(Settings.instance.store),
         _deliver = deliver ?? _defaultDeliver,
+        _deliverWindow = deliverWindow ?? _defaultDeliverWindow,
         _shutter = shutter ?? (() => playShutter()),
         _complete = complete ?? (() => playComplete()),
         _showError = showError ?? ((m) => CaptureBridge().showError(m));
 
   final Future<List<CapturedDisplay>> Function() _captureFrames;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
+  final Future<WindowImage?> Function(int) _captureWindowImage;
   final Settings _settings;
   final LastRegionStore _regionStore;
   final Future<DeliveryResult> Function(CaptureTarget, CaptureSettings) _deliver;
+  final Future<DeliveryResult> Function(
+      WindowImage, CaptureSettings, FocusedWindowInfo) _deliverWindow;
   final void Function() _shutter;
   final void Function() _complete;
   final void Function(String) _showError;
@@ -140,8 +174,43 @@ class DirectCapture {
   Future<void> screen() =>
       _run((frames) async => resolveScreenTarget(frames));
 
-  Future<void> window() => _run(
-      (frames) async => resolveWindowTarget(frames, await _focusedWindow()));
+  /// Capture the focused window with its REAL shape (rounded corners) via the
+  /// native per-window path; on any miss (no focused window, no window id, or a
+  /// failed per-window capture) fall back to the previous rectangular crop.
+  Future<void> window() async {
+    final info = await _focusedWindow();
+    if (info?.windowId != null) {
+      final cap = await _settings.loadCapture();
+      WindowImage? wi;
+      try {
+        wi = await _captureWindowImage(info!.windowId!);
+      } catch (_) {
+        wi = null; // fall through to the rectangular crop
+      }
+      if (wi != null) {
+        if (cap.shutterSound) _shutter();
+        try {
+          final result = await _deliverWindow(wi, cap, info!);
+          final ok = (!cap.saveToFile || result.savedOk) &&
+              (!cap.copyToClipboard || result.copiedToClipboard);
+          if (ok) {
+            if (cap.completionSound) _complete();
+          } else {
+            _showError('Capture failed');
+          }
+        } catch (e) {
+          _showError('Capture failed: $e');
+        }
+        // Record the window's rect so "Capture Last Region" can repeat it.
+        await _regionStore.save(
+            LastRegion(displayId: info!.displayId, rect: info.rect));
+        return;
+      }
+    }
+    // Fallback: the original rectangular window crop (whole display if there is
+    // no focused window) — real corners unavailable, but capture still works.
+    await _run((frames) async => resolveWindowTarget(frames, info));
+  }
 
   Future<void> lastRegion() => _run(
       (frames) async => resolveLastRegionTarget(frames, await _regionStore.load()));

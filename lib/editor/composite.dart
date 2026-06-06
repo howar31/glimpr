@@ -43,6 +43,8 @@ Future<Uint8List> compositeAndCrop({
   int jpegQuality = 90,
   DecorationStyle? decoration,
   ui.Color decorationJpegFill = const ui.Color(0xFFFFFFFF),
+  ui.Image? windowMask,
+  bool decorationShapeFromAlpha = false,
 }) async {
   final crop = nativeCropRect(
     selectionLogical: selectionLogical,
@@ -89,13 +91,39 @@ Future<Uint8List> compositeAndCrop({
   // colour; PNG keeps it transparent. The output is larger than the crop, so the
   // encoder uses the decorated image's own dimensions below.
   ui.Image output = cropped;
+  // Window-shape mask: keep the cropped pixels only where the window's real
+  // alpha is opaque (dstIn) -> faithful rounded corners. Only the mask's alpha
+  // matters; it is scaled to the crop so a ≤1px geometry difference leaves no seam.
+  if (windowMask != null) {
+    final rec = ui.PictureRecorder();
+    final cv = ui.Canvas(rec);
+    cv.drawImage(output, ui.Offset.zero, ui.Paint());
+    cv.drawImageRect(
+      windowMask,
+      ui.Rect.fromLTWH(
+        0,
+        0,
+        windowMask.width.toDouble(),
+        windowMask.height.toDouble(),
+      ),
+      ui.Rect.fromLTWH(0, 0, output.width.toDouble(), output.height.toDouble()),
+      ui.Paint()..blendMode = ui.BlendMode.dstIn,
+    );
+    final pic = rec.endRecording();
+    final masked = await pic.toImage(output.width, output.height);
+    pic.dispose();
+    output.dispose();
+    output = masked;
+  }
   if (decoration != null) {
-    output = await applyDecoration(
-      cropped,
+    final decorated = await applyDecoration(
+      output,
       decoration,
       fill: jpeg ? decorationJpegFill : null,
+      shapeFromContentAlpha: decorationShapeFromAlpha,
     );
-    cropped.dispose(); // the un-decorated intermediate
+    output.dispose(); // the un-decorated intermediate (cropped or masked)
+    output = decorated;
   }
   final ow = output.width;
   final oh = output.height;

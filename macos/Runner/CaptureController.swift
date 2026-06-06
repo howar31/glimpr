@@ -20,6 +20,15 @@ final class CaptureController {
     return try await capturer.captureAll()
   }
 
+  /// Capture a single window with real alpha (rounded corners), or nil when no
+  /// such window — for the direct "Capture Window" mode and the overlay snap mask.
+  func captureWindowImage(windowID: CGWindowID) async throws -> [String: Any]? {
+    guard capturer.hasPermissionOrRequest() else {
+      throw ScreenCapturer.CaptureError.noDisplays
+    }
+    return try await ScreenCapturer.captureWindowImage(windowID: windowID)
+  }
+
   func triggerCapture() {
     // Whole body on the main actor: NSAlert + the AppKit overlay work are all
     // MainActor-isolated, and triggerCapture() itself stays nonisolated so it is

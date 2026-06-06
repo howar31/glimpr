@@ -22,6 +22,7 @@ Future<DeliveryResult> exportAnnotated({
   required Rect? selectionLogical,
   required CaptureSettings cap,
   required CaptureKind kind,
+  ui.Image? windowMask,
   String? windowTitle,
   String? appName,
 }) async {
@@ -40,6 +41,55 @@ Future<DeliveryResult> exportAnnotated({
     jpegQuality: cap.jpegQuality,
     decoration: decoration,
     decorationJpegFill: ui.Color(cap.decorationJpegFill),
+    // A window snap masks the cropped composite to the window's real shape; the
+    // decoration shadow then follows that silhouette.
+    windowMask: windowMask,
+    decorationShapeFromAlpha: windowMask != null,
+  );
+  return deliverCapture(
+    pngBytes: bytes,
+    saveDir: cap.saveDir,
+    fileName: buildScreenshotName(
+      template: cap.filenameTemplate,
+      t: DateTime.now(),
+      windowTitle: windowTitle,
+      appName: appName,
+      ext: cap.fileExtension,
+    ),
+    soundFn: () async {},
+    saveToFile: cap.saveToFile,
+    copyToClipboard: cap.copyToClipboard,
+  );
+}
+
+/// Deliver a natively-captured window image (already alpha-shaped, real rounded
+/// corners) — for the direct "Capture Window" mode. No crop, no annotations;
+/// decoration (if enabled for [kind]) follows the real silhouette.
+Future<DeliveryResult> exportWindowImage({
+  required ui.Image windowImage,
+  required double scaleFactor,
+  required CaptureSettings cap,
+  required CaptureKind kind,
+  String? windowTitle,
+  String? appName,
+}) async {
+  final decoration = cap.decorateFor(kind)
+      ? DecorationStyle.scaled(scaleFactor)
+      : null;
+  final bytes = await compositeAndCrop(
+    frozen: windowImage,
+    drawables: const [],
+    scaleFactor: scaleFactor,
+    logicalSize: Size(
+      windowImage.width / scaleFactor,
+      windowImage.height / scaleFactor,
+    ),
+    selectionLogical: null,
+    jpeg: cap.isJpeg,
+    jpegQuality: cap.jpegQuality,
+    decoration: decoration,
+    decorationJpegFill: ui.Color(cap.decorationJpegFill),
+    decorationShapeFromAlpha: true,
   );
   return deliverCapture(
     pngBytes: bytes,
