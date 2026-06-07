@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../capture/captured_display.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
+import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../shortcuts/hotkey_binding.dart';
 import 'overlay_editor_host.dart';
@@ -22,6 +23,7 @@ class EditorCanvas extends StatelessWidget {
   final bool rightClickExits;
   final Map<String, HotkeyBinding?> editorBindings;
   final LoupeConfig loupe;
+  final HudConfig hud;
   // The captured OS mouse pointer (toggleable cursor layer) + its logical
   // top-left; null when there is none.
   final ui.Image? cursorImage;
@@ -37,6 +39,7 @@ class EditorCanvas extends StatelessWidget {
     required this.activeSignal,
     required this.editorBindings,
     this.loupe = const LoupeConfig(),
+    this.hud = const HudConfig(),
     this.rightClickExits = true,
     this.cursorImage,
     this.cursorTopLeft,
@@ -48,6 +51,7 @@ class EditorCanvas extends StatelessWidget {
       controller: controller,
       editorBindings: editorBindings,
       loupe: loupe,
+      hud: hud,
       host: OverlayEditorHost(
         display: display,
         frozen: frozenImage,

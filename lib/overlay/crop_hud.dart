@@ -1,54 +1,66 @@
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../editor/drawable.dart';
 import '../editor/drawable_painter.dart';
 import '../theme/glimpr_theme.dart';
+import 'hud_lines.dart';
 
-/// Full-screen crosshair lines through [cursor] (logical coords). Uses an
-/// inverting blend (BlendMode.difference with white) so the line flips whatever
-/// is behind it and stays visible over any background, bright or dark.
+/// Half-length of each reticle plus-arm (logical px). Shared so the crosshair can
+/// leave a matching gap around the cursor where the reticle sits.
+const double kReticleArm = 9.0;
+
+/// Full-screen crosshair lines through [cursor] (logical coords). Two-tone marching
+/// ants (see [drawMarchingLine]) so a thin line stays visible on any background.
+/// When [hole] > 0 each line is split to leave a clear square of that radius around
+/// the cursor, so the overlaid [ReticlePainter] reads cleanly in the centre.
 class CrosshairPainter extends CustomPainter {
   final Offset cursor;
-  const CrosshairPainter(this.cursor);
+  final ValueListenable<double>? march;
+  final double hole;
+  const CrosshairPainter(this.cursor, {this.march, this.hole = 0})
+    : super(repaint: march);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..strokeWidth = 1
-      ..blendMode = BlendMode.difference;
-    canvas.drawLine(
-      Offset(0, cursor.dy + 0.5),
-      Offset(size.width, cursor.dy + 0.5),
-      p,
-    );
-    canvas.drawLine(
-      Offset(cursor.dx + 0.5, 0),
-      Offset(cursor.dx + 0.5, size.height),
-      p,
-    );
+    final phase = (march?.value ?? 0) * kHudDashPeriod;
+    final cx = cursor.dx + 0.5;
+    final cy = cursor.dy + 0.5;
+    if (hole <= 0) {
+      drawMarchingLine(canvas, Offset(0, cy), Offset(size.width, cy),
+          phase: phase);
+      drawMarchingLine(canvas, Offset(cx, 0), Offset(cx, size.height),
+          phase: phase);
+      return;
+    }
+    // Split each line around the cursor, leaving a clear centre for the reticle.
+    drawMarchingLine(canvas, Offset(0, cy), Offset(cx - hole, cy), phase: phase);
+    drawMarchingLine(canvas, Offset(cx + hole, cy), Offset(size.width, cy),
+        phase: phase);
+    drawMarchingLine(canvas, Offset(cx, 0), Offset(cx, cy - hole), phase: phase);
+    drawMarchingLine(canvas, Offset(cx, cy + hole), Offset(cx, size.height),
+        phase: phase);
   }
 
   @override
-  bool shouldRepaint(CrosshairPainter old) => old.cursor != cursor;
+  bool shouldRepaint(CrosshairPainter old) =>
+      old.cursor != cursor || old.march != march || old.hole != hole;
 }
 
 /// A SMALL inverting reticle (a short plus) drawn at [cursor] — the precise-aim
 /// cursor that replaces the system arrow for the drawing tools (rectangle, arrow,
 /// pen, etc.). The region tools (crop / blur / pixelate) use the full-screen
-/// [CrosshairPainter] + loupe instead. Same inverting blend (difference with
-/// white) as the full crosshair, so it stays visible over any background.
+/// [CrosshairPainter] + loupe instead. Shares the HUD line identity (white +
+/// inverting blend + width) with the crosshair, but stays SOLID on purpose (no
+/// marching ants) — a steady aim point distinct from the animated region lines.
 class ReticlePainter extends CustomPainter {
   final Offset cursor;
   final double arm; // half-length of each plus stroke, in logical px
-  const ReticlePainter(this.cursor, {this.arm = 9});
+  const ReticlePainter(this.cursor, {this.arm = kReticleArm});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..strokeWidth = 1
-      ..blendMode = BlendMode.difference;
+    final p = hudReticlePaint();
     canvas.drawLine(
       Offset(cursor.dx - arm, cursor.dy + 0.5),
       Offset(cursor.dx + arm, cursor.dy + 0.5),
@@ -160,7 +172,6 @@ class LoupePainter extends CustomPainter {
       canvas.translate(-cursorLogical.dx, -cursorLogical.dy);
       DrawablePainter(
         drawables: drawables,
-        selectedIndex: null,
         blurredFull: blurredFull,
         pixelatedFull: pixelatedFull,
       ).paint(canvas, logicalSize);
@@ -296,28 +307,28 @@ class BoxSizeLabel extends StatelessWidget {
 }
 
 /// A snap highlight around a hovered window: a single rounded outline drawn with
-/// an inverting blend (BlendMode.difference), like the crosshair/reticle, so a
-/// thin line stays visible on any backdrop. Center is untouched (transparent),
-/// so the window content stays fully visible; rounded corners approximate native
-/// window radii (macOS/Windows).
+/// the shared HUD line identity (white + inverting BlendMode.difference, so a thin
+/// line stays visible on any backdrop) and animated as marching ants via [march].
+/// Center is untouched (transparent), so the window content stays fully visible;
+/// rounded corners approximate native window radii (macOS/Windows).
 class WindowHighlightPainter extends CustomPainter {
   final Rect rect;
   final double radius;
-  const WindowHighlightPainter(this.rect, {this.radius = 10});
+  final ValueListenable<double>? march;
+  const WindowHighlightPainter(this.rect, {this.radius = 10, this.march})
+    : super(repaint: march);
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(radius)),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = const Color(0xFFFFFFFF)
-        ..blendMode = BlendMode.difference,
+    final phase = (march?.value ?? 0) * kHudDashPeriod;
+    drawMarchingPolyline(
+      canvas,
+      roundedRectPolyline(rect, radius),
+      phase: phase,
     );
   }
 
   @override
   bool shouldRepaint(WindowHighlightPainter old) =>
-      old.rect != rect || old.radius != radius;
+      old.rect != rect || old.radius != radius || old.march != march;
 }

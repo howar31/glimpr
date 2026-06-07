@@ -68,6 +68,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _shutterSound = true;
   bool _completionSound = true;
   bool _rightClickExits = true;
+  bool _confirmOnExit = true;
   bool _captureCursor = false;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
@@ -84,6 +85,8 @@ class _SettingsAppState extends State<SettingsApp>
   int _decorationJpegFill = 0xFFFFFFFF;
   int _loupeSpan = kLoupeSpanDefault;
   int _loupeZoom = kLoupeZoomDefault;
+  bool _hudCrosshair = true;
+  bool _hudMarchingAnts = true;
   final _filenameController = TextEditingController();
 
   // Shortcuts draft: null until the user first opens the Shortcuts pane. Only
@@ -139,6 +142,7 @@ class _SettingsAppState extends State<SettingsApp>
     final shutter = await _s.getShutterSound();
     final complete = await _s.getCompletionSound();
     final rightClick = await _s.getRightClickExits();
+    final confirmOnExit = await _s.getConfirmOnExit();
     final captureCursor = await _s.getCaptureCursor();
     final template = await _s.getFilenameTemplate();
     final decSnap = await _s.getDecorateSnap();
@@ -149,6 +153,8 @@ class _SettingsAppState extends State<SettingsApp>
     final decFill = await _s.getDecorationJpegFill();
     final loupeSpan = await _s.getLoupeSpan();
     final loupeZoom = await _s.getLoupeZoom();
+    final hudCrosshair = await _s.getHudCrosshair();
+    final hudMarchingAnts = await _s.getHudMarchingAnts();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -159,6 +165,7 @@ class _SettingsAppState extends State<SettingsApp>
       _shutterSound = shutter;
       _completionSound = complete;
       _rightClickExits = rightClick;
+      _confirmOnExit = confirmOnExit;
       _captureCursor = captureCursor;
       _filenameTemplate = template;
       _decorateSnap = decSnap;
@@ -169,6 +176,8 @@ class _SettingsAppState extends State<SettingsApp>
       _decorationJpegFill = decFill;
       _loupeSpan = loupeSpan;
       _loupeZoom = loupeZoom;
+      _hudCrosshair = hudCrosshair;
+      _hudMarchingAnts = hudMarchingAnts;
     });
     _filenameController.text = template;
     // Login state comes from the OS (SMAppService) over a native channel; query
@@ -389,10 +398,53 @@ class _SettingsAppState extends State<SettingsApp>
             },
           ),
         ),
+        SettingRow(
+          divider: true,
+          title: 'Confirm before discarding',
+          hint: 'When exiting a capture that still has annotations (right-click '
+              'or Esc), ask before discarding them.',
+          trailing: GlassToggle(
+            value: _confirmOnExit,
+            onChanged: (v) async {
+              await _s.setConfirmOnExit(v);
+              if (mounted) setState(() => _confirmOnExit = v);
+            },
+          ),
+        ),
       ]),
       const SizedBox(height: 15),
       const SectionLabel('Loupe', icon: Icons.zoom_in),
       GlassCard.padded(child: _loupeBody(t)),
+      const SizedBox(height: 15),
+      const SectionLabel('Overlay HUD', icon: Icons.grid_goldenratio),
+      GlassCard.rows([
+        SettingRow(
+          title: 'Crosshair',
+          hint: 'Show the full-screen crosshair lines for the region tools '
+              '(crop / blur / pixelate). The centre reticle and loupe stay '
+              'either way.',
+          trailing: GlassToggle(
+            value: _hudCrosshair,
+            onChanged: (v) async {
+              await _s.setHudCrosshair(v);
+              if (mounted) setState(() => _hudCrosshair = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Animate marching ants',
+          hint: 'Flow the dashed selection / crosshair / window outlines. Turn '
+              'off for static dashes (less motion, slightly lighter).',
+          trailing: GlassToggle(
+            value: _hudMarchingAnts,
+            onChanged: (v) async {
+              await _s.setHudMarchingAnts(v);
+              if (mounted) setState(() => _hudMarchingAnts = v);
+            },
+          ),
+        ),
+      ]),
       const SizedBox(height: 15),
       const SectionLabel('Startup', icon: Icons.power_settings_new),
       GlassCard.rows([

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
@@ -8,6 +9,7 @@ import '../capture/captured_display.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../overlay/crop_hud.dart';
+import '../overlay/hud_lines.dart';
 import '../overlay/selection_controller.dart';
 import '../overlay/selection_scrim.dart';
 import '../overlay/toolbar.dart';
@@ -17,6 +19,7 @@ import 'drawable_painter.dart';
 import 'editor_controller.dart';
 import 'editor_host.dart';
 import 'hit_test.dart';
+import 'hud_config.dart';
 import 'loupe_config.dart';
 import 'raster.dart';
 import 'text_metrics.dart';
@@ -71,6 +74,9 @@ class EditorCore extends StatefulWidget {
   // Pixel-loupe geometry (size + magnification), loaded from settings by the
   // host app; shared so the overlay and the image editor look identical.
   final LoupeConfig loupe;
+  // HUD options (crosshair lines on/off, marching-ants animation on/off), loaded
+  // from settings by the host app; shared across both surfaces.
+  final HudConfig hud;
   const EditorCore({
     super.key,
     required this.controller,
@@ -78,6 +84,7 @@ class EditorCore extends StatefulWidget {
     required this.host,
     this.viewportController,
     this.loupe = const LoupeConfig(),
+    this.hud = const HudConfig(),
   });
 
   @override
@@ -385,6 +392,14 @@ class _EditorCoreState extends State<EditorCore> {
     c.stopEyedropper();
   }
 
+  // Marching-ants phase (0..1) for the precise-aim HUD lines (crosshair, crop
+  // selection border, window-snap highlight). Driven by a ~30fps [Timer] only
+  // while one of those is visible (see [_syncMarch]) — not a 60fps vsync ticker —
+  // so it stays cheap and doesn't spin frames when a drawing tool is active. The
+  // painters listen via CustomPainter(repaint:), so only they repaint each tick.
+  final ValueNotifier<double> _march = ValueNotifier<double>(0);
+  Timer? _marchTimer;
+
   @override
   void initState() {
     super.initState();
@@ -407,6 +422,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.addListener(_onToolChanged);
     c.eyedropperActive.addListener(_rebuild);
     c.showCursor.addListener(_rebuild);
+    c.refocus.addListener(_onRefocusRequested);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
@@ -426,6 +442,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.removeListener(_onToolChanged);
     c.eyedropperActive.removeListener(_rebuild);
     c.showCursor.removeListener(_rebuild);
+    c.refocus.removeListener(_onRefocusRequested);
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
@@ -439,7 +456,35 @@ class _EditorCoreState extends State<EditorCore> {
     _focus.dispose();
     _crop.dispose();
     _textFocus.dispose();
+    _marchTimer?.cancel();
+    _march.dispose();
     super.dispose();
+  }
+
+  /// Runs the marching-ants animation only while a dashed HUD line is on screen
+  /// (the crosshair, or a window-snap highlight); idle otherwise so we don't
+  /// schedule timers/frames for nothing. Safe to call every build (idempotent).
+  void _syncMarch(bool active) {
+    if (active) {
+      _marchTimer ??= Timer.periodic(kHudMarchTick, (_) {
+        final step =
+            kHudMarchTick.inMilliseconds / kHudMarchDuration.inMilliseconds;
+        _march.value = (_march.value + step) % 1.0;
+      });
+    } else {
+      _marchTimer?.cancel();
+      _marchTimer = null;
+    }
+  }
+
+  /// Re-acquire keyboard focus when the controller asks for it (after a modal
+  /// dialog closes, or the window regains key). Tool shortcuts run through
+  /// [_focus], which a popped route / window-key change doesn't reliably restore.
+  /// Post-frame so it lands after the route pop / rebuild settles.
+  void _onRefocusRequested() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
   }
 
   /// While editing, a toolbar style change applies to the whole text box: the
@@ -887,7 +932,8 @@ class _EditorCoreState extends State<EditorCore> {
 
   bool _nearHandles(Drawable d, Offset p) {
     if (d is RectShaped) {
-      for (final corner in _rectCorners((d as RectShaped).rect.inflate(4))) {
+      // Corners are flush with the shape's bounds (matching the drawn handles).
+      for (final corner in _rectCorners((d as RectShaped).rect)) {
         if ((corner - p).distance <= 16) return true;
       }
     }
@@ -1130,8 +1176,9 @@ class _EditorCoreState extends State<EditorCore> {
     //     draw / move / resize reverts), stay in capture;
     //  2) over a SAME-TYPE drawable (the active tool only deletes its own type,
     //     mirroring left-click selection) -> DELETE it, stay;
-    //  3) otherwise -> EXIT the capture, like Esc (nothing of the active tool's
-    //     type is under the cursor, so for that tool the spot is "empty").
+    //  3) an annotation is selected -> DESELECT it (a safe step-back), stay;
+    //  4) otherwise -> EXIT the capture, like Esc (nothing selected, and nothing
+    //     of the active tool's type under the cursor, so the spot is "empty").
     if (_cancelActiveGesture()) return;
     // Crop (and any tool with no own drawable type: _typeFilter() == null) never
     // deletes — right-click falls through to exit, over a drawable or empty space
@@ -1158,8 +1205,15 @@ class _EditorCoreState extends State<EditorCore> {
       c.selectedIndex.value = null;
       return;
     }
-    // Nothing of the active tool's type here -> exit, unless the user disabled
-    // right-click-to-exit in settings (Esc still exits regardless).
+    // A visible annotation selection -> right-click on empty space DESELECTS it
+    // first (a safe step-back), so only a second right-click (nothing selected)
+    // exits. Skipped in the crop phase (no annotation selection is shown there).
+    if (!_inCrop && c.selectedIndex.value != null) {
+      c.selectedIndex.value = null;
+      return;
+    }
+    // Nothing selected and nothing of the active tool's type here -> exit, unless
+    // the user disabled right-click-to-exit in settings (Esc still exits).
     if (widget.host.rightClickExits) widget.host.onCancel();
   }
 
@@ -1250,7 +1304,7 @@ class _EditorCoreState extends State<EditorCore> {
       for (var idx = drawables.length - 1; idx >= 0; idx--) {
         final d = drawables[idx];
         if (d is! RectShaped || (filter != null && !filter(d))) continue;
-        final corners = _rectCorners((d as RectShaped).rect.inflate(4));
+        final corners = _rectCorners((d as RectShaped).rect);
         for (var ci = 0; ci < corners.length; ci++) {
           if ((corners[ci] - p).distance <= 16) {
             _editIndex = idx;
@@ -1557,17 +1611,35 @@ class _EditorCoreState extends State<EditorCore> {
     final layer = CustomPaint(
       painter: DrawablePainter(
         // Annotations always paint (so an inactive display still shows its
-        // drawings); only the selection highlight is gated on focus.
+        // drawings); the selection highlight is a SEPARATE animated layer
+        // (see [_selectionHighlight]) so marching ants don't re-rasterize this.
         drawables: _effectiveDrawables(),
-        selectedIndex: (!_active || inCrop || _editingText)
-            ? null
-            : c.selectedIndex.value,
         blurredFull: _blurredFull,
         pixelatedFull: _pixelatedFull,
       ),
       size: _canvasSize,
     );
     return _interactive ? ClipRect(child: layer) : layer;
+  }
+
+  /// The selected drawable's flowing highlight, in its own layer so it can
+  /// animate without re-rasterizing the annotation content. One child either way
+  /// (an empty box when nothing is selected), keeping the Stack child count stable.
+  Widget _selectionHighlight(bool inCrop) {
+    final selIdx = (!_active || inCrop || _editingText)
+        ? null
+        : c.selectedIndex.value;
+    final drawables = _effectiveDrawables();
+    final selected = (selIdx != null && selIdx >= 0 && selIdx < drawables.length)
+        ? drawables[selIdx]
+        : null;
+    if (selected == null) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: CustomPaint(
+        size: _canvasSize,
+        painter: SelectionHighlightPainter(selected: selected, march: _march),
+      ),
+    );
   }
 
   /// The editor's pixel loupe, positioned in SCREEN space at the cursor's
@@ -1699,6 +1771,15 @@ class _EditorCoreState extends State<EditorCore> {
                   ? _fullDisplayRect
                   : null))
         : null;
+    // Marching ants run only while a dashed HUD element is shown AND the user has
+    // not turned the animation off (then the dashes are static). A selection
+    // highlight can also be visible without the crosshair, so include it.
+    final hasSelection = _active && !inCrop && !_editingText &&
+        c.selectedIndex.value != null;
+    _syncMarch(
+      widget.hud.marchingAnts &&
+          (showHud || snapTarget != null || hasSelection),
+    );
     // Outermost listener tracks the cursor for the crosshair from the RAW
     // pointer stream — fires everywhere (incl. over the toolbar, and after a
     // right-click ends the pan), so the crosshair follows continuously on the
@@ -1852,6 +1933,9 @@ class _EditorCoreState extends State<EditorCore> {
                     ),
                   ),
                 RepaintBoundary(child: _annotationLayer(inCrop)),
+                // Selection highlight (flowing marching-ants outline + handles),
+                // separate from the annotation layer so it animates cheaply.
+                _selectionHighlight(inCrop),
                 // Our own text-selection highlight — shown when the inline field is
                 // blurred (e.g. while typing a pt value), so the selected range stays
                 // visible. When the field is focused it draws its own highlight.
@@ -1890,6 +1974,14 @@ class _EditorCoreState extends State<EditorCore> {
                           children: [
                             CustomPaint(
                               painter: SelectionScrimPainter(selection: rect),
+                            ),
+                            // Marching outline in its own layer so the cheap line
+                            // redraw — not the costly scrim — repaints each frame.
+                            CustomPaint(
+                              painter: SelectionBorderPainter(
+                                selection: rect,
+                                march: _march,
+                              ),
                             ),
                             // Editor: corner handles on a pending selection so it
                             // can be resized/moved before confirming the trim.
@@ -1950,7 +2042,7 @@ class _EditorCoreState extends State<EditorCore> {
                             size: _canvasSize,
                             painter: rect == null
                                 ? null
-                                : WindowHighlightPainter(rect),
+                                : WindowHighlightPainter(rect, march: _march),
                           ),
                         ),
                       ),
@@ -1958,11 +2050,25 @@ class _EditorCoreState extends State<EditorCore> {
                 // raster region tools (blur/pixelate), active display only. OVERLAY
                 // only (canvas-space); the editor renders its HUD in the outer
                 // stack (screen-space) so it floats over the whole window.
+                if (showHud && !_interactive && widget.hud.crosshair)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      size: _canvasSize,
+                      painter: CrosshairPainter(
+                        _cursor,
+                        march: _march,
+                        hole: kReticleArm + 3,
+                      ),
+                    ),
+                  ),
+                // Centre reticle for the region tools — always shown with the HUD,
+                // independent of the crosshair-lines toggle, so there's always a
+                // precise aim point at the cursor.
                 if (showHud && !_interactive)
                   IgnorePointer(
                     child: CustomPaint(
                       size: _canvasSize,
-                      painter: CrosshairPainter(_cursor),
+                      painter: ReticlePainter(_cursor),
                     ),
                   ),
                 // Loupe is bound to the crosshair — shown/hidden together, so it
@@ -2139,15 +2245,21 @@ class _EditorCoreState extends State<EditorCore> {
                 // incl. the checkerboard margin — instead of being clipped to the
                 // image like the annotations. Hidden when the cursor leaves the
                 // image (showHud / _showsReticle gate on _overCanvas).
-                if (showHud)
+                if (showHud && widget.hud.crosshair)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: CustomPaint(
-                        painter: CrosshairPainter(v.toLocal(_cursor)),
+                        painter: CrosshairPainter(
+                          v.toLocal(_cursor),
+                          march: _march,
+                          hole: kReticleArm + 3,
+                        ),
                       ),
                     ),
                   ),
-                if (_showsReticle)
+                // Centre reticle for region tools (always with the HUD), plus the
+                // drawing-tools reticle — both in screen space.
+                if (showHud || _showsReticle)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: CustomPaint(

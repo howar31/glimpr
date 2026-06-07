@@ -7,12 +7,14 @@ import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../output/deliver.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
+import '../theme/confirm_dialog.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
@@ -46,6 +48,11 @@ class _OverlayAppState extends State<OverlayApp> {
   // ShortcutStore.all() returns the same merged shape.
   Map<String, HotkeyBinding?> _editorBindings = {...kDefaultBindings};
   LoupeConfig _loupe = const LoupeConfig();
+  HudConfig _hud = const HudConfig();
+  // Navigator for the exit-confirmation dialog; re-entrancy guard so a second
+  // Esc / right-click while it's open never stacks dialogs.
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  bool _confirmingExit = false;
   // True while a ⌘, Settings detour has paused this freeze -> show the dim mask.
   bool _settingsOpen = false;
   EditorController? _editor;
@@ -162,6 +169,10 @@ class _OverlayAppState extends State<OverlayApp> {
         Settings.instance.loadLoupe().then((l) {
           if (mounted) setState(() => _loupe = l);
         });
+        // HUD options (crosshair lines + marching-ants animation).
+        Settings.instance.loadHud().then((h) {
+          if (mounted) setState(() => _hud = h);
+        });
       },
       onCaptureFailed: (reason, msg) {
         if (mounted) _resetState();
@@ -176,6 +187,9 @@ class _OverlayAppState extends State<OverlayApp> {
       onResume: () {
         if (mounted) setState(() => _settingsOpen = false);
         _reloadSettings();
+        // Settings took keyboard focus; hand it back so tool shortcuts work
+        // without a click (the native side re-keys the overlay window).
+        _editor?.requestFocus();
       },
     );
   }
@@ -189,6 +203,9 @@ class _OverlayAppState extends State<OverlayApp> {
   void _reloadSettings() {
     Settings.instance.loadLoupe().then((l) {
       if (mounted) setState(() => _loupe = l);
+    });
+    Settings.instance.loadHud().then((h) {
+      if (mounted) setState(() => _hud = h);
     });
     Settings.instance.loadCapture().then((c) {
       if (mounted) setState(() => _capture = c);
@@ -286,6 +303,36 @@ class _OverlayAppState extends State<OverlayApp> {
   void _dismiss() {
     _resetState();
     _bridge.dismissOverlay();
+  }
+
+  /// Cancel path (Esc / right-click on empty space). Confirms first when there are
+  /// unsaved annotations and the setting is on, so an accidental exit can't waste
+  /// them; export (success) never routes here.
+  Future<void> _onCancelRequested() async {
+    if (_confirmingExit) return;
+    final editor = _editor;
+    final hasAnnotations =
+        editor != null && editor.document.value.drawables.isNotEmpty;
+    if (hasAnnotations && await Settings.instance.getConfirmOnExit()) {
+      final ctx = _navigatorKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        _confirmingExit = true;
+        final ok = await showDiscardConfirm(
+          ctx,
+          title: 'Discard capture?',
+          message: 'You have unsaved annotations on this capture. '
+              'Discard them and exit?',
+        );
+        _confirmingExit = false;
+        if (!ok) {
+          // Staying in the capture: the dialog took keyboard focus; hand it back
+          // to the editor so tool shortcuts work without a manual click.
+          editor.requestFocus();
+          return;
+        }
+      }
+    }
+    _dismiss();
   }
 
   Future<void> _onExport(Rect? selectionLogical, SnapWindow? window) async {
@@ -403,6 +450,7 @@ class _OverlayAppState extends State<OverlayApp> {
     final editor = _editor;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),
       home: (d == null || frozen == null || editor == null)
           // Idle: fully transparent until a capture sets the frozen frame.
@@ -420,11 +468,12 @@ class _OverlayAppState extends State<OverlayApp> {
                   frozenImage: frozen,
                   controller: editor,
                   onExport: _onExport,
-                  onCancel: _dismiss,
+                  onCancel: _onCancelRequested,
                   activeSignal: _activeSignal,
                   rightClickExits: _capture.rightClickExits,
                   editorBindings: _editorBindings,
                   loupe: _loupe,
+                  hud: _hud,
                   cursorImage: _cursorImage,
                   cursorTopLeft: _cursorTopLeft,
                 ),

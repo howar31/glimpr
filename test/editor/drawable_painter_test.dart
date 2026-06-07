@@ -30,41 +30,67 @@ void main() {
     const PixelateDrawable(Rect.fromLTWH(180, 130, 50, 40), style),
   ];
 
-  testWidgets('paints every drawable type (ellipse selected -> handles)', (
+  testWidgets('paints every drawable type without throwing', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CustomPaint(
+          size: const Size(300, 300),
+          painter: DrawablePainter(drawables: everyType),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  // The selection highlight (flowing outline + handles) is now a separate painter.
+  testWidgets('selection: rect-shaped -> flowing box + resize handles', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CustomPaint(
           size: const Size(300, 300),
-          painter: DrawablePainter(drawables: everyType, selectedIndex: 1),
+          // index 1 == EllipseDrawable (RectShaped) -> box + corner handles.
+          painter: SelectionHighlightPainter(selected: everyType[1]),
         ),
       ),
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('selecting a segment draws endpoint handles', (tester) async {
+  testWidgets('selection: segment -> endpoint handles', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CustomPaint(
           size: const Size(300, 300),
           // index 2 == ArrowDrawable (Segmented) -> two endpoint handles, no throw.
-          painter: DrawablePainter(drawables: everyType, selectedIndex: 2),
+          painter: SelectionHighlightPainter(selected: everyType[2]),
         ),
       ),
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('selecting a move-only drawable skips handles', (tester) async {
+  testWidgets('selection: move-only -> box, no handles', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CustomPaint(
           size: const Size(300, 300),
           // index 6 == TextDrawable (neither RectShaped nor Segmented) -> a bare
-          // selection rect, no handles, no throw.
-          painter: DrawablePainter(drawables: everyType, selectedIndex: 6),
+          // flowing box, no handles, no throw.
+          painter: SelectionHighlightPainter(selected: everyType[6]),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selection: null selected -> no-op', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CustomPaint(
+          size: const Size(300, 300),
+          painter: SelectionHighlightPainter(selected: null),
         ),
       ),
     );

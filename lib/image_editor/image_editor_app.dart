@@ -9,6 +9,7 @@ import '../editor/draw_style.dart';
 import '../editor/document.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
+import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
@@ -18,6 +19,7 @@ import '../settings/settings_mask.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
+import '../theme/confirm_dialog.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'checkerboard.dart';
@@ -67,6 +69,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Timer? _persistTimer; // debounces saving _toolStyles to the shared store
   Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
   LoupeConfig _loupe = const LoupeConfig();
+  HudConfig _hud = const HudConfig();
   CaptureSettings _cap = CaptureSettings.defaults;
   // Mask state derived from the GLOBAL "Settings open" signal + this window's
   // active state: mask when Settings is open AND the editor isn't the active
@@ -114,6 +117,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       Settings.instance.loadLoupe().then((l) {
         if (mounted) setState(() => _loupe = l);
       }).catchError((_) {});
+      Settings.instance.loadHud().then((h) {
+        if (mounted) setState(() => _hud = h);
+      }).catchError((_) {});
     } catch (_) {}
 
     // Load the recent-images list and push it to the native menu-bar submenu.
@@ -141,9 +147,15 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       } else if (call.method == 'settingsClosed') {
         if (mounted) setState(() => _settingsVisible = false);
         _reload();
+        // Settings took focus; hand it back to the canvas so shortcuts resume
+        // (the native side re-keys the editor window).
+        _controller?.requestFocus();
       } else if (call.method == 'windowBecameKey') {
-        // Returning to the editor (e.g. from Settings) picks up any change.
+        // Returning to the editor (e.g. from Settings, or Cmd-Tab back) picks up
+        // any change AND hands keyboard focus back to the canvas, so tool
+        // shortcuts work without a manual click.
         if (mounted) setState(() => _windowActive = true);
+        _controller?.requestFocus();
         _reload();
       } else if (call.method == 'windowResignedKey') {
         if (mounted) setState(() => _windowActive = false);
@@ -344,6 +356,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       Settings.instance.loadLoupe().then((l) {
         if (mounted) setState(() => _loupe = l);
       }).catchError((_) {});
+      Settings.instance.loadHud().then((h) {
+        if (mounted) setState(() => _hud = h);
+      }).catchError((_) {});
       Settings.instance.loadCapture().then((c) {
         if (mounted) setState(() => _cap = c);
       }).catchError((_) {});
@@ -405,75 +420,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     if (ctx == null || _confirming) return false;
     _confirming = true;
     try {
-      final brightness =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      final t = GlimprTokens.forBrightness(brightness);
-      final result = await showDialog<bool>(
-        context: ctx,
-        barrierColor: const Color(0x99000000),
-        builder: (c) => GlimprTheme(
-          tokens: t,
-          child: Center(
-            child: Material(
-              type: MaterialType.transparency,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 380),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    // Frosted glass matching the toolbar (blur + tint + border) so
-                    // the dialog reads as a solid surface, not see-through.
-                    filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        color: brightness == Brightness.dark
-                            ? const Color(0xF2161A24)
-                            : const Color(0xF2EEF2F7),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: brightness == Brightness.dark
-                              ? const Color(0x33FFFFFF)
-                              : const Color(0x66FFFFFF),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Discard changes?',
-                            style: GlimprType.sansStyle(18, 700, t.fg1,
-                                letterSpacing: -0.3),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'You have unsaved annotations. Discard them?',
-                            style: GlimprType.sansStyle(13.5, 400, t.fg3,
-                                height: 1.45),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              GhostButton('Cancel',
-                                  onTap: () => Navigator.of(c).pop(false)),
-                              const SizedBox(width: 10),
-                              AccentButton('Discard',
-                                  onTap: () => Navigator.of(c).pop(true)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+      return await showDiscardConfirm(
+        ctx,
+        title: 'Discard changes?',
+        message: 'You have unsaved annotations. Discard them?',
       );
-      return result ?? false;
     } finally {
       _confirming = false;
     }
@@ -778,6 +729,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             controller: controller,
             editorBindings: _bindings,
             loupe: _loupe,
+            hud: _hud,
             host: host,
             viewportController: _viewport,
           ),

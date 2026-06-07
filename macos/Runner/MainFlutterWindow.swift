@@ -26,6 +26,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   // Reached from AppDelegate.application(_:open:) to route external opens.
   static weak var shared: MainFlutterWindow?
 
+  // This window lives on-screen at alpha 0 (warm control engine) and only shows
+  // as the Settings window when revealed. While invisible it must NOT be
+  // key-eligible — otherwise macOS keeps handing the keyboard to this invisible
+  // window (after Settings closes, or on Cmd-Tab back to the app), leaving the
+  // capture overlay / image editor unfocused so tool shortcuts don't work. Gating
+  // on alpha makes key focus fall through to the actually-visible window instead.
+  override var canBecomeKey: Bool { alphaValue > 0 }
+  override var canBecomeMain: Bool { alphaValue > 0 }
+
   override func awakeFromNib() {
     MainFlutterWindow.shared = self
     let flutterViewController = FlutterViewController()
@@ -424,6 +433,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     if overlayManager?.isSuspended == true {
       overlayManager?.resume()
     }
+    // If the image editor is the visible window, hand key focus back to it —
+    // orderBack alone doesn't reliably re-key with our warm always-on-screen
+    // windows, so its windowDidBecomeKey fires and shortcuts resume.
+    if let w = imageEditorWindow, w.alphaValue > 0 {
+      w.makeKeyAndOrderFront(nil)
+    }
     // Settings closed (any path) → the editor drops its mask + hot-reloads.
     imageEditorChannel?.invokeMethod("settingsClosed", arguments: nil)
   }
@@ -469,7 +484,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private func updateActivationPolicy() {
     let editorVisible = (imageEditorWindow?.alphaValue ?? 0) > 0
     let settingsVisible = alphaValue > 0
-    NSApp.setActivationPolicy(editorVisible || settingsVisible ? .regular : .accessory)
+    // While a capture is paused for the Settings detour (⌘, from the overlay), stay
+    // .accessory. Flipping to .regular for Settings and back to .accessory on close
+    // deactivates the app on the next runloop turn, stealing focus from the
+    // shield-level overlay — so the overlay would never get the keyboard back.
+    let overlayCapture = overlayManager?.isSuspended == true
+    let regular = (editorVisible || settingsVisible) && !overlayCapture
+    NSApp.setActivationPolicy(regular ? .regular : .accessory)
   }
 }
 

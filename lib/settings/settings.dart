@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../capture/capture_kind.dart';
+import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../output/filename.dart';
 import 'settings_store.dart';
@@ -84,6 +85,7 @@ class Settings {
   static const _saveToFileKey = 'save_to_file';
   static const _copyToClipboardKey = 'copy_to_clipboard';
   static const _rightClickExitsKey = 'right_click_exits';
+  static const _confirmOnExitKey = 'confirm_on_exit';
   static const _filenameTemplateKey = 'filename_template';
   static const _decorateSnapKey = 'decorate_snap';
   static const _decorateCropKey = 'decorate_crop';
@@ -94,6 +96,8 @@ class Settings {
   static const _captureCursorKey = 'capture_cursor';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
+  static const _hudCrosshairKey = 'hud_crosshair';
+  static const _hudMarchingAntsKey = 'hud_marching_ants';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -139,6 +143,13 @@ class Settings {
       (await store.getBool(_rightClickExitsKey)) ?? true;
   Future<void> setRightClickExits(bool v) =>
       store.setBool(_rightClickExitsKey, v);
+
+  /// Confirm before exiting a capture that still has unsaved annotations
+  /// (right-click on empty space or Esc). Default ON to protect annotations.
+  Future<bool> getConfirmOnExit() async =>
+      (await store.getBool(_confirmOnExitKey)) ?? true;
+  Future<void> setConfirmOnExit(bool v) =>
+      store.setBool(_confirmOnExitKey, v);
 
   // Filename template ------------------------------------------------------
   Future<String> getFilenameTemplate() async {
@@ -203,6 +214,23 @@ class Settings {
   /// image editor (per open).
   Future<LoupeConfig> loadLoupe() async =>
       LoupeConfig(span: await getLoupeSpan(), zoom: await getLoupeZoom());
+
+  // HUD options (crosshair lines + marching-ants animation) ----------------
+  Future<bool> getHudCrosshair() async =>
+      (await store.getBool(_hudCrosshairKey)) ?? true;
+  Future<void> setHudCrosshair(bool v) => store.setBool(_hudCrosshairKey, v);
+
+  Future<bool> getHudMarchingAnts() async =>
+      (await store.getBool(_hudMarchingAntsKey)) ?? true;
+  Future<void> setHudMarchingAnts(bool v) =>
+      store.setBool(_hudMarchingAntsKey, v);
+
+  /// One-shot HUD options snapshot, read by the overlay (per capture) and the
+  /// image editor (per open); hot-reloaded alongside the loupe.
+  Future<HudConfig> loadHud() async => HudConfig(
+    crosshair: await getHudCrosshair(),
+    marchingAnts: await getHudMarchingAnts(),
+  );
 
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
   Future<CaptureSettings> loadCapture() async => CaptureSettings(

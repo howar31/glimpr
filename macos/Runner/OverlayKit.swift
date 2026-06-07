@@ -876,5 +876,17 @@ final class OverlayManager {
     for (_, u) in units {
       u.overlay.invokeMethod("onResume", arguments: nil)
     }
+    // Settings took key focus; the cursor poll only re-keys on a CHANGE, so the
+    // overlay would stay non-key (keyboard dead) until the cursor crosses
+    // displays. Force the window under the cursor back to key now so shortcuts
+    // resume immediately (the Dart side also re-requests its FocusNode).
+    if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
+    let mouse = NSEvent.mouseLocation
+    let id =
+      NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+      .map { displayID(of: $0) } ?? keyDisplayID
+    if let id = id, let unit = units[id], unit.window.canBecomeKey {
+      unit.window.makeKeyAndOrderFront(nil)
+    }
   }
 }

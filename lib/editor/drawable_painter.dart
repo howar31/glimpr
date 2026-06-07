@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../overlay/hud_lines.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'text_metrics.dart';
@@ -178,12 +180,10 @@ void paintHighlighterStroke(
 /// only paths (unit tests), where those regions draw a neutral placeholder.
 class DrawablePainter extends CustomPainter {
   final List<Drawable> drawables;
-  final int? selectedIndex;
   final ui.Image? blurredFull;
   final ui.Image? pixelatedFull;
   const DrawablePainter({
     required this.drawables,
-    required this.selectedIndex,
     this.blurredFull,
     this.pixelatedFull,
   });
@@ -192,10 +192,6 @@ class DrawablePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final d in drawables) {
       _paintOne(canvas, d, size);
-    }
-    final i = selectedIndex;
-    if (i != null && i >= 0 && i < drawables.length) {
-      _paintSelection(canvas, drawables[i]);
     }
   }
 
@@ -404,20 +400,44 @@ class DrawablePainter extends CustomPainter {
     _withShadow(canvas, style, fill, (c, p) => c.drawPath(path, p));
   }
 
-  void _paintSelection(Canvas canvas, Drawable d) {
-    // Segment shapes (line/arrow/highlighter) show two endpoint handles at the
-    // start/end points — not a bounding box — so each end can be dragged.
+  @override
+  bool shouldRepaint(DrawablePainter old) =>
+      old.drawables != drawables ||
+      old.blurredFull != blurredFull ||
+      old.pixelatedFull != pixelatedFull;
+}
+
+/// The selected drawable's highlight: a flowing two-tone marching-ants outline
+/// (matching the crop / crosshair / window-snap HUD) plus monochrome resize /
+/// endpoint handles. Kept in its OWN painter (not [DrawablePainter]) so it can
+/// animate via [march] without re-rasterizing the whole annotation layer each
+/// frame. [selected] is the currently selected (or mid-edit) drawable, or null.
+class SelectionHighlightPainter extends CustomPainter {
+  final Drawable? selected;
+  final ValueListenable<double>? march;
+  const SelectionHighlightPainter({required this.selected, this.march})
+    : super(repaint: march);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final d = selected;
+    if (d == null) return;
+    final phase = (march?.value ?? 0) * kHudDashPeriod;
+    // Box flush to the shape's geometric bounds (no outward inflation), so the
+    // outline sits right on the shape's baseline.
+    final r = d.bounds;
+    drawMarchingPolyline(
+      canvas,
+      [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
+      phase: phase,
+    );
+    // Segment shapes (line/arrow/highlighter): the box PLUS the two endpoint
+    // handles, so each end stays grabbable and the span is easy to spot.
     if (d is Segmented) {
       final seg = d as Segmented;
       _paintHandleDots(canvas, [seg.start, seg.end]);
       return;
     }
-    final r = d.bounds.inflate(4);
-    final line = Paint()
-      ..color = const Color(0xFF2196F3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    canvas.drawRect(r, line);
     // Corner resize handles only for rect-defined shapes (rectangle/ellipse and
     // the raster regions); pen/text/step are move-only, so handles would mislead.
     if (d is! RectShaped) return;
@@ -425,25 +445,23 @@ class DrawablePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(DrawablePainter old) =>
-      old.drawables != drawables ||
-      old.selectedIndex != selectedIndex ||
-      old.blurredFull != blurredFull ||
-      old.pixelatedFull != pixelatedFull;
+  bool shouldRepaint(SelectionHighlightPainter old) =>
+      old.selected != selected || old.march != march;
 }
 
-/// The shared corner-handle style — blue filled circle + white ring at each
-/// corner of [r]. Used by the drawable selection AND the editor crop selection
-/// so resize handles look identical everywhere.
+/// The shared corner-handle style — a monochrome dot (white fill + dark ring, so
+/// it reads on any background, matching the two-tone HUD) at each corner of [r].
+/// Used by the drawable selection AND the editor crop selection so resize handles
+/// look identical everywhere.
 void paintResizeHandles(Canvas canvas, Rect r) =>
     _paintHandleDots(canvas, [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]);
 
-/// Draws a handle (blue filled circle + white ring) at each point. Shared by the
+/// Draws a handle (white filled circle + dark ring) at each point. Shared by the
 /// rect corner handles and the segment endpoint handles so they look identical.
 void _paintHandleDots(Canvas canvas, List<Offset> points) {
-  final fill = Paint()..color = const Color(0xFF2196F3);
+  final fill = Paint()..color = const Color(0xFFFFFFFF);
   final ring = Paint()
-    ..color = const Color(0xFFFFFFFF)
+    ..color = const Color(0xFF000000)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5;
   for (final c in points) {

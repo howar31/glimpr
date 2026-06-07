@@ -78,7 +78,6 @@ Future<Uint8List> compositeAndCrop({
   canvas.scale(scaleFactor);
   DrawablePainter(
     drawables: drawables,
-    selectedIndex: null,
     blurredFull: blurredFull,
     pixelatedFull: pixelatedFull,
   ).paint(canvas, logicalSize);

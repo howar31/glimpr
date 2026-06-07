@@ -57,6 +57,14 @@ class EditorController {
   /// cursor button; read by EditorCore (render) + the export.
   final showCursor = ValueNotifier<bool>(false);
 
+  /// Bumped to ask the live editor to RE-ACQUIRE keyboard focus — after a modal
+  /// dialog closes (overlay discard prompt) or the window regains key (Cmd-Tab
+  /// back to the image editor). Tool shortcuts run through the editor's FocusNode,
+  /// which a popped route / window-key change doesn't reliably restore; EditorCore
+  /// listens here and re-requests focus so shortcuts work without a manual click.
+  final refocus = ValueNotifier<int>(0);
+  void requestFocus() => refocus.value++;
+
   EditorController({Map<ToolKind, DrawStyle>? toolStyles})
     : toolStyles = toolStyles ?? {} {
     // Seed the active style from any remembered tool so a fresh capture keeps
@@ -177,5 +185,6 @@ class EditorController {
     selectedIndex.dispose();
     phase.dispose();
     eyedropperActive.dispose();
+    refocus.dispose();
   }
 }
