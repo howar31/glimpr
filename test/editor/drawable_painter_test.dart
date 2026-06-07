@@ -96,4 +96,44 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('curved + styled line tools paint without throwing', (
+    tester,
+  ) async {
+    final shapes = <Drawable>[
+      // Curved dotted line (one interior point).
+      const LineDrawable(
+        Offset(10, 10),
+        Offset(110, 10),
+        DrawStyle(lineStyle: LineStyle.dotted),
+        mids: [Offset(60, 40)],
+      ),
+      // Curved double-headed dashed arrow (two interior points -> S).
+      const ArrowDrawable(
+        Offset(10, 60),
+        Offset(120, 60),
+        DrawStyle(lineStyle: LineStyle.dashed, arrowHeads: ArrowHeads.both),
+        mids: [Offset(40, 90), Offset(90, 30)],
+      ),
+      // Curved highlighter, each texture.
+      for (final tex in HighlighterTexture.values)
+        HighlighterDrawable(
+          const [Offset(10, 130), Offset(70, 160), Offset(130, 130)],
+          DrawStyle(texture: tex),
+        ),
+      // Every line style on a straight arrow.
+      for (final ls in LineStyle.values)
+        ArrowDrawable(const Offset(150, 10), const Offset(280, 200),
+            DrawStyle(lineStyle: ls)),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CustomPaint(
+          size: const Size(320, 320),
+          painter: DrawablePainter(drawables: shapes),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

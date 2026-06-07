@@ -49,6 +49,35 @@ HighlighterTexture _textureFromName(Object? name) {
   return HighlighterTexture.streaks;
 }
 
+/// Stroke dash style for the line tools (line / arrow / highlighter). Patterns
+/// scale with stroke width (see drawable_painter's dash runs). Other tools carry
+/// the field but ignore it (like [HighlighterTexture]).
+enum LineStyle { solid, dashed, dotted, longDash, dashDot, dashDotDot }
+
+LineStyle _lineStyleFromName(Object? name) {
+  for (final s in LineStyle.values) {
+    if (s.name == name) return s;
+  }
+  return LineStyle.solid;
+}
+
+/// Which ends of an arrow carry a head (arrow tool only).
+enum ArrowHeads { end, start, both }
+
+ArrowHeads _arrowHeadsFromName(Object? name) {
+  for (final h in ArrowHeads.values) {
+    if (h.name == name) return h;
+  }
+  return ArrowHeads.end;
+}
+
+/// Interior control-point count for new line-tool shapes. 0 = a plain straight
+/// two-endpoint line (the default); 1 = a single midpoint (C-curve); up to
+/// [kCurvePointsMax] for S / multi-bend curves.
+const int kCurvePointsMin = 0;
+const int kCurvePointsMax = 5;
+const int kCurvePointsDefault = 0;
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -57,6 +86,9 @@ class DrawStyle {
   final String? fontFamily; // null = system default
   final HighlighterTexture texture; // highlighter-only; ignored by other tools
   final bool shadow; // drop shadow under the annotation (drawing tools + text/step)
+  final LineStyle lineStyle; // line tools only (solid/dashed/...); else ignored
+  final ArrowHeads arrowHeads; // arrow only; which ends carry a head
+  final int curvePoints; // interior control points seeded for new line shapes
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -64,6 +96,9 @@ class DrawStyle {
     this.fontFamily,
     this.texture = HighlighterTexture.streaks,
     this.shadow = false,
+    this.lineStyle = LineStyle.solid,
+    this.arrowHeads = ArrowHeads.end,
+    this.curvePoints = kCurvePointsDefault,
   });
 
   DrawStyle copyWith({
@@ -73,6 +108,9 @@ class DrawStyle {
     String? fontFamily,
     HighlighterTexture? texture,
     bool? shadow,
+    LineStyle? lineStyle,
+    ArrowHeads? arrowHeads,
+    int? curvePoints,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -80,6 +118,9 @@ class DrawStyle {
     fontFamily: fontFamily ?? this.fontFamily,
     texture: texture ?? this.texture,
     shadow: shadow ?? this.shadow,
+    lineStyle: lineStyle ?? this.lineStyle,
+    arrowHeads: arrowHeads ?? this.arrowHeads,
+    curvePoints: curvePoints ?? this.curvePoints,
   );
 
   Map<String, dynamic> toJson() => {
@@ -89,6 +130,9 @@ class DrawStyle {
     if (fontFamily != null) 'fontFamily': fontFamily,
     'texture': texture.name,
     if (shadow) 'shadow': true,
+    if (lineStyle != LineStyle.solid) 'lineStyle': lineStyle.name,
+    if (arrowHeads != ArrowHeads.end) 'arrowHeads': arrowHeads.name,
+    if (curvePoints != kCurvePointsDefault) 'curvePoints': curvePoints,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -98,6 +142,10 @@ class DrawStyle {
     fontFamily: j['fontFamily'] as String?,
     texture: _textureFromName(j['texture']),
     shadow: j['shadow'] as bool? ?? false,
+    lineStyle: _lineStyleFromName(j['lineStyle']),
+    arrowHeads: _arrowHeadsFromName(j['arrowHeads']),
+    curvePoints: ((j['curvePoints'] as num?)?.toInt() ?? kCurvePointsDefault)
+        .clamp(kCurvePointsMin, kCurvePointsMax),
   );
 
   @override
@@ -108,8 +156,11 @@ class DrawStyle {
       other.fontSize == fontSize &&
       other.fontFamily == fontFamily &&
       other.texture == texture &&
-      other.shadow == shadow;
+      other.shadow == shadow &&
+      other.lineStyle == lineStyle &&
+      other.arrowHeads == arrowHeads &&
+      other.curvePoints == curvePoints;
   @override
-  int get hashCode =>
-      Object.hash(color, strokeWidth, fontSize, fontFamily, texture, shadow);
+  int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
+      texture, shadow, lineStyle, arrowHeads, curvePoints);
 }

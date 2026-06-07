@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../overlay/hud_lines.dart';
+import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'text_metrics.dart';
@@ -59,47 +60,51 @@ class _MarkerNoise {
   }
 }
 
-/// Paints a straight highlighter band from [points].first to [points].last in
-/// [style], rendering the style's [HighlighterTexture]. Translucent srcOver only
-/// (no multiply — it vanishes on dark screenshots); honours the colour's own
-/// alpha. Reused by the painter and the toolbar's texture-preview chips.
-///
-/// Tunables for in-app iteration are grouped near the top.
+/// Paints a highlighter band along the Catmull-Rom curve through [control]
+/// (control points; first/last = the ends). Translucent srcOver only (no
+/// multiply — it vanishes on dark screenshots); honours the colour's own alpha.
+/// The Clean texture also honours [DrawStyle.lineStyle]; streaks/frayed are
+/// textured and ignore it. Reused by the toolbar's texture preview (a 2-point
+/// list = a straight band).
 void paintHighlighterStroke(
   Canvas canvas,
-  List<Offset> points,
+  List<Offset> control,
   DrawStyle style,
 ) {
-  if (points.isEmpty) return;
-  final start = points.first;
-  final end = points.last;
+  if (control.isEmpty) return;
   final w = style.strokeWidth * 5; // wide marker band
   final color = style.color;
-  final half = w / 2;
-
-  if ((end - start).distance < 0.5) {
+  final spine = sampleCatmullRom(control);
+  final start = spine.first;
+  final end = spine.last;
+  var total = 0.0;
+  for (var i = 1; i < spine.length; i++) {
+    total += (spine[i] - spine[i - 1]).distance;
+  }
+  if (total < 0.5) {
     canvas.drawCircle(
       start,
-      half,
+      w / 2,
       Paint()
         ..color = color
         ..isAntiAlias = true,
     );
     return;
   }
+  final path = catmullRomPath(control);
 
-  // Clean: a plain round-capped translucent band, no texture.
+  // Clean: a plain round-capped translucent band along the curve. The highlighter
+  // is a marker — it does NOT take line styles (dashing reads inconsistently
+  // across its textures), so this is always a solid band.
   if (style.texture == HighlighterTexture.clean) {
-    canvas.drawLine(
-      start,
-      end,
-      Paint()
-        ..color = color
-        ..strokeWidth = w
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke
-        ..isAntiAlias = true,
-    );
+    final band = Paint()
+      ..color = color
+      ..strokeWidth = w
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+    canvas.drawPath(path, band);
     return;
   }
 
@@ -110,58 +115,74 @@ void paintHighlighterStroke(
   const lengthAmp = 0.22; // along-stroke variation (per-streak gradient)
   const edgeInk = 0.7; // extra darkening at the long edges
 
-  final dir = end - start;
-  final len = dir.distance;
-  final u = dir / len; // unit along axis
-  final n = Offset(-u.dy, u.dx); // unit normal
   final seed =
       (start.dx * 131 + start.dy * 557 + end.dx * 1289 + end.dy * 2741).round();
   final noise = _MarkerNoise(seed);
   final baseA = color.a; // the chosen alpha (0..1)
   Color withA(double a) => color.withValues(alpha: a.clamp(0.0, 0.95));
 
-  // Build the band from a FEW long streak lines (≈streakCount draws) instead of
-  // a per-pixel scanline×segment grid (that was ~10k+ drawLine calls per stroke
-  // and made the editor janky). Each streak spans the full length at its own
-  // intensity, with a 3-stop gradient along it for felt-tip lengthwise variation.
+  // Unit normal at each spine vertex so the streaks run PARALLEL to the curve.
+  final normals = <Offset>[];
+  for (var j = 0; j < spine.length; j++) {
+    final a = spine[j == 0 ? 0 : j - 1];
+    final b = spine[j == spine.length - 1 ? j : j + 1];
+    var t = b - a;
+    final l = t.distance;
+    t = l == 0 ? const Offset(1, 0) : t / l;
+    normals.add(Offset(-t.dy, t.dx));
+  }
+
+  // A FEW long streaks offset across the band (≈streakCount draws), each a
+  // polyline following the curve at its own offset + intensity (3-stop gradient
+  // along it for felt-tip lengthwise variation).
   final paint = Paint()
     ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.butt;
   final bandStep = w / streakCount;
   for (var i = 0; i < streakCount; i++) {
-    final t = (i + 0.5) / streakCount; // 0..1 across the band
-    final off = (t - 0.5) * w;
+    final tt = (i + 0.5) / streakCount; // 0..1 across the band
+    final off = (tt - 0.5) * w;
     var base = (1 - streakAmp) + streakAmp * noise(i * 1.7 + 3);
-    final edge = math.pow((t - 0.5).abs() * 2, 2.2).toDouble();
+    final edge = math.pow((tt - 0.5).abs() * 2, 2.2).toDouble();
     base *= 1 + edgeInk * edge; // ink-darker long edges
-    final p0 = start + n * off;
-    final p1 = end + n * off;
     double la(double k) =>
         baseA * base * ((1 - lengthAmp) + lengthAmp * noise(i * 0.5 + k));
+    final streak = Path();
+    final s0 = spine.first + normals.first * off;
+    streak.moveTo(s0.dx, s0.dy);
+    for (var j = 1; j < spine.length; j++) {
+      final sj = spine[j] + normals[j] * off;
+      streak.lineTo(sj.dx, sj.dy);
+    }
+    final s1 = spine.last + normals.last * off;
     paint
       ..strokeWidth = bandStep * 1.3 // overlap so there are no seams
-      ..shader = ui.Gradient.linear(p0, p1, [
+      ..shader = ui.Gradient.linear(s0, s1, [
         withA(la(0)),
         withA(la(6)),
         withA(la(12)),
       ], const [0.0, 0.5, 1.0]);
-    canvas.drawLine(p0, p1, paint);
+    canvas.drawPath(streak, paint);
   }
   paint.shader = null;
 
-  // Frayed: dry split-fork streaks trailing off both ends.
+  // Frayed: dry split-fork streaks off both ends, along the end tangents.
   if (style.texture == HighlighterTexture.frayed) {
     final fn = _MarkerNoise(seed * 5 + 1);
     final fray = Paint()
       ..isAntiAlias = true
       ..strokeCap = StrokeCap.round;
-    for (final (ex, sign) in [(end, 1.0), (start, -1.0)]) {
+    final ends = [
+      (end, curveTangent(control, atEnd: true), normals.last),
+      (start, curveTangent(control, atEnd: false), normals.first),
+    ];
+    for (final (ex, u, nrm) in ends) {
       for (var i = 0; i < 7; i++) {
         final off = (fn(i * 1.3) - 0.5) * w * 0.95;
         final length = 6 + fn(i * 2.1 + 9) * 26;
-        final p0 = ex + n * off;
-        final p1 =
-            ex + u * (sign * length) + n * (off + (fn(i * 4.0) - 0.5) * 4);
+        final p0 = ex + nrm * off;
+        final p1 = ex + u * length + nrm * (off + (fn(i * 4.0) - 0.5) * 4);
         fray
           ..color = withA(baseA * (0.25 + 0.5 * fn(i * 0.7 + 3)))
           ..strokeWidth = 1.2 + fn(i.toDouble()) * 2.2;
@@ -215,15 +236,18 @@ class DrawablePainter extends CustomPainter {
           ..isAntiAlias = true;
         _withShadow(canvas, d.style, paint, (c, p) => c.drawOval(d.rect, p));
       case ArrowDrawable():
-        _paintArrow(canvas, d.start, d.end, d.style);
+        _paintArrow(canvas, d);
       case LineDrawable():
         final paint = Paint()
           ..color = d.style.color
           ..strokeWidth = d.style.strokeWidth
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
           ..isAntiAlias = true;
-        _withShadow(canvas, d.style, paint, (c, p) => c.drawLine(d.start, d.end, p));
+        final path = catmullRomPath(d.points);
+        _withShadow(canvas, d.style, paint,
+            (c, p) => drawStyledPath(c, path, p, d.style.lineStyle, d.style.strokeWidth));
       case HighlighterDrawable():
         _paintHighlighter(canvas, d);
       case PenDrawable():
@@ -361,43 +385,85 @@ class DrawablePainter extends CustomPainter {
     );
   }
 
-  /// Classic barbed arrow: a uniform thin shaft and a long, pointed head whose
-  /// back edge cuts inward (the barbs sweep back slightly past where the shaft
-  /// joins). One filled polygon, so it casts a single drop shadow. The multipliers
-  /// below are the tunables for in-app polish.
-  void _paintArrow(Canvas canvas, Offset start, Offset end, DrawStyle style) {
+  /// Arrow: a (possibly curved, possibly dashed) shaft + a long pointed barbed
+  /// head at the end and/or start per [DrawStyle.arrowHeads], each oriented by the
+  /// curve's tangent there. The shaft is trimmed back at each headed end so it
+  /// doesn't poke through the head's concave back. Shaft + heads share one shadow.
+  void _paintArrow(Canvas canvas, ArrowDrawable d) {
+    final style = d.style;
     final w = style.strokeWidth;
-    final fill = Paint()
-      ..color = style.color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    final dir = end - start;
-    final len = dir.distance;
-    if (len < 1) {
-      _withShadow(canvas, style, fill, (c, p) => c.drawCircle(start, w / 2, p));
+    final pts = d.points;
+    if (pts.length < 2 || (pts.last - pts.first).distance < 1) {
+      final dot = Paint()
+        ..color = style.color
+        ..isAntiAlias = true;
+      _withShadow(canvas, style, dot, (c, p) => c.drawCircle(pts.first, w / 2, p));
       return;
     }
-    final u = Offset(dir.dx / len, dir.dy / len);
-    final n = Offset(-u.dy, u.dx); // unit normal
-    // ---- tunables (iterate in-app) ----
-    final headHalf = w * 1.6; // head half-width at the barbs (~3.2x the shaft)
-    final headLen = (w * 4.9).clamp(headHalf, len); // tip -> barb line (long/pointed)
-    final shaftHalf = w / 2; // uniform shaft (= the stroke width)
-    final back = headLen * 0.15; // shallow barb sweep -> concave back
-    final barbR = end - u * headLen + n * headHalf;
-    final barbL = end - u * headLen - n * headHalf;
-    final j = end - u * (headLen - back); // shaft <-> head junction (concave notch)
-    Offset at(Offset b, double s) => Offset(b.dx + n.dx * s, b.dy + n.dy * s);
+    final heads = style.arrowHeads;
+    final atEnd = heads == ArrowHeads.end || heads == ArrowHeads.both;
+    final atStart = heads == ArrowHeads.start || heads == ArrowHeads.both;
+    final headLen = w * 4.9; // tip -> barb line (long/pointed)
+    final back = headLen * 0.15; // shallow concave back
+    final trim = headLen - back; // shaft is cut to the head's notch
+    final full = catmullRomPath(pts);
+    final shaft = _trimContour(full, atStart ? trim : 0, atEnd ? trim : 0);
+    final shaftPaint = Paint()
+      ..color = style.color
+      ..strokeWidth = w
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    _withShadow(canvas, style, shaftPaint, (c, p) {
+      drawStyledPath(c, shaft, p, style.lineStyle, w);
+      final headFill = Paint()
+        ..color = p.color
+        ..style = PaintingStyle.fill
+        ..maskFilter = p.maskFilter // carry the shadow blur on the shadow pass
+        ..isAntiAlias = true;
+      if (atEnd) _drawArrowHead(c, pts, atEnd: true, w: w, fill: headFill);
+      if (atStart) _drawArrowHead(c, pts, atEnd: false, w: w, fill: headFill);
+    });
+  }
+
+  /// A single barbed arrowhead at the curve's [atEnd] (or start) tip, pointing
+  /// outward along the tangent there.
+  void _drawArrowHead(
+    Canvas canvas,
+    List<Offset> pts, {
+    required bool atEnd,
+    required double w,
+    required Paint fill,
+  }) {
+    final tip = atEnd ? pts.last : pts.first;
+    final u = curveTangent(pts, atEnd: atEnd); // unit outward
+    final n = Offset(-u.dy, u.dx);
+    final headHalf = w * 1.6;
+    final headLen = w * 4.9;
+    final back = headLen * 0.15;
+    final barbR = tip - u * headLen + n * headHalf;
+    final barbL = tip - u * headLen - n * headHalf;
+    final j = tip - u * (headLen - back); // concave notch
     final path = Path()
-      ..moveTo(at(start, shaftHalf).dx, at(start, shaftHalf).dy)
-      ..lineTo(at(j, shaftHalf).dx, at(j, shaftHalf).dy)
+      ..moveTo(tip.dx, tip.dy)
       ..lineTo(barbR.dx, barbR.dy)
-      ..lineTo(end.dx, end.dy)
+      ..lineTo(j.dx, j.dy)
       ..lineTo(barbL.dx, barbL.dy)
-      ..lineTo(at(j, -shaftHalf).dx, at(j, -shaftHalf).dy)
-      ..lineTo(at(start, -shaftHalf).dx, at(start, -shaftHalf).dy)
       ..close();
-    _withShadow(canvas, style, fill, (c, p) => c.drawPath(path, p));
+    canvas.drawPath(path, fill);
+  }
+
+  /// Extract the single contour of [path] trimmed by [fromStart]/[fromEnd] arc
+  /// length (a line/arrow spline is one contour). Empty if fully trimmed.
+  Path _trimContour(Path path, double fromStart, double fromEnd) {
+    final metrics = path.computeMetrics().toList();
+    if (metrics.isEmpty) return Path();
+    final m = metrics.first;
+    final a = fromStart.clamp(0.0, m.length).toDouble();
+    final b = (m.length - fromEnd).clamp(a, m.length).toDouble();
+    if (b <= a) return Path();
+    return m.extractPath(a, b);
   }
 
   @override
@@ -431,11 +497,11 @@ class SelectionHighlightPainter extends CustomPainter {
       [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
       phase: phase,
     );
-    // Segment shapes (line/arrow/highlighter): the box PLUS the two endpoint
-    // handles, so each end stays grabbable and the span is easy to spot.
+    // Segment shapes (line/arrow/highlighter): the box PLUS a handle at every
+    // control point (endpoints + interior curve points), so each is grabbable
+    // and the span is easy to spot.
     if (d is Segmented) {
-      final seg = d as Segmented;
-      _paintHandleDots(canvas, [seg.start, seg.end]);
+      _paintHandleDots(canvas, (d as Segmented).points);
       return;
     }
     // Corner resize handles only for rect-defined shapes (rectangle/ellipse and

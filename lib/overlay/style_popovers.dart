@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../editor/color_math.dart';
+import '../editor/curve.dart' show drawStyledPath;
 import '../editor/draw_style.dart';
 import '../editor/drawable_painter.dart' show paintHighlighterStroke;
 import '../theme/glimpr_theme.dart';
@@ -911,6 +912,178 @@ class _Swatch extends StatelessWidget {
           color: selected ? const Color(0xFF007AFF) : const Color(0x40000000),
           width: selected ? 2 : 1,
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LineStylePickerPopover  (line / arrow / highlighter)
+// ---------------------------------------------------------------------------
+
+String lineStyleLabel(LineStyle s) => switch (s) {
+      LineStyle.solid => 'Solid',
+      LineStyle.dashed => 'Dashed',
+      LineStyle.dotted => 'Dotted',
+      LineStyle.longDash => 'Long dash',
+      LineStyle.dashDot => 'Dash-dot',
+      LineStyle.dashDotDot => 'Dash-dot-dot',
+    };
+
+/// A menu of the six line styles, each with a live preview of the dash pattern.
+class LineStylePickerPopover extends StatelessWidget {
+  const LineStylePickerPopover({
+    Key? key,
+    required this.selected,
+    required this.color,
+    required this.onSelected,
+  }) : super(key: key);
+
+  final LineStyle selected;
+  final Color color;
+  final ValueChanged<LineStyle> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    const accent = GlimprTokens.accent;
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final s in LineStyle.values)
+            InkWell(
+              onTap: () => onSelected(s),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 116,
+                      child: Text(
+                        lineStyleLabel(s),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.visible,
+                        style: TextStyle(
+                          color: s == selected ? accent : fg,
+                          fontSize: 13,
+                          fontWeight:
+                              s == selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: SizedBox(
+                        height: 16,
+                        child: CustomPaint(painter: _LineStylePreview(s, fg)),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 22,
+                      child: s == selected
+                          ? const Icon(Icons.check, size: 16, color: accent)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LineStylePreview extends CustomPainter {
+  final LineStyle style;
+  final Color color;
+  const _LineStylePreview(this.style, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final path = Path()
+      ..moveTo(2, y)
+      ..lineTo(size.width - 2, y);
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    drawStyledPath(canvas, path, paint, style, 3);
+  }
+
+  @override
+  bool shouldRepaint(_LineStylePreview old) =>
+      old.style != style || old.color != color;
+}
+
+// ---------------------------------------------------------------------------
+// ArrowHeadsPickerPopover  (arrow only)
+// ---------------------------------------------------------------------------
+
+String arrowHeadsLabel(ArrowHeads h) => switch (h) {
+      ArrowHeads.end => 'End',
+      ArrowHeads.start => 'Start',
+      ArrowHeads.both => 'Both',
+    };
+
+/// A small menu choosing which ends of the arrow carry a head.
+class ArrowHeadsPickerPopover extends StatelessWidget {
+  const ArrowHeadsPickerPopover({
+    Key? key,
+    required this.selected,
+    required this.onSelected,
+  }) : super(key: key);
+
+  final ArrowHeads selected;
+  final ValueChanged<ArrowHeads> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    const accent = GlimprTokens.accent;
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final h in ArrowHeads.values)
+            InkWell(
+              onTap: () => onSelected(h),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        arrowHeadsLabel(h),
+                        style: TextStyle(
+                          color: h == selected ? accent : fg,
+                          fontSize: 14,
+                          fontWeight:
+                              h == selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 22,
+                      child: h == selected
+                          ? const Icon(Icons.check, size: 16, color: accent)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

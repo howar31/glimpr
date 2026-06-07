@@ -1,5 +1,6 @@
 import 'dart:ui' show Color, Image, Size;
 import 'package:flutter/foundation.dart';
+import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'document.dart';
@@ -28,6 +29,21 @@ enum EditorPhase { annotate, crop }
 DrawStyle defaultStyleFor(ToolKind t) => t == ToolKind.highlighter
     ? const DrawStyle(color: kHighlighterDefaultColor)
     : const DrawStyle();
+
+/// The drawing [ToolKind] a drawable corresponds to, for driving the option bar
+/// off the SELECTED annotation (so the universal Select tool can edit any of
+/// them). Null for shapes with no editable option-bar style (raster / image).
+ToolKind? toolKindForDrawable(Drawable d) => switch (d) {
+      RectangleDrawable() => ToolKind.rectangle,
+      EllipseDrawable() => ToolKind.ellipse,
+      ArrowDrawable() => ToolKind.arrow,
+      LineDrawable() => ToolKind.line,
+      HighlighterDrawable() => ToolKind.highlighter,
+      PenDrawable() => ToolKind.pen,
+      TextDrawable() => ToolKind.text,
+      StepDrawable() => ToolKind.step,
+      BlurDrawable() || PixelateDrawable() || ImageDrawable() => null,
+    };
 
 /// Mutable editor state exposed as ValueListenables so widgets rebuild narrowly.
 /// Defaults to the Crop tool — most captures are a plain crop; annotation tools
@@ -74,6 +90,25 @@ class EditorController {
         this.toolStyles[ToolKind.arrow] ??
         this.toolStyles[ToolKind.text];
     if (seed != null) style.value = seed;
+    // The option bar reflects the SELECTED annotation's style (and reverts to the
+    // tool's remembered style on deselect), so editing/Reset clearly act on it.
+    selectedIndex.addListener(_syncStyleToSelection);
+  }
+
+  /// Load the selected drawable's style into the option bar; on deselect, restore
+  /// the active tool's remembered style so the brush isn't left stuck on it.
+  void _syncStyleToSelection() {
+    final i = selectedIndex.value;
+    if (i == null || i >= document.value.drawables.length) {
+      if (tool.value != ToolKind.crop) {
+        style.value = toolStyles[tool.value] ?? defaultStyleFor(tool.value);
+      }
+      return;
+    }
+    final d = document.value.drawables[i];
+    // Raster regions / pasted images have no editable option-bar style.
+    if (d is BlurDrawable || d is PixelateDrawable || d is ImageDrawable) return;
+    style.value = d.style;
   }
 
   void selectTool(ToolKind t) {
@@ -101,6 +136,12 @@ class EditorController {
   void setFontFamily(String? f) =>
       _updateStyle(style.value.copyWith(fontFamily: f));
   void setShadow(bool s) => _updateStyle(style.value.copyWith(shadow: s));
+  void setLineStyle(LineStyle s) =>
+      _updateStyle(style.value.copyWith(lineStyle: s));
+  void setArrowHeads(ArrowHeads h) =>
+      _updateStyle(style.value.copyWith(arrowHeads: h));
+  void setCurvePoints(int n) => _updateStyle(style.value
+      .copyWith(curvePoints: n.clamp(kCurvePointsMin, kCurvePointsMax)));
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
   // so we rebuild the style explicitly without a fontFamily. The other fields
@@ -124,6 +165,18 @@ class EditorController {
       style.value = def;
       _restyleSelected();
     }
+  }
+
+  /// Reset the option bar's CURRENT subject to its factory default. [effective] is
+  /// the type the option bar is showing — the selected annotation's type when one
+  /// is selected (so the universal Select tool resets it to ITS type's default
+  /// without touching the active tool), else the active tool. Resets the active
+  /// tool's remembered style only when it IS that type.
+  void resetActiveStyle(ToolKind effective) {
+    final def = defaultStyleFor(effective);
+    if (tool.value == effective) toolStyles[effective] = def;
+    style.value = def;
+    _restyleSelected();
   }
 
   void _updateStyle(DrawStyle s) {
@@ -152,7 +205,18 @@ class EditorController {
       PixelateDrawable() => d,
       ImageDrawable() => d,
     };
-    document.value = document.value.replaceAt(i, restyled);
+    // For the line tools, a changed curve-points count re-seeds the interior
+    // control points evenly along the current spline (shape preserved).
+    var result = restyled;
+    if (result is Segmented) {
+      final want =
+          style.value.curvePoints.clamp(kCurvePointsMin, kCurvePointsMax);
+      final seg = result as Segmented;
+      if (seg.points.length - 2 != want) {
+        result = seg.withPoints(resampleInterior(seg.points, want));
+      }
+    }
+    document.value = document.value.replaceAt(i, result);
   }
 
   void commitDrawable(Drawable d) => document.value = document.value.add(d);

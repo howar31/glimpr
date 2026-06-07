@@ -94,4 +94,48 @@ void main() {
     expect(kStrokeMin, lessThan(kStrokeMax));
     expect(kStrokeWidths.every((w) => w >= kStrokeMin && w <= kStrokeMax), isTrue);
   });
+
+  test('line-tool defaults: solid, end head, straight (0 curve points)', () {
+    const d = DrawStyle();
+    expect(d.lineStyle, LineStyle.solid);
+    expect(d.arrowHeads, ArrowHeads.end);
+    expect(d.curvePoints, kCurvePointsDefault);
+    expect(kCurvePointsDefault, 0);
+    expect(kCurvePointsMin, 0);
+  });
+
+  test('lineStyle / arrowHeads / curvePoints round-trip through JSON', () {
+    const d = DrawStyle(
+      lineStyle: LineStyle.dashDot,
+      arrowHeads: ArrowHeads.both,
+      curvePoints: 3,
+    );
+    final r = DrawStyle.fromJson(d.toJson());
+    expect(r.lineStyle, LineStyle.dashDot);
+    expect(r.arrowHeads, ArrowHeads.both);
+    expect(r.curvePoints, 3);
+  });
+
+  test('defaults are omitted from JSON, and fall back on read', () {
+    const d = DrawStyle();
+    final j = d.toJson();
+    expect(j.containsKey('lineStyle'), isFalse);
+    expect(j.containsKey('arrowHeads'), isFalse);
+    expect(j.containsKey('curvePoints'), isFalse);
+    final r = DrawStyle.fromJson({'color': 0xFFFF0000});
+    expect(r.lineStyle, LineStyle.solid);
+    expect(r.arrowHeads, ArrowHeads.end);
+    expect(r.curvePoints, kCurvePointsDefault);
+  });
+
+  test('curvePoints clamps to the 1..5 range on read', () {
+    expect(DrawStyle.fromJson({'curvePoints': 99}).curvePoints, kCurvePointsMax);
+    expect(DrawStyle.fromJson({'curvePoints': 0}).curvePoints, kCurvePointsMin);
+  });
+
+  test('garbage enum names fall back to defaults', () {
+    final r = DrawStyle.fromJson({'lineStyle': 'zzz', 'arrowHeads': 'zzz'});
+    expect(r.lineStyle, LineStyle.solid);
+    expect(r.arrowHeads, ArrowHeads.end);
+  });
 }

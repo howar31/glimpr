@@ -354,7 +354,7 @@ class _Bar extends StatelessWidget {
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
-enum _OpenPopover { none, color, font, texture }
+enum _OpenPopover { none, color, font, texture, lineStyle, arrowHeads }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
 /// font size (text only). Hidden for the Crop tool.
@@ -394,13 +394,16 @@ class _OptionsRowState extends State<_OptionsRow> {
   @override
   void initState() {
     super.initState();
-    // Switching tools must dismiss any open popover.
+    // Switching tools OR changing the selection must dismiss any open popover (it
+    // targets the previous subject's style).
     widget.controller.tool.addListener(_onToolChanged);
+    widget.controller.selectedIndex.addListener(_onToolChanged);
   }
 
   @override
   void dispose() {
     widget.controller.tool.removeListener(_onToolChanged);
+    widget.controller.selectedIndex.removeListener(_onToolChanged);
     _removeEntry();
     super.dispose();
   }
@@ -419,6 +422,19 @@ class _OptionsRowState extends State<_OptionsRow> {
   }
 
   EditorController get _c => widget.controller;
+
+  /// The type the option bar is showing: the SELECTED annotation's type when one
+  /// is selected (so the universal Select tool — and any tool — edits the actual
+  /// selection), else the active tool.
+  ToolKind _effectiveType() {
+    final drawables = _c.document.value.drawables;
+    final sel = _c.selectedIndex.value;
+    if (sel != null && sel >= 0 && sel < drawables.length) {
+      final t = toolKindForDrawable(drawables[sel]);
+      if (t != null) return t;
+    }
+    return _c.tool.value;
+  }
 
   // --- popover openers (async work happens HERE, on tap, not at build) -------
 
@@ -443,8 +459,9 @@ class _OptionsRowState extends State<_OptionsRow> {
         color: _c.style.value.color,
         recents: recents,
         // The highlighter shows its translucent quick-picks; everything else the
-        // standard palette. (These used to live in the option bar.)
-        presets: _c.tool.value == ToolKind.highlighter
+        // standard palette. Keyed off the EFFECTIVE type so editing a selected
+        // highlighter via the Select tool still shows the translucent presets.
+        presets: _effectiveType() == ToolKind.highlighter
             ? kHighlighterPresets
             : kColorPresets,
         onChanged: _c.setColor,
@@ -504,6 +521,49 @@ class _OptionsRowState extends State<_OptionsRow> {
           _c.setHighlighterTexture(t);
           _closePopover(); // menu-style: pick closes
           setState(() {}); // refresh the button label
+        },
+      ),
+    );
+  }
+
+  void _openLineStylePopover() {
+    if (_open == _OpenPopover.lineStyle) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    _showPopover(
+      _OpenPopover.lineStyle,
+      _barLink,
+      width: 300,
+      child: LineStylePickerPopover(
+        selected: _c.style.value.lineStyle,
+        color: _c.style.value.color,
+        onSelected: (s) {
+          _c.setLineStyle(s);
+          _closePopover();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
+  void _openArrowHeadsPopover() {
+    if (_open == _OpenPopover.arrowHeads) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    _showPopover(
+      _OpenPopover.arrowHeads,
+      _barLink,
+      width: 150,
+      child: ArrowHeadsPickerPopover(
+        selected: _c.style.value.arrowHeads,
+        onSelected: (h) {
+          _c.setArrowHeads(h);
+          _closePopover();
+          setState(() {});
         },
       ),
     );
@@ -582,9 +642,15 @@ class _OptionsRowState extends State<_OptionsRow> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ToolKind>(
-      valueListenable: _c.tool,
-      builder: (_, tool, _) {
+    // Rebuild on tool / selection / document changes: the option bar is driven by
+    // the EFFECTIVE type (the selected annotation's type, else the active tool),
+    // so the Select tool can edit any selected annotation and a hidden bar appears
+    // once something is selected.
+    return ListenableBuilder(
+      listenable:
+          Listenable.merge([_c.tool, _c.selectedIndex, _c.document]),
+      builder: (context, _) {
+        final tool = _effectiveType();
         // Tools that carry a color (all vector draw tools; not crop/raster).
         const colorTools = {
           ToolKind.rectangle,
@@ -623,6 +689,17 @@ class _OptionsRowState extends State<_OptionsRow> {
           ToolKind.step,
         };
         final showsShadow = shadowTools.contains(tool);
+        // Curve-points apply to all Segmented line tools; the line-STYLE picker
+        // is line/arrow only (the highlighter is a marker — dashing it is
+        // inconsistent across its textures); the arrowheads picker is arrow-only.
+        const segmentTools = {
+          ToolKind.line,
+          ToolKind.arrow,
+          ToolKind.highlighter,
+        };
+        final showsCurvePoints = segmentTools.contains(tool);
+        final showsLineStyle =
+            tool == ToolKind.line || tool == ToolKind.arrow;
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
@@ -659,6 +736,36 @@ class _OptionsRowState extends State<_OptionsRow> {
                       onTap: _openTexturePopover,
                     ),
                   ],
+                  if (showsLineStyle) ...[
+                    const SizedBox(width: 8),
+                    _TextureButton(
+                      key: const ValueKey('line-style-picker'),
+                      label: lineStyleLabel(style.lineStyle),
+                      onTap: _openLineStylePopover,
+                    ),
+                  ],
+                  if (showsCurvePoints) ...[
+                    const SizedBox(width: 8),
+                    _NumberStepper(
+                      key: const ValueKey('curve-points-stepper'),
+                      controller: _c,
+                      read: (s) => s.curvePoints.toDouble(),
+                      write: (v) => _c.setCurvePoints(v.round()),
+                      min: kCurvePointsMin.toDouble(),
+                      max: kCurvePointsMax.toDouble(),
+                      step: 1,
+                      suffix: 'pts',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
+                  ],
+                  if (tool == ToolKind.arrow) ...[
+                    const SizedBox(width: 8),
+                    _TextureButton(
+                      key: const ValueKey('arrow-heads-picker'),
+                      label: arrowHeadsLabel(style.arrowHeads),
+                      onTap: _openArrowHeadsPopover,
+                    ),
+                  ],
                   if (showsFont) ...[
                     const SizedBox(width: 10),
                     _NumberStepper(
@@ -693,7 +800,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                   _ResetToolButton(
                     key: const ValueKey('reset-tool'),
                     enabled: style != defaultStyleFor(tool),
-                    onTap: () => _c.resetTool(_c.tool.value),
+                    onTap: () => _c.resetActiveStyle(tool),
                   ),
                 ],
               ),

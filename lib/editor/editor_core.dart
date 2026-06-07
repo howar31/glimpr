@@ -14,6 +14,8 @@ import '../overlay/selection_controller.dart';
 import '../overlay/selection_scrim.dart';
 import '../overlay/toolbar.dart';
 import '../overlay/window_snap.dart';
+import 'curve.dart';
+import 'draw_style.dart';
 import 'drawable.dart';
 import 'drawable_painter.dart';
 import 'editor_controller.dart';
@@ -987,8 +989,12 @@ class _EditorCoreState extends State<EditorCore> {
         _nearHandles(drawables[cur], p)) {
       return;
     }
-    final idx = _hitActiveType(p); // highlight same-type drawable under cursor
-    if (cur != idx) c.selectedIndex.value = idx;
+    // Hover-select is STICKY: hovering a same-type drawable selects it, but moving
+    // onto empty canvas KEEPS that selection (so you can reach the option bar to
+    // restyle / reset it without it clearing en route). A click on empty space
+    // (or right-click) still deselects; hovering a different drawable switches.
+    final idx = _hitActiveType(p);
+    if (idx != null && cur != idx) c.selectedIndex.value = idx;
   }
 
   void _onTapUp(TapUpDetails d) {
@@ -1336,21 +1342,23 @@ class _EditorCoreState extends State<EditorCore> {
         }
       }
     }
-    // Segment endpoint-drag (line/arrow/highlighter): a press near a start/end
-    // handle moves just that endpoint; a press on the body falls through to move.
-    if (_segmentTools.contains(c.tool.value)) {
+    // Segment control-point drag (line/arrow/highlighter, + the universal Select
+    // tool): a press near ANY handle (endpoints + interior curve points) moves
+    // just that point; a press on the body falls through to move. `_endpoint`
+    // indexes into `points`.
+    if (_segmentTools.contains(c.tool.value) || _isSelectTool) {
       for (var idx = drawables.length - 1; idx >= 0; idx--) {
         final d = drawables[idx];
         if (d is! Segmented || (filter != null && !filter(d))) continue;
-        final ends = [(d as Segmented).start, (d as Segmented).end];
-        for (var ei = 0; ei < ends.length; ei++) {
-          if ((ends[ei] - p).distance <= 16) {
+        final pts = (d as Segmented).points;
+        for (var ei = 0; ei < pts.length; ei++) {
+          if ((pts[ei] - p).distance <= 16) {
             _editIndex = idx;
             _editOriginal = drawables[idx];
             _editPreview = drawables[idx];
             _endpoint = ei;
             c.selectedIndex.value = idx;
-            _pinned = true; // dragging an endpoint pins the shape
+            _pinned = true; // dragging a control point pins the shape
             return;
           }
         }
@@ -1494,11 +1502,14 @@ class _EditorCoreState extends State<EditorCore> {
     final shift = HardwareKeyboard.instance.isShiftPressed;
     if (_endpoint != null && orig is Segmented) {
       final seg = orig as Segmented;
-      final anchor = _endpoint == 0 ? seg.end : seg.start; // the fixed end
-      final moved = shift ? _snap8(anchor, p) : p;
-      final start = _endpoint == 0 ? moved : seg.start;
-      final end = _endpoint == 1 ? moved : seg.end;
-      setState(() => _editPreview = seg.withEndpoints(start, end));
+      final pts = [...seg.points];
+      final i = _endpoint!.clamp(0, pts.length - 1);
+      // Shift constrains an ENDPOINT drag to 8 directions from the opposite end;
+      // interior control points move freely.
+      final isEnd = i == 0 || i == pts.length - 1;
+      final anchor = i == 0 ? pts.last : pts.first;
+      pts[i] = (shift && isEnd) ? _snap8(anchor, p) : p;
+      setState(() => _editPreview = seg.withPoints(pts));
     } else if (_resizeCorner != null && orig is RectShaped) {
       final shape = orig as RectShaped;
       final corners = _rectCorners(shape.rect);
@@ -1566,7 +1577,16 @@ class _EditorCoreState extends State<EditorCore> {
     }
     final prev = _preview;
     setState(_resetDrawState);
-    if (prev != null && prev.bounds.longestSide >= 3) c.commitDrawable(prev);
+    if (prev == null || prev.bounds.longestSide < 3) return;
+    // A freshly drawn line/arrow/highlighter is a straight 2-point shape; seed the
+    // configured number of interior control points along it so it can be curved.
+    Drawable out = prev;
+    if (prev is Segmented) {
+      final seg = prev as Segmented;
+      final n = prev.style.curvePoints.clamp(kCurvePointsMin, kCurvePointsMax);
+      out = seg.withPoints(seedInterior(seg.start, seg.end, n));
+    }
+    c.commitDrawable(out);
   }
 
   // ---- build -------------------------------------------------------------

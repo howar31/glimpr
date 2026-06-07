@@ -22,13 +22,22 @@ abstract interface class RectShaped {
   Drawable resizedTo(Rect r);
 }
 
-/// Shapes defined by two endpoints (start/end), adjustable via two endpoint
-/// handles rather than four box corners. Implemented by line/arrow/highlighter.
-/// The endpoint-drag gesture and the 2-handle selection style are shared.
+/// Shapes defined by a list of control points the curve passes THROUGH —
+/// `[start, ...interior, end]`. Implemented by line/arrow/highlighter. Adjustable
+/// via a handle at each point; the endpoint-drag gesture + the per-point selection
+/// handles are shared. With no interior points it is a straight 2-point segment.
 abstract interface class Segmented {
   Offset get start;
   Offset get end;
+
+  /// All control points: `[start, ...interior, end]` (>= 2).
+  List<Offset> get points;
+
+  /// Move the endpoints, preserving the interior control points.
   Drawable withEndpoints(Offset start, Offset end);
+
+  /// Replace all control points (>= 2; first/last become start/end).
+  Drawable withPoints(List<Offset> points);
 }
 
 class RectangleDrawable extends Drawable implements RectShaped {
@@ -65,25 +74,38 @@ class EllipseDrawable extends Drawable implements RectShaped {
   EllipseDrawable withStyle(DrawStyle s) => EllipseDrawable(rect, s);
 }
 
-/// A plain straight stroke (an arrow with no head). Two endpoint handles.
+/// A stroke through `[start, ...mids, end]` (Catmull-Rom curve; straight with no
+/// mids). An arrow with no head. A handle per control point.
 class LineDrawable extends Drawable implements Segmented {
   @override
   final Offset start;
   @override
   final Offset end;
-  const LineDrawable(this.start, this.end, DrawStyle style) : super(style);
+  final List<Offset> mids; // interior control points
+  const LineDrawable(this.start, this.end, DrawStyle style,
+      {this.mids = const []})
+      : super(style);
 
   @override
-  Rect get bounds => _segmentBounds(start, end);
+  List<Offset> get points => [start, ...mids, end];
 
   @override
-  LineDrawable moved(Offset d) => LineDrawable(start + d, end + d, style);
+  Rect get bounds => _pointsBounds(points);
+
+  @override
+  LineDrawable moved(Offset d) => LineDrawable(start + d, end + d, style,
+      mids: [for (final m in mids) m + d]);
 
   @override
   LineDrawable withEndpoints(Offset start, Offset end) =>
-      LineDrawable(start, end, style);
+      LineDrawable(start, end, style, mids: mids);
 
-  LineDrawable withStyle(DrawStyle s) => LineDrawable(start, end, s);
+  @override
+  LineDrawable withPoints(List<Offset> p) => LineDrawable(p.first, p.last, style,
+      mids: p.length > 2 ? p.sublist(1, p.length - 1) : const []);
+
+  LineDrawable withStyle(DrawStyle s) =>
+      LineDrawable(start, end, s, mids: mids);
 }
 
 /// A freehand translucent marker band through the captured pointer [points].
@@ -91,18 +113,26 @@ class LineDrawable extends Drawable implements Segmented {
 /// colour's alpha in one layer, so self-overlap doesn't darken (the highlighter
 /// look) and the chosen alpha is honoured. Move-only.
 class HighlighterDrawable extends Drawable implements Segmented {
+  @override
   final List<Offset> points;
   const HighlighterDrawable(this.points, DrawStyle style) : super(style);
 
-  // The band is drawn from points.first to points.last, so the endpoints ARE the
-  // first/last points; an endpoint edit collapses it to a 2-point band.
+  // The band follows the Catmull-Rom curve through `points`; the endpoints are
+  // the first/last points and the rest are interior control points.
   @override
   Offset get start => points.first;
   @override
   Offset get end => points.last;
   @override
   HighlighterDrawable withEndpoints(Offset start, Offset end) =>
-      HighlighterDrawable([start, end], style);
+      HighlighterDrawable([
+        start,
+        if (points.length > 2) ...points.sublist(1, points.length - 1),
+        end,
+      ], style);
+  @override
+  HighlighterDrawable withPoints(List<Offset> p) =>
+      HighlighterDrawable(p, style);
 
   @override
   Rect get bounds {
@@ -234,39 +264,52 @@ class ImageDrawable extends Drawable implements RectShaped {
   ImageDrawable resizedTo(Rect r) => ImageDrawable(r, image, style);
 }
 
-Rect _segmentBounds(Offset a, Offset b) => Rect.fromLTRB(
-  a.dx < b.dx ? a.dx : b.dx,
-  a.dy < b.dy ? a.dy : b.dy,
-  a.dx > b.dx ? a.dx : b.dx,
-  a.dy > b.dy ? a.dy : b.dy,
-);
+/// Bounding box of a list of control points (>= 1).
+Rect _pointsBounds(List<Offset> pts) {
+  var minX = pts.first.dx, minY = pts.first.dy;
+  var maxX = minX, maxY = minY;
+  for (final p in pts) {
+    if (p.dx < minX) minX = p.dx;
+    if (p.dy < minY) minY = p.dy;
+    if (p.dx > maxX) maxX = p.dx;
+    if (p.dy > maxY) maxY = p.dy;
+  }
+  return Rect.fromLTRB(minX, minY, maxX, maxY);
+}
 
 class ArrowDrawable extends Drawable implements Segmented {
   @override
   final Offset start;
   @override
   final Offset end;
-  const ArrowDrawable(this.start, this.end, DrawStyle style) : super(style);
+  final List<Offset> mids; // interior control points
+  const ArrowDrawable(this.start, this.end, DrawStyle style,
+      {this.mids = const []})
+      : super(style);
 
   @override
-  Rect get bounds => Rect.fromLTRB(
-    start.dx < end.dx ? start.dx : end.dx,
-    start.dy < end.dy ? start.dy : end.dy,
-    start.dx > end.dx ? start.dx : end.dx,
-    start.dy > end.dy ? start.dy : end.dy,
-  );
+  List<Offset> get points => [start, ...mids, end];
 
   @override
-  ArrowDrawable moved(Offset d) => ArrowDrawable(start + d, end + d, style);
+  Rect get bounds => _pointsBounds(points);
+
+  @override
+  ArrowDrawable moved(Offset d) => ArrowDrawable(start + d, end + d, style,
+      mids: [for (final m in mids) m + d]);
 
   @override
   ArrowDrawable withEndpoints(Offset start, Offset end) =>
-      ArrowDrawable(start, end, style);
+      ArrowDrawable(start, end, style, mids: mids);
+
+  @override
+  ArrowDrawable withPoints(List<Offset> p) => ArrowDrawable(
+      p.first, p.last, style,
+      mids: p.length > 2 ? p.sublist(1, p.length - 1) : const []);
 
   ArrowDrawable resized(Rect r) =>
       ArrowDrawable(r.topLeft, r.bottomRight, style);
 
-  ArrowDrawable withStyle(DrawStyle s) => ArrowDrawable(start, end, s);
+  ArrowDrawable withStyle(DrawStyle s) => ArrowDrawable(start, end, s, mids: mids);
 }
 
 /// A text annotation: a single string at [position], drawn in one [style]
