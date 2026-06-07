@@ -253,22 +253,7 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
           ),
         ),
         const SizedBox(width: 6),
-        Tooltip(
-          message: 'Pick a colour from the screen',
-          child: InkResponse(
-            onTap: widget.onPickFromScreen,
-            radius: 20,
-            child: Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: const Icon(Icons.colorize, size: 18, color: Colors.white),
-            ),
-          ),
-        ),
+        _EyedropperButton(onTap: widget.onPickFromScreen!),
       ],
     );
   }
@@ -437,6 +422,66 @@ class _SVPlanePainter extends CustomPainter {
 // ---------------------------------------------------------------------------
 // _GradientSlider
 // ---------------------------------------------------------------------------
+
+/// The colour-picker eyedropper trigger. A bordered 34px box with a clear hover
+/// state (fill + brighter border/icon) so it reads as interactive — the previous
+/// InkResponse gave no visible hover on this surface.
+class _EyedropperButton extends StatefulWidget {
+  const _EyedropperButton({required this.onTap});
+  final VoidCallback onTap;
+  @override
+  State<_EyedropperButton> createState() => _EyedropperButtonState();
+}
+
+class _EyedropperButtonState extends State<_EyedropperButton> {
+  // Hover lives in a notifier, NOT setState: setState would rebuild the [Tooltip]
+  // (an OverlayPortal) on every enter/exit, and a hover-in-then-out double-
+  // schedules its layout callback within one frame -> the object.dart
+  // `scheduleLayoutCallback` assertion. Driving only a leaf
+  // [ValueListenableBuilder] repaints the swatch while the Tooltip is built once.
+  final _hover = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _hover.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Pick a colour from the screen',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => _hover.value = true,
+        onExit: (_) => _hover.value = false,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _hover,
+            builder: (_, hover, _) => Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: hover ? Colors.white12 : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: hover ? Colors.white54 : Colors.white24,
+                ),
+              ),
+              child: Icon(
+                Icons.colorize,
+                size: 18,
+                color: hover ? Colors.white : Colors.white70,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// A horizontal gradient track with a round knob. [value] is 0..1.
 /// [checkerboard] draws a checkerboard pattern behind the gradient

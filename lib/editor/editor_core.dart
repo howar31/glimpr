@@ -1845,6 +1845,25 @@ class _EditorCoreState extends State<EditorCore> {
   /// not stacked under the loupe.
   Widget _loupeReadout() => LoupeReadout(x: _toPx(_cursor.dx), y: _toPx(_cursor.dy));
 
+  /// A small eyedropper glyph pinned to the lower-right of the aim reticle while
+  /// sampling. The eyedropper reuses the region-tool crosshair/reticle/loupe HUD,
+  /// which alone looks identical to crop — this badge makes "picking a colour"
+  /// unmistakable so it never reads as a tool switch. [at] is the reticle point in
+  /// the host stack's coordinate space (canvas-local for the overlay, screen-local
+  /// for the editor).
+  Widget _eyedropperBadge(Offset at) => Positioned(
+        left: at.dx + 11,
+        top: at.dy + 11,
+        child: const IgnorePointer(
+          child: Icon(
+            Icons.colorize,
+            size: 18,
+            color: Color(0xFFFFFFFF),
+            shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
+          ),
+        ),
+      );
+
   // Vertical space reserved below the loupe for the readout, so the loupe flips
   // above the cursor early enough that the readout stays on-screen too.
   static const double _kLoupeReadoutReserve = 64.0;
@@ -2316,6 +2335,9 @@ class _EditorCoreState extends State<EditorCore> {
                       painter: ReticlePainter(_cursor),
                     ),
                   ),
+                // Eyedropper badge beside the reticle so colour-sampling mode is
+                // visually distinct from the region tools' identical HUD.
+                if (_eyedropper && !_interactive) _eyedropperBadge(_cursor),
                 // Gesture layer: the overlay keeps it here (full display, box ==
                 // logical 1:1). For the editor it is lifted to a sibling scoped to
                 // the on-screen image rect (see the return below). The stable key
@@ -2469,6 +2491,8 @@ class _EditorCoreState extends State<EditorCore> {
                       ),
                     ),
                   ),
+                // Eyedropper badge beside the reticle (screen space) — see overlay.
+                if (_eyedropper) _eyedropperBadge(v.toLocal(_cursor)),
                 if (showHud) _editorLoupe(v),
                 // Crop readouts in screen space (constant size under zoom): start
                 // coordinate at the start corner, W×H at the cursor corner.
