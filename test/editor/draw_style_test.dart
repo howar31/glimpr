@@ -138,4 +138,24 @@ void main() {
     expect(r.lineStyle, LineStyle.solid);
     expect(r.arrowHeads, ArrowHeads.end);
   });
+
+  test('strength defaults to 12, omitted from JSON, round-trips, clamps', () {
+    expect(const DrawStyle().strength, kRasterStrengthDefault);
+    expect(const DrawStyle().toJson().containsKey('strength'), isFalse);
+    final s = const DrawStyle().copyWith(strength: 24);
+    expect(s.toJson()['strength'], 24);
+    expect(DrawStyle.fromJson(s.toJson()).strength, 24);
+    expect(DrawStyle.fromJson({'strength': 999}).strength, kRasterStrengthMax);
+    expect(DrawStyle.fromJson({'strength': 0}).strength, kRasterStrengthMin);
+    expect(
+      DrawStyle.fromJson({'color': 0xFFFF0000}).strength,
+      kRasterStrengthDefault,
+    );
+  });
+
+  test('equality and copyWith include strength', () {
+    const a = DrawStyle();
+    expect(a.copyWith(strength: 20) == a, isFalse);
+    expect(a.copyWith(strength: 20).strength, 20);
+  });
 }

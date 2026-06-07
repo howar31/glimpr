@@ -124,8 +124,15 @@ class _EditorCoreState extends State<EditorCore> {
   _strokePoints; // accumulated freehand points (pen + highlighter)
   // Whole frame pre-blurred / pre-pixelated once when the tool is selected; the
   // blur/pixelate regions just mask these (no per-frame recompute -> no lag).
-  ui.Image? _blurredFull;
-  ui.Image? _pixelatedFull;
+  // Per-region blur/pixelate effect images, computed when a region settles
+  // (ShareX-style, no whole-frame). Cache keyed by (isBlur, rect) -> (image, the
+  // strength it was built for); a strength change keeps the OLD image shown until
+  // the new one is ready (no flash / no peek at the original). A region being
+  // drawn / moved / resized (rect changes) or with no cache yet shows the
+  // placeholder. _effectPending dedups concurrent builds by full strength key.
+  final Map<(bool, Rect), (ui.Image, double)> _effectCache = {};
+  final Set<(bool, Rect, double)> _effectPending = {};
+  int _effectGen = 0; // bumped on clear to discard in-flight (stale-frame) builds
 
   // Move/resize an existing drawable.
   int? _editIndex;
@@ -248,18 +255,15 @@ class _EditorCoreState extends State<EditorCore> {
     final shifted = [
       for (final d in c.document.value.drawables) d.moved(-rect.topLeft),
     ];
+    // Drop pre-trim-frame region rasters BEFORE the document changes; commitTrim
+    // fires the reconcile listener, which rebuilds them from the trimmed image.
+    _clearEffectCache();
     c.commitTrim(shifted, cropped, rect.size);
     c.selectedIndex.value = null;
-    // Stale pre-rasters (old size) -> drop + recompute from the trimmed image.
-    _blurredFull?.dispose();
-    _pixelatedFull?.dispose();
-    _blurredFull = null;
-    _pixelatedFull = null;
     setState(() {
       _crop.clear();
       _cropping = false;
     });
-    _ensureRasterFor(c.tool.value);
     _refitViewport();
   }
 
@@ -418,6 +422,7 @@ class _EditorCoreState extends State<EditorCore> {
     _overCanvas = widget.host.startsActive; // pointer starts over canvas
     _windows = widget.host.snapWindows;
     c.document.addListener(_rebuild);
+    c.document.addListener(_reconcileEffectCache);
     c.selectedIndex.addListener(_rebuild);
     c.selectedIndex.addListener(_unpinIfCleared);
     c.tool.addListener(_rebuild);
@@ -450,10 +455,9 @@ class _EditorCoreState extends State<EditorCore> {
     c.style.removeListener(_onStyleChanged);
     _textFocus.removeListener(_rebuild);
     widget.host.activeSignal.removeListener(_onActiveSignal);
-    // Release the whole-frame blur/pixelate native images (created per capture
-    // in _ensureRasterFor); otherwise they linger until a GC finalizer runs.
-    _blurredFull?.dispose();
-    _pixelatedFull?.dispose();
+    // Release the per-region blur/pixelate effect images + stop reconciling.
+    c.document.removeListener(_reconcileEffectCache);
+    _clearEffectCache();
     _textCtl?.dispose();
     _focus.dispose();
     _crop.dispose();
@@ -500,28 +504,95 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _onToolChanged() {
-    // Switching tools commits any in-progress text (its tool is gone). Blur no
-    // longer commits, so the pt field can take focus without ending editing.
+    // Switching tools commits any in-progress text (its tool is gone).
     if (_editingText) _commitText();
-    // The "paste" slot is the universal SELECT tool (select / move / resize /
-    // delete any drawable). The paste ACTION is Cmd-V only.
-    _ensureRasterFor(c.tool.value); // pre-compute whole-frame blur/pixelate
   }
 
-  /// Compute the whole-frame blur / pixelate ONCE when its tool is first
-  /// selected (the region drag then just masks it — no per-frame recompute).
-  Future<void> _ensureRasterFor(ToolKind t) async {
-    // Use the CURRENT canvas image so blur/pixelate align after a crop-trim.
-    if (t == ToolKind.blur && _blurredFull == null) {
-      final img = await blurWhole(
-        _canvasImage,
-        kBlurSigmaLogical * widget.host.pixelScale,
-      );
-      if (mounted) setState(() => _blurredFull = img);
-    } else if (t == ToolKind.pixelate && _pixelatedFull == null) {
-      final img = await pixelateWhole(_canvasImage, kPixelCellNative);
-      if (mounted) setState(() => _pixelatedFull = img);
+  // ---- region-local blur/pixelate effect cache ---------------------------
+  // Effects are rasterised per region when it settles (ShareX-style), keyed by
+  // (isBlur, rect, strength). A region being drawn/moved/resized or pending shows
+  // the placeholder. No whole-frame pre-compute.
+
+  (bool, Rect)? _effectCacheKey(Drawable d) {
+    if (d is BlurDrawable) return (true, d.rect);
+    if (d is PixelateDrawable) return (false, d.rect);
+    return null;
+  }
+
+  /// The effect-image lookup handed to the painters: the cached region image for a
+  /// blur/pixelate region (whatever strength it was last built at — so a strength
+  /// change shows the previous image until the new one lands), or null (->
+  /// placeholder) while it is being drawn/moved/resized or has no cache yet.
+  ui.Image? _lookupEffect(Drawable d) {
+    final ck = _effectCacheKey(d);
+    return ck == null ? null : _effectCache[ck]?.$1;
+  }
+
+  /// Ensure each settled blur/pixelate region has a cached effect image at its
+  /// CURRENT strength; build misses + strength changes async (keeping the old
+  /// image shown meanwhile); evict images for regions that are gone. The region
+  /// under active edit ([_editIndex]) is skipped (it shows the placeholder).
+  void _reconcileEffectCache() {
+    final needed = <(bool, Rect)>{};
+    final drawables = c.document.value.drawables;
+    for (var i = 0; i < drawables.length; i++) {
+      if (i == _editIndex) continue;
+      final ck = _effectCacheKey(drawables[i]);
+      if (ck == null) continue;
+      needed.add(ck);
+      final strength = drawables[i].style.strength;
+      final cur = _effectCache[ck];
+      final buildKey = (ck.$1, ck.$2, strength);
+      // Build when nothing is cached for this region OR the cached image is for a
+      // different strength (keep the old one visible until the new one is ready).
+      if ((cur == null || cur.$2 != strength) &&
+          !_effectPending.contains(buildKey)) {
+        _buildEffect(buildKey);
+      }
     }
+    for (final k
+        in _effectCache.keys.where((k) => !needed.contains(k)).toList()) {
+      _effectCache.remove(k)?.$1.dispose();
+    }
+  }
+
+  Future<void> _buildEffect((bool, Rect, double) buildKey) async {
+    final gen = _effectGen;
+    _effectPending.add(buildKey);
+    final (isBlur, rect, strength) = buildKey;
+    final scale = widget.host.pixelScale;
+    final native = Rect.fromLTRB(
+      rect.left * scale,
+      rect.top * scale,
+      rect.right * scale,
+      rect.bottom * scale,
+    );
+    try {
+      final img = isBlur
+          ? await blurRegion(
+              _canvasImage, native, blurSigmaNative(strength, scale))
+          : await pixelateRegion(
+              _canvasImage, native, pixelateCellNative(strength));
+      if (!mounted || gen != _effectGen) {
+        img.dispose(); // unmounted, or the cache was cleared mid-build
+        return;
+      }
+      final ck = (isBlur, rect);
+      _effectCache[ck]?.$1.dispose(); // replace the old image now the new is ready
+      _effectCache[ck] = (img, strength);
+      setState(() {});
+    } finally {
+      _effectPending.remove(buildKey);
+    }
+  }
+
+  void _clearEffectCache() {
+    _effectGen++;
+    for (final e in _effectCache.values) {
+      e.$1.dispose();
+    }
+    _effectCache.clear();
+    _effectPending.clear();
   }
 
   @override
@@ -530,17 +601,14 @@ class _EditorCoreState extends State<EditorCore> {
     // New frozen frame (in-place re-capture) -> the pre-computed images are
     // stale; drop them and recompute for the active tool.
     if (old.host.baseImage != widget.host.baseImage) {
-      _blurredFull?.dispose();
-      _pixelatedFull?.dispose();
-      _blurredFull = null;
-      _pixelatedFull = null;
+      _clearEffectCache(); // pre-rasters were from the old frame
+      _reconcileEffectCache(); // rebuild existing regions from the new frame
       _windows = widget.host.snapWindows;
       _hoverWindow = null;
       // Re-fit a re-loaded image (interactive editor). Usually moot because the
       // app re-keys EditorCore by ValueKey(image) so a fresh State runs initial
       // fit anyway, but kept correct for in-place baseImage swaps.
       _didInitialFit = false;
-      _ensureRasterFor(c.tool.value);
     }
   }
 
@@ -1657,8 +1725,7 @@ class _EditorCoreState extends State<EditorCore> {
         // drawings); the selection highlight is a SEPARATE animated layer
         // (see [_selectionHighlight]) so marching ants don't re-rasterize this.
         drawables: _effectiveDrawables(),
-        blurredFull: _blurredFull,
-        pixelatedFull: _pixelatedFull,
+        effectImage: _lookupEffect,
       ),
       size: _canvasSize,
     );
@@ -1714,8 +1781,7 @@ class _EditorCoreState extends State<EditorCore> {
                 scaleFactor: widget.host.pixelScale,
                 zoom: widget.loupe.zoom.toDouble(),
                 drawables: _effectiveDrawables(),
-                blurredFull: _blurredFull,
-                pixelatedFull: _pixelatedFull,
+                effectImage: _lookupEffect,
                 logicalSize: _canvasSize,
               ),
             ),
@@ -2177,8 +2243,7 @@ class _EditorCoreState extends State<EditorCore> {
                               scaleFactor: widget.host.pixelScale,
                               zoom: widget.loupe.zoom.toDouble(),
                               drawables: _effectiveDrawables(),
-                              blurredFull: _blurredFull,
-                              pixelatedFull: _pixelatedFull,
+                              effectImage: _lookupEffect,
                               logicalSize: Size(
                                 _canvasSize.width,
                                 _canvasSize.height,

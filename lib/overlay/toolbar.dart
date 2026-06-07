@@ -651,6 +651,10 @@ class _OptionsRowState extends State<_OptionsRow> {
           Listenable.merge([_c.tool, _c.selectedIndex, _c.document]),
       builder: (context, _) {
         final tool = _effectiveType();
+        // Blur/Pixelate carry no colour but DO have a strength control, so the bar
+        // shows for them too (a strength stepper replaces the colour button).
+        final isRasterEffect =
+            tool == ToolKind.blur || tool == ToolKind.pixelate;
         // Tools that carry a color (all vector draw tools; not crop/raster).
         const colorTools = {
           ToolKind.rectangle,
@@ -662,7 +666,9 @@ class _OptionsRowState extends State<_OptionsRow> {
           ToolKind.text,
           ToolKind.step,
         };
-        if (!colorTools.contains(tool)) return const SizedBox.shrink();
+        if (!colorTools.contains(tool) && !isRasterEffect) {
+          return const SizedBox.shrink();
+        }
         // Stroke-width applies to the shape/stroke tools (not text/step).
         const widthTools = {
           ToolKind.rectangle,
@@ -710,8 +716,23 @@ class _OptionsRowState extends State<_OptionsRow> {
                 children: [
                   // Single colour button: shows the current colour over a
                   // checkerboard (translucency reads) and opens the picker. The
-                  // presets live inside the picker now.
-                  _ColorButton(color: style.color, onTap: _openColorPopover),
+                  // presets live inside the picker now. Hidden for the raster
+                  // effects — blur/pixelate have no colour, they get a strength
+                  // stepper instead.
+                  if (!isRasterEffect)
+                    _ColorButton(color: style.color, onTap: _openColorPopover),
+                  if (isRasterEffect)
+                    _NumberStepper(
+                      key: const ValueKey('strength-stepper'),
+                      controller: _c,
+                      read: (s) => s.strength,
+                      write: _c.setStrength,
+                      min: 4,
+                      max: 64,
+                      step: 2,
+                      suffix: 'px',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
                   if (showsWidth) ...[
                     const SizedBox(width: 10),
                     _NumberStepper(

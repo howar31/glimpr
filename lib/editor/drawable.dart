@@ -227,6 +227,8 @@ class BlurDrawable extends Drawable implements RectShaped {
 
   @override
   BlurDrawable resizedTo(Rect r) => BlurDrawable(r, style);
+
+  BlurDrawable withStyle(DrawStyle s) => BlurDrawable(rect, s);
 }
 
 /// A rectangular region that masks the pre-pixelated whole-frame image. Like
@@ -245,6 +247,8 @@ class PixelateDrawable extends Drawable implements RectShaped {
 
   @override
   PixelateDrawable resizedTo(Rect r) => PixelateDrawable(r, style);
+
+  PixelateDrawable withStyle(DrawStyle s) => PixelateDrawable(rect, s);
 }
 
 /// A pasted bitmap (from the clipboard) drawn into [rect]. Movable/resizable.

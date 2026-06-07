@@ -32,7 +32,8 @@ DrawStyle defaultStyleFor(ToolKind t) => t == ToolKind.highlighter
 
 /// The drawing [ToolKind] a drawable corresponds to, for driving the option bar
 /// off the SELECTED annotation (so the universal Select tool can edit any of
-/// them). Null for shapes with no editable option-bar style (raster / image).
+/// them). Blur/Pixelate map to their tools (they expose a strength control); only
+/// a pasted image has no editable option-bar style.
 ToolKind? toolKindForDrawable(Drawable d) => switch (d) {
       RectangleDrawable() => ToolKind.rectangle,
       EllipseDrawable() => ToolKind.ellipse,
@@ -42,7 +43,9 @@ ToolKind? toolKindForDrawable(Drawable d) => switch (d) {
       PenDrawable() => ToolKind.pen,
       TextDrawable() => ToolKind.text,
       StepDrawable() => ToolKind.step,
-      BlurDrawable() || PixelateDrawable() || ImageDrawable() => null,
+      BlurDrawable() => ToolKind.blur,
+      PixelateDrawable() => ToolKind.pixelate,
+      ImageDrawable() => null,
     };
 
 /// Mutable editor state exposed as ValueListenables so widgets rebuild narrowly.
@@ -106,8 +109,9 @@ class EditorController {
       return;
     }
     final d = document.value.drawables[i];
-    // Raster regions / pasted images have no editable option-bar style.
-    if (d is BlurDrawable || d is PixelateDrawable || d is ImageDrawable) return;
+    // Pasted images have no editable option-bar style. Blur/Pixelate DO sync now
+    // (they expose a per-region strength), so the option bar reflects the region.
+    if (d is ImageDrawable) return;
     style.value = d.style;
   }
 
@@ -142,6 +146,8 @@ class EditorController {
       _updateStyle(style.value.copyWith(arrowHeads: h));
   void setCurvePoints(int n) => _updateStyle(style.value
       .copyWith(curvePoints: n.clamp(kCurvePointsMin, kCurvePointsMax)));
+  void setStrength(double s) => _updateStyle(style.value
+      .copyWith(strength: s.clamp(kRasterStrengthMin, kRasterStrengthMax)));
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
   // so we rebuild the style explicitly without a fontFamily. The other fields
@@ -216,9 +222,10 @@ class EditorController {
       PenDrawable() => d.withStyle(style.value),
       TextDrawable() => d.withStyle(style.value),
       StepDrawable() => d.withStyle(style.value),
-      // Raster regions carry no editable style (no color/width in their options).
-      BlurDrawable() => d,
-      PixelateDrawable() => d,
+      // Raster regions carry an editable strength (blur radius / block size).
+      BlurDrawable() => d.withStyle(style.value),
+      PixelateDrawable() => d.withStyle(style.value),
+      // Pasted images carry no editable style.
       ImageDrawable() => d,
     };
     // For the line tools, a changed curve-points count re-seeds the interior

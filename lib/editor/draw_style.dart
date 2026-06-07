@@ -78,6 +78,16 @@ const int kCurvePointsMin = 0;
 const int kCurvePointsMax = 5;
 const int kCurvePointsDefault = 0;
 
+/// Raster-effect strength (blur radius / pixelate block size), in PIXELS. Per
+/// region; only the Blur/Pixelate tools read it (other tools carry but ignore it,
+/// like [HighlighterTexture]). The default 12 reproduces the pre-strength look
+/// exactly: blur reads it as LOGICAL px (native sigma = strength * pixelScale),
+/// pixelate reads it as NATIVE block px. Clamped to [kRasterStrengthMin,
+/// kRasterStrengthMax]; the option bar narrows the live range per tool.
+const double kRasterStrengthDefault = 12;
+const double kRasterStrengthMin = 2;
+const double kRasterStrengthMax = 64;
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -89,6 +99,7 @@ class DrawStyle {
   final LineStyle lineStyle; // line tools only (solid/dashed/...); else ignored
   final ArrowHeads arrowHeads; // arrow only; which ends carry a head
   final int curvePoints; // interior control points seeded for new line shapes
+  final double strength; // blur radius / pixelate block size; Blur/Pixelate only
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -99,6 +110,7 @@ class DrawStyle {
     this.lineStyle = LineStyle.solid,
     this.arrowHeads = ArrowHeads.end,
     this.curvePoints = kCurvePointsDefault,
+    this.strength = kRasterStrengthDefault,
   });
 
   DrawStyle copyWith({
@@ -111,6 +123,7 @@ class DrawStyle {
     LineStyle? lineStyle,
     ArrowHeads? arrowHeads,
     int? curvePoints,
+    double? strength,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -121,6 +134,7 @@ class DrawStyle {
     lineStyle: lineStyle ?? this.lineStyle,
     arrowHeads: arrowHeads ?? this.arrowHeads,
     curvePoints: curvePoints ?? this.curvePoints,
+    strength: strength ?? this.strength,
   );
 
   Map<String, dynamic> toJson() => {
@@ -133,6 +147,7 @@ class DrawStyle {
     if (lineStyle != LineStyle.solid) 'lineStyle': lineStyle.name,
     if (arrowHeads != ArrowHeads.end) 'arrowHeads': arrowHeads.name,
     if (curvePoints != kCurvePointsDefault) 'curvePoints': curvePoints,
+    if (strength != kRasterStrengthDefault) 'strength': strength,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -146,6 +161,8 @@ class DrawStyle {
     arrowHeads: _arrowHeadsFromName(j['arrowHeads']),
     curvePoints: ((j['curvePoints'] as num?)?.toInt() ?? kCurvePointsDefault)
         .clamp(kCurvePointsMin, kCurvePointsMax),
+    strength: ((j['strength'] as num?)?.toDouble() ?? kRasterStrengthDefault)
+        .clamp(kRasterStrengthMin, kRasterStrengthMax),
   );
 
   @override
@@ -159,8 +176,9 @@ class DrawStyle {
       other.shadow == shadow &&
       other.lineStyle == lineStyle &&
       other.arrowHeads == arrowHeads &&
-      other.curvePoints == curvePoints;
+      other.curvePoints == curvePoints &&
+      other.strength == strength;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
-      texture, shadow, lineStyle, arrowHeads, curvePoints);
+      texture, shadow, lineStyle, arrowHeads, curvePoints, strength);
 }

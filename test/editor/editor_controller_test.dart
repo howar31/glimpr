@@ -99,6 +99,26 @@ void main() {
     c.dispose();
   });
 
+  test('selecting a blur region syncs its strength; editing it stays per-region', () {
+    final styles = <ToolKind, DrawStyle>{};
+    final c = EditorController(toolStyles: styles);
+    c.selectTool(ToolKind.blur);
+    c.commitDrawable(
+      const BlurDrawable(Rect.fromLTWH(0, 0, 20, 20), DrawStyle()),
+    );
+    c.selectedIndex.value = 0;
+    // Selecting a blur region loads its style (strength) into the option bar.
+    expect(c.style.value.strength, kRasterStrengthDefault);
+    c.setStrength(24);
+    expect(
+      (c.document.value.drawables[0] as BlurDrawable).style.strength,
+      24,
+    );
+    // Editing a selected region must not pollute the tool default.
+    expect(styles[ToolKind.blur], isNull);
+    c.dispose();
+  });
+
   test('enterCrop switches phase to crop', () {
     final c = EditorController();
     c.selectTool(ToolKind.crop);

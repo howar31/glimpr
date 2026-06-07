@@ -119,14 +119,12 @@ class LoupePainter extends CustomPainter {
   final Offset cursorLogical;
   final double scaleFactor;
   final double zoom;
-  // Drawables + whole-frame blur/pixelate, so the loupe shows the COMPOSITED
-  // result (e.g. a committed blur region reads as blurred, matching the screen
-  // and the export) instead of the raw frozen pixels. [logicalSize] is the
-  // display's logical size (the painter stretches the whole-frame masks across
-  // it). Empty list = plain magnifier (e.g. unit tests).
+  // Drawables + the per-region blur/pixelate lookup, so the loupe shows the
+  // COMPOSITED result (e.g. a committed blur region reads as blurred, matching the
+  // screen and the export) instead of the raw frozen pixels. [logicalSize] is the
+  // display's logical size. Empty list = plain magnifier (e.g. unit tests).
   final List<Drawable> drawables;
-  final ui.Image? blurredFull;
-  final ui.Image? pixelatedFull;
+  final EffectImageLookup? effectImage;
   final Size logicalSize;
   const LoupePainter({
     required this.image,
@@ -134,8 +132,7 @@ class LoupePainter extends CustomPainter {
     required this.scaleFactor,
     this.zoom = 8,
     this.drawables = const [],
-    this.blurredFull,
-    this.pixelatedFull,
+    this.effectImage,
     this.logicalSize = Size.zero,
   });
 
@@ -172,8 +169,7 @@ class LoupePainter extends CustomPainter {
       canvas.translate(-cursorLogical.dx, -cursorLogical.dy);
       DrawablePainter(
         drawables: drawables,
-        blurredFull: blurredFull,
-        pixelatedFull: pixelatedFull,
+        effectImage: effectImage,
       ).paint(canvas, logicalSize);
       canvas.restore();
     }
@@ -224,8 +220,7 @@ class LoupePainter extends CustomPainter {
       old.image != image ||
       old.zoom != zoom ||
       old.drawables != drawables ||
-      old.blurredFull != blurredFull ||
-      old.pixelatedFull != pixelatedFull;
+      old.effectImage != effectImage;
 }
 
 // Shared HUD pill (loupe readout + box-size label): dark body + thin light frame,

@@ -195,19 +195,19 @@ void paintHighlighterStroke(
 /// Paints the drawable list (annotation layer) and, if [selectedIndex] is set,
 /// a selection rectangle + corner handles around that drawable.
 ///
-/// [blurredFull]/[pixelatedFull] are the whole frame pre-blurred / pre-pixelated
-/// once (computed when the tool is selected); the blur/pixelate regions just
-/// clip them to the dragged rect — no per-frame recompute. Null on the vector-
-/// only paths (unit tests), where those regions draw a neutral placeholder.
+/// Looks up the cached region-local effect image for a blur/pixelate drawable, or
+/// null while it is being drawn / computed (then a styled placeholder is drawn).
+/// Supplied by EditorCore (live editor) and composite (export).
+typedef EffectImageLookup = ui.Image? Function(Drawable d);
+
+/// [effectImage] returns the per-region pre-rasterised blur/pixelate image (region
+/// rect 1:1) for a settled region, or null while it is being drawn / computed (a
+/// styled placeholder is drawn instead). A null lookup on the vector-only paths
+/// (unit tests) -> every region shows the placeholder.
 class DrawablePainter extends CustomPainter {
   final List<Drawable> drawables;
-  final ui.Image? blurredFull;
-  final ui.Image? pixelatedFull;
-  const DrawablePainter({
-    required this.drawables,
-    this.blurredFull,
-    this.pixelatedFull,
-  });
+  final EffectImageLookup? effectImage;
+  const DrawablePainter({required this.drawables, this.effectImage});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -279,9 +279,9 @@ class DrawablePainter extends CustomPainter {
       case StepDrawable():
         _paintStep(canvas, d);
       case BlurDrawable():
-        _paintMasked(canvas, d.rect, size, blurredFull, nearest: false);
+        _paintEffect(canvas, d, d.rect, isBlur: true);
       case PixelateDrawable():
-        _paintMasked(canvas, d.rect, size, pixelatedFull, nearest: true);
+        _paintEffect(canvas, d, d.rect, isBlur: false);
       case ImageDrawable():
         canvas.drawImageRect(
           d.image,
@@ -297,31 +297,101 @@ class DrawablePainter extends CustomPainter {
     }
   }
 
-  /// Clips the pre-computed whole-frame [full] image (blurred or pixelated) to
-  /// [rect], stretched across the display ([size]) so it aligns 1:1 with the
-  /// frozen frame beneath. [nearest] keeps pixelate blocks crisp. A neutral
-  /// placeholder shows while [full] is still being computed (or in unit tests).
-  void _paintMasked(
-    Canvas canvas,
-    Rect rect,
-    Size size,
-    ui.Image? full, {
-    required bool nearest,
-  }) {
-    if (full == null) {
-      canvas.drawRect(rect, Paint()..color = const Color(0x33000000));
+  /// Draws a blur/pixelate region: its pre-rasterised region image (stretched 1:1
+  /// over the rect; nearest-neighbour for pixelate -> crisp blocks), or a styled
+  /// placeholder while the image is unavailable (being drawn / still computing).
+  void _paintEffect(Canvas canvas, Drawable d, Rect rect, {required bool isBlur}) {
+    final img = effectImage?.call(d);
+    if (img == null) {
+      _paintEffectPlaceholder(
+        canvas,
+        rect,
+        isBlur: isBlur,
+        strength: d.style.strength,
+      );
       return;
     }
     canvas.save();
     canvas.clipRect(rect);
     canvas.drawImageRect(
-      full,
-      Rect.fromLTWH(0, 0, full.width.toDouble(), full.height.toDouble()),
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()
-        ..filterQuality = nearest ? FilterQuality.none : FilterQuality.medium,
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      rect,
+      Paint()..filterQuality = isBlur ? FilterQuality.medium : FilterQuality.none,
     );
     canvas.restore();
+  }
+
+  /// The Glimpr-styled "effect pending here" placeholder, shown while a region is
+  /// being drawn/moved/resized or its effect image is still computing: a frosted
+  /// dark scrim + a faint centred effect-icon watermark + a static two-tone dashed
+  /// border (HUD identity) + a corner glass pill naming the effect and strength.
+  void _paintEffectPlaceholder(
+    Canvas canvas,
+    Rect rect, {
+    required bool isBlur,
+    required double strength,
+  }) {
+    canvas.save();
+    canvas.clipRect(rect);
+    // Frosted dark scrim (Aurora navy) — reads as a glass panel over the content.
+    canvas.drawRect(rect, Paint()..color = const Color(0xCC0F1526));
+    // Faint centred effect-icon watermark.
+    final icon = isBlur ? Icons.blur_on : Icons.grid_on;
+    final iconSize = (rect.shortestSide * 0.4).clamp(0.0, 56.0);
+    if (iconSize >= 16) {
+      final ip = TextPainter(
+        text: TextSpan(
+          text: String.fromCharCode(icon.codePoint),
+          style: TextStyle(
+            fontFamily: icon.fontFamily,
+            package: icon.fontPackage,
+            fontSize: iconSize,
+            color: const Color(0x30FFFFFF),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      ip.paint(canvas, rect.center - Offset(ip.width / 2, ip.height / 2));
+    }
+    canvas.restore();
+    // Static two-tone dashed border (HUD identity; phase 0 = not animated, so the
+    // annotation layer is not re-rasterised every march tick).
+    drawMarchingPolyline(
+      canvas,
+      [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft],
+      phase: 0,
+    );
+    // Corner glass pill: "[Blur|Pixelate] N", drawn when it fits the region.
+    final label = '${isBlur ? 'Blur' : 'Pixelate'} ${strength.round()}';
+    final lp = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          color: Color(0xFFFFFFFF),
+          fontSize: 11,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.none,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final pillW = lp.width + 16, pillH = lp.height + 8;
+    if (rect.width >= pillW + 8 && rect.height >= pillH + 8) {
+      final pill = Rect.fromLTWH(rect.left + 6, rect.top + 6, pillW, pillH);
+      final rr = RRect.fromRectAndRadius(pill, const Radius.circular(8));
+      canvas.drawRRect(rr, Paint()..color = const Color(0xF2202020));
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..color = const Color(0x55FFFFFF)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+      lp.paint(canvas, Offset(pill.left + 8, pill.top + 4));
+    }
   }
 
   void _paintPen(Canvas canvas, PenDrawable d) {
@@ -468,9 +538,7 @@ class DrawablePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(DrawablePainter old) =>
-      old.drawables != drawables ||
-      old.blurredFull != blurredFull ||
-      old.pixelatedFull != pixelatedFull;
+      old.drawables != drawables || old.effectImage != effectImage;
 }
 
 /// The selected drawable's highlight: a flowing two-tone marching-ants outline

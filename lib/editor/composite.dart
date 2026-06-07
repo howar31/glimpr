@@ -7,6 +7,10 @@ import 'drawable.dart';
 import 'drawable_painter.dart';
 import 'raster.dart';
 
+/// A logical rect scaled to native pixels.
+Rect _nativeRect(Rect r, double s) =>
+    Rect.fromLTRB(r.left * s, r.top * s, r.right * s, r.bottom * s);
+
 /// Native-pixel crop rect for [selectionLogical] (logical overlay coords), or
 /// the whole display when null. Clamped to the native image bounds.
 Rect nativeCropRect({
@@ -64,22 +68,31 @@ Future<Uint8List> compositeAndCrop({
   if (cursorImage != null && cursorTopLeftNative != null) {
     canvas.drawImage(cursorImage, cursorTopLeftNative, ui.Paint());
   }
-  // Pre-compute the whole-frame blur / pixelate once (only if used) so the
-  // region drawables can just mask them — same path as on-screen.
-  final blurredFull = drawables.any((d) => d is BlurDrawable)
-      ? await blurWhole(frozen, kBlurSigmaLogical * scaleFactor)
-      : null;
-  final pixelatedFull = drawables.any((d) => d is PixelateDrawable)
-      ? await pixelateWhole(frozen, kPixelCellNative)
-      : null;
+  // Region-local blur / pixelate: rasterise each region over its OWN pixels at its
+  // strength (no whole-frame), keyed by drawable so the painter looks it up.
+  final effects = <Drawable, ui.Image>{};
+  for (final d in drawables) {
+    if (d is BlurDrawable) {
+      effects[d] = await blurRegion(
+        frozen,
+        _nativeRect(d.rect, scaleFactor),
+        blurSigmaNative(d.style.strength, scaleFactor),
+      );
+    } else if (d is PixelateDrawable) {
+      effects[d] = await pixelateRegion(
+        frozen,
+        _nativeRect(d.rect, scaleFactor),
+        pixelateCellNative(d.style.strength),
+      );
+    }
+  }
   // Layer 2: drawables, scaled logical->native. Paste-image carries its own
-  // bitmap; blur/pixelate mask the pre-computed whole-frame images.
+  // bitmap; blur/pixelate draw their pre-rasterised region images.
   canvas.save();
   canvas.scale(scaleFactor);
   DrawablePainter(
     drawables: drawables,
-    blurredFull: blurredFull,
-    pixelatedFull: pixelatedFull,
+    effectImage: (d) => effects[d],
   ).paint(canvas, logicalSize);
   canvas.restore();
   final picture = recorder.endRecording();
@@ -87,10 +100,11 @@ Future<Uint8List> compositeAndCrop({
   final outH = crop.height.round();
   final cropped = await picture.toImage(outW, outH);
   picture.dispose();
-  // The whole-frame blur/pixelate (if any) are now rasterised into `cropped`;
+  // The per-region blur/pixelate images are now rasterised into `cropped`;
   // release their native memory rather than waiting for GC finalizers.
-  blurredFull?.dispose();
-  pixelatedFull?.dispose();
+  for (final img in effects.values) {
+    img.dispose();
+  }
 
   // Opt-in decoration: wrap the cropped content in margin + rounded corners +
   // drop shadow. JPEG (no alpha) fills the transparent region with the fill
