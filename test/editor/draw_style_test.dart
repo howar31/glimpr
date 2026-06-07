@@ -158,4 +158,22 @@ void main() {
     expect(a.copyWith(strength: 20) == a, isFalse);
     expect(a.copyWith(strength: 20).strength, 20);
   });
+
+  test('fill defaults transparent, omitted from JSON, round-trips', () {
+    expect(const DrawStyle().fillColor, const Color(0x00000000));
+    expect(const DrawStyle().toJson().containsKey('fillColor'), isFalse);
+    final filled = const DrawStyle().copyWith(fillColor: const Color(0x80FF0000));
+    expect(filled.toJson()['fillColor'], 0x80FF0000);
+    expect(DrawStyle.fromJson(filled.toJson()).fillColor, const Color(0x80FF0000));
+    // Old blobs (no key) load as no fill.
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).fillColor,
+        const Color(0x00000000));
+  });
+
+  test('equality and copyWith include fillColor', () {
+    const a = DrawStyle();
+    expect(a.copyWith(fillColor: const Color(0x4400FF00)) == a, isFalse);
+    expect(a.copyWith(fillColor: const Color(0x4400FF00)).fillColor,
+        const Color(0x4400FF00));
+  });
 }

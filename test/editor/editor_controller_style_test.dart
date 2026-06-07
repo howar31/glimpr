@@ -69,4 +69,15 @@ void main() {
     c.resetTool(ToolKind.highlighter);
     expect(c.style.value, defaultStyleFor(ToolKind.highlighter));
   });
+
+  test('setFillColor sets a fill and canonicalizes a transparent pick to none', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.rectangle);
+    c.setFillColor(const Color(0x804CD964));
+    expect(c.style.value.fillColor, const Color(0x804CD964));
+    // Any fully transparent pick collapses to the exact no-fill default so the
+    // reset button (style != default) reads correctly and JSON omits it.
+    c.setFillColor(const Color(0x00FF0000));
+    expect(c.style.value.fillColor, const Color(0x00000000));
+  });
 }

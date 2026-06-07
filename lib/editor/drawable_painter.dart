@@ -42,6 +42,49 @@ void _withShadow(
   geom(canvas, base);
 }
 
+/// Draws a rect/ellipse shape as shadow -> fill -> stroke (z-order), so a drop
+/// shadow never haloes over the fill and the fill sits beneath the outline. With
+/// a transparent fill and shadow off this draws only the stroke geom — byte for
+/// byte the legacy single-stroke paint, keeping the default export identical.
+void _paintFilledShape(
+  Canvas canvas,
+  DrawStyle style,
+  void Function(Canvas, Paint) geom,
+) {
+  final hasFill = style.fillColor.a > 0;
+  if (style.shadow) {
+    final sp = Paint()
+      ..style = hasFill ? PaintingStyle.fill : PaintingStyle.stroke
+      ..strokeWidth = style.strokeWidth
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true
+      ..color = _kShadowColor
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _kShadowSigma);
+    canvas.save();
+    canvas.translate(_kShadowOffset.dx, _kShadowOffset.dy);
+    geom(canvas, sp);
+    canvas.restore();
+  }
+  if (hasFill) {
+    geom(
+      canvas,
+      Paint()
+        ..color = style.fillColor
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
+  }
+  geom(
+    canvas,
+    Paint()
+      ..color = style.color
+      ..strokeWidth = style.strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true,
+  );
+}
+
 /// Smooth, deterministic value noise for the procedural marker texture — same
 /// seed always yields the same curve, so a highlighter never shimmers on repaint.
 class _MarkerNoise {
@@ -219,22 +262,12 @@ class DrawablePainter extends CustomPainter {
   void _paintOne(Canvas canvas, Drawable d, Size size) {
     switch (d) {
       case RectangleDrawable():
-        final paint = Paint()
-          ..color = d.style.color
-          ..strokeWidth = d.style.strokeWidth
-          ..style = PaintingStyle.stroke
-          ..strokeJoin = StrokeJoin.round;
         // Rounded corners; radius eases down for small rectangles.
         final radius = (d.rect.shortestSide / 4).clamp(0.0, 12.0);
         final rrect = RRect.fromRectAndRadius(d.rect, Radius.circular(radius));
-        _withShadow(canvas, d.style, paint, (c, p) => c.drawRRect(rrect, p));
+        _paintFilledShape(canvas, d.style, (c, p) => c.drawRRect(rrect, p));
       case EllipseDrawable():
-        final paint = Paint()
-          ..color = d.style.color
-          ..strokeWidth = d.style.strokeWidth
-          ..style = PaintingStyle.stroke
-          ..isAntiAlias = true;
-        _withShadow(canvas, d.style, paint, (c, p) => c.drawOval(d.rect, p));
+        _paintFilledShape(canvas, d.style, (c, p) => c.drawOval(d.rect, p));
       case ArrowDrawable():
         _paintArrow(canvas, d);
       case LineDrawable():

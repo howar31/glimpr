@@ -100,6 +100,7 @@ class DrawStyle {
   final ArrowHeads arrowHeads; // arrow only; which ends carry a head
   final int curvePoints; // interior control points seeded for new line shapes
   final double strength; // blur radius / pixelate block size; Blur/Pixelate only
+  final Color fillColor; // rect/ellipse solid fill (own alpha); 0 alpha = no fill
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -111,6 +112,7 @@ class DrawStyle {
     this.arrowHeads = ArrowHeads.end,
     this.curvePoints = kCurvePointsDefault,
     this.strength = kRasterStrengthDefault,
+    this.fillColor = const Color(0x00000000),
   });
 
   DrawStyle copyWith({
@@ -124,6 +126,7 @@ class DrawStyle {
     ArrowHeads? arrowHeads,
     int? curvePoints,
     double? strength,
+    Color? fillColor,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -135,6 +138,7 @@ class DrawStyle {
     arrowHeads: arrowHeads ?? this.arrowHeads,
     curvePoints: curvePoints ?? this.curvePoints,
     strength: strength ?? this.strength,
+    fillColor: fillColor ?? this.fillColor,
   );
 
   Map<String, dynamic> toJson() => {
@@ -148,6 +152,7 @@ class DrawStyle {
     if (arrowHeads != ArrowHeads.end) 'arrowHeads': arrowHeads.name,
     if (curvePoints != kCurvePointsDefault) 'curvePoints': curvePoints,
     if (strength != kRasterStrengthDefault) 'strength': strength,
+    if (fillColor.a != 0) 'fillColor': fillColor.toARGB32(),
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -163,6 +168,7 @@ class DrawStyle {
         .clamp(kCurvePointsMin, kCurvePointsMax),
     strength: ((j['strength'] as num?)?.toDouble() ?? kRasterStrengthDefault)
         .clamp(kRasterStrengthMin, kRasterStrengthMax),
+    fillColor: Color((j['fillColor'] as num?)?.toInt() ?? 0x00000000),
   );
 
   @override
@@ -177,8 +183,9 @@ class DrawStyle {
       other.lineStyle == lineStyle &&
       other.arrowHeads == arrowHeads &&
       other.curvePoints == curvePoints &&
-      other.strength == strength;
+      other.strength == strength &&
+      other.fillColor == fillColor;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
-      texture, shadow, lineStyle, arrowHeads, curvePoints, strength);
+      texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor);
 }

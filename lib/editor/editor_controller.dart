@@ -148,6 +148,10 @@ class EditorController {
       .copyWith(curvePoints: n.clamp(kCurvePointsMin, kCurvePointsMax)));
   void setStrength(double s) => _updateStyle(style.value
       .copyWith(strength: s.clamp(kRasterStrengthMin, kRasterStrengthMax)));
+  // Rect/ellipse fill. Canonicalize a fully transparent pick to the exact "no
+  // fill" default so equality (reset-button enablement) and JSON omission agree.
+  void setFillColor(Color c) => _updateStyle(style.value
+      .copyWith(fillColor: c.a == 0 ? const Color(0x00000000) : c));
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
   // so we rebuild the style explicitly without a fontFamily. The other fields

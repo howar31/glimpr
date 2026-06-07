@@ -354,7 +354,7 @@ class _Bar extends StatelessWidget {
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
-enum _OpenPopover { none, color, font, texture, lineStyle, arrowHeads }
+enum _OpenPopover { none, color, fill, font, texture, lineStyle, arrowHeads }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
 /// font size (text only). Hidden for the Crop tool.
@@ -473,6 +473,40 @@ class _OptionsRowState extends State<_OptionsRow> {
         onPickFromScreen: () {
           _c.startEyedropper();
           _closePopover();
+        },
+      ),
+    );
+  }
+
+  // The fill picker (rect/ellipse only). Mirrors the outline picker but seeds and
+  // writes [DrawStyle.fillColor]; the alpha slider doubles as "drag to 0 = no
+  // fill". No eyedropper — that path targets the outline colour.
+  Future<void> _openFillPopover() async {
+    if (_open == _OpenPopover.fill) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final recents = await ToolStyleStore(
+      Settings.instance.store,
+    ).loadRecentColors();
+    if (!mounted) return;
+    _showPopover(
+      _OpenPopover.fill,
+      _barLink,
+      width: 242,
+      child: ColorPickerPopover(
+        color: _c.style.value.fillColor,
+        recents: recents,
+        presets: kColorPresets,
+        onChanged: _c.setFillColor,
+        // A cleared (transparent) fill isn't a colour worth recalling.
+        onCommit: (color) {
+          if (color.a > 0) {
+            ToolStyleStore(
+              Settings.instance.store,
+            ).pushRecentColor(color.toARGB32());
+          }
         },
       ),
     );
@@ -706,6 +740,9 @@ class _OptionsRowState extends State<_OptionsRow> {
         final showsCurvePoints = segmentTools.contains(tool);
         final showsLineStyle =
             tool == ToolKind.line || tool == ToolKind.arrow;
+        // Fill applies to the closed RectShaped vector shapes.
+        const fillTools = {ToolKind.rectangle, ToolKind.ellipse};
+        final showsFill = fillTools.contains(tool);
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
@@ -721,6 +758,16 @@ class _OptionsRowState extends State<_OptionsRow> {
                   // stepper instead.
                   if (!isRasterEffect)
                     _ColorButton(color: style.color, onTap: _openColorPopover),
+                  if (showsFill) ...[
+                    const SizedBox(width: 6),
+                    _ColorButton(
+                      key: const ValueKey('fill-color'),
+                      color: style.fillColor,
+                      tooltip: 'Fill',
+                      glyph: Icons.format_color_fill,
+                      onTap: _openFillPopover,
+                    ),
+                  ],
                   if (isRasterEffect)
                     _NumberStepper(
                       key: const ValueKey('strength-stepper'),
@@ -870,14 +917,24 @@ class _TextureButton extends StatelessWidget {
 class _ColorButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
-  const _ColorButton({required this.color, required this.onTap});
+  final String tooltip;
+  // Optional glyph overlaid centre to tell two swatches apart (the fill swatch
+  // carries a fill-bucket icon; the outline swatch carries none).
+  final IconData? glyph;
+  const _ColorButton({
+    super.key,
+    required this.color,
+    required this.onTap,
+    this.tooltip = 'Colour',
+    this.glyph,
+  });
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Tooltip(
-        message: 'Colour',
+        message: tooltip,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: Container(
@@ -898,6 +955,19 @@ class _ColorButton extends StatelessWidget {
               children: [
                 const CustomPaint(painter: _CheckerPainter()),
                 ColoredBox(color: color),
+                if (glyph != null)
+                  // Fixed white-on-shadow so the glyph stays legible over any
+                  // fill colour and over the bare checker (no fill).
+                  Center(
+                    child: Icon(
+                      glyph,
+                      size: 13,
+                      color: const Color(0xF0FFFFFF),
+                      shadows: const [
+                        Shadow(color: Color(0x99000000), blurRadius: 2),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
