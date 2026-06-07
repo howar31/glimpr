@@ -152,6 +152,10 @@ class EditorController {
   // fill" default so equality (reset-button enablement) and JSON omission agree.
   void setFillColor(Color c) => _updateStyle(style.value
       .copyWith(fillColor: c.a == 0 ? const Color(0x00000000) : c));
+  // Text glyph outline. Canonicalize a fully transparent pick to the exact "no
+  // outline" default (same rationale as setFillColor).
+  void setOutlineColor(Color c) => _updateStyle(style.value
+      .copyWith(outlineColor: c.a == 0 ? const Color(0x00000000) : c));
   void setCornerRadius(double r) => _updateStyle(
       style.value.copyWith(cornerRadius: r.clamp(0.0, kCornerRadiusMax)));
   // Revert ONLY the corner radius to the legacy auto value (bypasses the

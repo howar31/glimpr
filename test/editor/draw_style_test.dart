@@ -209,4 +209,22 @@ void main() {
     expect(resolveCornerRadius(80, rect), 50); // clamp to shortestSide/2
     expect(resolveCornerRadius(0, rect), 0);
   });
+
+  test('outline defaults transparent, omitted from JSON, round-trips', () {
+    expect(const DrawStyle().outlineColor, const Color(0x00000000));
+    expect(const DrawStyle().toJson().containsKey('outlineColor'), isFalse);
+    final o = const DrawStyle().copyWith(outlineColor: const Color(0xFFFFFFFF));
+    expect(o.toJson()['outlineColor'], 0xFFFFFFFF);
+    expect(DrawStyle.fromJson(o.toJson()).outlineColor, const Color(0xFFFFFFFF));
+    // Old blobs (no key) load as no outline.
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).outlineColor,
+        const Color(0x00000000));
+  });
+
+  test('equality and copyWith include outlineColor', () {
+    const a = DrawStyle();
+    expect(a.copyWith(outlineColor: const Color(0xFF000000)) == a, isFalse);
+    expect(a.copyWith(outlineColor: const Color(0xFF000000)).outlineColor,
+        const Color(0xFF000000));
+  });
 }

@@ -102,4 +102,13 @@ void main() {
     expect(c.style.value.cornerRadius, kCornerRadiusAuto);
     expect(c.style.value.strokeWidth, 20); // unrelated fields untouched
   });
+
+  test('setOutlineColor sets an outline and canonicalizes a transparent pick', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.text);
+    c.setOutlineColor(const Color(0xFFFFFFFF));
+    expect(c.style.value.outlineColor, const Color(0xFFFFFFFF));
+    c.setOutlineColor(const Color(0x00123456));
+    expect(c.style.value.outlineColor, const Color(0x00000000));
+  });
 }

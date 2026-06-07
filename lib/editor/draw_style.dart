@@ -119,6 +119,7 @@ class DrawStyle {
   final double strength; // blur radius / pixelate block size; Blur/Pixelate only
   final Color fillColor; // rect/ellipse solid fill (own alpha); 0 alpha = no fill
   final double cornerRadius; // rectangle corner radius; kCornerRadiusAuto = legacy
+  final Color outlineColor; // text glyph outline (own alpha); 0 alpha = no outline
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -132,6 +133,7 @@ class DrawStyle {
     this.strength = kRasterStrengthDefault,
     this.fillColor = const Color(0x00000000),
     this.cornerRadius = kCornerRadiusAuto,
+    this.outlineColor = const Color(0x00000000),
   });
 
   DrawStyle copyWith({
@@ -147,6 +149,7 @@ class DrawStyle {
     double? strength,
     Color? fillColor,
     double? cornerRadius,
+    Color? outlineColor,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -160,6 +163,7 @@ class DrawStyle {
     strength: strength ?? this.strength,
     fillColor: fillColor ?? this.fillColor,
     cornerRadius: cornerRadius ?? this.cornerRadius,
+    outlineColor: outlineColor ?? this.outlineColor,
   );
 
   Map<String, dynamic> toJson() => {
@@ -175,6 +179,7 @@ class DrawStyle {
     if (strength != kRasterStrengthDefault) 'strength': strength,
     if (fillColor.a != 0) 'fillColor': fillColor.toARGB32(),
     if (cornerRadius != kCornerRadiusAuto) 'cornerRadius': cornerRadius,
+    if (outlineColor.a != 0) 'outlineColor': outlineColor.toARGB32(),
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -192,6 +197,7 @@ class DrawStyle {
         .clamp(kRasterStrengthMin, kRasterStrengthMax),
     fillColor: Color((j['fillColor'] as num?)?.toInt() ?? 0x00000000),
     cornerRadius: (j['cornerRadius'] as num?)?.toDouble() ?? kCornerRadiusAuto,
+    outlineColor: Color((j['outlineColor'] as num?)?.toInt() ?? 0x00000000),
   );
 
   @override
@@ -208,9 +214,10 @@ class DrawStyle {
       other.curvePoints == curvePoints &&
       other.strength == strength &&
       other.fillColor == fillColor &&
-      other.cornerRadius == cornerRadius;
+      other.cornerRadius == cornerRadius &&
+      other.outlineColor == outlineColor;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
       texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
-      cornerRadius);
+      cornerRadius, outlineColor);
 }

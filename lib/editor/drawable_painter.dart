@@ -15,6 +15,15 @@ const Color _kShadowColor = Color(0xBF000000); // 75% black
 const Offset _kShadowOffset = Offset(2, 2);
 const double _kShadowSigma = 1.0; // shape MaskFilter blur stddev (~CSS 2px blur)
 const double _kShadowTextBlur = 2.0; // text Shadow.blurRadius (CSS-style radius)
+// The text drop shadow, cast by whichever layer is outermost (pill > outline >
+// glyphs) so it never floats oddly between layers.
+const List<Shadow> _kTextShadow = [
+  Shadow(
+    color: _kShadowColor,
+    offset: _kShadowOffset,
+    blurRadius: _kShadowTextBlur,
+  ),
+];
 
 /// Draws [geom] as a blurred, offset drop shadow beneath the real shape when
 /// [style.shadow] is on, then draws the real shape via the same closure. The
@@ -287,21 +296,17 @@ class DrawablePainter extends CustomPainter {
       case PenDrawable():
         _paintPen(canvas, d);
       case TextDrawable():
-        // The shadow is injected only at paint time — NOT in textStyleOf, which
-        // the transparent inline editing field shares (it would float a shadow
-        // under invisible glyphs while typing).
-        final span = d.style.shadow
+        final hasFill = d.style.fillColor.a > 0;
+        final hasOutline = d.style.outlineColor.a > 0;
+        // The drop shadow is cast by the OUTERMOST visible layer: the pill if there
+        // is a background, else the outline ring, else the glyphs. (The shadow is
+        // injected only at paint time — never in textStyleOf, which the transparent
+        // inline editing field shares and would float a shadow under empty glyphs.)
+        final glyphShadow = d.style.shadow && !hasFill && !hasOutline;
+        final span = glyphShadow
             ? TextSpan(
                 text: d.text.isEmpty ? ' ' : d.text,
-                style: textStyleOf(d.style).copyWith(
-                  shadows: const [
-                    Shadow(
-                      color: _kShadowColor,
-                      offset: _kShadowOffset,
-                      blurRadius: _kShadowTextBlur,
-                    ),
-                  ],
-                ),
+                style: textStyleOf(d.style).copyWith(shadows: _kTextShadow),
               )
             : buildTextSpan(d);
         final tp = TextPainter(
@@ -309,6 +314,84 @@ class DrawablePainter extends CustomPainter {
           textDirection: TextDirection.ltr,
           strutStyle: StrutStyle.disabled, // match the inline field's layout
         )..layout();
+        // Background pill behind the text (A1). Default transparent fill -> skipped
+        // -> byte-identical. The text stays at d.position; the pill draws around it.
+        // When shadow is on, the pill casts it (a blurred, offset rrect).
+        if (hasFill) {
+          final bg = textBackgroundRect(d.position & tp.size, d.style.fontSize);
+          final rrect = RRect.fromRectAndRadius(
+            bg,
+            Radius.circular(textBackgroundRadius(bg, d.style.fontSize)),
+          );
+          if (d.style.shadow) {
+            canvas.save();
+            canvas.translate(_kShadowOffset.dx, _kShadowOffset.dy);
+            canvas.drawRRect(
+              rrect,
+              Paint()
+                ..color = _kShadowColor
+                ..maskFilter =
+                    const MaskFilter.blur(BlurStyle.normal, _kShadowSigma),
+            );
+            canvas.restore();
+          }
+          canvas.drawRRect(
+            rrect,
+            Paint()
+              ..color = d.style.fillColor
+              ..isAntiAlias = true,
+          );
+        }
+        // Glyph outline under the fill text (A1). A stroke foreground pass — built
+        // WITHOUT a color (Flutter forbids color + foreground together).
+        if (hasOutline) {
+          // Repaints the glyph run with [fg] as a stroke foreground at d.position.
+          void paintOutline(Paint fg) {
+            TextPainter(
+              text: TextSpan(
+                text: d.text.isEmpty ? ' ' : d.text,
+                style: TextStyle(
+                  fontSize: d.style.fontSize,
+                  height: kTextLineHeight,
+                  fontFamily: d.style.fontFamily,
+                  foreground: fg,
+                ),
+              ),
+              textDirection: TextDirection.ltr,
+              strutStyle: StrutStyle.disabled,
+            )..layout()
+              ..paint(canvas, d.position);
+          }
+
+          final w = textOutlineWidth(d.style.fontSize);
+          // The outline casts the drop shadow when no pill does. A TextStyle.shadows
+          // on a stroke run renders as the narrower glyph FILL (hidden behind the
+          // wider outline), so paint an explicit stroke-shaped shadow instead — its
+          // outer edge matches the outline silhouette.
+          if (d.style.shadow && !hasFill) {
+            canvas.save();
+            canvas.translate(_kShadowOffset.dx, _kShadowOffset.dy);
+            paintOutline(
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = w
+                ..strokeJoin = StrokeJoin.round
+                ..color = _kShadowColor
+                ..maskFilter =
+                    const MaskFilter.blur(BlurStyle.normal, _kShadowSigma)
+                ..isAntiAlias = true,
+            );
+            canvas.restore();
+          }
+          paintOutline(
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = w
+              ..strokeJoin = StrokeJoin.round
+              ..color = d.style.outlineColor
+              ..isAntiAlias = true,
+          );
+        }
         tp.paint(canvas, d.position);
       case StepDrawable():
         _paintStep(canvas, d);

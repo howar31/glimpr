@@ -31,3 +31,30 @@ Size measureText(TextDrawable d) {
   )..layout();
   return tp.size;
 }
+
+// ---- text background pill + glyph outline geometry (A1) ----------------------
+// All font-scaled and PURE (operate on an already-measured Rect, no TextPainter),
+// so the painter and TextDrawable.bounds share one source of truth.
+
+const double kTextBgPadXFactor = 0.35; // horizontal padding = fontSize * factor
+const double kTextBgPadYFactor = 0.18; // vertical padding = fontSize * factor
+
+double textBgPadX(double fontSize) => fontSize * kTextBgPadXFactor;
+double textBgPadY(double fontSize) => fontSize * kTextBgPadYFactor;
+
+/// The background pill rect: the measured text [textRect] padded out by the
+/// font-scaled padding (so the text sits centred inside the pill).
+Rect textBackgroundRect(Rect textRect, double fontSize) => Rect.fromLTRB(
+      textRect.left - textBgPadX(fontSize),
+      textRect.top - textBgPadY(fontSize),
+      textRect.right + textBgPadX(fontSize),
+      textRect.bottom + textBgPadY(fontSize),
+    );
+
+/// Pill corner radius — font-scaled, capped to half the short side (never a
+/// degenerate over-round).
+double textBackgroundRadius(Rect bgRect, double fontSize) =>
+    (fontSize * 0.3).clamp(0.0, bgRect.shortestSide / 2);
+
+/// Glyph outline stroke width — font-scaled, clamped to a legible range.
+double textOutlineWidth(double fontSize) => (fontSize * 0.12).clamp(1.0, 10.0);

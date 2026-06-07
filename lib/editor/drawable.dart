@@ -325,7 +325,14 @@ class TextDrawable extends Drawable {
   const TextDrawable(this.position, this.text, DrawStyle style) : super(style);
 
   @override
-  Rect get bounds => position & measureText(this);
+  Rect get bounds {
+    final textRect = position & measureText(this);
+    // A visible background pill grows the selectable / hittable area to wrap it;
+    // with no background the bounds are the bare text rect (byte-identical).
+    return style.fillColor.a > 0
+        ? textBackgroundRect(textRect, style.fontSize)
+        : textRect;
+  }
 
   @override
   TextDrawable moved(Offset d) => TextDrawable(position + d, text, style);

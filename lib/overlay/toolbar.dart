@@ -359,7 +359,17 @@ class _Bar extends StatelessWidget {
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
-enum _OpenPopover { none, color, fill, radius, font, texture, lineStyle, arrowHeads }
+enum _OpenPopover {
+  none,
+  color,
+  fill,
+  outline,
+  radius,
+  font,
+  texture,
+  lineStyle,
+  arrowHeads,
+}
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
 /// font size (text only). Hidden for the Crop tool.
@@ -506,6 +516,38 @@ class _OptionsRowState extends State<_OptionsRow> {
         presets: kColorPresets,
         onChanged: _c.setFillColor,
         // A cleared (transparent) fill isn't a colour worth recalling.
+        onCommit: (color) {
+          if (color.a > 0) {
+            ToolStyleStore(
+              Settings.instance.store,
+            ).pushRecentColor(color.toARGB32());
+          }
+        },
+      ),
+    );
+  }
+
+  // The text-outline picker (Text tool only). Mirrors the fill picker but writes
+  // [DrawStyle.outlineColor]; alpha 0 = no outline.
+  Future<void> _openOutlinePopover() async {
+    if (_open == _OpenPopover.outline) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final recents = await ToolStyleStore(
+      Settings.instance.store,
+    ).loadRecentColors();
+    if (!mounted) return;
+    _showPopover(
+      _OpenPopover.outline,
+      _barLink,
+      width: 242,
+      child: ColorPickerPopover(
+        color: _c.style.value.outlineColor,
+        recents: recents,
+        presets: kColorPresets,
+        onChanged: _c.setOutlineColor,
         onCommit: (color) {
           if (color.a > 0) {
             ToolStyleStore(
@@ -771,8 +813,15 @@ class _OptionsRowState extends State<_OptionsRow> {
             tool == ToolKind.line || tool == ToolKind.arrow;
         // Fill applies to the closed RectShaped vector shapes; corner radius is
         // rectangle-only (an ellipse has no corners).
-        const fillTools = {ToolKind.rectangle, ToolKind.ellipse};
+        // Fill = a solid fill for the closed shapes AND the background pill for
+        // text. Outline (glyph stroke) is text-only.
+        const fillTools = {
+          ToolKind.rectangle,
+          ToolKind.ellipse,
+          ToolKind.text,
+        };
         final showsFill = fillTools.contains(tool);
+        final showsOutline = tool == ToolKind.text;
         final showsCornerRadius = tool == ToolKind.rectangle;
         return CompositedTransformTarget(
           link: _barLink,
@@ -794,9 +843,20 @@ class _OptionsRowState extends State<_OptionsRow> {
                     _ColorButton(
                       key: const ValueKey('fill-color'),
                       color: style.fillColor,
-                      tooltip: 'Fill',
+                      // Same field, two readings: a shape fill vs a text backdrop.
+                      tooltip: tool == ToolKind.text ? 'Background' : 'Fill',
                       glyph: Icons.format_color_fill,
                       onTap: _openFillPopover,
+                    ),
+                  ],
+                  if (showsOutline) ...[
+                    const SizedBox(width: 6),
+                    _ColorButton(
+                      key: const ValueKey('outline-color'),
+                      color: style.outlineColor,
+                      tooltip: 'Text outline',
+                      glyph: Icons.format_color_text,
+                      onTap: _openOutlinePopover,
                     ),
                   ],
                   if (isRasterEffect)
