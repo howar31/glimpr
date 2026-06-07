@@ -171,17 +171,33 @@ class EditorController {
   /// the type the option bar is showing — the selected annotation's type when one
   /// is selected (so the universal Select tool resets it to ITS type's default
   /// without touching the active tool), else the active tool. Resets the active
-  /// tool's remembered style only when it IS that type.
+  /// tool's remembered style only when nothing is selected and it IS that type;
+  /// with a selection this resets ONLY that drawable, leaving the tool default
+  /// intact (uniform with the Select tool).
   void resetActiveStyle(ToolKind effective) {
     final def = defaultStyleFor(effective);
-    if (tool.value == effective) toolStyles[effective] = def;
+    if (!_hasSelection && tool.value == effective) toolStyles[effective] = def;
     style.value = def;
     _restyleSelected();
   }
 
+  /// True when a drawable is currently selected, so an option-bar change is an
+  /// EDIT of that drawable rather than setting the active tool's default.
+  bool get _hasSelection {
+    final i = selectedIndex.value;
+    return i != null && i < document.value.drawables.length;
+  }
+
   void _updateStyle(DrawStyle s) {
     style.value = s;
-    if (tool.value != ToolKind.crop) toolStyles[tool.value] = s; // remember it
+    // No selection -> set the active tool's default for future shapes (remembered
+    // per tool). A selection -> this is an EDIT of that drawable only; leave the
+    // tool's default untouched so deselecting restores it. This makes every tool
+    // behave like the universal Select tool, whose edits would otherwise land on
+    // the never-read paste slot rather than the drawn type's default.
+    if (!_hasSelection && tool.value != ToolKind.crop) {
+      toolStyles[tool.value] = s;
+    }
     _restyleSelected();
   }
 
