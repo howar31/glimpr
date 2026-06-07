@@ -940,6 +940,23 @@ class _EditorCoreState extends State<EditorCore> {
     return d.bounds.inflate(8).contains(p);
   }
 
+  /// True when the cursor is over an annotation the active (typed) tool would
+  /// engage — its current selection's handle zone, or a same-type drawable under
+  /// the cursor. Used to suppress the window-snap highlight: if you're clearly
+  /// aiming at an annotation, the snap frame is redundant noise. Type-less tools
+  /// (crop) never match — they don't target annotations, so snapping still wins.
+  bool _overAnnotation(Offset p) {
+    if (_typeFilter() == null) return false;
+    final drawables = c.document.value.drawables;
+    final cur = c.selectedIndex.value;
+    if (cur != null &&
+        cur < drawables.length &&
+        _nearHandles(drawables[cur], p)) {
+      return true;
+    }
+    return _hitActiveType(p) != null;
+  }
+
   // Left-click PINS the selection: a clicked annotation stays selected even when
   // the cursor leaves it (e.g. to reach the option bar to restyle it). Hover only
   // previews a selection while nothing is pinned; clicking empty space unpins.
@@ -1084,9 +1101,10 @@ class _EditorCoreState extends State<EditorCore> {
     if (!_active) return;
     final p = _toLogical(e.localPosition);
     // Window-snap: highlight the top-most window under the cursor for the snap
-    // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging. The
-    // full-screen crosshair / reticle follow the pointer on the active display.
-    final hover = (_snapTools.contains(c.tool.value) && !_dragging)
+    // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging and not
+    // while hovering an annotation the tool would engage (then the snap frame is
+    // redundant). The full-screen crosshair / reticle still follow the pointer.
+    final hover = (_snapTools.contains(c.tool.value) && !_dragging && !_overAnnotation(p))
         ? topmostWindowAt(_windows, p)
         : null;
     setState(() {
