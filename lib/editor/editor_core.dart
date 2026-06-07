@@ -989,12 +989,17 @@ class _EditorCoreState extends State<EditorCore> {
         _nearHandles(drawables[cur], p)) {
       return;
     }
-    // Hover-select is STICKY: hovering a same-type drawable selects it, but moving
-    // onto empty canvas KEEPS that selection (so you can reach the option bar to
-    // restyle / reset it without it clearing en route). A click on empty space
-    // (or right-click) still deselects; hovering a different drawable switches.
+    // Hover-PREVIEW (uniform for EVERY tool, including the universal Select tool):
+    // hovering a same-type drawable shows its handles so the user can see what is
+    // clickable. It is a PREVIEW only and NON-STICKY — it clears the instant the
+    // cursor leaves the shape onto empty canvas (idx == null). Nothing stays
+    // selected from hovering alone: a freshly drawn shape is not left selected, and
+    // the Select tool no longer "sticks" a hovered shape. To LOCK a selection (to
+    // reach the option bar to restyle / reset, or to move / resize), the user
+    // CLICKS it — _onTapUp pins it (_pinned), and a pinned selection ignores hover
+    // until a click on empty space deselects.
     final idx = _hitActiveType(p);
-    if (idx != null && cur != idx) c.selectedIndex.value = idx;
+    if (cur != idx) c.selectedIndex.value = idx;
   }
 
   void _onTapUp(TapUpDetails d) {
