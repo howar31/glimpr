@@ -270,37 +270,49 @@ class LoupeReadout extends StatelessWidget {
       _hudPill(Text('$x, $y', style: _kHudText));
 }
 
-/// The label at a drag selection's bottom-left corner: the box size and its
-/// drag-start origin, in NATIVE pixels. Same pill style as [LoupeReadout]; the
-/// `×` and the north-west corner icon keep the two lines self-explanatory.
+/// The box-size readout (W × H, NATIVE pixels), shown beside the selection's
+/// cursor (moving) corner during a drag. Same pill style as [LoupeReadout]; the
+/// `×` keeps it self-explanatory.
 class BoxSizeLabel extends StatelessWidget {
   final int w;
   final int h;
+  const BoxSizeLabel({super.key, required this.w, required this.h});
+
+  @override
+  Widget build(BuildContext context) =>
+      _hudPill(Text('$w × $h', style: _kHudText.copyWith(fontWeight: FontWeight.w700)));
+}
+
+/// The drag-start origin (NATIVE pixels), shown beside the selection's start
+/// corner. [cornerLeft]/[cornerTop] say which corner the start point is, so the
+/// arrow points back at it (the pill sits just outside that corner of the box).
+class StartCoordLabel extends StatelessWidget {
   final int startX;
   final int startY;
-  const BoxSizeLabel({
+  final bool cornerLeft;
+  final bool cornerTop;
+  const StartCoordLabel({
     super.key,
-    required this.w,
-    required this.h,
     required this.startX,
     required this.startY,
+    required this.cornerLeft,
+    required this.cornerTop,
   });
+
+  // The pill sits diagonally OUTSIDE the corner, so the arrow points inward
+  // (toward the box centre) at the start point it labels.
+  IconData get _arrow => cornerTop
+      ? (cornerLeft ? Icons.south_east : Icons.south_west)
+      : (cornerLeft ? Icons.north_east : Icons.north_west);
 
   @override
   Widget build(BuildContext context) => _hudPill(
-    Column(
+    Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$w × $h', style: _kHudText.copyWith(fontWeight: FontWeight.w700)),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.north_west, size: 11, color: Color(0xFFFFFFFF)),
-            const SizedBox(width: 2),
-            Text('$startX, $startY', style: _kHudText),
-          ],
-        ),
+        Icon(_arrow, size: 11, color: const Color(0xFFFFFFFF)),
+        const SizedBox(width: 2),
+        Text('$startX, $startY', style: _kHudText),
       ],
     ),
   );

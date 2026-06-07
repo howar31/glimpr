@@ -1740,22 +1740,83 @@ class _EditorCoreState extends State<EditorCore> {
   // above the cursor early enough that the readout stays on-screen too.
   static const double _kLoupeReadoutReserve = 64.0;
 
-  /// The editor's box size + drag-start label, in SCREEN space at the selection's
-  /// viewport-mapped bottom-left corner — so its text stays a constant size under
-  /// zoom (unlike the canvas-space scrim/handles). Values are native px.
-  Widget _editorBoxLabel(EditorViewport v) {
-    final r = _crop.rect.value!;
-    final a = _crop.anchor ?? r.topLeft;
-    final sx = v.offset.dx + r.left * v.scale;
-    final sy = v.offset.dy + r.bottom * v.scale + 4;
+  /// The editor's two crop readouts, in SCREEN space (viewport-mapped) so their
+  /// text stays a constant size under zoom (unlike the canvas-space scrim/handles).
+  List<Widget> _editorBoxLabel(EditorViewport v) => _cropReadoutLabels(
+    _crop.rect.value!,
+    (p) => Offset(v.offset.dx + p.dx * v.scale, v.offset.dy + p.dy * v.scale),
+    _lastBoxSize,
+  );
+
+  /// The two crop readout pills: the drag-start coordinate beside the START corner
+  /// (the anchor) and the W×H beside the OPPOSITE (cursor) corner. [map] converts a
+  /// canvas-space point into the host Stack's coordinate space (identity for the
+  /// 1:1 overlay; viewport-mapped for the zoomable editor); [bound] clamps the pill
+  /// anchor on-screen. Values are native px.
+  List<Widget> _cropReadoutLabels(
+    Rect rect,
+    Offset Function(Offset) map,
+    Size bound,
+  ) {
+    final a = _crop.anchor ?? rect.topLeft;
+    final anchorLeft = a.dx <= rect.center.dx;
+    final anchorTop = a.dy <= rect.center.dy;
+    final anchorPt = map(
+      Offset(anchorLeft ? rect.left : rect.right, anchorTop ? rect.top : rect.bottom),
+    );
+    final cursorPt = map(
+      Offset(anchorLeft ? rect.right : rect.left, anchorTop ? rect.bottom : rect.top),
+    );
+    return [
+      _cornerPill(
+        corner: anchorPt,
+        isLeft: anchorLeft,
+        isTop: anchorTop,
+        bound: bound,
+        child: StartCoordLabel(
+          startX: _toPx(a.dx),
+          startY: _toPx(a.dy),
+          cornerLeft: anchorLeft,
+          cornerTop: anchorTop,
+        ),
+      ),
+      _cornerPill(
+        corner: cursorPt,
+        isLeft: !anchorLeft,
+        isTop: !anchorTop,
+        bound: bound,
+        child: BoxSizeLabel(w: _toPx(rect.width), h: _toPx(rect.height)),
+      ),
+    ];
+  }
+
+  /// Place a HUD pill at the selection's [corner]: HUGGING the box edge
+  /// horizontally (left edge to the box's left for a left corner, right edge to the
+  /// box's right for a right corner) and just OUTSIDE the box vertically (above a
+  /// top corner, below a bottom corner). Vertical-outside keeps it clear of the
+  /// loupe, which tracks the cursor to the side. Edge alignment uses a
+  /// [FractionalTranslation] of the pill's own size; a fixed gap nudges it off the
+  /// edge.
+  Widget _cornerPill({
+    required Offset corner,
+    required bool isLeft,
+    required bool isTop,
+    required Size bound,
+    required Widget child,
+  }) {
+    const gap = 6.0;
     return Positioned(
-      left: sx.clamp(0.0, _lastBoxSize.width),
-      top: sy.clamp(0.0, _lastBoxSize.height),
-      child: BoxSizeLabel(
-        w: _toPx(r.width),
-        h: _toPx(r.height),
-        startX: _toPx(a.dx),
-        startY: _toPx(a.dy),
+      left: corner.dx.clamp(0.0, bound.width),
+      top: corner.dy.clamp(0.0, bound.height),
+      child: FractionalTranslation(
+        translation: Offset(isLeft ? 0.0 : -1.0, isTop ? -1.0 : 0.0),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: isTop ? gap : 0,
+            top: isTop ? 0 : gap,
+          ),
+          child: child,
+        ),
       ),
     );
   }
@@ -2032,34 +2093,17 @@ class _EditorCoreState extends State<EditorCore> {
                               CustomPaint(
                                 painter: _CropHandlesPainter(rect),
                               ),
-                            Positioned(
-                              left: rect.left,
-                              top: (rect.bottom + 4).clamp(
-                                0,
-                                _canvasSize.height,
+                            // Crop readouts: drag-start coordinate beside the start
+                            // corner, W×H beside the cursor corner (native px).
+                            // Overlay only — canvas == screen (1:1); the editor
+                            // draws them in SCREEN space (constant size under zoom)
+                            // via [_editorBoxLabel].
+                            if (!_interactive)
+                              ..._cropReadoutLabels(
+                                rect,
+                                (p) => p,
+                                _canvasSize,
                               ),
-                              // Box size + drag-start origin, at the selection's
-                              // bottom-left corner (native px). The drag start is
-                              // the crop anchor; fall back to the rect's top-left
-                              // for a released/pending selection with no anchor.
-                              child: Builder(
-                                builder: (_) {
-                                  // Overlay only: canvas == screen (1:1). The
-                                  // editor draws this in SCREEN space (constant
-                                  // size under zoom) via [_editorBoxLabel].
-                                  if (_interactive) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  final a = _crop.anchor ?? rect.topLeft;
-                                  return BoxSizeLabel(
-                                    w: _toPx(rect.width),
-                                    h: _toPx(rect.height),
-                                    startX: _toPx(a.dx),
-                                    startY: _toPx(a.dy),
-                                  );
-                                },
-                              ),
-                            ),
                           ],
                         );
                       },
@@ -2311,10 +2355,10 @@ class _EditorCoreState extends State<EditorCore> {
                     ),
                   ),
                 if (showHud) _editorLoupe(v),
-                // Box size + drag-start label in screen space (constant size
-                // under zoom), at the crop selection's corner.
+                // Crop readouts in screen space (constant size under zoom): start
+                // coordinate at the start corner, W×H at the cursor corner.
                 if (_active && inCrop && _crop.rect.value != null)
-                  _editorBoxLabel(v),
+                  ..._editorBoxLabel(v),
                 // On-canvas crop confirm/cancel — ABOVE the gesture layer so the
                 // ✔/✖ are tappable. Shown only for a pending (drag-released) trim
                 // selection (Enter/Esc do the same).
