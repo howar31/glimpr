@@ -262,8 +262,9 @@ class DrawablePainter extends CustomPainter {
   void _paintOne(Canvas canvas, Drawable d, Size size) {
     switch (d) {
       case RectangleDrawable():
-        // Rounded corners; radius eases down for small rectangles.
-        final radius = (d.rect.shortestSide / 4).clamp(0.0, 12.0);
+        // Auto radius (eases down for small rects) unless overridden; resolved by
+        // the shared pure helper so the painter and tests agree.
+        final radius = resolveCornerRadius(d.style.cornerRadius, d.rect);
         final rrect = RRect.fromRectAndRadius(d.rect, Radius.circular(radius));
         _paintFilledShape(canvas, d.style, (c, p) => c.drawRRect(rrect, p));
       case EllipseDrawable():

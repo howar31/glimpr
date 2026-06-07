@@ -64,7 +64,11 @@ class EditorToolbar extends StatelessWidget {
     );
     return _ToolbarTheme(
       palette: palette,
-      child: Column(
+      // The toolbar floats at the bottom and every panel/popover grows UPWARD;
+      // tooltips must too, or they cover the bar they describe.
+      child: TooltipTheme(
+        data: const TooltipThemeData(preferBelow: false),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Contextual options row FIRST so it grows UPWARD. The host pins this
@@ -126,6 +130,7 @@ class EditorToolbar extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -354,7 +359,7 @@ class _Bar extends StatelessWidget {
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
-enum _OpenPopover { none, color, fill, font, texture, lineStyle, arrowHeads }
+enum _OpenPopover { none, color, fill, radius, font, texture, lineStyle, arrowHeads }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
 /// font size (text only). Hidden for the Crop tool.
@@ -508,6 +513,30 @@ class _OptionsRowState extends State<_OptionsRow> {
             ).pushRecentColor(color.toARGB32());
           }
         },
+      ),
+    );
+  }
+
+  // The corner-radius picker (rectangle only): a slider plus an Auto toggle. The
+  // child listens to the style so dragging the slider moves its own knob live.
+  void _openRadiusPopover() {
+    if (_open == _OpenPopover.radius) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    _showPopover(
+      _OpenPopover.radius,
+      _barLink,
+      width: 220,
+      child: ValueListenableBuilder<DrawStyle>(
+        valueListenable: _c.style,
+        builder: (_, st, _) => RadiusPickerPopover(
+          value: st.cornerRadius,
+          max: kCornerRadiusMax,
+          onChanged: _c.setCornerRadius,
+          onAuto: _c.setCornerRadiusAuto,
+        ),
       ),
     );
   }
@@ -740,9 +769,11 @@ class _OptionsRowState extends State<_OptionsRow> {
         final showsCurvePoints = segmentTools.contains(tool);
         final showsLineStyle =
             tool == ToolKind.line || tool == ToolKind.arrow;
-        // Fill applies to the closed RectShaped vector shapes.
+        // Fill applies to the closed RectShaped vector shapes; corner radius is
+        // rectangle-only (an ellipse has no corners).
         const fillTools = {ToolKind.rectangle, ToolKind.ellipse};
         final showsFill = fillTools.contains(tool);
+        final showsCornerRadius = tool == ToolKind.rectangle;
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
@@ -778,6 +809,9 @@ class _OptionsRowState extends State<_OptionsRow> {
                       max: 64,
                       step: 2,
                       suffix: 'px',
+                      leadingIcon: Icons.blur_on,
+                      leadingTooltip:
+                          tool == ToolKind.blur ? 'Blur strength' : 'Pixel size',
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   if (showsWidth) ...[
@@ -791,9 +825,24 @@ class _OptionsRowState extends State<_OptionsRow> {
                       max: kStrokeMax,
                       step: 2,
                       suffix: 'px',
+                      leadingIcon: Icons.line_weight,
+                      leadingTooltip: 'Stroke width',
                       // Hand keyboard focus back to the editor on commit so tool
                       // shortcuts work again (the font field already does this).
                       onEditingDone: widget.onPtEditingDone,
+                    ),
+                  ],
+                  if (showsCornerRadius) ...[
+                    const SizedBox(width: 8),
+                    // A self-labeling pill (like Texture / Line-style) instead of a
+                    // second bare px stepper: it names itself ("Radius") and shows
+                    // the value; the slider + Auto live in its popover, so "Auto"
+                    // has a clear home.
+                    _TextureButton(
+                      key: const ValueKey('radius-picker'),
+                      label: 'Radius: ${radiusLabel(style.cornerRadius)}',
+                      tooltip: 'Corner radius',
+                      onTap: _openRadiusPopover,
                     ),
                   ],
                   if (tool == ToolKind.highlighter) ...[
@@ -801,6 +850,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                     _TextureButton(
                       key: const ValueKey('texture-picker'),
                       label: textureLabel(style.texture),
+                      tooltip: 'Highlighter texture',
                       onTap: _openTexturePopover,
                     ),
                   ],
@@ -809,6 +859,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                     _TextureButton(
                       key: const ValueKey('line-style-picker'),
                       label: lineStyleLabel(style.lineStyle),
+                      tooltip: 'Line style',
                       onTap: _openLineStylePopover,
                     ),
                   ],
@@ -823,6 +874,8 @@ class _OptionsRowState extends State<_OptionsRow> {
                       max: kCurvePointsMax.toDouble(),
                       step: 1,
                       suffix: 'pts',
+                      leadingIcon: Icons.gesture,
+                      leadingTooltip: 'Curve points',
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
@@ -831,6 +884,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                     _TextureButton(
                       key: const ValueKey('arrow-heads-picker'),
                       label: arrowHeadsLabel(style.arrowHeads),
+                      tooltip: 'Arrowheads',
                       onTap: _openArrowHeadsPopover,
                     ),
                   ],
@@ -844,6 +898,9 @@ class _OptionsRowState extends State<_OptionsRow> {
                       max: 200,
                       step: 2,
                       suffix: 'pt',
+                      leadingIcon: Icons.format_size,
+                      leadingTooltip:
+                          tool == ToolKind.text ? 'Font size' : 'Badge size',
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
@@ -885,11 +942,17 @@ class _OptionsRowState extends State<_OptionsRow> {
 class _TextureButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  const _TextureButton({super.key, required this.label, required this.onTap});
+  final String? tooltip; // names the control on hover (e.g. "Line style")
+  const _TextureButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.tooltip,
+  });
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
-    return GestureDetector(
+    final pill = GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -907,6 +970,7 @@ class _TextureButton extends StatelessWidget {
         ),
       ),
     );
+    return tooltip == null ? pill : Tooltip(message: tooltip!, child: pill);
   }
 }
 
@@ -1172,6 +1236,11 @@ class _NumberStepper extends StatefulWidget {
   final double step;
   final String suffix; // "px" / "pt"
   final VoidCallback? onEditingDone; // re-focus inline text (font only)
+  // Optional leading pictogram that names what the stepper adjusts (e.g. a
+  // line-weight glyph for stroke width), so two numeric fields are never
+  // ambiguous at a glance. [leadingTooltip] explains the glyph on hover.
+  final IconData? leadingIcon;
+  final String? leadingTooltip;
   const _NumberStepper({
     super.key,
     required this.controller,
@@ -1182,6 +1251,8 @@ class _NumberStepper extends StatefulWidget {
     required this.step,
     required this.suffix,
     this.onEditingDone,
+    this.leadingIcon,
+    this.leadingTooltip,
   });
   @override
   State<_NumberStepper> createState() => _NumberStepperState();
@@ -1325,6 +1396,16 @@ class _NumberStepperState extends State<_NumberStepper> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.leadingIcon != null) ...[
+            if (widget.leadingTooltip != null)
+              Tooltip(
+                message: widget.leadingTooltip!,
+                child: Icon(widget.leadingIcon, color: p.fgDim, size: 15),
+              )
+            else
+              Icon(widget.leadingIcon, color: p.fgDim, size: 15),
+            const SizedBox(width: 2),
+          ],
           btn(Icons.remove, () => _bump(-widget.step)),
           SizedBox(
             width: 36,

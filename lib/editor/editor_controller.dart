@@ -152,6 +152,13 @@ class EditorController {
   // fill" default so equality (reset-button enablement) and JSON omission agree.
   void setFillColor(Color c) => _updateStyle(style.value
       .copyWith(fillColor: c.a == 0 ? const Color(0x00000000) : c));
+  void setCornerRadius(double r) => _updateStyle(
+      style.value.copyWith(cornerRadius: r.clamp(0.0, kCornerRadiusMax)));
+  // Revert ONLY the corner radius to the legacy auto value (bypasses the
+  // setCornerRadius clamp, which would pin the sentinel to 0). Lets the option bar
+  // offer a per-field "Auto" without the all-options reset button.
+  void setCornerRadiusAuto() =>
+      _updateStyle(style.value.copyWith(cornerRadius: kCornerRadiusAuto));
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
   // so we rebuild the style explicitly without a fontFamily. The other fields

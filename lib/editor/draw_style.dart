@@ -88,6 +88,23 @@ const double kRasterStrengthDefault = 12;
 const double kRasterStrengthMin = 2;
 const double kRasterStrengthMax = 64;
 
+/// Rectangle corner-radius sentinels. [kCornerRadiusAuto] (-1) reproduces the
+/// legacy auto radius ((shortestSide/4).clamp(0,12)) — the default, so the export
+/// stays byte-identical. >= 0 is an explicit radius. [kCornerRadiusMax] is the
+/// option-bar stepper ceiling (the painter re-clamps to shortestSide/2);
+/// [kCornerRadiusBaseline] is the value the stepper jumps to when leaving Auto.
+const double kCornerRadiusAuto = -1;
+const double kCornerRadiusMax = 80;
+const double kCornerRadiusBaseline = 12;
+
+/// Resolve the effective corner radius for [rect]. The auto sentinel maps to the
+/// legacy auto radius; an explicit value clamps to [0, shortestSide/2] (the
+/// geometric max before the rectangle becomes a stadium). Pure so it is unit
+/// testable — the painter itself cannot be headless-rasterized.
+double resolveCornerRadius(double cornerRadius, Rect rect) => cornerRadius < 0
+    ? (rect.shortestSide / 4).clamp(0.0, 12.0)
+    : cornerRadius.clamp(0.0, rect.shortestSide / 2);
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -101,6 +118,7 @@ class DrawStyle {
   final int curvePoints; // interior control points seeded for new line shapes
   final double strength; // blur radius / pixelate block size; Blur/Pixelate only
   final Color fillColor; // rect/ellipse solid fill (own alpha); 0 alpha = no fill
+  final double cornerRadius; // rectangle corner radius; kCornerRadiusAuto = legacy
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -113,6 +131,7 @@ class DrawStyle {
     this.curvePoints = kCurvePointsDefault,
     this.strength = kRasterStrengthDefault,
     this.fillColor = const Color(0x00000000),
+    this.cornerRadius = kCornerRadiusAuto,
   });
 
   DrawStyle copyWith({
@@ -127,6 +146,7 @@ class DrawStyle {
     int? curvePoints,
     double? strength,
     Color? fillColor,
+    double? cornerRadius,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -139,6 +159,7 @@ class DrawStyle {
     curvePoints: curvePoints ?? this.curvePoints,
     strength: strength ?? this.strength,
     fillColor: fillColor ?? this.fillColor,
+    cornerRadius: cornerRadius ?? this.cornerRadius,
   );
 
   Map<String, dynamic> toJson() => {
@@ -153,6 +174,7 @@ class DrawStyle {
     if (curvePoints != kCurvePointsDefault) 'curvePoints': curvePoints,
     if (strength != kRasterStrengthDefault) 'strength': strength,
     if (fillColor.a != 0) 'fillColor': fillColor.toARGB32(),
+    if (cornerRadius != kCornerRadiusAuto) 'cornerRadius': cornerRadius,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -169,6 +191,7 @@ class DrawStyle {
     strength: ((j['strength'] as num?)?.toDouble() ?? kRasterStrengthDefault)
         .clamp(kRasterStrengthMin, kRasterStrengthMax),
     fillColor: Color((j['fillColor'] as num?)?.toInt() ?? 0x00000000),
+    cornerRadius: (j['cornerRadius'] as num?)?.toDouble() ?? kCornerRadiusAuto,
   );
 
   @override
@@ -184,8 +207,10 @@ class DrawStyle {
       other.arrowHeads == arrowHeads &&
       other.curvePoints == curvePoints &&
       other.strength == strength &&
-      other.fillColor == fillColor;
+      other.fillColor == fillColor &&
+      other.cornerRadius == cornerRadius;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
-      texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor);
+      texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
+      cornerRadius);
 }

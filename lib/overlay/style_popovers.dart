@@ -3,6 +3,7 @@ import '../editor/color_math.dart';
 import '../editor/curve.dart' show drawStyledPath;
 import '../editor/draw_style.dart';
 import '../editor/drawable_painter.dart' show paintHighlighterStroke;
+import '../theme/glimpr_controls.dart' show GlimprSlider, GlassToggle;
 import '../theme/glimpr_theme.dart';
 
 // ignore_for_file: use_super_parameters
@@ -1084,6 +1085,102 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RadiusPickerPopover  (rectangle corner radius)
+// ---------------------------------------------------------------------------
+
+/// Pill label for the option bar: "Auto" for the legacy size-relative radius,
+/// else the explicit pixel value.
+String radiusLabel(double r) => r < 0 ? 'Auto' : '${r.round()} px';
+
+/// Corner-radius picker: the design-system [GlimprSlider] for an explicit radius
+/// plus a labeled [GlassToggle] for "Auto" (the legacy size-relative radius, the
+/// default). Opened from the option bar's "Radius" pill, so "Auto" has a clear
+/// home instead of floating beside an anonymous stepper.
+class RadiusPickerPopover extends StatelessWidget {
+  const RadiusPickerPopover({
+    Key? key,
+    required this.value, // kCornerRadiusAuto (-1) or an explicit radius
+    required this.max,
+    required this.onChanged,
+    required this.onAuto,
+  }) : super(key: key);
+
+  final double value;
+  final double max;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onAuto;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final tokens = dark ? GlimprTokens.dark : GlimprTokens.light;
+    final isAuto = value < 0;
+    // The capture overlay has no GlimprTheme ancestor (only the image editor /
+    // settings provide one), yet the design-system slider/toggle read it via
+    // GlimprTheme.of — so provide it here. Harmless where one already exists.
+    return GlimprTheme(
+      tokens: tokens,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Corner radius',
+              style: GlimprType.sansStyle(13.5, 600, tokens.fg1),
+            ),
+            // The explicit slider only shows when Auto is off; Auto's own meaning
+            // is always explained by the sub-line below, so an off->on switch is
+            // never a mystery.
+            if (!isAuto) ...[
+              const SizedBox(height: 12),
+              GlimprSlider(
+                value: value.clamp(0.0, max),
+                min: 0,
+                max: max,
+                onChanged: onChanged,
+                suffix: 'px',
+              ),
+            ],
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Auto',
+                        style: GlimprType.sansStyle(13.5, 600, tokens.fg2),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Radius scales with the rectangle's size",
+                        style:
+                            GlimprType.sansStyle(12, 400, tokens.fg3, height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // On -> auto radius; off -> seed an explicit baseline so the
+                // slider has a sensible starting value.
+                GlassToggle(
+                  value: isAuto,
+                  onChanged: (on) =>
+                      on ? onAuto() : onChanged(kCornerRadiusBaseline),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

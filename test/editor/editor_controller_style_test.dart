@@ -80,4 +80,26 @@ void main() {
     c.setFillColor(const Color(0x00FF0000));
     expect(c.style.value.fillColor, const Color(0x00000000));
   });
+
+  test('setCornerRadius clamps to [0, kCornerRadiusMax]', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.rectangle);
+    c.setCornerRadius(16);
+    expect(c.style.value.cornerRadius, 16);
+    c.setCornerRadius(999);
+    expect(c.style.value.cornerRadius, kCornerRadiusMax);
+    c.setCornerRadius(-5);
+    expect(c.style.value.cornerRadius, 0);
+  });
+
+  test('setCornerRadiusAuto reverts to the auto sentinel, leaving other fields', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.rectangle);
+    c.setStrokeWidth(20);
+    c.setCornerRadius(24);
+    expect(c.style.value.cornerRadius, 24);
+    c.setCornerRadiusAuto();
+    expect(c.style.value.cornerRadius, kCornerRadiusAuto);
+    expect(c.style.value.strokeWidth, 20); // unrelated fields untouched
+  });
 }

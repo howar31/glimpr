@@ -176,4 +176,37 @@ void main() {
     expect(a.copyWith(fillColor: const Color(0x4400FF00)).fillColor,
         const Color(0x4400FF00));
   });
+
+  test('cornerRadius defaults to auto, omitted from JSON, round-trips', () {
+    expect(const DrawStyle().cornerRadius, kCornerRadiusAuto);
+    expect(const DrawStyle().toJson().containsKey('cornerRadius'), isFalse);
+    final r = const DrawStyle().copyWith(cornerRadius: 16);
+    expect(r.toJson()['cornerRadius'], 16);
+    expect(DrawStyle.fromJson(r.toJson()).cornerRadius, 16);
+    // Old blobs (no key) load as auto.
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).cornerRadius,
+        kCornerRadiusAuto);
+  });
+
+  test('equality and copyWith include cornerRadius', () {
+    const a = DrawStyle();
+    expect(a.copyWith(cornerRadius: 8) == a, isFalse);
+    expect(a.copyWith(cornerRadius: 8).cornerRadius, 8);
+  });
+
+  test('resolveCornerRadius: auto sentinel uses the legacy auto radius', () {
+    // Large rect: shortestSide/4 capped at 12.
+    expect(resolveCornerRadius(kCornerRadiusAuto, const Rect.fromLTWH(0, 0, 100, 100)),
+        12);
+    // Small rect: shortestSide/4 below the cap.
+    expect(resolveCornerRadius(kCornerRadiusAuto, const Rect.fromLTWH(0, 0, 20, 20)),
+        5);
+  });
+
+  test('resolveCornerRadius: explicit value clamps to [0, shortestSide/2]', () {
+    const rect = Rect.fromLTWH(0, 0, 100, 100);
+    expect(resolveCornerRadius(30, rect), 30);
+    expect(resolveCornerRadius(80, rect), 50); // clamp to shortestSide/2
+    expect(resolveCornerRadius(0, rect), 0);
+  });
 }
