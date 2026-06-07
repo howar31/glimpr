@@ -139,17 +139,17 @@ class _EditorCoreState extends State<EditorCore> {
   Drawable? _editOriginal;
   Drawable? _editPreview;
   Offset? _moveStart;
-  int? _resizeCorner; // 0=TL 1=TR 2=BR 3=BL on a RectangleDrawable
+  int? _resizeHandle; // 0-3 corners (TL/TR/BR/BL), 4-7 edge mids (T/R/B/L)
   int? _endpoint; // 0=start 1=end on a Segmented shape (line/arrow/highlighter)
   Offset? _dragPos; // last drag position, to re-apply a mid-drag Shift toggle
 
   bool _cropping = false;
   // Editor crop-trim: adjusting a PENDING (drag-released) selection before
   // confirm — resize from a corner or move the whole rect.
-  int? _cropCorner; // 0=TL 1=TR 2=BR 3=BL during a corner-resize drag
+  int? _cropHandle; // resize handle index (0-3 corners, 4-7 edge mids)
   Offset? _cropMoveStart; // logical press point when moving the whole selection
   Rect? _cropMoveOrigin; // the pending rect at move-start
-  bool get _cropAdjusting => _cropCorner != null || _cropMoveStart != null;
+  bool get _cropAdjusting => _cropHandle != null || _cropMoveStart != null;
 
   // Snappable windows for THIS display (capture-time snapshot) + the one the
   // cursor is currently over (crop tool, not mid-drag) — highlighted + snapped.
@@ -993,18 +993,48 @@ class _EditorCoreState extends State<EditorCore> {
 
   // ---- pointer gestures --------------------------------------------------
 
-  List<Offset> _rectCorners(Rect r) => [
+  // Resize handles for a box: 4 corners (0-3: TL, TR, BR, BL) then 4 edge
+  // midpoints (4: top, 5: right, 6: bottom, 7: left). Corners scale both axes;
+  // edge mids scale a single axis. Index order is shared by the hit-test and
+  // [_resizeRect].
+  List<Offset> _rectHandles(Rect r) => [
     r.topLeft,
     r.topRight,
     r.bottomRight,
     r.bottomLeft,
+    Offset(r.center.dx, r.top),
+    Offset(r.right, r.center.dy),
+    Offset(r.center.dx, r.bottom),
+    Offset(r.left, r.center.dy),
   ];
+
+  static const _handleMovesLeft = {0, 3, 7};
+  static const _handleMovesRight = {1, 2, 5};
+  static const _handleMovesTop = {0, 1, 4};
+  static const _handleMovesBottom = {2, 3, 6};
+
+  /// New rect from dragging handle [h] (0-3 corners, 4-7 edge mids) to [p].
+  /// Corners move two edges; edge mids move a single axis. Normalised so it never
+  /// inverts when dragged past the opposite edge.
+  Rect _resizeRect(Rect r, int h, Offset p) {
+    var l = r.left, t = r.top, rt = r.right, b = r.bottom;
+    if (_handleMovesLeft.contains(h)) l = p.dx;
+    if (_handleMovesRight.contains(h)) rt = p.dx;
+    if (_handleMovesTop.contains(h)) t = p.dy;
+    if (_handleMovesBottom.contains(h)) b = p.dy;
+    return Rect.fromLTRB(
+      math.min(l, rt),
+      math.min(t, b),
+      math.max(l, rt),
+      math.max(t, b),
+    );
+  }
 
   bool _nearHandles(Drawable d, Offset p) {
     if (d is RectShaped) {
-      // Corners are flush with the shape's bounds (matching the drawn handles).
-      for (final corner in _rectCorners((d as RectShaped).rect)) {
-        if ((corner - p).distance <= 16) return true;
+      // Handles are flush with the shape's bounds (matching the drawn handles).
+      for (final h in _rectHandles((d as RectShaped).rect)) {
+        if ((h - p).distance <= 16) return true;
       }
     }
     return d.bounds.inflate(8).contains(p);
@@ -1318,7 +1348,7 @@ class _EditorCoreState extends State<EditorCore> {
     _preview = null;
     _dragStart = null;
     _strokePoints = null;
-    _cropCorner = null;
+    _cropHandle = null;
     _cropMoveStart = null;
     _cropMoveOrigin = null;
   }
@@ -1328,7 +1358,7 @@ class _EditorCoreState extends State<EditorCore> {
     _editOriginal = null;
     _editPreview = null;
     _moveStart = null;
-    _resizeCorner = null;
+    _resizeHandle = null;
     _endpoint = null;
   }
 
@@ -1369,10 +1399,10 @@ class _EditorCoreState extends State<EditorCore> {
       final pending = widget.host.cropTrims ? _crop.rect.value : null;
       if (pending != null) {
         final tol = 16 / _viewport.scale; // ~16 screen px regardless of zoom
-        final corners = _rectCorners(pending);
-        for (var ci = 0; ci < corners.length; ci++) {
-          if ((corners[ci] - p).distance <= tol) {
-            _cropCorner = ci;
+        final handles = _rectHandles(pending);
+        for (var ci = 0; ci < handles.length; ci++) {
+          if ((handles[ci] - p).distance <= tol) {
+            _cropHandle = ci;
             setState(() => _cursor = p);
             return;
           }
@@ -1401,13 +1431,13 @@ class _EditorCoreState extends State<EditorCore> {
       for (var idx = drawables.length - 1; idx >= 0; idx--) {
         final d = drawables[idx];
         if (d is! RectShaped || (filter != null && !filter(d))) continue;
-        final corners = _rectCorners((d as RectShaped).rect);
-        for (var ci = 0; ci < corners.length; ci++) {
-          if ((corners[ci] - p).distance <= 16) {
+        final handles = _rectHandles((d as RectShaped).rect);
+        for (var ci = 0; ci < handles.length; ci++) {
+          if ((handles[ci] - p).distance <= 16) {
             _editIndex = idx;
             _editOriginal = drawables[idx];
             _editPreview = drawables[idx];
-            _resizeCorner = ci;
+            _resizeHandle = ci;
             c.selectedIndex.value = idx;
             _pinned = true; // dragging an existing shape pins it
             return;
@@ -1443,7 +1473,7 @@ class _EditorCoreState extends State<EditorCore> {
       _editOriginal = drawables[hit];
       _editPreview = drawables[hit];
       _moveStart = p;
-      _resizeCorner = null;
+      _resizeHandle = null;
       c.selectedIndex.value = hit;
       _pinned = true; // dragging an existing shape pins it
     } else {
@@ -1488,12 +1518,16 @@ class _EditorCoreState extends State<EditorCore> {
       // whole rect; otherwise extend the in-progress selection. Shift squares the
       // resize / draw (capped to the canvas), like a rectangle drag.
       final shift = HardwareKeyboard.instance.isShiftPressed;
-      if (_cropCorner != null) {
+      if (_cropHandle != null) {
         final cur = _crop.rect.value;
         if (cur != null) {
-          final opposite = _rectCorners(cur)[(_cropCorner! + 2) % 4];
-          final cp = shift ? _squareCornerIn(opposite, p, _canvasSize) : p;
-          _crop.set(Rect.fromPoints(opposite, cp));
+          final h = _cropHandle!;
+          // Corners square-constrain (Shift) against the opposite corner; edge
+          // mids are single-axis (Shift is a no-op).
+          final cp = (shift && h < 4)
+              ? _squareCornerIn(_rectHandles(cur)[(h + 2) % 4], p, _canvasSize)
+              : p;
+          _crop.set(_resizeRect(cur, h, cp));
         }
       } else if (_cropMoveStart != null && _cropMoveOrigin != null) {
         _crop.set(_cropMoveOrigin!.shift(p - _cropMoveStart!));
@@ -1583,13 +1617,16 @@ class _EditorCoreState extends State<EditorCore> {
       final anchor = i == 0 ? pts.last : pts.first;
       pts[i] = (shift && isEnd) ? _snap8(anchor, p) : p;
       setState(() => _editPreview = seg.withPoints(pts));
-    } else if (_resizeCorner != null && orig is RectShaped) {
+    } else if (_resizeHandle != null && orig is RectShaped) {
       final shape = orig as RectShaped;
-      final corners = _rectCorners(shape.rect);
-      final opposite = corners[(_resizeCorner! + 2) % 4];
-      final cp = shift ? _squareCorner(opposite, p) : p;
+      final h = _resizeHandle!;
+      // Corners square-constrain (Shift) against the opposite corner; edge mids
+      // are single-axis (Shift is a no-op).
+      final cp = (shift && h < 4)
+          ? _squareCorner(_rectHandles(shape.rect)[(h + 2) % 4], p)
+          : p;
       setState(
-        () => _editPreview = shape.resizedTo(Rect.fromPoints(opposite, cp)),
+        () => _editPreview = shape.resizedTo(_resizeRect(shape.rect, h, cp)),
       );
     } else {
       final start = _moveStart;
@@ -1617,7 +1654,7 @@ class _EditorCoreState extends State<EditorCore> {
     }
     if (c.tool.value == ToolKind.crop) {
       _cropping = false;
-      _cropCorner = null;
+      _cropHandle = null;
       _cropMoveStart = null;
       _cropMoveOrigin = null;
       final r = _crop.rect.value;
@@ -1891,20 +1928,27 @@ class _EditorCoreState extends State<EditorCore> {
   /// selection's on-screen (viewport-mapped) bottom-right and clamped on-screen.
   Widget _cropConfirmButtons(EditorViewport v) {
     final r = _crop.rect.value!;
-    final screenLeft = v.offset.dx + r.left * v.scale;
-    final screenTop = v.offset.dy + r.top * v.scale;
-    final w = r.width * v.scale;
-    final h = r.height * v.scale;
-    const barW = 80.0, barH = 40.0, gap = 8.0;
+    final screenRight = v.offset.dx + r.right * v.scale;
+    final screenBottom = v.offset.dy + r.bottom * v.scale;
+    const gap = 8.0, barH = 52.0;
+    // Stack the bar below the box, RIGHT-ALIGNED to the box's right edge so it
+    // lines up with the W×H readout pill above it. Anchored by its OWN right edge
+    // (FractionalTranslation) so the exact bar width doesn't matter; pushed down by
+    // the readout's height so the two don't overlap.
+    const readoutClearance = 30.0;
     return Positioned(
-      left: (screenLeft + w - barW).clamp(gap, _lastBoxSize.width - barW - gap),
-      top: (screenTop + h + gap).clamp(gap, _lastBoxSize.height - barH - gap),
-      child: _CropConfirmBar(
-        onConfirm: _confirmTrim,
-        onCancel: () => setState(() {
-          _crop.clear();
-          _cropping = false;
-        }),
+      left: screenRight.clamp(gap, _lastBoxSize.width - gap),
+      top: (screenBottom + gap + readoutClearance)
+          .clamp(gap, _lastBoxSize.height - barH - gap),
+      child: FractionalTranslation(
+        translation: const Offset(-1, 0),
+        child: _CropConfirmBar(
+          onConfirm: _confirmTrim,
+          onCancel: () => setState(() {
+            _crop.clear();
+            _cropping = false;
+          }),
+        ),
       ),
     );
   }

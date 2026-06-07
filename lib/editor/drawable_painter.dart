@@ -583,12 +583,21 @@ class SelectionHighlightPainter extends CustomPainter {
       old.selected != selected || old.march != march;
 }
 
-/// The shared corner-handle style — a monochrome dot (white fill + dark ring, so
-/// it reads on any background, matching the two-tone HUD) at each corner of [r].
-/// Used by the drawable selection AND the editor crop selection so resize handles
-/// look identical everywhere.
-void paintResizeHandles(Canvas canvas, Rect r) =>
-    _paintHandleDots(canvas, [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]);
+/// The shared resize-handle style — a monochrome dot (white fill + dark ring, so
+/// it reads on any background, matching the two-tone HUD) at each of [r]'s 8
+/// handles: the 4 corners (scale both axes) plus the 4 edge midpoints (scale a
+/// single axis). Used by the drawable selection AND the editor crop selection so
+/// resize handles look identical everywhere.
+void paintResizeHandles(Canvas canvas, Rect r) => _paintHandleDots(canvas, [
+      r.topLeft,
+      r.topRight,
+      r.bottomLeft,
+      r.bottomRight,
+      Offset(r.center.dx, r.top),
+      Offset(r.center.dx, r.bottom),
+      Offset(r.left, r.center.dy),
+      Offset(r.right, r.center.dy),
+    ]);
 
 /// Draws a handle (white filled circle + dark ring) at each point. Shared by the
 /// rect corner handles and the segment endpoint handles so they look identical.
