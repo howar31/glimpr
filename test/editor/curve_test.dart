@@ -112,4 +112,47 @@ void main() {
       expect(p.where((r) => r.kind == DashKind.dot).length, 2);
     });
   });
+
+  group('pen smoothing', () {
+    test('kPenSmoothMinDist is a positive spacing', () {
+      expect(kPenSmoothMinDist, greaterThan(0));
+    });
+
+    test('decimateByDistance drops near points and keeps the endpoints', () {
+      final pts = [
+        const Offset(0, 0),
+        const Offset(1, 0), // 1px from the kept (0,0) -> dropped
+        const Offset(2, 0), // still < 5px -> dropped
+        const Offset(10, 0), // 10px from (0,0) -> kept
+        const Offset(11, 0), // close to (10,0) but it's the LAST -> kept
+      ];
+      expect(decimateByDistance(pts, 5), [
+        const Offset(0, 0),
+        const Offset(10, 0),
+        const Offset(11, 0),
+      ]);
+    });
+
+    test('decimateByDistance with minDist<=0 is the identity', () {
+      final pts = [const Offset(0, 0), const Offset(1, 0), const Offset(2, 0)];
+      expect(decimateByDistance(pts, 0), pts);
+      expect(decimateByDistance(pts, -5), pts);
+    });
+
+    test('decimateByDistance leaves 2-or-fewer points unchanged', () {
+      final two = [const Offset(0, 0), const Offset(1, 0)];
+      expect(decimateByDistance(two, 100), two);
+    });
+
+    test('decimateByDistance thins a dense jittery stroke, keeps endpoints', () {
+      final pts = [
+        for (var i = 0; i < 50; i++)
+          Offset(i.toDouble(), (i % 2).toDouble()), // a jittery dense stroke
+      ];
+      final out = decimateByDistance(pts, kPenSmoothMinDist);
+      expect(out.length, lessThan(pts.length));
+      expect(out.first, pts.first);
+      expect(out.last, pts.last);
+    });
+  });
 }

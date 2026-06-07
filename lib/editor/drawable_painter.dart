@@ -415,10 +415,9 @@ class DrawablePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
-    final path = Path()..moveTo(d.points.first.dx, d.points.first.dy);
-    for (var i = 1; i < d.points.length; i++) {
-      path.lineTo(d.points[i].dx, d.points[i].dy);
-    }
+    // Freehand strokes are decimated on release (editor_core), so the stored
+    // points are already simplified; draw them as a smooth Catmull-Rom spline.
+    final path = catmullRomPath(d.points);
     _withShadow(canvas, d.style, paint, (c, p) => c.drawPath(path, p));
   }
 

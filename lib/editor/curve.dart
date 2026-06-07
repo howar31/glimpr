@@ -209,3 +209,25 @@ void drawStyledPath(
   }
   canvas.drawPath(dashPath, stroke);
 }
+
+// ---- pen smoothing --------------------------------------------------------
+
+/// Fixed minimum spacing (logical px) used to decimate a freehand pen stroke ONCE
+/// on release. The kept points are then drawn as a Catmull-Rom spline, so the
+/// stroke reads smooth while storing / painting / hit-testing far fewer points
+/// than the raw pointer samples. A balance of smoothing vs corner fidelity; raise
+/// it to simplify (and save) more, lower it to follow the hand more closely.
+const double kPenSmoothMinDist = 6;
+
+/// Drop points closer than [minDist] to the last KEPT point, always keeping the
+/// first and last. O(n), order-stable. [minDist] <= 0, or 2-or-fewer points →
+/// the points unchanged.
+List<Offset> decimateByDistance(List<Offset> pts, double minDist) {
+  if (minDist <= 0 || pts.length <= 2) return List.of(pts);
+  final out = <Offset>[pts.first];
+  for (var i = 1; i < pts.length - 1; i++) {
+    if ((pts[i] - out.last).distance >= minDist) out.add(pts[i]);
+  }
+  out.add(pts.last);
+  return out;
+}

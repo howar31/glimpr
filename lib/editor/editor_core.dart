@@ -1695,6 +1695,12 @@ class _EditorCoreState extends State<EditorCore> {
       final seg = prev as Segmented;
       final n = prev.style.curvePoints.clamp(kCurvePointsMin, kCurvePointsMax);
       out = seg.withPoints(seedInterior(seg.start, seg.end, n));
+    } else if (prev is PenDrawable) {
+      // Freehand strokes are decimated ONCE on release: the points are stored
+      // already-simplified (lighter to keep / paint / hit-test) and the painter
+      // draws them as a smooth Catmull-Rom spline.
+      out = PenDrawable(
+          decimateByDistance(prev.points, kPenSmoothMinDist), prev.style);
     }
     c.commitDrawable(out);
   }

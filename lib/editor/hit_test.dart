@@ -37,7 +37,9 @@ bool _hits(Drawable d, Offset p) {
       return _hitsPolyline(
           sampleCatmullRom(d.points), p, _band(d.style.strokeWidth * 5));
     case PenDrawable():
-      return _hitsPolyline(d.points, p, _band(d.style.strokeWidth));
+      // Hit the VISIBLE (smoothed) stroke, matching the painter's spline.
+      return _hitsPolyline(
+          sampleCatmullRom(d.points), p, _band(d.style.strokeWidth));
     case StepDrawable():
       return (p - d.center).distance <= d.radius;
     case BlurDrawable():
