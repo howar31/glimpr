@@ -6,16 +6,18 @@
      Source of truth: design handoff "Glimpr Logo - Final (Viewfinder)". -->
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Tile background: linear-gradient(158deg, #141d33, #0a0f1d 78%) -->
-    <linearGradient id="bg" gradientUnits="objectBoundingBox"
-        x1="0.313" y1="0.036" x2="0.687" y2="0.964">
-      <stop offset="0" stop-color="#141d33"/>
-      <stop offset="0.78" stop-color="#0a0f1d"/>
-      <stop offset="1" stop-color="#0a0f1d"/>
-    </linearGradient>
-    <!-- Brand gradient across the whole mark (single, user-space). -->
+    <!-- Tile background is SOLID dark navy (no linear gradient). The depth comes
+         from the cyan radial glow (upper-centre) + the top inset highlight + the
+         hairline border — NOT a diagonal sheen. A linear gradient here rendered as
+         a visible diagonal stripe that the design doesn't have. -->
+    <!-- Brand gradient across the whole mark. userSpaceOnUse resolves in the
+         mark group's LOCAL space (the group carries translate(273.04)
+         scale(4.97833)), so these are the mark's own coords (it spans ~18..78),
+         NOT the 1024 canvas. 13.45..82.55 == the old 340..684 canvas line mapped
+         through that transform; the canvas-space coords put the whole mark before
+         the gradient start, clamping it to the first stop = flat cyan. -->
     <linearGradient id="mark" gradientUnits="userSpaceOnUse"
-        x1="340" y1="340" x2="684" y2="684">
+        x1="13.45" y1="13.45" x2="82.55" y2="82.55">
       <stop offset="0" stop-color="#22d3ee"/>
       <stop offset="0.52" stop-color="#3b82f6"/>
       <stop offset="1" stop-color="#a78bfa"/>
@@ -46,9 +48,9 @@
     </filter>
   </defs>
 
-  <!-- Base tile + contact shadow -->
+  <!-- Base tile (solid) + contact shadow -->
   <rect x="100" y="100" width="824" height="824" rx="185" ry="185"
-      fill="url(#bg)" filter="url(#contactShadow)"/>
+      fill="#0d1322" filter="url(#contactShadow)"/>
 
   <!-- Glow + top highlight, clipped to the tile -->
   <g clip-path="url(#bodyClip)">
