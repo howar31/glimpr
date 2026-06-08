@@ -18,6 +18,7 @@ import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'drawable_painter.dart';
+import 'geometry.dart';
 import 'editor_controller.dart';
 import 'editor_host.dart';
 import 'hit_test.dart';
@@ -1639,11 +1640,21 @@ class _EditorCoreState extends State<EditorCore> {
     } else if (_resizeHandle != null && orig is RectShaped) {
       final shape = orig as RectShaped;
       final h = _resizeHandle!;
-      // Corners square-constrain (Shift) against the opposite corner; edge mids
-      // are single-axis (Shift is a no-op).
-      final cp = (shift && h < 4)
-          ? _squareCorner(_rectHandles(shape.rect)[(h + 2) % 4], p)
-          : p;
+      // Corners constrain on Shift; edge mids are single-axis (Shift no-op).
+      // A pasted/stamped IMAGE locks to its NATIVE aspect (treat it as a picture,
+      // not a free box); every other shape squares.
+      final Offset cp;
+      if (shift && h < 4) {
+        final anchor = _rectHandles(shape.rect)[(h + 2) % 4];
+        if (orig is ImageDrawable) {
+          final img = orig.image;
+          cp = aspectCorner(anchor, p, img.width / img.height);
+        } else {
+          cp = _squareCorner(anchor, p);
+        }
+      } else {
+        cp = p;
+      }
       setState(
         () => _editPreview = shape.resizedTo(_resizeRect(shape.rect, h, cp)),
       );
