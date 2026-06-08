@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/draw_style.dart';
 import 'package:glimpr/editor/drawable.dart';
@@ -189,6 +192,41 @@ void main() {
     c.sendSelectedToBack(); // already first
     expect((c.document.value.drawables.first as RectangleDrawable).rect.left, 0);
     expect(c.document.value.drawables.length, before);
+    c.dispose();
+  });
+
+  Future<ui.Image> testImage(int w, int h) {
+    final done = Completer<ui.Image>();
+    final pixels = Uint8List(w * h * 4)..fillRange(0, w * h * 4, 255);
+    ui.decodeImageFromPixels(
+        pixels, w, h, ui.PixelFormat.rgba8888, done.complete);
+    return done.future;
+  }
+
+  test('stamp image defaults null; setStampImage stores it', () async {
+    final c = EditorController();
+    expect(c.stampImage.value, isNull);
+    final img = await testImage(2, 1);
+    c.setStampImage(img);
+    expect(c.stampImage.value, same(img));
+    c.dispose();
+  });
+
+  test('requestStampPick bumps the stampPick channel', () {
+    final c = EditorController();
+    final before = c.stampPick.value;
+    c.requestStampPick();
+    expect(c.stampPick.value, before + 1);
+    c.dispose();
+  });
+
+  test('setStamp sets both the image and the source bytes (for broadcast)', () async {
+    final c = EditorController();
+    final img = await testImage(2, 1);
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+    c.setStamp(img, bytes);
+    expect(c.stampImage.value, same(img));
+    expect(c.stampBytes, same(bytes));
     c.dispose();
   });
 }

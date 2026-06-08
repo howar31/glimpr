@@ -824,8 +824,8 @@ class _OptionsRowState extends State<_OptionsRow> {
     // so the Select tool can edit any selected annotation and a hidden bar appears
     // once something is selected.
     return ListenableBuilder(
-      listenable:
-          Listenable.merge([_c.tool, _c.selectedIndex, _c.document]),
+      listenable: Listenable.merge(
+          [_c.tool, _c.selectedIndex, _c.document, _c.stampImage]),
       builder: (context, _) {
         final tool = _effectiveType();
         // Blur/Pixelate carry no colour but DO have a strength control, so the bar
@@ -850,7 +850,10 @@ class _OptionsRowState extends State<_OptionsRow> {
         final sel = _c.selectedIndex.value;
         final hasSelection =
             sel != null && sel >= 0 && sel < _c.document.value.drawables.length;
-        if (!hasStyleBar && !hasSelection) {
+        // The stamp tool has no style controls, but its option bar shows a
+        // "Choose image" pill so the bar must appear for it too.
+        final isStamp = tool == ToolKind.stamp;
+        if (!hasStyleBar && !hasSelection && !isStamp) {
           return const SizedBox.shrink();
         }
         // Stroke-width applies to the shape/stroke tools (not text/step).
@@ -910,6 +913,15 @@ class _OptionsRowState extends State<_OptionsRow> {
               builder: (_, style, _) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (isStamp)
+                    _TextureButton(
+                      key: const ValueKey('stamp-picker'),
+                      label: _c.stampImage.value == null
+                          ? 'Choose image…'
+                          : 'Change image…',
+                      tooltip: 'Choose a stamp image',
+                      onTap: _c.requestStampPick,
+                    ),
                   if (hasStyleBar) ...[
                   // Single colour button: shows the current colour over a
                   // checkerboard (translucency reads) and opens the picker. The

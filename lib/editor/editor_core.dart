@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:pasteboard/pasteboard.dart';
 import '../capture/captured_display.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -431,6 +432,8 @@ class _EditorCoreState extends State<EditorCore> {
     c.eyedropperActive.addListener(_rebuild);
     c.showCursor.addListener(_rebuild);
     c.refocus.addListener(_onRefocusRequested);
+    c.stampPick.addListener(_onStampPick);
+    c.tool.addListener(_onToolMaybeStamp);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     c.phase.addListener(_rebuild);
     c.style.addListener(_onStyleChanged);
@@ -451,6 +454,8 @@ class _EditorCoreState extends State<EditorCore> {
     c.eyedropperActive.removeListener(_rebuild);
     c.showCursor.removeListener(_rebuild);
     c.refocus.removeListener(_onRefocusRequested);
+    c.stampPick.removeListener(_onStampPick);
+    c.tool.removeListener(_onToolMaybeStamp);
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     c.phase.removeListener(_rebuild);
     c.style.removeListener(_onStyleChanged);
@@ -681,6 +686,55 @@ class _EditorCoreState extends State<EditorCore> {
     }
   }
 
+  /// Choose a file image as the stamp tool's current "stamp" (reusable for
+  /// repeated placement). No-op when the user cancels or the file is undecodable.
+  Future<void> _pickStamp() async {
+    const group = XTypeGroup(
+      label: 'Images',
+      extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'heic'],
+    );
+    final file = await openFile(acceptedTypeGroups: [group]);
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    ui.Image img;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      img = (await codec.getNextFrame()).image;
+    } catch (_) {
+      return; // not a decodable image
+    }
+    if (!mounted) return;
+    // Keep the bytes so the overlay can broadcast this stamp to the other
+    // displays (which each decode their own ui.Image).
+    c.setStamp(img, bytes);
+  }
+
+  /// Default placement rect for a stamp: native size / scale, fit within ~half
+  /// the display (never upscale), centered on the tap point [p].
+  Rect _stampRectAt(Offset p, ui.Image img) {
+    final sf = widget.host.pixelScale;
+    final w = img.width / sf, h = img.height / sf;
+    final fit = [
+      1.0,
+      widget.host.size.width * 0.5 / w,
+      widget.host.size.height * 0.5 / h,
+    ].reduce((a, b) => a < b ? a : b);
+    return Rect.fromCenter(center: p, width: w * fit, height: h * fit);
+  }
+
+  void _onStampPick() => _pickStamp();
+
+  // Selecting the stamp tool with no image loaded opens the picker immediately
+  // (so the user does not have to hunt for the option-bar button on first use).
+  // Gated on [_active] like the eyedropper: the tool change is BROADCAST to every
+  // display (overlay cross-display sync), so without this guard each display would
+  // open its own file dialog. Only the display the user is on (active) opens one.
+  void _onToolMaybeStamp() {
+    if (_active && c.tool.value == ToolKind.stamp && c.stampImage.value == null) {
+      _pickStamp();
+    }
+  }
+
   // ---- type filter -------------------------------------------------------
 
   bool Function(Drawable)? _typeFilter() {
@@ -705,6 +759,10 @@ class _EditorCoreState extends State<EditorCore> {
         return (d) => d is BlurDrawable;
       case ToolKind.pixelate:
         return (d) => d is PixelateDrawable;
+      case ToolKind.stamp:
+        // The stamp tool targets pasted/placed images (so its placed image is
+        // selectable / resizable while the tool stays active for more stamps).
+        return (d) => d is ImageDrawable;
       case ToolKind.paste:
         // The "paste" slot is the universal SELECT tool: it operates on EVERY
         // drawable type (select / move / resize / delete), so it matches all.
@@ -723,6 +781,7 @@ class _EditorCoreState extends State<EditorCore> {
     ToolKind.blur,
     ToolKind.pixelate,
     ToolKind.paste,
+    ToolKind.stamp,
   };
 
   // Tools whose drawable is a Segmented shape (two endpoint handles, not box
@@ -1199,6 +1258,23 @@ class _EditorCoreState extends State<EditorCore> {
           _selectAndPin(idx);
         }
         return;
+      case ToolKind.stamp:
+        // Tap on empty space places a new stamp at the current image; tap on an
+        // existing image selects it (then resize/move). No image loaded yet ->
+        // open the picker. The tool STAYS active so you can keep stamping.
+        final img = c.stampImage.value;
+        if (img == null) {
+          c.requestStampPick();
+          return;
+        }
+        final hit = _hitActiveType(p);
+        if (hit == null) {
+          c.commitDrawable(ImageDrawable(_stampRectAt(p, img), img, style));
+          c.selectedIndex.value = c.document.value.drawables.length - 1;
+        } else {
+          _selectAndPin(hit);
+        }
+        return;
       case ToolKind.arrow:
       case ToolKind.line:
       case ToolKind.pen:
@@ -1616,6 +1692,7 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.text:
       case ToolKind.step:
       case ToolKind.paste:
+      case ToolKind.stamp:
       case ToolKind.crop:
         break;
     }

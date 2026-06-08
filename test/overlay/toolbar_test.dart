@@ -38,8 +38,8 @@ void main() {
   testWidgets('builds every tool and every tool options row', (tester) async {
     final c = await _pumpToolbar(tester, kDefaultBindings);
 
-    expect(kEditorToolMeta.length, 12);
-    expect(find.byType(IconButton), findsNWidgets(12));
+    expect(kEditorToolMeta.length, 13);
+    expect(find.byType(IconButton), findsNWidgets(13));
 
     for (final (kind, _) in kEditorToolMeta) {
       c.selectTool(kind);
@@ -52,9 +52,9 @@ void main() {
       (tester) async {
     await _pumpToolbar(tester, kDefaultBindings);
 
-    // Default tool is Crop => no options row => the 12 Text widgets are exactly
-    // the 12 tool badges (one per tool, all default-bound).
-    expect(find.byType(Text), findsNWidgets(12));
+    // Default tool is Crop => no options row => the 13 Text widgets are exactly
+    // the 13 tool badges (one per tool, all default-bound).
+    expect(find.byType(Text), findsNWidgets(13));
     // Crop's default is bare 'C'; Rectangle's is bare '1'. Both are
     // host-platform-stable (no modifier glyphs).
     expect(find.text('C'), findsOneWidget);
@@ -76,7 +76,7 @@ void main() {
 
     expect(find.text('X'), findsOneWidget); // the rebound label shows
     expect(find.text('C'), findsNothing); // the old label is gone
-    expect(find.byType(Text), findsNWidgets(12)); // still one badge per tool
+    expect(find.byType(Text), findsNWidgets(13)); // still one badge per tool
   });
 
   testWidgets('an unbound tool shows no badge (button still builds)',
@@ -89,15 +89,15 @@ void main() {
     };
     await _pumpToolbar(tester, bindings);
 
-    expect(find.byType(IconButton), findsNWidgets(12)); // all 12 buttons build
+    expect(find.byType(IconButton), findsNWidgets(13)); // all 13 buttons build
     expect(find.text('C'), findsNothing); // crop's badge is suppressed
-    expect(find.byType(Text), findsNWidgets(11)); // exactly one fewer badge
+    expect(find.byType(Text), findsNWidgets(12)); // exactly one fewer badge
   });
 
   testWidgets('empty bindings => no badges at all', (tester) async {
     await _pumpToolbar(tester, const {});
 
-    expect(find.byType(IconButton), findsNWidgets(12));
+    expect(find.byType(IconButton), findsNWidgets(13));
     expect(find.byType(Text), findsNothing);
   });
 }

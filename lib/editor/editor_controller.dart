@@ -22,6 +22,7 @@ enum ToolKind {
   blur,
   pixelate,
   paste,
+  stamp,
 }
 
 enum EditorPhase { annotate, crop }
@@ -79,6 +80,29 @@ class EditorController {
   /// per capture from the "capture mouse pointer" setting; flipped by the toolbar
   /// cursor button; read by EditorCore (render) + the export.
   final showCursor = ValueNotifier<bool>(false);
+
+  /// The current "stamp" image (file-loaded) the stamp tool places, or null
+  /// until one is chosen. Session-scoped; not persisted across captures.
+  final stampImage = ValueNotifier<Image?>(null);
+  void setStampImage(Image? img) => stampImage.value = img;
+
+  /// The encoded bytes of [stampImage], kept so the overlay can BROADCAST the
+  /// stamp to the other displays (each decodes its own ui.Image — images cannot
+  /// cross Flutter engines). Null until a stamp is chosen.
+  Uint8List? stampBytes;
+
+  /// Set the stamp image and its source bytes together (bytes first so a
+  /// stampImage listener that broadcasts sees a consistent pair).
+  void setStamp(Image img, Uint8List bytes) {
+    stampBytes = bytes;
+    stampImage.value = img;
+  }
+
+  /// Pick-request channel for the stamp tool (mirrors [eyedropperActive]): the
+  /// option-bar button and selecting the empty stamp tool bump this; EditorCore
+  /// listens and opens the file picker.
+  final stampPick = ValueNotifier<int>(0);
+  void requestStampPick() => stampPick.value++;
 
   /// Bumped to ask the live editor to RE-ACQUIRE keyboard focus — after a modal
   /// dialog closes (overlay discard prompt) or the window regains key (Cmd-Tab
@@ -326,5 +350,7 @@ class EditorController {
     phase.dispose();
     eyedropperActive.dispose();
     refocus.dispose();
+    stampImage.dispose();
+    stampPick.dispose();
   }
 }

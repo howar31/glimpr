@@ -33,6 +33,7 @@ const kEditorToolActionKey = <ToolKind, String>{
   ToolKind.text: 'editor.text',
   ToolKind.highlighter: 'editor.highlighter',
   ToolKind.step: 'editor.step',
+  ToolKind.stamp: 'editor.stamp',
   ToolKind.paste: 'editor.paste',
 };
 
@@ -100,6 +101,9 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       _b(PhysicalKeyboardKey.keyH, LogicalKeyboardKey.keyH),
   kEditorToolActionKey[ToolKind.step]!:
       _b(PhysicalKeyboardKey.keyS, LogicalKeyboardKey.keyS),
+  // Image stamp tool — I (Image).
+  kEditorToolActionKey[ToolKind.stamp]!:
+      _b(PhysicalKeyboardKey.keyI, LogicalKeyboardKey.keyI),
   // The "paste" slot is the universal Select tool — V (the standard selection-
   // tool key in design apps); ⌘V remains the paste-image action.
   kEditorToolActionKey[ToolKind.paste]!:

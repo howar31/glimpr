@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
@@ -242,12 +243,14 @@ class _OverlayAppState extends State<OverlayApp> {
     e.tool.addListener(_broadcastEditorState);
     e.style.addListener(_broadcastEditorState);
     e.style.addListener(_schedulePersist);
+    e.stampImage.addListener(_broadcastStamp);
   }
 
   void _detachShared() {
     _editor?.tool.removeListener(_broadcastEditorState);
     _editor?.style.removeListener(_broadcastEditorState);
     _editor?.style.removeListener(_schedulePersist);
+    _editor?.stampImage.removeListener(_broadcastStamp);
   }
 
   void _schedulePersist() {
@@ -283,10 +286,47 @@ class _OverlayAppState extends State<OverlayApp> {
     });
   }
 
+  /// Push the chosen stamp image to the other displays as raw bytes (each decodes
+  /// its own ui.Image — images cannot cross Flutter engines). One-shot on pick,
+  /// kept OFF the per-change tool/style broadcast so a frequent style edit never
+  /// re-sends the image. Uint8List rides the StandardMethodCodec channel as
+  /// binary (no base64); the native side relays the args verbatim.
+  void _broadcastStamp() {
+    if (_applyingRemote) return;
+    final bytes = _editor?.stampBytes;
+    if (bytes == null) return;
+    _bridge.broadcastEditorState({'stampBytes': bytes});
+  }
+
+  /// Decode a stamp broadcast from another display and set it locally (guarded so
+  /// setting it does not bounce the broadcast back).
+  Future<void> _applyRemoteStamp(Uint8List bytes) async {
+    final e = _editor;
+    if (e == null) return;
+    final ui.Image img;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      img = (await codec.getNextFrame()).image;
+    } catch (_) {
+      return;
+    }
+    if (!mounted || _editor != e) return;
+    _applyingRemote = true;
+    e.setStamp(img, bytes);
+    _applyingRemote = false;
+  }
+
   /// Mirror a tool/style change received from another display onto this editor.
   void _applyRemoteEditorState(Map<String, dynamic> state) {
     final e = _editor;
     if (e == null) return;
+    // A stamp broadcast carries only the image bytes (no tool/style); decode and
+    // apply it on its own async path.
+    final stampBytes = state['stampBytes'];
+    if (stampBytes is Uint8List) {
+      _applyRemoteStamp(stampBytes);
+      return;
+    }
     _applyingRemote = true;
     final t = ToolKind.values[state['tool'] as int];
     final s = DrawStyle.fromJson(state); // tolerant; ignores the extra 'tool' key
