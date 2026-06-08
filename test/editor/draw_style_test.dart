@@ -227,4 +227,25 @@ void main() {
     expect(a.copyWith(outlineColor: const Color(0xFF000000)).outlineColor,
         const Color(0xFF000000));
   });
+
+  test('arrowHeadScale defaults to 1, omitted from JSON, round-trips, clamps', () {
+    expect(const DrawStyle().arrowHeadScale, kArrowHeadScaleDefault);
+    expect(const DrawStyle().toJson().containsKey('arrowHeadScale'), isFalse);
+    final s = const DrawStyle().copyWith(arrowHeadScale: 2);
+    expect(s.toJson()['arrowHeadScale'], 2);
+    expect(DrawStyle.fromJson(s.toJson()).arrowHeadScale, 2);
+    // Out-of-range clamps; missing key falls back to the default.
+    expect(DrawStyle.fromJson({'arrowHeadScale': 99}).arrowHeadScale,
+        kArrowHeadScaleMax);
+    expect(DrawStyle.fromJson({'arrowHeadScale': 0}).arrowHeadScale,
+        kArrowHeadScaleMin);
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).arrowHeadScale,
+        kArrowHeadScaleDefault);
+  });
+
+  test('equality and copyWith include arrowHeadScale', () {
+    const a = DrawStyle();
+    expect(a.copyWith(arrowHeadScale: 1.5) == a, isFalse);
+    expect(a.copyWith(arrowHeadScale: 1.5).arrowHeadScale, 1.5);
+  });
 }

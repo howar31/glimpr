@@ -947,6 +947,21 @@ class _OptionsRowState extends State<_OptionsRow> {
                       tooltip: 'Arrowheads',
                       onTap: _openArrowHeadsPopover,
                     ),
+                    const SizedBox(width: 8),
+                    _NumberStepper(
+                      key: const ValueKey('arrow-head-scale-stepper'),
+                      controller: _c,
+                      // The multiplier reads more naturally as a percentage.
+                      read: (s) => s.arrowHeadScale * 100,
+                      write: (v) => _c.setArrowHeadScale(v / 100),
+                      min: kArrowHeadScaleMin * 100,
+                      max: kArrowHeadScaleMax * 100,
+                      step: 25,
+                      suffix: '%',
+                      leadingIcon: Icons.arrow_right_alt,
+                      leadingTooltip: 'Arrowhead size',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
                   ],
                   if (showsFont) ...[
                     const SizedBox(width: 10),

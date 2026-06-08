@@ -111,4 +111,15 @@ void main() {
     c.setOutlineColor(const Color(0x00123456));
     expect(c.style.value.outlineColor, const Color(0x00000000));
   });
+
+  test('setArrowHeadScale clamps to [min, max]', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.arrow);
+    c.setArrowHeadScale(2);
+    expect(c.style.value.arrowHeadScale, 2);
+    c.setArrowHeadScale(99);
+    expect(c.style.value.arrowHeadScale, kArrowHeadScaleMax);
+    c.setArrowHeadScale(0);
+    expect(c.style.value.arrowHeadScale, kArrowHeadScaleMin);
+  });
 }

@@ -105,6 +105,13 @@ double resolveCornerRadius(double cornerRadius, Rect rect) => cornerRadius < 0
     ? (rect.shortestSide / 4).clamp(0.0, 12.0)
     : cornerRadius.clamp(0.0, rect.shortestSide / 2);
 
+/// Arrowhead size multiplier (arrow tool only). 1.0 = the legacy head size
+/// (headLen = strokeWidth * 4.9), so the default keeps the export byte-identical;
+/// the head still scales with stroke width, this just multiplies on top.
+const double kArrowHeadScaleDefault = 1.0;
+const double kArrowHeadScaleMin = 0.5;
+const double kArrowHeadScaleMax = 3.0;
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -120,6 +127,7 @@ class DrawStyle {
   final Color fillColor; // rect/ellipse solid fill (own alpha); 0 alpha = no fill
   final double cornerRadius; // rectangle corner radius; kCornerRadiusAuto = legacy
   final Color outlineColor; // text glyph outline (own alpha); 0 alpha = no outline
+  final double arrowHeadScale; // arrow head size multiplier; 1.0 = legacy size
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -134,6 +142,7 @@ class DrawStyle {
     this.fillColor = const Color(0x00000000),
     this.cornerRadius = kCornerRadiusAuto,
     this.outlineColor = const Color(0x00000000),
+    this.arrowHeadScale = kArrowHeadScaleDefault,
   });
 
   DrawStyle copyWith({
@@ -150,6 +159,7 @@ class DrawStyle {
     Color? fillColor,
     double? cornerRadius,
     Color? outlineColor,
+    double? arrowHeadScale,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -164,6 +174,7 @@ class DrawStyle {
     fillColor: fillColor ?? this.fillColor,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     outlineColor: outlineColor ?? this.outlineColor,
+    arrowHeadScale: arrowHeadScale ?? this.arrowHeadScale,
   );
 
   Map<String, dynamic> toJson() => {
@@ -180,6 +191,7 @@ class DrawStyle {
     if (fillColor.a != 0) 'fillColor': fillColor.toARGB32(),
     if (cornerRadius != kCornerRadiusAuto) 'cornerRadius': cornerRadius,
     if (outlineColor.a != 0) 'outlineColor': outlineColor.toARGB32(),
+    if (arrowHeadScale != kArrowHeadScaleDefault) 'arrowHeadScale': arrowHeadScale,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -198,6 +210,9 @@ class DrawStyle {
     fillColor: Color((j['fillColor'] as num?)?.toInt() ?? 0x00000000),
     cornerRadius: (j['cornerRadius'] as num?)?.toDouble() ?? kCornerRadiusAuto,
     outlineColor: Color((j['outlineColor'] as num?)?.toInt() ?? 0x00000000),
+    arrowHeadScale:
+        ((j['arrowHeadScale'] as num?)?.toDouble() ?? kArrowHeadScaleDefault)
+            .clamp(kArrowHeadScaleMin, kArrowHeadScaleMax),
   );
 
   @override
@@ -215,9 +230,10 @@ class DrawStyle {
       other.strength == strength &&
       other.fillColor == fillColor &&
       other.cornerRadius == cornerRadius &&
-      other.outlineColor == outlineColor;
+      other.outlineColor == outlineColor &&
+      other.arrowHeadScale == arrowHeadScale;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
       texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
-      cornerRadius, outlineColor);
+      cornerRadius, outlineColor, arrowHeadScale);
 }

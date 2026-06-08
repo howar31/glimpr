@@ -25,6 +25,14 @@ const List<Shadow> _kTextShadow = [
   ),
 ];
 
+// ---- arrowhead geometry (DrawStyle.arrowHeadScale) ---------------------------
+// Head dimensions in stroke widths; multiplied by arrowHeadScale (default 1.0 =
+// the legacy size). Shared by _paintArrow (shaft trim) and _drawArrowHead so the
+// trim and the head always agree.
+const double _kArrowHeadLenRatio = 4.9; // tip -> barb line
+const double _kArrowHeadHalfRatio = 1.6; // barb half-width
+const double _kArrowHeadBackRatio = 0.15; // concave back, in head lengths
+
 /// Draws [geom] as a blurred, offset drop shadow beneath the real shape when
 /// [style.shadow] is on, then draws the real shape via the same closure. The
 /// shadow paint copies [base]'s stroke/fill geometry so caps/joins/width match.
@@ -589,8 +597,9 @@ class DrawablePainter extends CustomPainter {
     final heads = style.arrowHeads;
     final atEnd = heads == ArrowHeads.end || heads == ArrowHeads.both;
     final atStart = heads == ArrowHeads.start || heads == ArrowHeads.both;
-    final headLen = w * 4.9; // tip -> barb line (long/pointed)
-    final back = headLen * 0.15; // shallow concave back
+    final scale = style.arrowHeadScale;
+    final headLen = w * _kArrowHeadLenRatio * scale; // tip -> barb line
+    final back = headLen * _kArrowHeadBackRatio; // shallow concave back
     final trim = headLen - back; // shaft is cut to the head's notch
     final full = catmullRomPath(pts);
     final shaft = _trimContour(full, atStart ? trim : 0, atEnd ? trim : 0);
@@ -608,8 +617,12 @@ class DrawablePainter extends CustomPainter {
         ..style = PaintingStyle.fill
         ..maskFilter = p.maskFilter // carry the shadow blur on the shadow pass
         ..isAntiAlias = true;
-      if (atEnd) _drawArrowHead(c, pts, atEnd: true, w: w, fill: headFill);
-      if (atStart) _drawArrowHead(c, pts, atEnd: false, w: w, fill: headFill);
+      if (atEnd) {
+        _drawArrowHead(c, pts, atEnd: true, w: w, scale: scale, fill: headFill);
+      }
+      if (atStart) {
+        _drawArrowHead(c, pts, atEnd: false, w: w, scale: scale, fill: headFill);
+      }
     });
   }
 
@@ -620,14 +633,15 @@ class DrawablePainter extends CustomPainter {
     List<Offset> pts, {
     required bool atEnd,
     required double w,
+    required double scale,
     required Paint fill,
   }) {
     final tip = atEnd ? pts.last : pts.first;
     final u = curveTangent(pts, atEnd: atEnd); // unit outward
     final n = Offset(-u.dy, u.dx);
-    final headHalf = w * 1.6;
-    final headLen = w * 4.9;
-    final back = headLen * 0.15;
+    final headHalf = w * _kArrowHeadHalfRatio * scale;
+    final headLen = w * _kArrowHeadLenRatio * scale;
+    final back = headLen * _kArrowHeadBackRatio;
     final barbR = tip - u * headLen + n * headHalf;
     final barbL = tip - u * headLen - n * headHalf;
     final j = tip - u * (headLen - back); // concave notch
