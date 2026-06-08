@@ -75,7 +75,11 @@ class EditorToolbar extends StatelessWidget {
           // Column's BOTTOM at the toolbar position, so the tool row (the last,
           // bottom child) stays put while the options row above it appears /
           // grows / shrinks — it can never displace the tool row being aimed at.
-          _OptionsRow(controller: controller, onPtEditingDone: onPtEditingDone),
+          _OptionsRow(
+            controller: controller,
+            onPtEditingDone: onPtEditingDone,
+            editorBindings: editorBindings,
+          ),
           const SizedBox(height: 6),
           // Main tool row LAST = the fixed bottom anchor.
           _Bar(
@@ -322,6 +326,38 @@ class _CursorToggle extends StatelessWidget {
   }
 }
 
+/// A compact icon button for selection actions (duplicate / z-order) shown in the
+/// option bar whenever a drawable is selected. Sized to match the option-bar
+/// pills/steppers rather than the taller tool-row [IconButton].
+class _ActionIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _ActionIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Icon(icon, size: 18, color: p.fg, shadows: p.shadows),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Bar extends StatelessWidget {
   final Widget child;
   const _Bar({required this.child});
@@ -392,7 +428,14 @@ enum _OpenPopover {
 class _OptionsRow extends StatefulWidget {
   final EditorController controller;
   final VoidCallback onPtEditingDone;
-  const _OptionsRow({required this.controller, required this.onPtEditingDone});
+  // Effective editor.* bindings, so the selection-action tooltips can show the
+  // user's customized shortcut (matches the tool-button badges).
+  final Map<String, HotkeyBinding?> editorBindings;
+  const _OptionsRow({
+    required this.controller,
+    required this.onPtEditingDone,
+    this.editorBindings = const {},
+  });
 
   @override
   State<_OptionsRow> createState() => _OptionsRowState();
@@ -425,6 +468,13 @@ class _OptionsRowState extends State<_OptionsRow> {
   }
 
   void _onToolChanged() => _closePopover();
+
+  /// Tooltip text for a selection-action button: the name plus the user's
+  /// current shortcut label (e.g. "Duplicate  ⌘D"), or just the name if unbound.
+  String _actionTip(String name, String actionKey) {
+    final label = widget.editorBindings[actionKey]?.label();
+    return (label == null || label.isEmpty) ? name : '$name  $label';
+  }
 
   void _removeEntry() {
     _entry?.remove();
@@ -793,7 +843,14 @@ class _OptionsRowState extends State<_OptionsRow> {
           ToolKind.text,
           ToolKind.step,
         };
-        if (!colorTools.contains(tool) && !isRasterEffect) {
+        // The style controls show for color/raster tools (the EFFECTIVE type);
+        // the selection-action cluster shows whenever ANYTHING is selected —
+        // including a pasted image, which has no style bar at all.
+        final hasStyleBar = colorTools.contains(tool) || isRasterEffect;
+        final sel = _c.selectedIndex.value;
+        final hasSelection =
+            sel != null && sel >= 0 && sel < _c.document.value.drawables.length;
+        if (!hasStyleBar && !hasSelection) {
           return const SizedBox.shrink();
         }
         // Stroke-width applies to the shape/stroke tools (not text/step).
@@ -853,6 +910,7 @@ class _OptionsRowState extends State<_OptionsRow> {
               builder: (_, style, _) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (hasStyleBar) ...[
                   // Single colour button: shows the current colour over a
                   // checkerboard (translucency reads) and opens the picker. The
                   // presets live inside the picker now. Hidden for the raster
@@ -1047,6 +1105,42 @@ class _OptionsRowState extends State<_OptionsRow> {
                     enabled: style != defaultStyleFor(tool),
                     onTap: () => _c.resetActiveStyle(tool),
                   ),
+                  ],
+                  // Selection actions (duplicate / z-order): shown whenever an
+                  // annotation is selected, INCLUDING a pasted image (which has
+                  // no style bar). A thin divider separates them from the style
+                  // group when both are present.
+                  if (hasSelection) ...[
+                    if (hasStyleBar) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 1,
+                        height: 24,
+                        color: _ToolbarTheme.of(context)
+                            .fgDim
+                            .withValues(alpha: 0.35),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    _ActionIconButton(
+                      icon: Icons.content_copy,
+                      tooltip: _actionTip('Duplicate', kEditorDuplicateKey),
+                      onTap: _c.duplicateSelected,
+                    ),
+                    const SizedBox(width: 4),
+                    _ActionIconButton(
+                      icon: Icons.flip_to_front,
+                      tooltip:
+                          _actionTip('Bring to front', kEditorBringToFrontKey),
+                      onTap: _c.bringSelectedToFront,
+                    ),
+                    const SizedBox(width: 4),
+                    _ActionIconButton(
+                      icon: Icons.flip_to_back,
+                      tooltip: _actionTip('Send to back', kEditorSendToBackKey),
+                      onTap: _c.sendSelectedToBack,
+                    ),
+                  ],
                 ],
               ),
             ),

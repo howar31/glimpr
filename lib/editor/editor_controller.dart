@@ -1,9 +1,13 @@
-import 'dart:ui' show Color, Image, Size;
+import 'dart:ui' show Color, Image, Offset, Size;
 import 'package:flutter/foundation.dart';
 import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'document.dart';
+
+/// Fixed down-right offset applied to a duplicated annotation so the copy is
+/// visibly distinct from and grabbable over its source.
+const kDuplicateOffset = Offset(16, 16);
 
 enum ToolKind {
   crop,
@@ -281,6 +285,34 @@ class EditorController {
       document.value = document.value.removeAt(i);
       selectedIndex.value = null;
     }
+  }
+
+  /// Duplicate the selected drawable: insert an offset copy directly above it
+  /// (index+1) and select the copy.
+  void duplicateSelected() {
+    final i = selectedIndex.value;
+    if (i == null || i >= document.value.drawables.length) return;
+    final copy = document.value.drawables[i].moved(kDuplicateOffset);
+    document.value = document.value.insertAt(i + 1, copy);
+    selectedIndex.value = i + 1;
+  }
+
+  /// Move the selected drawable to the top of the stack; keep it selected.
+  void bringSelectedToFront() {
+    final i = selectedIndex.value;
+    if (i == null || i >= document.value.drawables.length) return;
+    final last = document.value.drawables.length - 1;
+    if (i == last) return;
+    document.value = document.value.moveToFront(i);
+    selectedIndex.value = last;
+  }
+
+  /// Move the selected drawable to the bottom of the stack; keep it selected.
+  void sendSelectedToBack() {
+    final i = selectedIndex.value;
+    if (i == null || i <= 0 || i >= document.value.drawables.length) return;
+    document.value = document.value.moveToBack(i);
+    selectedIndex.value = 0;
   }
 
   void undo() => document.value = document.value.undo();

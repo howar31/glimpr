@@ -16,6 +16,9 @@ const kEditorRedoKey = 'editor.redo';
 const kEditorPasteKey = 'editor.pasteImage';
 const kEditorDeleteKey = 'editor.deleteSelected';
 const kEditorConfirmKey = 'editor.confirmExport';
+const kEditorDuplicateKey = 'editor.duplicateSelected';
+const kEditorBringToFrontKey = 'editor.bringToFront';
+const kEditorSendToBackKey = 'editor.sendToBack';
 
 /// Maps each editor tool to its action key.
 const kEditorToolActionKey = <ToolKind, String>{
@@ -66,6 +69,14 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kEditorDeleteKey:
       _b(PhysicalKeyboardKey.backspace, LogicalKeyboardKey.backspace),
   kEditorConfirmKey: _b(PhysicalKeyboardKey.enter, LogicalKeyboardKey.enter),
+  kEditorDuplicateKey: _b(PhysicalKeyboardKey.keyD, LogicalKeyboardKey.keyD,
+      {HotkeyModifier.meta}),
+  kEditorBringToFrontKey: _b(
+      PhysicalKeyboardKey.bracketRight, LogicalKeyboardKey.bracketRight,
+      {HotkeyModifier.meta}),
+  kEditorSendToBackKey: _b(
+      PhysicalKeyboardKey.bracketLeft, LogicalKeyboardKey.bracketLeft,
+      {HotkeyModifier.meta}),
   // Editor tools
   kEditorToolActionKey[ToolKind.crop]!:
       _b(PhysicalKeyboardKey.keyC, LogicalKeyboardKey.keyC),
@@ -176,6 +187,9 @@ String? pickEditorAction(
     kEditorPasteKey,
     kEditorDeleteKey,
     kEditorConfirmKey,
+    kEditorDuplicateKey,
+    kEditorBringToFrontKey,
+    kEditorSendToBackKey,
   ];
   for (final k in commands) {
     final b = bindings[k];

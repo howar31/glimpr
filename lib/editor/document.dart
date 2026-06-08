@@ -60,6 +60,31 @@ class EditorDocument {
     return _commit(next);
   }
 
+  /// Insert [d] at [i] (undoable). Used to place a duplicated drawable directly
+  /// above its source.
+  EditorDocument insertAt(int i, Drawable d) {
+    final next = [...drawables]..insert(i, d);
+    return _commit(next);
+  }
+
+  /// Move [i] to the top (end of the list = painted last). No-op (returns this,
+  /// no undo step) when out of range or already on top.
+  EditorDocument moveToFront(int i) {
+    if (i < 0 || i >= drawables.length || i == drawables.length - 1) return this;
+    final next = [...drawables];
+    next.add(next.removeAt(i));
+    return _commit(next);
+  }
+
+  /// Move [i] to the bottom (index 0 = painted first). No-op when out of range
+  /// or already at the bottom.
+  EditorDocument moveToBack(int i) {
+    if (i <= 0 || i >= drawables.length) return this;
+    final next = [...drawables];
+    next.insert(0, next.removeAt(i));
+    return _commit(next);
+  }
+
   /// Replace [i] in the CURRENT state WITHOUT creating an undo step. For async
   /// cosmetic backfills (e.g. a pixelate mosaic finishing after the region was
   /// already committed) that must not become a separate undo entry.

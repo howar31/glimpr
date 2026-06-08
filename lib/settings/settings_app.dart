@@ -1052,6 +1052,13 @@ class _SettingsAppState extends State<SettingsApp>
             'Export',
             'Screenshot the snapped window, or the whole screen',
           ),
+          (kEditorDuplicateKey, 'Duplicate selected', 'Copy the selected annotation'),
+          (
+            kEditorBringToFrontKey,
+            'Bring to front',
+            'Move the selection above others',
+          ),
+          (kEditorSendToBackKey, 'Send to back', 'Move the selection below others'),
         ])
           SettingRow(
             title: cmd.$2,

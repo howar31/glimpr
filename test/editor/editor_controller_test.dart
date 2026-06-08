@@ -125,4 +125,70 @@ void main() {
     expect(c.phase.value, EditorPhase.crop);
     c.dispose();
   });
+
+  RectangleDrawable r(double x) =>
+      RectangleDrawable(Rect.fromLTWH(x, 0, 10, 10), const DrawStyle());
+
+  test('duplicateSelected inserts an offset copy above the original and selects it', () {
+    final c = EditorController();
+    c.commitDrawable(r(0));
+    c.selectedIndex.value = 0;
+    c.duplicateSelected();
+    expect(c.document.value.drawables.length, 2);
+    expect(c.selectedIndex.value, 1);
+    final copy = c.document.value.drawables[1] as RectangleDrawable;
+    expect(copy.rect.left, kDuplicateOffset.dx);
+    expect(copy.rect.top, kDuplicateOffset.dy);
+    // The original is untouched.
+    expect((c.document.value.drawables[0] as RectangleDrawable).rect.left, 0);
+    c.dispose();
+  });
+
+  test('duplicateSelected is a no-op when nothing is selected', () {
+    final c = EditorController();
+    c.commitDrawable(r(0));
+    c.selectedIndex.value = null;
+    c.duplicateSelected();
+    expect(c.document.value.drawables.length, 1);
+    c.dispose();
+  });
+
+  test('bringSelectedToFront moves the selection to the top and tracks the index', () {
+    final c = EditorController();
+    c.commitDrawable(r(0));
+    c.commitDrawable(r(1));
+    c.commitDrawable(r(2));
+    c.selectedIndex.value = 0;
+    c.bringSelectedToFront();
+    expect((c.document.value.drawables.last as RectangleDrawable).rect.left, 0);
+    expect(c.selectedIndex.value, 2);
+    c.dispose();
+  });
+
+  test('sendSelectedToBack moves the selection to the bottom and tracks the index', () {
+    final c = EditorController();
+    c.commitDrawable(r(0));
+    c.commitDrawable(r(1));
+    c.commitDrawable(r(2));
+    c.selectedIndex.value = 2;
+    c.sendSelectedToBack();
+    expect((c.document.value.drawables.first as RectangleDrawable).rect.left, 2);
+    expect(c.selectedIndex.value, 0);
+    c.dispose();
+  });
+
+  test('bring/send are no-ops when already at the edge', () {
+    final c = EditorController();
+    c.commitDrawable(r(0));
+    c.commitDrawable(r(1));
+    final before = c.document.value.drawables.length;
+    c.selectedIndex.value = 1;
+    c.bringSelectedToFront(); // already last
+    expect((c.document.value.drawables.last as RectangleDrawable).rect.left, 1);
+    c.selectedIndex.value = 0;
+    c.sendSelectedToBack(); // already first
+    expect((c.document.value.drawables.first as RectangleDrawable).rect.left, 0);
+    expect(c.document.value.drawables.length, before);
+    c.dispose();
+  });
 }

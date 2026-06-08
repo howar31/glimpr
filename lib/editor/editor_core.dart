@@ -859,6 +859,18 @@ class _EditorCoreState extends State<EditorCore> {
       c.deleteSelected();
       return KeyEventResult.handled;
     }
+    if (action == kEditorDuplicateKey && c.selectedIndex.value != null) {
+      c.duplicateSelected();
+      return KeyEventResult.handled;
+    }
+    if (action == kEditorBringToFrontKey && c.selectedIndex.value != null) {
+      c.bringSelectedToFront();
+      return KeyEventResult.handled;
+    }
+    if (action == kEditorSendToBackKey && c.selectedIndex.value != null) {
+      c.sendSelectedToBack();
+      return KeyEventResult.handled;
+    }
     if (action != null && kEditorToolActionKey.containsValue(action)) {
       final tool = kEditorToolActionKey.entries
           .firstWhere((x) => x.value == action)
