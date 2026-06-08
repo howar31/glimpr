@@ -1173,7 +1173,14 @@ class _EditorCoreState extends State<EditorCore> {
         final idx = _hitActiveType(p);
         if (idx == null) {
           c.commitDrawable(
-            StepDrawable(p, nextStepNumber(c.document.value.drawables), style),
+            StepDrawable(
+              p,
+              nextStepNumber(
+                c.document.value.drawables,
+                start: style.stepStart,
+              ),
+              style,
+            ),
           );
         } else {
           _selectAndPin(idx);

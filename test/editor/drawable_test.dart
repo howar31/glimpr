@@ -97,6 +97,18 @@ void main() {
     expect(nextStepNumber(list), 4);
   });
 
+  test('nextStepNumber honours the start floor', () {
+    final list = <Drawable>[StepDrawable(const Offset(0, 0), 3, style)];
+    // Empty doc: the floor IS the first number.
+    expect(nextStepNumber(const [], start: 5), 5);
+    // Existing max above the floor: continue from max (floor ignored).
+    expect(nextStepNumber(list, start: 2), 4);
+    // Floor above the running max: jump up to the floor.
+    expect(nextStepNumber(list, start: 10), 10);
+    // Default start = legacy behaviour.
+    expect(nextStepNumber(list), 4);
+  });
+
   test('text drawable carries position and text', () {
     final d = TextDrawable(const Offset(5, 6), 'hi', style);
     expect(d.position, const Offset(5, 6));

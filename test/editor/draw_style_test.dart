@@ -248,4 +248,35 @@ void main() {
     expect(a.copyWith(arrowHeadScale: 1.5) == a, isFalse);
     expect(a.copyWith(arrowHeadScale: 1.5).arrowHeadScale, 1.5);
   });
+
+  test('stepStart defaults to 1, omitted from JSON, round-trips, clamps', () {
+    expect(const DrawStyle().stepStart, kStepStartDefault);
+    expect(const DrawStyle().toJson().containsKey('stepStart'), isFalse);
+    final s = const DrawStyle().copyWith(stepStart: 5);
+    expect(s.toJson()['stepStart'], 5);
+    expect(DrawStyle.fromJson(s.toJson()).stepStart, 5);
+    expect(DrawStyle.fromJson({'stepStart': 9999}).stepStart, kStepStartMax);
+    expect(DrawStyle.fromJson({'stepStart': 0}).stepStart, kStepStartMin);
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).stepStart, kStepStartDefault);
+  });
+
+  test('stepShape defaults to circle, omitted from JSON, round-trips, falls back',
+      () {
+    expect(const DrawStyle().stepShape, StepShape.circle);
+    expect(const DrawStyle().toJson().containsKey('stepShape'), isFalse);
+    final s = const DrawStyle().copyWith(stepShape: StepShape.square);
+    expect(s.toJson()['stepShape'], 'square');
+    expect(DrawStyle.fromJson(s.toJson()).stepShape, StepShape.square);
+    // Missing / garbage -> circle.
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).stepShape, StepShape.circle);
+    expect(DrawStyle.fromJson({'stepShape': 'zzz'}).stepShape, StepShape.circle);
+  });
+
+  test('equality and copyWith include stepStart + stepShape', () {
+    const a = DrawStyle();
+    expect(a.copyWith(stepStart: 3) == a, isFalse);
+    expect(a.copyWith(stepShape: StepShape.square) == a, isFalse);
+    expect(a.copyWith(stepStart: 3).stepStart, 3);
+    expect(a.copyWith(stepShape: StepShape.square).stepShape, StepShape.square);
+  });
 }

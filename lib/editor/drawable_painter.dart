@@ -550,16 +550,21 @@ class DrawablePainter extends CustomPainter {
       paintHighlighterStroke(canvas, d.points, d.style);
 
   void _paintStep(Canvas canvas, StepDrawable d) {
-    final circle = Paint()
+    final fill = Paint()
       ..color = d.style.color
       ..isAntiAlias = true;
+    final r = d.radius;
     // The badge casts one shadow as a whole; the number rides on top, no shadow.
-    _withShadow(
-      canvas,
-      d.style,
-      circle,
-      (c, p) => c.drawCircle(d.center, d.radius, p),
-    );
+    // Circle (legacy) or a rounded square of the same diameter.
+    if (d.style.stepShape == StepShape.square) {
+      final rrect = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: d.center, width: r * 2, height: r * 2),
+        Radius.circular(r * 0.3),
+      );
+      _withShadow(canvas, d.style, fill, (c, p) => c.drawRRect(rrect, p));
+    } else {
+      _withShadow(canvas, d.style, fill, (c, p) => c.drawCircle(d.center, r, p));
+    }
     final tp = TextPainter(
       text: TextSpan(
         text: '${d.number}',

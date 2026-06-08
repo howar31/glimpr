@@ -122,4 +122,17 @@ void main() {
     c.setArrowHeadScale(0);
     expect(c.style.value.arrowHeadScale, kArrowHeadScaleMin);
   });
+
+  test('setStepStart clamps; setStepShape sets the shape', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.step);
+    c.setStepStart(5);
+    expect(c.style.value.stepStart, 5);
+    c.setStepStart(9999);
+    expect(c.style.value.stepStart, kStepStartMax);
+    c.setStepStart(0);
+    expect(c.style.value.stepStart, kStepStartMin);
+    c.setStepShape(StepShape.square);
+    expect(c.style.value.stepShape, StepShape.square);
+  });
 }

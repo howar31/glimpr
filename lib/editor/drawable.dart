@@ -201,10 +201,12 @@ class StepDrawable extends Drawable {
   StepDrawable withStyle(DrawStyle s) => StepDrawable(center, number, s);
 }
 
-/// Next badge number for a freshly placed [StepDrawable] = (max existing) + 1.
-/// Computed from the document each placement so undo/redo/delete stay coherent.
-int nextStepNumber(List<Drawable> drawables) {
-  var maxN = 0;
+/// Next badge number for a freshly placed [StepDrawable]: the running max + 1,
+/// but never below the [start] floor (so a sequence can begin at N). Computed from
+/// the document each placement so undo/redo/delete stay coherent. Default
+/// start = 1 reproduces the legacy auto-from-1 numbering.
+int nextStepNumber(List<Drawable> drawables, {int start = 1}) {
+  var maxN = start - 1;
   for (final d in drawables) {
     if (d is StepDrawable && d.number > maxN) maxN = d.number;
   }

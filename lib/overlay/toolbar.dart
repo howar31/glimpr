@@ -369,6 +369,7 @@ enum _OpenPopover {
   texture,
   lineStyle,
   arrowHeads,
+  stepShape,
 }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
@@ -667,6 +668,27 @@ class _OptionsRowState extends State<_OptionsRow> {
         selected: _c.style.value.arrowHeads,
         onSelected: (h) {
           _c.setArrowHeads(h);
+          _closePopover();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
+  void _openStepShapePopover() {
+    if (_open == _OpenPopover.stepShape) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    _showPopover(
+      _OpenPopover.stepShape,
+      _barLink,
+      width: 150,
+      child: StepShapePickerPopover(
+        selected: _c.style.value.stepShape,
+        onSelected: (s) {
+          _c.setStepShape(s);
           _closePopover();
           setState(() {});
         },
@@ -977,6 +999,29 @@ class _OptionsRowState extends State<_OptionsRow> {
                       leadingTooltip:
                           tool == ToolKind.text ? 'Font size' : 'Badge size',
                       onEditingDone: widget.onPtEditingDone,
+                    ),
+                  ],
+                  if (tool == ToolKind.step) ...[
+                    const SizedBox(width: 8),
+                    _NumberStepper(
+                      key: const ValueKey('step-start-stepper'),
+                      controller: _c,
+                      read: (s) => s.stepStart.toDouble(),
+                      write: (v) => _c.setStepStart(v.round()),
+                      min: kStepStartMin.toDouble(),
+                      max: kStepStartMax.toDouble(),
+                      step: 1,
+                      suffix: '',
+                      leadingIcon: Icons.tag,
+                      leadingTooltip: 'Start number',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
+                    const SizedBox(width: 8),
+                    _TextureButton(
+                      key: const ValueKey('step-shape-picker'),
+                      label: stepShapeLabel(style.stepShape),
+                      tooltip: 'Badge shape',
+                      onTap: _openStepShapePopover,
                     ),
                   ],
                   if (showsFontFamily) ...[

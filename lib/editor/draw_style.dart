@@ -112,6 +112,23 @@ const double kArrowHeadScaleDefault = 1.0;
 const double kArrowHeadScaleMin = 0.5;
 const double kArrowHeadScaleMax = 3.0;
 
+/// Step-badge numbering floor + shape (step tool only). [kStepStartDefault] = 1
+/// reproduces the legacy auto-from-1 numbering; [StepShape.circle] is the legacy
+/// shape — so the defaults keep the export byte-identical.
+const int kStepStartDefault = 1;
+const int kStepStartMin = 1;
+const int kStepStartMax = 999;
+
+/// Step badge outline shape.
+enum StepShape { circle, square }
+
+StepShape _stepShapeFromName(Object? name) {
+  for (final s in StepShape.values) {
+    if (s.name == name) return s;
+  }
+  return StepShape.circle;
+}
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -128,6 +145,8 @@ class DrawStyle {
   final double cornerRadius; // rectangle corner radius; kCornerRadiusAuto = legacy
   final Color outlineColor; // text glyph outline (own alpha); 0 alpha = no outline
   final double arrowHeadScale; // arrow head size multiplier; 1.0 = legacy size
+  final int stepStart; // step badge numbering floor; 1 = legacy auto-from-1
+  final StepShape stepShape; // step badge outline shape; circle = legacy
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -143,6 +162,8 @@ class DrawStyle {
     this.cornerRadius = kCornerRadiusAuto,
     this.outlineColor = const Color(0x00000000),
     this.arrowHeadScale = kArrowHeadScaleDefault,
+    this.stepStart = kStepStartDefault,
+    this.stepShape = StepShape.circle,
   });
 
   DrawStyle copyWith({
@@ -160,6 +181,8 @@ class DrawStyle {
     double? cornerRadius,
     Color? outlineColor,
     double? arrowHeadScale,
+    int? stepStart,
+    StepShape? stepShape,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -175,6 +198,8 @@ class DrawStyle {
     cornerRadius: cornerRadius ?? this.cornerRadius,
     outlineColor: outlineColor ?? this.outlineColor,
     arrowHeadScale: arrowHeadScale ?? this.arrowHeadScale,
+    stepStart: stepStart ?? this.stepStart,
+    stepShape: stepShape ?? this.stepShape,
   );
 
   Map<String, dynamic> toJson() => {
@@ -192,6 +217,8 @@ class DrawStyle {
     if (cornerRadius != kCornerRadiusAuto) 'cornerRadius': cornerRadius,
     if (outlineColor.a != 0) 'outlineColor': outlineColor.toARGB32(),
     if (arrowHeadScale != kArrowHeadScaleDefault) 'arrowHeadScale': arrowHeadScale,
+    if (stepStart != kStepStartDefault) 'stepStart': stepStart,
+    if (stepShape != StepShape.circle) 'stepShape': stepShape.name,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -213,6 +240,9 @@ class DrawStyle {
     arrowHeadScale:
         ((j['arrowHeadScale'] as num?)?.toDouble() ?? kArrowHeadScaleDefault)
             .clamp(kArrowHeadScaleMin, kArrowHeadScaleMax),
+    stepStart: ((j['stepStart'] as num?)?.toInt() ?? kStepStartDefault)
+        .clamp(kStepStartMin, kStepStartMax),
+    stepShape: _stepShapeFromName(j['stepShape']),
   );
 
   @override
@@ -231,9 +261,11 @@ class DrawStyle {
       other.fillColor == fillColor &&
       other.cornerRadius == cornerRadius &&
       other.outlineColor == outlineColor &&
-      other.arrowHeadScale == arrowHeadScale;
+      other.arrowHeadScale == arrowHeadScale &&
+      other.stepStart == stepStart &&
+      other.stepShape == stepShape;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
       texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
-      cornerRadius, outlineColor, arrowHeadScale);
+      cornerRadius, outlineColor, arrowHeadScale, stepStart, stepShape);
 }

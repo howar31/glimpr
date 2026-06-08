@@ -146,6 +146,10 @@ class EditorController {
       _updateStyle(style.value.copyWith(arrowHeads: h));
   void setArrowHeadScale(double s) => _updateStyle(style.value.copyWith(
       arrowHeadScale: s.clamp(kArrowHeadScaleMin, kArrowHeadScaleMax)));
+  void setStepStart(int n) => _updateStyle(
+      style.value.copyWith(stepStart: n.clamp(kStepStartMin, kStepStartMax)));
+  void setStepShape(StepShape s) =>
+      _updateStyle(style.value.copyWith(stepShape: s));
   void setCurvePoints(int n) => _updateStyle(style.value
       .copyWith(curvePoints: n.clamp(kCurvePointsMin, kCurvePointsMax)));
   void setStrength(double s) => _updateStyle(style.value

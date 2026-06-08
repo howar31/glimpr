@@ -1136,6 +1136,79 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// StepShapePickerPopover  (step tool)
+// ---------------------------------------------------------------------------
+
+String stepShapeLabel(StepShape s) => switch (s) {
+      StepShape.circle => 'Circle',
+      StepShape.square => 'Square',
+    };
+
+/// A small menu choosing the step badge's outline shape.
+class StepShapePickerPopover extends StatelessWidget {
+  const StepShapePickerPopover({
+    Key? key,
+    required this.selected,
+    required this.onSelected,
+  }) : super(key: key);
+
+  final StepShape selected;
+  final ValueChanged<StepShape> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    const accent = GlimprTokens.accent;
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final s in StepShape.values)
+            InkWell(
+              onTap: () => onSelected(s),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      s == StepShape.circle
+                          ? Icons.circle_outlined
+                          : Icons.square_outlined,
+                      size: 16,
+                      color: s == selected ? accent : fg,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        stepShapeLabel(s),
+                        style: TextStyle(
+                          color: s == selected ? accent : fg,
+                          fontSize: 14,
+                          fontWeight:
+                              s == selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 22,
+                      child: s == selected
+                          ? const Icon(Icons.check, size: 16, color: accent)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // RadiusPickerPopover  (rectangle corner radius)
 // ---------------------------------------------------------------------------
 
