@@ -137,24 +137,56 @@ final class ScreenCapturer {
     guard let window = shareable.windows.first(where: { $0.windowID == windowID })
     else { return nil }
 
-    // Scale from the window's display (fallback: the main display).
-    let scale = Self.displayForRect(window.frame).map(Self.scaleFactor(for:))
-      ?? Self.scaleFactor(for: CGMainDisplayID())
+    // Size the buffer from the FILTER's own geometry, NOT from SCWindow.frame *
+    // NSScreen.backingScaleFactor. SCScreenshotManager renders a desktop-
+    // independent window at contentRect.size * pointPixelScale; using the
+    // filter's authoritative values keeps the buffer correct on scaled-HiDPI
+    // modes where backingScaleFactor can differ from pointPixelScale (both
+    // macOS 14+). scalesToFit is Apple-designated for independent window capture.
+    let filter = SCContentFilter(desktopIndependentWindow: window)
+    let scale = CGFloat(filter.pointPixelScale)
+    let content = filter.contentRect
     let cfg = SCStreamConfiguration()
-    cfg.width = max(1, Int((window.frame.width * scale).rounded()))
-    cfg.height = max(1, Int((window.frame.height * scale).rounded()))
+    cfg.width = max(1, Int((content.width * scale).rounded()))
+    cfg.height = max(1, Int((content.height * scale).rounded()))
+    cfg.scalesToFit = true
     cfg.showsCursor = showsCursor
     cfg.colorSpaceName = CGColorSpace.sRGB
-    let filter = SCContentFilter(desktopIndependentWindow: window)
     let cg = try await SCScreenshotManager.captureImage(
       contentFilter: filter, configuration: cfg)
-    guard let png = Self.pngData(from: cg) else { return nil }
+    let rep = NSBitmapImageRep(cgImage: cg)
+    // Some windows are NOT independently capturable — notably a modern System
+    // Settings modal alert, which is drawn into its PARENT window's surface
+    // rather than being backed by its own. For those, SCK ignores the per-window
+    // filter and returns the PARENT, scaled (preservesAspectRatio) into our
+    // buffer with transparent letterbox bands. Used as a snap mask, that carves
+    // the (correct) frozen crop into a partial shape — the "half window" bug.
+    // A faithfully-captured window fills its own contentRect buffer, so the
+    // midpoint of every edge is opaque; if any is transparent the capture is a
+    // mismatch -> bail so the caller falls back to a plain rectangular crop.
+    guard Self.fillsBuffer(rep),
+          let png = rep.representation(using: .png, properties: [:]) else { return nil }
     return [
       "pngBytes": FlutterStandardTypedData(bytes: png),
       "width": cfg.width,
       "height": cfg.height,
       "scale": Double(scale),
     ]
+  }
+
+  /// True when the midpoint of each edge of [rep] is opaque. A faithfully
+  /// captured window fills its own buffer (rounded corners aside), so all four
+  /// edge midpoints are solid; transparent ones mean the capture is letterboxed
+  /// — a mismatched / non-independent window, not the one we asked for.
+  static func fillsBuffer(_ rep: NSBitmapImageRep) -> Bool {
+    let w = rep.pixelsWide, h = rep.pixelsHigh
+    guard w > 6, h > 6 else { return true } // too small to judge — trust it
+    let inset = 2
+    func opaque(_ x: Int, _ y: Int) -> Bool {
+      (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5
+    }
+    return opaque(w / 2, inset) && opaque(w / 2, h - 1 - inset)
+      && opaque(inset, h / 2) && opaque(w - 1 - inset, h / 2)
   }
 
   /// Snappable top-level windows on [displayID], as display-local logical rects
