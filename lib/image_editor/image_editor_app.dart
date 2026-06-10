@@ -60,8 +60,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   bool _dirty = false;
   bool _closePending = false;
   bool _confirming = false;
-  final GlobalKey<ScaffoldMessengerState> _messengerKey =
-      GlobalKey<ScaffoldMessengerState>();
+  // Top-centred toast pill (see _toast): the message, its visibility (drives
+  // the fade/slide), and the auto-dismiss + post-fade clear timers.
+  String? _toastMsg;
+  bool _toastVisible = false;
+  Timer? _toastTimer;
+  Timer? _toastClearTimer;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final ValueNotifier<({int id, Offset cursor})> _active = ValueNotifier(
     (id: ImageEditorHost.kImageEditorHostId, cursor: Offset.zero),
@@ -497,16 +501,31 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     });
   }
 
+  /// Show the top-centred toast pill (replaces the old floating SnackBar,
+  /// which rose from the bottom and covered the toolbar pill). Repeated calls
+  /// restart the timer with the new message.
   void _toast(String message) {
-    _messengerKey.currentState
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(_AuroraSnack.build(message));
+    _toastTimer?.cancel();
+    _toastClearTimer?.cancel();
+    setState(() {
+      _toastMsg = message;
+      _toastVisible = true;
+    });
+    _toastTimer = Timer(const Duration(milliseconds: 2400), () {
+      if (mounted) setState(() => _toastVisible = false);
+      // Drop the text only after the fade-out finishes so it never flashes.
+      _toastClearTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) setState(() => _toastMsg = null);
+      });
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _persistTimer?.cancel();
+    _toastTimer?.cancel();
+    _toastClearTimer?.cancel();
     _image?.dispose();
     _controller?.style.removeListener(_schedulePersist);
     _controller?.dispose();
@@ -525,7 +544,6 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
-      scaffoldMessengerKey: _messengerKey,
       theme: ThemeData(
         brightness: brightness,
         scaffoldBackgroundColor: Colors.transparent,
@@ -551,6 +569,61 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                         : _editor(tokens, image, bytes, controller),
                   ),
                 ],
+              ),
+              // Toast: a top-centred glass pill just below the title bar —
+              // away from the bottom toolbar pill (the old floating SnackBar
+              // covered it). Non-interactive; fades + slides in/out.
+              Positioned(
+                top: 32 + 12,
+                left: 24,
+                right: 24,
+                child: IgnorePointer(
+                  child: AnimatedSlide(
+                    offset:
+                        _toastVisible ? Offset.zero : const Offset(0, -0.4),
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _toastVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 220),
+                      child: Center(
+                        child: _toastMsg == null
+                            ? const SizedBox.shrink()
+                            : Container(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 560),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 9),
+                                decoration: BoxDecoration(
+                                  color: tokens.isDark
+                                      ? const Color(0xF21A2236)
+                                      : const Color(0xFAFFFFFF),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: tokens.isDark
+                                          ? const Color(0x3360A5FA)
+                                          : const Color(0x1F0F172A)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: tokens.isDark
+                                          ? const Color(0x66000000)
+                                          : const Color(0x2E0F172A),
+                                      blurRadius: 16,
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  _toastMsg!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GlimprType.sansStyle(
+                                      13.5, 600, tokens.fg1),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
               // Dim + lock the editor while Settings is open and the editor
               // isn't the active window (correct regardless of open order).
@@ -724,7 +797,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           left: 0,
           right: 0,
           bottom: 18,
-          child: Center(child: _toolbarPill(controller)),
+          child: Center(child: _toolbarPill(t, controller)),
         ),
       ],
     );
@@ -771,7 +844,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// draggable) with undo/redo + Open/Copy/Save as trailing actions inside its
   /// own glass bar. Its contextual option row grows UPWARD above the bar, over
   /// the canvas. No wrapping background — the pill IS the toolbar's glass bar.
-  Widget _toolbarPill(EditorController controller) {
+  // [t] is passed in (not GlimprTheme.of): this method runs off the State's
+  // root context, which sits ABOVE the GlimprTheme scope built in [build].
+  Widget _toolbarPill(GlimprTokens t, EditorController controller) {
     // The pill is the toolbar's own glass bar at its natural width (centred by the
     // caller). NOT wrapped in a full-width horizontal scroll view — that scrollable
     // intercepted the whole bottom strip, blocking drawing left/right of the pill.
@@ -815,39 +890,41 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             enabled: !_exporting,
             position: PopupMenuPosition.over,
             offset: const Offset(0, -8),
-            color: const Color(0xF2202830),
+            color: t.isDark ? const Color(0xF2202830) : const Color(0xFAFFFFFF),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: t.divider),
             ),
             onSelected: _runActions,
+            // The menu route lives in the app overlay, ABOVE the GlimprTheme
+            // scope — pass the tokens in rather than re-reading them there.
             itemBuilder: (_) => [
-              _oneOff('Copy only', Icons.copy_outlined, {FlowAction.copy}),
-              _oneOff('Save only', Icons.save_outlined, {FlowAction.save}),
-              _oneOff('Copy file path', Icons.link,
+              _oneOff(t, 'Copy only', Icons.copy_outlined, {FlowAction.copy}),
+              _oneOff(t, 'Save only', Icons.save_outlined, {FlowAction.save}),
+              _oneOff(t, 'Copy file path', Icons.link,
                   {FlowAction.save, FlowAction.copyPath}),
-              _oneOff('Show in Finder', Icons.folder_outlined,
+              _oneOff(t, 'Show in Finder', Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
             ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              child: Icon(Icons.expand_more, size: 18, color: Colors.white70),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Icon(Icons.expand_more, size: 18, color: t.fg2),
             ),
           ),
         ],
       );
   }
 
-  PopupMenuItem<Set<FlowAction>> _oneOff(
-          String label, IconData icon, Set<FlowAction> actions) =>
+  PopupMenuItem<Set<FlowAction>> _oneOff(GlimprTokens t, String label,
+          IconData icon, Set<FlowAction> actions) =>
       PopupMenuItem(
         value: actions,
         height: 36,
         child: Row(
           children: [
-            Icon(icon, size: 16, color: Colors.white70),
+            Icon(icon, size: 16, color: t.fg2),
             const SizedBox(width: 10),
-            Text(label,
-                style: const TextStyle(color: Colors.white, fontSize: 13.5)),
+            Text(label, style: GlimprType.sansStyle(13.5, 500, t.fg1)),
           ],
         ),
       );
@@ -1070,19 +1147,3 @@ class _RecentRowState extends State<_RecentRow> {
 }
 
 /// Builds an Aurora-tinted confirmation [SnackBar] (floating, brand-bordered).
-class _AuroraSnack {
-  static SnackBar build(String message) => SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xF21A2236),
-        elevation: 8,
-        duration: const Duration(milliseconds: 2200),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0x3360A5FA)),
-        ),
-        content: Text(
-          message,
-          style: GlimprType.sansStyle(13.5, 600, const Color(0xF2FFFFFF)),
-        ),
-      );
-}
