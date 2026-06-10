@@ -31,7 +31,10 @@ class _FakeStore implements SettingsStore {
 CapturedDisplay _disp(int id, {bool cursor = false, double w = 1920, double h = 1080}) =>
     CapturedDisplay(
       displayId: id,
-      pngBytes: Uint8List(0),
+      rawBytes: Uint8List(0),
+      pixelWidth: 0,
+      pixelHeight: 0,
+      rowBytes: 0,
       left: 0,
       top: 0,
       width: w,

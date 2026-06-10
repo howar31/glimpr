@@ -37,9 +37,31 @@ final class ScreenCapturer {
 
   enum CaptureError: Error { case noDisplays }
 
-  /// Captures every display. Throws CaptureError.noDisplays or rethrows SCK errors.
-  func captureAll(showsCursor: Bool = false, includeCursorImage: Bool = false)
-    async throws -> [[String: Any]] {
+  /// The display under the cursor = the interactive editor display. Uses
+  /// NSScreen: NSEvent.mouseLocation and NSScreen.frame share the same Cocoa
+  /// bottom-left global space, so NSMouseInRect needs NO coordinate flip (the
+  /// old CG/Cocoa flip mismapped multi-display layouts, landing the editor on
+  /// the wrong display). Falls back to the main, then the first known, display
+  /// so EXACTLY ONE display is always the cursor display — never a no-editor
+  /// freeze. Main thread (AppKit).
+  func cursorDisplayID() -> CGDirectDisplayID {
+    let mouse = NSEvent.mouseLocation
+    return NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+      .flatMap(Self.screenNumber)
+      ?? NSScreen.main.flatMap(Self.screenNumber)
+      ?? (cachedContent?.displays.first?.displayID ?? CGMainDisplayID())
+  }
+
+  /// Captures every display IN PARALLEL and pushes each display's dict to
+  /// [onDisplayReady] (main actor) the moment it is ready — the cursor
+  /// display's task starts first, so the display the user is looking at
+  /// freezes first instead of waiting for the slowest one. Pixels travel as
+  /// raw BGRA8888 (no PNG on the freeze path). Returns after every display
+  /// was pushed. Throws CaptureError.noDisplays or rethrows SCK errors.
+  func captureAll(
+    showsCursor: Bool = false, includeCursorImage: Bool = false,
+    onDisplayReady: @escaping @MainActor ([String: Any]) -> Void
+  ) async throws {
     // Trust the cache only while its display SET still matches the current
     // screens; otherwise refetch fresh (the cache goes stale across a display
     // add/remove, which would drop a hot-plugged display from the capture).
@@ -54,49 +76,30 @@ final class ScreenCapturer {
       throw CaptureError.noDisplays
     }
     let displays = content.displays
-
-    // Which display holds the cursor = the interactive editor display. Use
-    // NSScreen: NSEvent.mouseLocation and NSScreen.frame share the same Cocoa
-    // bottom-left global space, so NSMouseInRect needs NO coordinate flip (the
-    // old CG/Cocoa flip mismapped multi-display layouts, landing the editor on
-    // the wrong display). Fall back to the main, then the first, display so
-    // EXACTLY ONE display is always the cursor display — never a no-editor freeze.
+    let cursorID = cursorDisplayID()
     let mouse = NSEvent.mouseLocation
-    let cursorDisplayID: CGDirectDisplayID =
-      NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
-        .flatMap(Self.screenNumber)
-        ?? NSScreen.main.flatMap(Self.screenNumber)
-        ?? displays.first!.displayID
 
-    var out: [[String: Any]] = []
+    // Pre-compute everything that touches AppKit (scale, geometry, crosshair
+    // seed, cursor image, snappable windows) on the calling (main) actor; the
+    // group tasks then only touch SCK + CoreGraphics.
+    struct Job {
+      let display: SCDisplay
+      let scale: CGFloat
+      let isCursor: Bool
+      var dict: [String: Any]
+    }
+    var jobs: [Job] = []
     for d in displays {
       let scale = Self.scaleFactor(for: d.displayID)
-      let cfg = SCStreamConfiguration()
-      cfg.width = Int(CGFloat(d.width) * scale)
-      cfg.height = Int(CGFloat(d.height) * scale)
-      cfg.showsCursor = showsCursor
-      // Capture in sRGB. SCK otherwise tags frames with the display's native
-      // wide-gamut profile (e.g. "LG ULTRAFINE"), but Flutter's Image widget
-      // ignores embedded ICC profiles and treats pixels as sRGB — so a wide-
-      // gamut frame renders with a visible color cast in the overlay. Producing
-      // sRGB pixels makes the overlay match the live screen (the compositor
-      // maps sRGB -> display), and saved PNGs become portable sRGB files.
-      cfg.colorSpaceName = CGColorSpace.sRGB
-      let filter = SCContentFilter(display: d, excludingWindows: [])
-      PerfLog.mark("sckImageBegin display=\(d.displayID)")
-      let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
-      PerfLog.mark("sckImageEnd display=\(d.displayID)")
-      guard let png = Self.pngData(from: cgImage) else { continue }
-      PerfLog.mark("pngEncodeEnd display=\(d.displayID) bytes=\(png.count)")
       let frame = d.frame
-      let isCursor = d.displayID == cursorDisplayID
+      let isCursor = d.displayID == cursorID
       var dict: [String: Any] = [
         "displayId": Int(d.displayID),
-        "pngBytes": FlutterStandardTypedData(bytes: png),
         "left": Double(frame.origin.x), "top": Double(frame.origin.y),
         "width": Double(frame.size.width), "height": Double(frame.size.height),
         "scaleFactor": Double(scale),
         "isCursorDisplay": isCursor,
+        "windows": Self.snappableWindows(displayID: d.displayID),
       ]
       // Seed the crosshair at the real cursor (display-local, top-left origin)
       // instead of the display centre. Same Cocoa global -> local conversion as
@@ -118,11 +121,46 @@ final class ScreenCapturer {
           dict["cursorTop"] = curY - Double(hot.y)
         }
       }
-      dict["windows"] = Self.snappableWindows(displayID: d.displayID)
-      PerfLog.mark("windowsQueryEnd display=\(d.displayID)")
-      out.append(dict)
+      jobs.append(Job(display: d, scale: scale, isCursor: isCursor, dict: dict))
     }
-    return out
+    // Cursor display FIRST so its task starts (and usually finishes) first.
+    jobs.sort { $0.isCursor && !$1.isCursor }
+
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      for job in jobs {
+        group.addTask {
+          let d = job.display
+          let cfg = SCStreamConfiguration()
+          cfg.width = Int(CGFloat(d.width) * job.scale)
+          cfg.height = Int(CGFloat(d.height) * job.scale)
+          cfg.showsCursor = showsCursor
+          // Capture in sRGB. SCK otherwise tags frames with the display's native
+          // wide-gamut profile (e.g. "LG ULTRAFINE"), but Flutter ignores
+          // embedded ICC profiles and treats pixels as sRGB — so a wide-gamut
+          // frame renders with a visible color cast in the overlay. Producing
+          // sRGB pixels makes the overlay match the live screen (the compositor
+          // maps sRGB -> display), and exported PNGs become portable sRGB files.
+          cfg.colorSpaceName = CGColorSpace.sRGB
+          let filter = SCContentFilter(display: d, excludingWindows: [])
+          PerfLog.mark("sckImageBegin display=\(d.displayID)")
+          let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter, configuration: cfg)
+          PerfLog.mark("sckImageEnd display=\(d.displayID)")
+          // A failed pixel extraction skips this display (parity with the old
+          // PNG-encode guard) — the other displays still freeze.
+          guard let raw = Self.bgraData(from: cgImage) else { return }
+          PerfLog.mark("rawExtractEnd display=\(d.displayID) bytes=\(raw.data.count)")
+          var dict = job.dict
+          dict["rawBytes"] = FlutterStandardTypedData(bytes: raw.data)
+          dict["pixelWidth"] = cgImage.width
+          dict["pixelHeight"] = cgImage.height
+          dict["rowBytes"] = raw.rowBytes
+          await onDisplayReady(dict)
+          PerfLog.mark("displayPushed display=\(d.displayID)")
+        }
+      }
+      try await group.waitForAll()
+    }
   }
 
   /// Capture a SINGLE window with its REAL alpha — the area outside the window's
@@ -331,6 +369,28 @@ final class ScreenCapturer {
 
   static func pngData(from cgImage: CGImage) -> Data? {
     NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+  }
+
+  /// CGImage -> tightly-packed BGRA8888 (premultipliedFirst, little-endian),
+  /// sRGB. Returns (bytes, rowBytes). The capture cfg already produced sRGB
+  /// pixels; rendering into an sRGB context must not re-tag or convert — this
+  /// preserves the Phase-2 color fix on the raw path.
+  static func bgraData(from cgImage: CGImage) -> (data: Data, rowBytes: Int)? {
+    let w = cgImage.width, h = cgImage.height
+    guard w > 0, h > 0 else { return nil }
+    let rowBytes = w * 4
+    var data = Data(count: rowBytes * h)
+    let ok = data.withUnsafeMutableBytes { (buf: UnsafeMutableRawBufferPointer) -> Bool in
+      guard let ctx = CGContext(
+        data: buf.baseAddress, width: w, height: h, bitsPerComponent: 8,
+        bytesPerRow: rowBytes, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+          | CGBitmapInfo.byteOrder32Little.rawValue)
+      else { return false }
+      ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+      return true
+    }
+    return ok ? (data, rowBytes) : nil
   }
 
   /// Render an OS cursor's image to a native-scale PNG (alpha-preserving), drawn at
@@ -719,30 +779,28 @@ final class OverlayManager {
     }
   }
 
-  /// Distribute captured frames to their displays' engines. Each window is
-  /// revealed later, in show(displayID:), after its Dart paints the frame and
-  /// signals overlayReady — capture-then-show, no blank flash.
-  func presentFrames(_ frames: [[String: Any]], pinOnly: Bool = false) {
+  /// Seed a capture presentation: reset the pending bookkeeping and record the
+  /// cursor display so only ITS overlay takes key focus on reveal — otherwise,
+  /// with several displays, the last one revealed steals key and the cursor
+  /// display's editor gets no hover/keyboard (the multi-display freeze). Called
+  /// once per capture, BEFORE the parallel per-display pushes start.
+  func presentBegin(cursorDisplayID: CGDirectDisplayID?) {
     pendingShow.removeAll()
-    // Record the cursor display so only ITS overlay takes key focus on reveal —
-    // otherwise, with several displays, the last one revealed steals key and the
-    // cursor display's editor gets no hover/keyboard (the multi-display freeze).
-    keyDisplayID = nil
-    for f in frames {
-      if (f["isCursorDisplay"] as? Bool) == true, let raw = f["displayId"] as? Int {
-        keyDisplayID = CGDirectDisplayID(raw)
-      }
-    }
-    for f in frames {
-      guard let raw = f["displayId"] as? Int else { continue }
-      let id = CGDirectDisplayID(raw)
-      guard let unit = units[id] else { continue }
-      pendingShow.insert(id)
-      unit.overlay.invokeMethod(
-        "onCaptureReady", arguments: ["display": f, "pinOnly": pinOnly])
-    }
+    keyDisplayID = cursorDisplayID
     // One authority decides the active display from here until dismiss.
     startCursorTracking()
+  }
+
+  /// Push ONE display's frame to its engine the moment its capture is ready.
+  /// Each window is revealed later, in show(displayID:), after its Dart paints
+  /// the frame and signals overlayReady — capture-then-show, no blank flash.
+  func presentFrame(_ f: [String: Any], pinOnly: Bool = false) {
+    guard let raw = f["displayId"] as? Int else { return }
+    let id = CGDirectDisplayID(raw)
+    guard let unit = units[id] else { return }
+    pendingShow.insert(id)
+    unit.overlay.invokeMethod(
+      "onCaptureReady", arguments: ["display": f, "pinOnly": pinOnly])
   }
 
   /// Capture-then-show: the window is already on-screen + warm (alpha 0). Once

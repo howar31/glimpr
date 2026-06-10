@@ -4,7 +4,10 @@ import 'package:glimpr/capture/captured_display.dart';
 
 Map<String, Object?> _base(List<Map<String, Object?>> windows) => {
   'displayId': 1,
-  'pngBytes': Uint8List(0),
+  'rawBytes': Uint8List(0),
+  'pixelWidth': 0,
+  'pixelHeight': 0,
+  'rowBytes': 0,
   'left': 0.0,
   'top': 0.0,
   'width': 100.0,

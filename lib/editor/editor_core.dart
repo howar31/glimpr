@@ -2343,10 +2343,9 @@ class _EditorCoreState extends State<EditorCore> {
                             ),
                           ),
                         )
-                      : Image.memory(
-                          widget.host.baseImageBytes,
+                      : RawImage(
+                          image: widget.host.baseImage,
                           fit: BoxFit.fill,
-                          gaplessPlayback: true,
                         ),
                 ),
                 // Layer 2: annotation layer (+ a highlight box on the hovered/selected

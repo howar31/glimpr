@@ -28,7 +28,6 @@ void main() {
     expect(host.size, const Size(4000, 3000));
     expect(host.pixelScale, 1.0);
     expect(host.baseImage, same(image));
-    expect(host.baseImageBytes, isNotNull);
     expect(host.cursorSeed, isNull);
     expect(host.startsActive, isTrue);
     expect(host.snapWindows, isEmpty);

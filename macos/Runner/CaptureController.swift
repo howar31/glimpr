@@ -18,8 +18,17 @@ final class CaptureController {
       throw ScreenCapturer.CaptureError.noDisplays
     }
     // Direct modes bake the cursor (atomic capture) per the setting; no separate
-    // cursor image (that is the overlay's toggleable path).
-    return try await capturer.captureAll(showsCursor: showsCursor, includeCursorImage: false)
+    // cursor image (that is the overlay's toggleable path). Interim shim until
+    // the native single-target captureRegion replaces this path entirely:
+    // gather the per-display pushes back into the old batch shape.
+    final class Box { var frames: [[String: Any]] = [] }
+    let box = Box()
+    try await capturer.captureAll(
+      showsCursor: showsCursor, includeCursorImage: false
+    ) { dict in
+      box.frames.append(dict)
+    }
+    return box.frames
   }
 
   /// Capture a single window with real alpha (rounded corners), or nil when no
@@ -50,16 +59,22 @@ final class CaptureController {
       // Safety net: a warm overlay unit for every CURRENT display before capture.
       self.manager()?.syncUnitsToScreens()
       do {
-        // Overlay: clean base (cursor is the toggleable layer) + the OS cursor
-        // image for that toggle.
-        PerfLog.mark("captureAllBegin")
-        let frames = try await self.capturer.captureAll(
-          showsCursor: false, includeCursorImage: true)
-        PerfLog.mark("captureAllEnd displays=\(frames.count)")
         guard let manager = self.manager() else {
           Self.alert("Overlay manager not ready"); return
         }
-        manager.presentFrames(frames, pinOnly: pinOnly)
+        // Seed the presentation bookkeeping (key display + pendingShow) BEFORE
+        // the parallel capture so per-display pushes land on clean state.
+        manager.presentBegin(cursorDisplayID: self.capturer.cursorDisplayID())
+        // Overlay: clean base (cursor is the toggleable layer) + the OS cursor
+        // image for that toggle. Each display is pushed (and its engine starts
+        // painting) the moment its capture is ready — cursor display first.
+        PerfLog.mark("captureAllBegin")
+        try await self.capturer.captureAll(
+          showsCursor: false, includeCursorImage: true
+        ) { dict in
+          manager.presentFrame(dict, pinOnly: pinOnly)
+        }
+        PerfLog.mark("captureAllEnd")
       } catch ScreenCapturer.CaptureError.noDisplays {
         Self.alert("No displays found")
       } catch {

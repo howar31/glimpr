@@ -16,7 +16,10 @@ void main() {
       return [
         {
           'displayId': 1,
-          'pngBytes': Uint8List(0),
+          'rawBytes': Uint8List(0),
+          'pixelWidth': 0,
+          'pixelHeight': 0,
+          'rowBytes': 0,
           'left': 0.0,
           'top': 0.0,
           'width': 1920.0,

@@ -5,7 +5,10 @@ import 'package:glimpr/capture/captured_display.dart';
 
 Map<String, dynamic> _base() => {
   'displayId': 1,
-  'pngBytes': Uint8List(0),
+  'rawBytes': Uint8List(16),
+  'pixelWidth': 2,
+  'pixelHeight': 2,
+  'rowBytes': 8,
   'left': 0.0,
   'top': 0.0,
   'width': 800.0,
@@ -15,6 +18,14 @@ Map<String, dynamic> _base() => {
 };
 
 void main() {
+  test('parses the raw-pixel fields', () {
+    final d = CapturedDisplay.fromMap(_base());
+    expect(d.rawBytes.length, 16);
+    expect(d.pixelWidth, 2);
+    expect(d.pixelHeight, 2);
+    expect(d.rowBytes, 8);
+  });
+
   test('decodes the windows list (empty when absent)', () {
     expect(CapturedDisplay.fromMap(_base()).windows, isEmpty);
 

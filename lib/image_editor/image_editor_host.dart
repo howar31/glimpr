@@ -44,8 +44,6 @@ class ImageEditorHost implements EditorHost {
   @override
   Offset? get cursorTopLeft => null;
   @override
-  Uint8List get baseImageBytes => bytes;
-  @override
   Offset? get cursorSeed => null; // EditorCore seeds at centre
   @override
   bool get startsActive => true;

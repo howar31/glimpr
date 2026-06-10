@@ -20,7 +20,10 @@ void main() {
     final signal = ValueNotifier<({int id, Offset cursor})>((id: -1, cursor: Offset.zero));
     final display = CapturedDisplay(
       displayId: 7,
-      pngBytes: Uint8List.fromList([1, 2, 3]),
+      rawBytes: Uint8List.fromList([1, 2, 3]),
+      pixelWidth: 1,
+      pixelHeight: 1,
+      rowBytes: 4,
       left: 100,
       top: 50,
       width: 10,
@@ -46,7 +49,6 @@ void main() {
     expect(host.size, const Size(10, 5));
     expect(host.pixelScale, 2.0);
     expect(host.baseImage, same(frozen));
-    expect(host.baseImageBytes, display.pngBytes);
     expect(host.cursorSeed, const Offset(3, 4));
     expect(host.startsActive, isTrue);
     expect(host.hostId, 7);

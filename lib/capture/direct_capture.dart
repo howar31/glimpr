@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:ui' show Rect;
 import '../output/flow.dart';
@@ -83,13 +84,14 @@ CaptureTarget? resolveLastRegionTarget(
 
 /// Decodes the chosen frame and delivers it with no annotations.
 Future<FlowResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) async {
-  final codec = await ui.instantiateImageCodec(t.display.pngBytes);
-  final ui.Image image;
-  try {
-    image = (await codec.getNextFrame()).image;
-  } finally {
-    codec.dispose(); // release the decoder even if getNextFrame throws
-  }
+  // Raw BGRA pixels -> ui.Image (no codec). Interim until the native
+  // single-target captureRegion replaces this whole leg.
+  final completer = Completer<ui.Image>();
+  ui.decodeImageFromPixels(
+    t.display.rawBytes, t.display.pixelWidth, t.display.pixelHeight,
+    ui.PixelFormat.bgra8888, completer.complete, rowBytes: t.display.rowBytes,
+  );
+  final ui.Image image = await completer.future;
   try {
     return await exportAnnotated(
       display: t.display,

@@ -48,9 +48,6 @@ abstract class EditorHost {
   /// The cursor image's display-local LOGICAL top-left, or null when no cursor.
   Offset? get cursorTopLeft => null;
 
-  /// Encoded bytes for the cheap on-screen `Image.memory` layer.
-  Uint8List get baseImageBytes;
-
   /// Crosshair seed on first build (cursor display-local point), or null = centre.
   Offset? get cursorSeed;
 

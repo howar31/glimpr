@@ -77,10 +77,15 @@ class WindowImage {
 }
 
 /// One frozen display returned by the native capture channel.
-/// [left/top/width/height] are LOGICAL global-desktop coords; [pngBytes] is NATIVE resolution.
+/// [left/top/width/height] are LOGICAL global-desktop coords; [rawBytes] is
+/// NATIVE-resolution BGRA8888 (premultiplied, sRGB) — raw pixels, no codec on
+/// the freeze path; decode with `ui.decodeImageFromPixels`.
 class CapturedDisplay {
   final int displayId;
-  final Uint8List pngBytes;
+  final Uint8List rawBytes;
+  final int pixelWidth;
+  final int pixelHeight;
+  final int rowBytes;
   final double left;
   final double top;
   final double width;
@@ -104,7 +109,10 @@ class CapturedDisplay {
 
   const CapturedDisplay({
     required this.displayId,
-    required this.pngBytes,
+    required this.rawBytes,
+    required this.pixelWidth,
+    required this.pixelHeight,
+    required this.rowBytes,
     required this.left,
     required this.top,
     required this.width,
@@ -121,7 +129,10 @@ class CapturedDisplay {
 
   factory CapturedDisplay.fromMap(Map<dynamic, dynamic> m) => CapturedDisplay(
     displayId: m['displayId'] as int,
-    pngBytes: m['pngBytes'] as Uint8List,
+    rawBytes: m['rawBytes'] as Uint8List,
+    pixelWidth: (m['pixelWidth'] as num).toInt(),
+    pixelHeight: (m['pixelHeight'] as num).toInt(),
+    rowBytes: (m['rowBytes'] as num).toInt(),
     left: (m['left'] as num).toDouble(),
     top: (m['top'] as num).toDouble(),
     width: (m['width'] as num).toDouble(),

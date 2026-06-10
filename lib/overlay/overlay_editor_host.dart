@@ -52,8 +52,6 @@ class OverlayEditorHost implements EditorHost {
   @override
   ui.Image get baseImage => frozen;
   @override
-  Uint8List get baseImageBytes => display.pngBytes;
-  @override
   Offset? get cursorSeed => (display.cursorX != null && display.cursorY != null)
       ? Offset(display.cursorX!, display.cursorY!)
       : null;

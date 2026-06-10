@@ -12,7 +12,10 @@ void main() {
 
   Map<String, Object> displayMap() => {
     'displayId': 1,
-    'pngBytes': Uint8List.fromList([1, 2, 3]),
+    'rawBytes': Uint8List.fromList([1, 2, 3]),
+    'pixelWidth': 1,
+    'pixelHeight': 1,
+    'rowBytes': 4,
     'left': 0.0,
     'top': 0.0,
     'width': 1512.0,

@@ -89,24 +89,19 @@ class _OverlayAppState extends State<OverlayApp> {
         // awaited just before the controller is built, so its latency hides
         // behind the image decode below (no added reveal delay).
         final stylesFuture = _loadToolStyles();
-        // Warm-decode the image both for the on-screen Image.memory and for the
-        // export ui.Image. The engine is already warm (window on-screen at
-        // alpha 0), so these resolve; bounded so a hiccup can't stall the reveal.
-        try {
-          await precacheImage(
-            MemoryImage(d.pngBytes),
-            context,
-          ).timeout(const Duration(milliseconds: 300));
-        } catch (_) {
-          // Bounded best-effort decode; reveal anyway on failure/timeout.
-        }
+        // Raw BGRA pixels -> ui.Image (no codec): a pixel upload, not a PNG
+        // decode — this is the freeze path's cheap step.
         ui.Image? frozen;
         try {
-          final codec = await ui.instantiateImageCodec(d.pngBytes);
-          frozen = (await codec.getNextFrame()).image;
-          codec.dispose(); // release the decoder's native memory immediately
+          final completer = Completer<ui.Image>();
+          ui.decodeImageFromPixels(
+            d.rawBytes, d.pixelWidth, d.pixelHeight, ui.PixelFormat.bgra8888,
+            completer.complete, rowBytes: d.rowBytes,
+          );
+          frozen = await completer.future;
         } catch (_) {
-          // If decode fails the export will be skipped; the overlay still shows.
+          // Without a frozen image the overlay presents with no base layer and
+          // the export is skipped — practically unreachable for raw pixels.
         }
         // Decode the OS cursor image (toggleable layer), if any.
         ui.Image? cursorImg;
