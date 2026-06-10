@@ -63,6 +63,11 @@ final class CaptureChannel {
           MainFlutterWindow.shared?.notifyRecentChanged()
         }
         result(nil)
+      case "perfMark":
+        if let label = (call.arguments as? [String: Any])?["label"] as? String {
+          PerfLog.mark(label)
+        }
+        result(nil)
       case "captureFrames":
         // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
         // and the channel reply must land on the platform (main) thread.
@@ -70,7 +75,9 @@ final class CaptureChannel {
           ?? false
         Task { @MainActor in
           do {
+            PerfLog.mark("captureFramesBegin")
             let frames = try await self?.capture.captureFrames(showsCursor: cursor) ?? []
+            PerfLog.mark("captureFramesEnd displays=\(frames.count)")
             result(frames)
           } catch {
             result(FlutterError(

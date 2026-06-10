@@ -3,6 +3,7 @@ import Cocoa
 import FlutterMacOS
 import ServiceManagement
 import UniformTypeIdentifiers
+import os
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureChannel: CaptureChannel?
@@ -36,6 +37,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   override var canBecomeMain: Bool { alphaValue > 0 }
 
   override func awakeFromNib() {
+    PerfLog.mark("launchBegin")
     MainFlutterWindow.shared = self
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -168,6 +170,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       onClearRecent: { [weak self] in
         self?.imageEditorChannel?.invokeMethod("clearRecent", arguments: nil)
       })
+    PerfLog.mark("statusItemReady")
 
     // Warm the Image Editor engine + window at launch. A post-launch (on-demand)
     // engine never starts its render loop (only launch-born engines render — a
@@ -746,6 +749,7 @@ final class HotkeyController {
   /// Fire [actionKey] exactly as if its global hotkey was pressed — used by
   /// the menu-bar items so both paths share the Dart-side dispatcher.
   func fireAction(_ actionKey: String) {
+    PerfLog.mark("hotkey \(actionKey) src=menu")
     channel.invokeMethod("onHotkey", arguments: actionKey)
   }
 
@@ -825,6 +829,7 @@ final class HotkeyController {
 
   private func fire(_ id: UInt32) {
     guard let actionKey = actionForId[id] else { return }
+    PerfLog.mark("hotkey \(actionKey) src=carbon")
     channel.invokeMethod("onHotkey", arguments: actionKey)
   }
 
@@ -1208,5 +1213,18 @@ final class PinContentView: NSView {
     guard bounds.insetBy(dx: interactiveInset, dy: interactiveInset).contains(p)
     else { return nil }
     return super.hitTest(point)
+  }
+}
+
+/// Perf instrumentation: named marks in the unified log (subsystem = bundle
+/// id, category "perf"). Near-zero cost when no log consumer is attached; the
+/// unified log supplies the timestamps. Extract with:
+///   log show --last 5m --info \
+///     --predicate 'subsystem == "com.howar31.glimpr" AND category == "perf"'
+enum PerfLog {
+  static let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "glimpr", category: "perf")
+  static func mark(_ label: String) {
+    logger.log("PERF \(label, privacy: .public)")
   }
 }

@@ -147,6 +147,7 @@ class DirectCapture {
     void Function()? shutter,
     void Function()? complete,
     void Function(String)? showError,
+    void Function(String)? perfMark,
   })  : _captureFrames = captureFrames ?? CaptureBridge().captureFrames,
         _focusedWindow = focusedWindow ?? CaptureBridge().focusedWindow,
         _captureWindowImage =
@@ -157,7 +158,8 @@ class DirectCapture {
         _deliverWindow = deliverWindow ?? _defaultDeliverWindow,
         _shutter = shutter ?? (() => playShutter()),
         _complete = complete ?? (() => playComplete()),
-        _showError = showError ?? ((m) => CaptureBridge().showError(m));
+        _showError = showError ?? ((m) => CaptureBridge().showError(m)),
+        _perfMark = perfMark ?? ((label) => CaptureBridge.perfMark(label));
 
   final Future<List<CapturedDisplay>> Function({bool showsCursor}) _captureFrames;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
@@ -170,6 +172,7 @@ class DirectCapture {
   final void Function() _shutter;
   final void Function() _complete;
   final void Function(String) _showError;
+  final void Function(String) _perfMark;
 
   Future<void> screen() =>
       _run((frames) async => resolveScreenTarget(frames));
@@ -201,6 +204,9 @@ class DirectCapture {
           } else {
             _showError('Capture failed');
           }
+          // kind=window marks the real-alpha leg; the rectangular fallback
+          // below reports kind=focusedWindow through _run's mark instead.
+          _perfMark('directDelivered ok=$ok kind=window');
         } catch (e) {
           _showError('Capture failed: $e');
         }
@@ -241,6 +247,7 @@ class DirectCapture {
       } else {
         _showError('Capture failed');
       }
+      _perfMark('directDelivered ok=$ok kind=${target.kind.name}');
     } catch (e) {
       _showError('Capture failed: $e');
     }

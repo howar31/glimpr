@@ -118,6 +118,7 @@ void main() {
     late int shutters;
     late int completes;
     late List<String> errors;
+    late List<String> marks;
 
     DirectCapture build({
       required List<CapturedDisplay> frames,
@@ -129,6 +130,7 @@ void main() {
       shutters = 0;
       completes = 0;
       errors = [];
+      marks = [];
       return DirectCapture(
         captureFrames: ({bool showsCursor = false}) async => frames,
         focusedWindow: () async => window,
@@ -142,6 +144,7 @@ void main() {
         shutter: () => shutters++,
         complete: () => completes++,
         showError: (m) => errors.add(m),
+        perfMark: (label) => marks.add(label),
       );
     }
 
@@ -203,6 +206,7 @@ void main() {
         shutter: () {},
         complete: () => completes++,
         showError: (_) {},
+        perfMark: (_) {},
       );
       await dc.window();
       expect(deliveredWi, isNotNull);
@@ -226,6 +230,18 @@ void main() {
       await dc.lastRegion();
       expect(delivered.single.display.displayId, 2);
       expect(delivered.single.selectionLogical, const Rect.fromLTWH(7, 8, 200, 150));
+    });
+
+    test('screen(): emits a perf mark naming the kind after delivery', () async {
+      final dc = build(frames: [_disp(1, cursor: true)]);
+      await dc.screen();
+      expect(marks, ['directDelivered ok=true kind=display']);
+    });
+
+    test('lastRegion(): silent no-op emits no perf mark', () async {
+      final dc = build(frames: [_disp(1, cursor: true)]);
+      await dc.lastRegion();
+      expect(marks, isEmpty);
     });
   });
 }

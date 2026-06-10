@@ -87,6 +87,13 @@ class CaptureBridge {
   static Future<void> notifyRecentChanged() =>
       _channel.invokeMethod('recentChanged');
 
+  /// Drop a named perf mark into the NATIVE unified log (subsystem
+  /// com.howar31.glimpr, category "perf") so Dart-side completion events land
+  /// on the same timeline as the native capture marks. Static for the same
+  /// reason as [openInEditor]. Fire-and-forget.
+  static Future<void> perfMark(String label) =>
+      _channel.invokeMethod('perfMark', {'label': label});
+
   /// Reveal the Settings window (⌘, from the capture overlay). The caller
   /// dismisses the overlay first, since it sits above normal windows.
   Future<void> openSettings() => _channel.invokeMethod('openSettings');

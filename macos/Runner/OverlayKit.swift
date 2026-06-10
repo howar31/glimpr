@@ -535,7 +535,10 @@ final class OverlayManager {
         guard let self = self else { result(nil); return }
         switch call.method {
         case "overlayReady":
-          if let vc = vc, let id = self.displayID(forVC: vc) { self.show(displayID: id) }
+          if let vc = vc, let id = self.displayID(forVC: vc) {
+            PerfLog.mark("overlayReady display=\(id)")
+            self.show(displayID: id)
+          }
           result(nil)
         case "broadcastEditorState":
           if let vc = vc, let id = self.displayID(forVC: vc),
@@ -750,6 +753,7 @@ final class OverlayManager {
       ?? unit.window.screen?.frame ?? unit.window.frame
     unit.window.setFrame(frame, display: true)
     unit.window.alphaValue = 1
+    PerfLog.mark("overlayShown display=\(id)")
     // ALL displays are interactive so the editor can FOLLOW the cursor across
     // them (the cursor poll re-keys the active display via setActiveDisplay).
     // Only the cursor display takes the INITIAL key/active focus on reveal;

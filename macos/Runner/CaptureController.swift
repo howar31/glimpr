@@ -52,8 +52,10 @@ final class CaptureController {
       do {
         // Overlay: clean base (cursor is the toggleable layer) + the OS cursor
         // image for that toggle.
+        PerfLog.mark("captureAllBegin")
         let frames = try await self.capturer.captureAll(
           showsCursor: false, includeCursorImage: true)
+        PerfLog.mark("captureAllEnd displays=\(frames.count)")
         guard let manager = self.manager() else {
           Self.alert("Overlay manager not ready"); return
         }
