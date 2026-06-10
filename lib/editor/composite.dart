@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as imglib;
 import 'decoration.dart';
 import 'draw_style.dart';
+import 'encode_bridge.dart';
 import 'drawable.dart';
 import 'drawable_painter.dart';
 import 'raster.dart';
@@ -169,16 +170,20 @@ Future<Uint8List> compositeAndCrop({
   final oh = output.height;
 
   if (jpeg) {
-    // dart:ui can only encode PNG; for JPEG pull the raw RGBA and encode via
-    // the image package. This runs on the background path (overlay already
-    // hidden), so the extra encode cost is off the user-facing hot path.
+    // dart:ui can only encode PNG; for JPEG pull the raw RGBA and encode
+    // NATIVELY (ImageIO) — the pure-Dart image-package encoder took seconds
+    // for a 5K frame. It stays as the fallback when the channel is missing
+    // (unit tests, future hosts without the handler).
     final raw = await output.toByteData(format: ui.ImageByteFormat.rawRgba);
     output.dispose();
+    final rgba = raw!.buffer.asUint8List();
+    final native = await encodeJpegNative(rgba, ow, oh, jpegQuality);
+    if (native != null) return native;
     final encoded = imglib.encodeJpg(
       imglib.Image.fromBytes(
         width: ow,
         height: oh,
-        bytes: raw!.buffer,
+        bytes: rgba.buffer,
         numChannels: 4,
         order: imglib.ChannelOrder.rgba,
       ),

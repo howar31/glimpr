@@ -64,6 +64,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       capture: capture,
       manager: { [weak self] in self?.overlayManager }
     )
+    EncodeChannel.register(messenger: flutterViewController.engine.binaryMessenger)
 
     // Native global hotkeys (Carbon RegisterEventHotKey), driven by the control
     // engine's NativeHotkeyRegistrar over `glimpr/hotkeys`.
@@ -144,6 +145,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     let manager = OverlayManager()
     manager.startObservingScreens()
     self.overlayManager = manager
+    // NOTE: a launch-time 1x1 SCK warm-up screenshot was tried here and did
+    // NOT absorb the session's first-capture overhead (~100ms SCK first call
+    // regardless) — do not re-add. A persistent SCStream is also off the
+    // table: it would pin the macOS "recording" indicator on.
 
     self.statusItem = StatusItemController(
       // Menu items fire global actions through the SAME Dart dispatcher as
@@ -259,6 +264,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private func setUpImageEditorWindow() {
     let vc = FlutterViewController()
     RegisterGeneratedPlugins(registry: vc)
+    EncodeChannel.register(messenger: vc.engine.binaryMessenger)
     let role = FlutterMethodChannel(
       name: "glimpr/role", binaryMessenger: vc.engine.binaryMessenger)
     role.setMethodCallHandler { call, result in

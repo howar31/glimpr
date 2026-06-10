@@ -652,6 +652,7 @@ final class OverlayManager {
       role.setMethodCallHandler { call, result in
         if call.method == "getRole" { result("overlay") } else { result(FlutterMethodNotImplemented) }
       }
+      EncodeChannel.register(messenger: msgr)
       let control = FlutterMethodChannel(name: "glimpr/capture", binaryMessenger: msgr)
       control.setMethodCallHandler { [weak self, weak vc] call, result in
         guard let self = self else { result(nil); return }

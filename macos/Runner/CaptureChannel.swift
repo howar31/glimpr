@@ -115,3 +115,54 @@ final class CaptureChannel {
     }
   }
 }
+
+/// Native JPEG encoder for the editor layer, registered on EVERY engine's
+/// messenger (control / overlay / image editor) so `composite.dart` can call
+/// it host-agnostically: raw RGBA8888 in, JPEG bytes out. The pure-Dart
+/// image-package encoder took seconds for a 5K frame.
+enum EncodeChannel {
+  static func register(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "glimpr/encode", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "jpeg",
+            let a = call.arguments as? [String: Any],
+            let data = a["rgba"] as? FlutterStandardTypedData,
+            let w = a["width"] as? Int, let h = a["height"] as? Int,
+            w > 0, h > 0, data.data.count >= w * h * 4
+      else { result(nil); return }
+      let quality = max(0, min(100, (a["quality"] as? Int) ?? 90))
+      // CPU-bound encode off the platform thread; the reply hops back.
+      DispatchQueue.global(qos: .userInitiated).async {
+        let bytes = Self.encodeJpeg(
+          rgba: data.data, width: w, height: h, quality: quality)
+        DispatchQueue.main.async {
+          result(bytes.map { FlutterStandardTypedData(bytes: $0) })
+        }
+      }
+    }
+  }
+
+  /// dart:ui rawRgba layout = R,G,B,A bytes, premultiplied — matches a
+  /// premultipliedLast big-endian CGContext. Content is effectively opaque
+  /// (captures; JPEG fills), so premultiplication is a no-op in practice.
+  private static func encodeJpeg(
+    rgba: Data, width: Int, height: Int, quality: Int
+  ) -> Data? {
+    var pixels = rgba
+    let rowBytes = width * 4
+    let cg: CGImage? = pixels.withUnsafeMutableBytes { buf in
+      guard let ctx = CGContext(
+        data: buf.baseAddress, width: width, height: height,
+        bitsPerComponent: 8, bytesPerRow: rowBytes,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+      else { return nil }
+      return ctx.makeImage()
+    }
+    guard let image = cg else { return nil }
+    return NSBitmapImageRep(cgImage: image).representation(
+      using: .jpeg,
+      properties: [.compressionFactor: Double(quality) / 100.0])
+  }
+}
