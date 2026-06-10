@@ -83,8 +83,11 @@ final class ScreenCapturer {
       // maps sRGB -> display), and saved PNGs become portable sRGB files.
       cfg.colorSpaceName = CGColorSpace.sRGB
       let filter = SCContentFilter(display: d, excludingWindows: [])
+      PerfLog.mark("sckImageBegin display=\(d.displayID)")
       let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
+      PerfLog.mark("sckImageEnd display=\(d.displayID)")
       guard let png = Self.pngData(from: cgImage) else { continue }
+      PerfLog.mark("pngEncodeEnd display=\(d.displayID) bytes=\(png.count)")
       let frame = d.frame
       let isCursor = d.displayID == cursorDisplayID
       var dict: [String: Any] = [
@@ -116,6 +119,7 @@ final class ScreenCapturer {
         }
       }
       dict["windows"] = Self.snappableWindows(displayID: d.displayID)
+      PerfLog.mark("windowsQueryEnd display=\(d.displayID)")
       out.append(dict)
     }
     return out
