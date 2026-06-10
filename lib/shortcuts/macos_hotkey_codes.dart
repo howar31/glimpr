@@ -109,3 +109,14 @@ int carbonModifierMask(Set<HotkeyModifier> modifiers) {
   if (modifiers.contains(HotkeyModifier.control)) mask |= _controlKey;
   return mask;
 }
+
+/// The Cocoa (NSEvent.ModifierFlags) mask for [modifiers] — used for the
+/// menu-bar items' key-equivalent display hints.
+int cocoaModifierMask(Set<HotkeyModifier> modifiers) {
+  var mask = 0;
+  if (modifiers.contains(HotkeyModifier.shift)) mask |= 1 << 17;
+  if (modifiers.contains(HotkeyModifier.control)) mask |= 1 << 18;
+  if (modifiers.contains(HotkeyModifier.alt)) mask |= 1 << 19;
+  if (modifiers.contains(HotkeyModifier.meta)) mask |= 1 << 20;
+  return mask;
+}

@@ -28,9 +28,10 @@ Future<FlowResult> exportImage({
   required Directory? saveDir,
   required String sourceName,
   RunFlowSeam? run,
-  // The editor engine has no glimpr/capture handler, so its share leg rides
-  // the editor's own channel — injected here, forwarded to runFlow.
+  // The editor engine has no glimpr/capture handler, so its share/pin legs
+  // ride the editor's own channel — injected here, forwarded to runFlow.
   Future<void> Function(String path)? shareFn,
+  Future<void> Function(String path)? pinFn,
 }) async {
   final bytes = await compositeAndCrop(
     frozen: image,
@@ -49,6 +50,7 @@ Future<FlowResult> exportImage({
             fileName: fileName,
             soundFn: () async {},
             shareFn: shareFn,
+            pinFn: pinFn,
           );
   return fn(
     actions: actions,

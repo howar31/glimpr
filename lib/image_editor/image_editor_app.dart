@@ -407,9 +407,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         actions: actions,
         saveDir: cap.saveDir,
         sourceName: _sourceName,
-        // Route the share leg over the editor's own channel (this engine has
-        // no glimpr/capture handler); native anchors it to the menu-bar icon.
+        // Route the share/pin legs over the editor's own channel (this engine
+        // has no glimpr/capture handler); share anchors to the menu-bar icon,
+        // pin centers (no origin rect from the editor).
         shareFn: (path) => _channel.invokeMethod('shareSheet', {'path': path}),
+        pinFn: (path) => _channel.invokeMethod('pinImage', {'path': path}),
       );
       if (!mounted) return false;
       // Clear dirty only on a confirmed file save, not on clipboard copy.
@@ -448,6 +450,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         if (r.errors.containsKey('showInFinder')) 'Reveal failed',
       if (actions.contains(FlowAction.shareSheet))
         if (r.errors.containsKey('shareSheet')) 'Share failed',
+      if (actions.contains(FlowAction.pin))
+        r.errors.containsKey('pin') ? 'Pin failed' : 'Pinned',
     ];
     return parts.isEmpty ? 'Done' : parts.join(' · ');
   }
@@ -913,6 +917,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               _oneOff(t, 'Show in Finder', Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
               _oneOff(t, 'Share…', Icons.ios_share, {FlowAction.shareSheet}),
+              _oneOff(t, 'Pin to screen', Icons.push_pin_outlined,
+                  {FlowAction.pin}),
             ],
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),

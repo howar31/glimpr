@@ -287,6 +287,15 @@ class _SettingsAppState extends State<SettingsApp>
         hint: 'Open the macOS share menu (AirDrop, Messages, …)',
         trailing: toggle(FlowAction.shareSheet),
       ),
+      SettingRow(
+        divider: true,
+        title: 'Pin to screen',
+        hint: capture
+            ? 'Float the capture as an always-on-top window, pinned in '
+                'place over where it was taken'
+            : 'Float the result as an always-on-top window (centered)',
+        trailing: toggle(FlowAction.pin),
+      ),
     ];
   }
 

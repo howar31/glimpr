@@ -144,7 +144,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.overlayManager = manager
 
     self.statusItem = StatusItemController(
-      onCapture: { [weak self] in self?.captureController?.triggerCapture() },
+      // Menu items fire global actions through the SAME Dart dispatcher as
+      // the hotkeys; their key hints mirror the effective bindings.
+      onAction: { [weak self] key in self?.hotkeyController?.fireAction(key) },
+      keyHint: { [weak self] key in
+        guard let h = self?.hotkeyController?.keyEquivalent(for: key) else { return nil }
+        return (h.key, h.mods.rawValue)
+      },
       onSettings: { [weak self] in self?.revealSettings() },
       onOpenImage: { [weak self] in self?.openImageEditor() },
       // A recent item reveals the editor (it may be hidden) then loads the file
@@ -283,10 +289,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "openSettings":
         self?.revealSettings()
         result(nil)
-      // Editor Done flow / one-off: share sheet anchored to the editor window.
+      // Editor Done flow / one-off: share sheet anchored to the menu-bar icon.
       case "shareSheet":
         if let path = (call.arguments as? [String: Any])?["path"] as? String {
           self?.showShareSheet(path: path)
+        }
+        result(nil)
+      // Editor Done flow / one-off: pin (no origin rect -> centered).
+      case "pinImage":
+        if let path = (call.arguments as? [String: Any])?["path"] as? String {
+          self?.pinImage(path: path, rect: nil)
         }
         result(nil)
       default:
@@ -447,6 +459,38 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     let picker = NSSharingServicePicker(items: [URL(fileURLWithPath: path)])
     sharePicker = picker
     picker.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+  }
+
+  // The live pin windows; a pin removes itself from here when closed.
+  private var pins: [PinPanel] = []
+
+  /// Float the image at [path] as an always-on-top pin window. [rect] is the
+  /// GLOBAL top-left-origin logical rect (pin-in-place over the captured
+  /// region); nil centers the pin on the main screen at the image's logical
+  /// size. Coordinates flip via the primary screen (AppKit is bottom-left).
+  func pinImage(path: String, rect: CGRect?) {
+    guard let image = NSImage(contentsOfFile: path) else { return }
+    let frame: NSRect
+    if let r = rect {
+      let primaryH = NSScreen.screens.first?.frame.height ?? 0
+      frame = NSRect(x: r.minX, y: primaryH - r.maxY, width: r.width, height: r.height)
+    } else {
+      let screen = NSScreen.main ?? NSScreen.screens.first
+      let scale = screen?.backingScaleFactor ?? 2
+      // A screenshot PNG carries no DPI metadata, so NSImage.size == pixels;
+      // divide by the backing scale for the on-screen logical size.
+      let s = NSSize(width: image.size.width / scale, height: image.size.height / scale)
+      let sf = screen?.frame ?? .zero
+      frame = NSRect(
+        x: sf.midX - s.width / 2, y: sf.midY - s.height / 2,
+        width: s.width, height: s.height)
+    }
+    let pin = PinPanel(image: image, frame: frame)
+    pins.append(pin)
+    pin.onClosed = { [weak self, weak pin] in
+      self?.pins.removeAll { $0 === pin }
+    }
+    pin.orderFrontRegardless()
   }
 
   private func hideImageEditor() {
@@ -669,6 +713,21 @@ final class HotkeyController {
   private var actionForId: [UInt32: String] = [:] // EventHotKeyID.id -> actionKey
   private var nextId: UInt32 = 1
   private var handlerInstalled = false
+  // Display hints for the menu-bar items: the EFFECTIVE binding's key
+  // character + Cocoa modifier mask per action, pushed by Dart on register.
+  private var hints: [String: (key: String, mods: NSEvent.ModifierFlags)] = [:]
+
+  /// The effective binding's menu key-equivalent for [actionKey], or nil when
+  /// unbound / not registrable as a one-character equivalent.
+  func keyEquivalent(for actionKey: String) -> (key: String, mods: NSEvent.ModifierFlags)? {
+    hints[actionKey]
+  }
+
+  /// Fire [actionKey] exactly as if its global hotkey was pressed — used by
+  /// the menu-bar items so both paths share the Dart-side dispatcher.
+  func fireAction(_ actionKey: String) {
+    channel.invokeMethod("onHotkey", arguments: actionKey)
+  }
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: "glimpr/hotkeys", binaryMessenger: messenger)
@@ -685,7 +744,12 @@ final class HotkeyController {
         let keyCode = a["keyCode"] as? Int,
         let modifiers = a["modifiers"] as? Int
       else { result(false); return }
-      result(register(actionKey: id, keyCode: UInt32(keyCode), modifiers: UInt32(modifiers)))
+      let ok = register(actionKey: id, keyCode: UInt32(keyCode), modifiers: UInt32(modifiers))
+      if ok, let keyChar = a["keyChar"] as? String, !keyChar.isEmpty,
+         let cocoaMods = a["cocoaMods"] as? Int {
+        hints[id] = (keyChar, NSEvent.ModifierFlags(rawValue: UInt(cocoaMods)))
+      }
+      result(ok)
     case "unregister":
       if let a = call.arguments as? [String: Any], let id = a["id"] as? String {
         unregister(actionKey: id)
@@ -742,6 +806,7 @@ final class HotkeyController {
   }
 
   private func unregister(actionKey: String) {
+    hints.removeValue(forKey: actionKey)
     if let ref = refs.removeValue(forKey: actionKey) {
       UnregisterEventHotKey(ref)
       actionForId = actionForId.filter { $0.value != actionKey }
@@ -752,5 +817,343 @@ final class HotkeyController {
     for (_, ref) in refs { UnregisterEventHotKey(ref) }
     refs.removeAll()
     actionForId.removeAll()
+    hints.removeAll()
+  }
+}
+
+// MARK: - Pin to screen
+
+/// A floating "pin": a captured image as an always-on-top borderless panel —
+/// a reference snippet that stays over everything until closed. The window is
+/// LARGER than the image by a transparent margin so the hover corona can glow
+/// OUTWARD past the image edge. Drag anywhere to move; scroll wheel zooms
+/// 25%–300%; hovering for 2s reveals the Aurora corona (rotating brand-gradient
+/// halo radiating out from the edge) + a glass close button (top-right, hover-
+/// reactive, follows light/dark). Right-click: Reset Size / Save As / Copy /
+/// Close. Pure AppKit BY NECESSITY: pins are created at runtime and post-launch
+/// Flutter engines never start a render loop.
+final class PinPanel: NSPanel {
+  /// Transparent margin around the image — the vapor's reach. Must exceed the
+  /// glow's worst case (max shadowRadius ~20 × ~2 visual falloff + drift ±8)
+  /// or the halo clips with a hard edge at the window border.
+  private static let margin: CGFloat = 56
+  private let baseSize: NSSize // IMAGE logical size at 100%
+  private var zoom: CGFloat = 1
+  private let pinnedImage: NSImage
+  private var hoverTimer: Timer?
+  private var imageView: NSImageView!
+  private var closeWrap: NSVisualEffectView!
+  private var closeHoverLayer: CALayer!
+  private var closeButton: NSButton!
+  private var vaporContainer: CALayer!
+  private var vaporLayers: [CALayer] = []
+  var onClosed: (() -> Void)?
+
+  /// [imageFrame] is where the IMAGE sits on screen (AppKit coords); the
+  /// window itself extends [margin] beyond it on every side.
+  init(image: NSImage, frame imageFrame: NSRect) {
+    baseSize = imageFrame.size
+    pinnedImage = image
+    let m = Self.margin
+    super.init(
+      contentRect: imageFrame.insetBy(dx: -m, dy: -m),
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered, defer: false)
+    isFloatingPanel = true
+    level = .floating
+    isOpaque = false
+    hasShadow = true
+    isReleasedWhenClosed = false
+    backgroundColor = .clear
+
+    let content = PinContentView(frame: NSRect(origin: .zero, size: self.frame.size))
+    content.interactiveInset = m // clicks land only on the image, not the halo
+    content.wantsLayer = true
+
+    // Aurora vapor, BEHIND the image (added before the image subview): three
+    // soft shadow layers in the brand cyan / blue / violet, cast outward from
+    // the image edge (shadowPath = the image rect; no fill — only the halo
+    // shows past the image). Each drifts and breathes on its own slow period,
+    // so the colours mingle like vapor. Hidden until the 2s hover reveal.
+    let container = CALayer()
+    container.opacity = 0
+    let brand: [NSColor] = [
+      NSColor(red: 0.13, green: 0.83, blue: 0.93, alpha: 1), // cyan
+      NSColor(red: 0.38, green: 0.65, blue: 0.98, alpha: 1), // blue
+      NSColor(red: 0.65, green: 0.55, blue: 0.98, alpha: 1), // violet
+    ]
+    for color in brand {
+      let v = CALayer()
+      v.backgroundColor = NSColor.clear.cgColor
+      v.shadowColor = color.cgColor
+      v.shadowOpacity = 0.85
+      v.shadowOffset = .zero
+      v.shadowRadius = 14
+      container.addSublayer(v)
+      vaporLayers.append(v)
+    }
+    content.layer?.addSublayer(container)
+    vaporContainer = container
+
+    let iv = NSImageView(frame: content.bounds.insetBy(dx: m, dy: m))
+    iv.image = image
+    iv.imageScaling = .scaleProportionallyUpOrDown
+    iv.autoresizingMask = [.width, .height]
+    content.addSubview(iv)
+    imageView = iv
+
+    // Glass close button, top-right of the IMAGE, hidden until the hover
+    // reveal. Popover material + semantic colors follow light/dark; its own
+    // hover state brightens the glyph and washes the circle so it reads as
+    // clickable.
+    let wrap = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+    wrap.material = .popover
+    wrap.blendingMode = .withinWindow
+    wrap.state = .active
+    wrap.wantsLayer = true
+    wrap.layer?.cornerRadius = 12
+    wrap.layer?.masksToBounds = true
+    wrap.alphaValue = 0
+    wrap.isHidden = true // not hit-testable until the hover reveal
+    let hover = CALayer()
+    hover.frame = wrap.bounds
+    hover.cornerRadius = 12
+    hover.backgroundColor = NSColor.labelColor.withAlphaComponent(0.14).cgColor
+    hover.opacity = 0
+    wrap.layer?.addSublayer(hover)
+    closeHoverLayer = hover
+    let button = NSButton(frame: wrap.bounds)
+    button.isBordered = false
+    button.image = NSImage(
+      systemSymbolName: "xmark", accessibilityDescription: "Close")?
+      .withSymbolConfiguration(.init(pointSize: 10, weight: .bold))
+    button.contentTintColor = .secondaryLabelColor
+    button.target = self
+    button.action = #selector(closePin)
+    wrap.addSubview(button)
+    content.addSubview(wrap)
+    closeWrap = wrap
+    closeButton = button
+
+    // Two tracking areas: the IMAGE (delayed vapor reveal — the transparent
+    // halo margin must not trigger it) + the close button (immediate hover
+    // affordance), told apart via userInfo.
+    iv.addTrackingArea(NSTrackingArea(
+      rect: .zero,
+      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      owner: self, userInfo: nil))
+    wrap.addTrackingArea(NSTrackingArea(
+      rect: .zero,
+      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      owner: self, userInfo: ["close": true]))
+    contentView = content
+    layoutChrome()
+  }
+
+  // A non-activating reference window: never steals the keyboard.
+  override var canBecomeKey: Bool { false }
+  override var canBecomeMain: Bool { false }
+
+  /// Keep the corona + close button tracking the current size (init and after
+  /// every zoom/reset resize).
+  private func layoutChrome() {
+    guard let bounds = contentView?.bounds else { return }
+    let m = Self.margin
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    vaporContainer.frame = bounds
+    let imageRect = bounds.insetBy(dx: m, dy: m)
+    for v in vaporLayers {
+      v.frame = bounds
+      v.shadowPath = CGPath(
+        roundedRect: imageRect, cornerWidth: 4, cornerHeight: 4, transform: nil)
+    }
+    CATransaction.commit()
+    closeWrap.setFrameOrigin(NSPoint(
+      x: bounds.width - m - closeWrap.frame.width - 8,
+      y: bounds.height - m - closeWrap.frame.height - 8))
+  }
+
+  // Drag anywhere: explicit window drag (NSImageView swallows the implicit
+  // movable-by-background path).
+  override func mouseDown(with event: NSEvent) {
+    performDrag(with: event)
+  }
+
+  override func rightMouseDown(with event: NSEvent) {
+    let menu = NSMenu()
+    func add(_ title: String, _ action: Selector) {
+      let mi = NSMenuItem(title: title, action: action, keyEquivalent: "")
+      mi.target = self
+      menu.addItem(mi)
+    }
+    add("Reset Size", #selector(resetSize))
+    add("Save As…", #selector(saveAs))
+    add("Copy to Clipboard", #selector(copyImage))
+    menu.addItem(.separator())
+    add("Close Pin", #selector(closePin))
+    if let v = contentView {
+      NSMenu.popUpContextMenu(menu, with: event, for: v)
+    }
+  }
+
+  // The pin-wide hover reveal is DELAYED 2s — the pin should feel like part of
+  // the screen until the user deliberately rests on it; then the corona marks
+  // it and the close button appears. The close button's OWN hover (userInfo-
+  // tagged tracking area) reacts immediately so it reads as clickable.
+  override func mouseEntered(with event: NSEvent) {
+    if (event.trackingArea?.userInfo?["close"] as? Bool) == true {
+      setCloseHover(true)
+      return
+    }
+    hoverTimer?.invalidate()
+    // Nominal 1s dwell before the reveal — no compensation games for fade /
+    // timer-coalescing perception (owner call, 2026-06-10).
+    hoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) {
+      [weak self] _ in self?.reveal(true)
+    }
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    if (event.trackingArea?.userInfo?["close"] as? Bool) == true {
+      setCloseHover(false)
+      return
+    }
+    hoverTimer?.invalidate()
+    hoverTimer = nil
+    reveal(false)
+  }
+
+  private func setCloseHover(_ on: Bool) {
+    CATransaction.begin()
+    CATransaction.setAnimationDuration(0.15)
+    closeHoverLayer.opacity = on ? 1 : 0
+    CATransaction.commit()
+    closeButton.contentTintColor = on ? .labelColor : .secondaryLabelColor
+    (on ? NSCursor.pointingHand : NSCursor.arrow).set()
+  }
+
+  private var revealed = false
+
+  private func reveal(_ on: Bool) {
+    revealed = on
+    // The vapor replaces the window shadow while shown: leaving hasShadow on
+    // makes AppKit recompute the borderless window's shadow ALONG THE VAPOR'S
+    // translucent edge — a dark rounded rim around the glow (a WindowServer
+    // shadow element, which is also why SCK-based captures don't see it).
+    // On reveal it goes off IMMEDIATELY; on hide it comes back only AFTER the
+    // vapor has fully faded (restoring it mid-fade flashes the dark rim).
+    if on { hasShadow = false }
+    // isHidden gates hit-testing AND the button's hover tracking — an
+    // invisible ✕ must not be clickable.
+    if on { closeWrap.isHidden = false }
+    NSAnimationContext.runAnimationGroup({ ctx in
+      ctx.duration = 0.25
+      closeWrap.animator().alphaValue = on ? 1 : 0
+    }, completionHandler: { [weak self] in
+      guard let self = self, !on, !self.revealed else { return }
+      self.closeWrap.isHidden = true
+      self.hasShadow = true
+      self.invalidateShadow()
+    })
+    CATransaction.begin()
+    CATransaction.setAnimationDuration(0.25)
+    vaporContainer.opacity = on ? 1 : 0
+    CATransaction.commit()
+    if on {
+      // Per-layer organic motion: a slow Lissajous drift (different x/y
+      // periods per colour) + a breathing blur radius. The mismatched periods
+      // keep the three colours weaving — vapor, not a rigid ring.
+      for (i, v) in vaporLayers.enumerated() {
+        let fi = Double(i)
+        let dx = CABasicAnimation(keyPath: "position.x")
+        dx.byValue = 5 + fi * 1.5
+        dx.duration = 2.3 + fi * 0.7
+        dx.autoreverses = true
+        dx.repeatCount = .infinity
+        dx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        v.add(dx, forKey: "driftX")
+        let dy = CABasicAnimation(keyPath: "position.y")
+        dy.byValue = -4 - fi * 1.5
+        dy.duration = 3.1 + fi * 0.5
+        dy.autoreverses = true
+        dy.repeatCount = .infinity
+        dy.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        v.add(dy, forKey: "driftY")
+        let breathe = CABasicAnimation(keyPath: "shadowRadius")
+        breathe.fromValue = 9 + fi * 2
+        breathe.toValue = 16 + fi * 2
+        breathe.duration = 2.0 + fi * 0.6
+        breathe.autoreverses = true
+        breathe.repeatCount = .infinity
+        breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        v.add(breathe, forKey: "breathe")
+      }
+    } else {
+      for v in vaporLayers { v.removeAllAnimations() }
+    }
+    invalidateShadow()
+  }
+
+  override func scrollWheel(with event: NSEvent) {
+    // Gentle steps (a full notch ≈ a few %); clamp to 25%–300% of the ORIGINAL
+    // logical size so a runaway scroll can never lose the pin.
+    let factor = 1 + event.scrollingDeltaY * 0.0025
+    setZoom(min(3, max(0.25, zoom * factor)))
+  }
+
+  private func setZoom(_ z: CGFloat) {
+    zoom = z
+    let m = Self.margin
+    let s = NSSize(
+      width: baseSize.width * zoom + m * 2,
+      height: baseSize.height * zoom + m * 2)
+    let c = NSPoint(x: frame.midX, y: frame.midY)
+    setFrame(
+      NSRect(x: c.x - s.width / 2, y: c.y - s.height / 2, width: s.width, height: s.height),
+      display: true)
+    layoutChrome()
+  }
+
+  @objc private func resetSize() { setZoom(1) }
+
+  @objc private func saveAs() {
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.png]
+    panel.nameFieldStringValue = "pin.png"
+    panel.level = .floating // stay reachable above this floating pin
+    NSApp.activate(ignoringOtherApps: true)
+    panel.begin { [weak self] response in
+      guard response == .OK, let url = panel.url, let self = self else { return }
+      guard let tiff = self.pinnedImage.tiffRepresentation,
+            let rep = NSBitmapImageRep(data: tiff),
+            let png = rep.representation(using: .png, properties: [:])
+      else { return }
+      try? png.write(to: url)
+    }
+  }
+
+  @objc private func copyImage() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.writeObjects([pinnedImage])
+  }
+
+  @objc private func closePin() {
+    hoverTimer?.invalidate()
+    orderOut(nil)
+    onClosed?()
+  }
+}
+
+/// The pin's content view: hit-testing is limited to the IMAGE rect (the
+/// transparent vapor margin must not swallow clicks meant for whatever sits
+/// under the halo).
+final class PinContentView: NSView {
+  var interactiveInset: CGFloat = 0
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    let p = convert(point, from: superview)
+    guard bounds.insetBy(dx: interactiveInset, dy: interactiveInset).contains(p)
+    else { return nil }
+    return super.hitTest(point)
   }
 }

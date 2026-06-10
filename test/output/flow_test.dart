@@ -143,6 +143,39 @@ void main() {
       expect(shared, ['/tmp/x/shot.png', '/tmp/temp.png']);
     });
 
+    test('pin uses the saved path, shares the temp with the other legs',
+        () async {
+      final pinned = <String>[];
+      var tempWrites = 0;
+      await runFlow(
+        actions: {FlowAction.pin, FlowAction.shareSheet},
+        bytes: bytes,
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        pinFn: (p) async => pinned.add(p),
+        shareFn: (p) async {},
+        writeTempFn: (b) async {
+          tempWrites++;
+          return '/tmp/temp.png';
+        },
+      );
+      expect(pinned, ['/tmp/temp.png']);
+      expect(tempWrites, 1);
+
+      await runFlow(
+        actions: {FlowAction.save, FlowAction.pin},
+        bytes: bytes,
+        fileName: 'shot.png',
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        pinFn: (p) async => pinned.add(p),
+        writeTempFn: (b) async => fail('must not write temp'),
+      );
+      expect(pinned, ['/tmp/temp.png', '/tmp/x/shot.png']);
+    });
+
     test('save/copy legs honour the action set (delivery layer reused)',
         () async {
       var clipped = 0;

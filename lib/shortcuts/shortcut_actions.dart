@@ -9,6 +9,8 @@ const kCaptureWindowKey = 'global.captureWindow';
 const kCaptureLastRegionKey = 'global.captureLastRegion';
 const kOpenEditorKey = 'global.openEditor';
 const kOpenEditorClipboardKey = 'global.openEditorClipboard';
+const kPinAreaKey = 'global.pinArea';
+const kPinClipboardKey = 'global.pinClipboard';
 
 // Editor command keys.
 const kEditorUndoKey = 'editor.undo';
@@ -61,6 +63,12 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kOpenEditorClipboardKey: _b(
       PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  // Pin to screen: ⌘⌥7 = capture a region straight to a pin; ⌘⌥8 = pin the
+  // clipboard image (no capture).
+  kPinAreaKey: _b(PhysicalKeyboardKey.digit7, LogicalKeyboardKey.digit7,
+      {HotkeyModifier.meta, HotkeyModifier.alt}),
+  kPinClipboardKey: _b(PhysicalKeyboardKey.digit8, LogicalKeyboardKey.digit8,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   // Editor commands
   kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
@@ -171,6 +179,16 @@ const kGlobalActions = <GlobalAction>[
     actionKey: kOpenEditorClipboardKey,
     label: 'Open Editor with Clipboard',
     hint: 'Open the Image Editor and load the clipboard image',
+  ),
+  GlobalAction(
+    actionKey: kPinAreaKey,
+    label: 'Pin Capture',
+    hint: 'Capture a region straight to a floating pin',
+  ),
+  GlobalAction(
+    actionKey: kPinClipboardKey,
+    label: 'Pin Clipboard',
+    hint: 'Float the clipboard image as a pin',
   ),
 ];
 

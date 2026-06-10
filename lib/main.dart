@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'image_editor/image_editor_app.dart';
+import 'output/filename.dart';
 import 'overlay/overlay_app.dart';
 import 'settings/settings.dart';
 import 'settings/settings_app.dart';
@@ -35,28 +38,59 @@ Future<void> main() async {
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
   const control = MethodChannel('glimpr/role');
+  void dispatchAction(String actionKey) {
+    switch (actionKey) {
+      case kCaptureAreaKey:
+        CaptureBridge().beginCapture();
+      case kCaptureScreenKey:
+        direct.screen();
+      case kCaptureWindowKey:
+        direct.window();
+      case kCaptureLastRegionKey:
+        direct.lastRegion();
+      case kOpenEditorKey:
+        control.invokeMethod('openImageEditor');
+      case kOpenEditorClipboardKey:
+        control.invokeMethod('openImageEditorClipboard');
+      case kPinAreaKey:
+        // Capture a region straight to a floating pin (the overlay session
+        // runs {pin} only, ignoring the configured after-capture flow).
+        CaptureBridge().beginCapture(pinOnly: true);
+      case kPinClipboardKey:
+        _pinClipboard();
+    }
+  }
+
+  // The menu-bar items fire actions over the same channel as the hotkeys; the
+  // fallback keeps them working when an action's shortcut is unbound.
+  final registrar = NativeHotkeyRegistrar()..fallback = dispatchAction;
   final hotkeyService = HotkeyService(
-    registrar: NativeHotkeyRegistrar(),
+    registrar: registrar,
     bindings: bindings,
-    onAction: (actionKey) {
-      switch (actionKey) {
-        case kCaptureAreaKey:
-          CaptureBridge().beginCapture();
-        case kCaptureScreenKey:
-          direct.screen();
-        case kCaptureWindowKey:
-          direct.window();
-        case kCaptureLastRegionKey:
-          direct.lastRegion();
-        case kOpenEditorKey:
-          control.invokeMethod('openImageEditor');
-        case kOpenEditorClipboardKey:
-          control.invokeMethod('openImageEditorClipboard');
-      }
-    },
+    onAction: dispatchAction,
   );
   await hotkeyService.start();
   runApp(SettingsApp(settings: Settings.instance, hotkeyService: hotkeyService));
+}
+
+/// Float the clipboard image as a centered pin window (⌘⌥8 — Snipaste's F3).
+/// The image goes through a temp file so the native pin loads it like any
+/// other source; a non-image clipboard surfaces a small native alert.
+Future<void> _pinClipboard() async {
+  Uint8List? bytes;
+  try {
+    bytes = await Pasteboard.image;
+  } catch (_) {
+    bytes = null;
+  }
+  if (bytes == null || bytes.isEmpty) {
+    CaptureBridge().showError('No image in clipboard');
+    return;
+  }
+  final file = File(
+      '${Directory.systemTemp.path}/${screenshotFilename(DateTime.now(), 'png')}');
+  await file.writeAsBytes(bytes);
+  await CaptureBridge.pinImage(file.path);
 }
 
 /// Resolves this engine's role. The native handler is registered synchronously

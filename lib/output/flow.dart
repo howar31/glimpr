@@ -16,6 +16,7 @@ enum FlowAction {
   copyPath, // saved file PATH -> clipboard (needs save)
   showInFinder, // reveal the saved file in Finder (needs save)
   shareSheet, // macOS share menu (AirDrop / Messages / ...) for the file
+  pin, // float the image as an always-on-top pin window
 }
 
 /// Parse a comma-joined name list (the persisted form). Unknown names are
@@ -60,11 +61,11 @@ class FlowResult {
 
 /// Run a completion flow over an already-encoded image: the save/copy legs go
 /// through [deliverCapture] (independent, partial-failure-aware), then the
-/// extras in order copyPath -> showInFinder -> openEditor -> shareSheet.
+/// extras in order copyPath -> showInFinder -> pin -> openEditor -> shareSheet.
 /// copyPath and showInFinder need a saved file — without one they record an
 /// error rather than throwing (the Settings UI gates them on save, this guards
-/// races). openEditor and shareSheet fall back to ONE shared temp file when
-/// nothing was saved.
+/// races). pin, openEditor and shareSheet fall back to ONE shared temp file
+/// when nothing was saved.
 Future<FlowResult> runFlow({
   required Set<FlowAction> actions,
   required Uint8List bytes,
@@ -77,6 +78,9 @@ Future<FlowResult> runFlow({
   Future<void> Function(String path)? revealFn,
   Future<void> Function(String path)? openEditorFn,
   Future<void> Function(String path)? shareFn,
+  // Pin geometry (pin-in-place) is the CALLER's business: capture exports
+  // close over their global rect here; the default pins centered.
+  Future<void> Function(String path)? pinFn,
   Future<String> Function(Uint8List bytes)? writeTempFn,
 }) async {
   final delivery = await deliverCapture(
@@ -95,6 +99,7 @@ Future<FlowResult> runFlow({
   final reveal = revealFn ?? _revealInFinder;
   final openEditor = openEditorFn ?? CaptureBridge.openInEditor;
   final share = shareFn ?? CaptureBridge.shareSheet;
+  final pin = pinFn ?? ((p) => CaptureBridge.pinImage(p));
   final writeTemp = writeTempFn ?? ((b) => _writeTemp(b, fileName));
 
   final extra = <String, String>{};
@@ -125,6 +130,13 @@ Future<FlowResult> runFlow({
       } catch (e) {
         extra['showInFinder'] = '$e';
       }
+    }
+  }
+  if (actions.contains(FlowAction.pin)) {
+    try {
+      await pin(await ensureFile());
+    } catch (e) {
+      extra['pin'] = '$e';
     }
   }
   if (actions.contains(FlowAction.openEditor)) {

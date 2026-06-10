@@ -1,31 +1,38 @@
 import Cocoa
 
-/// The menu-bar (NSStatusItem) shell. "Settings…" is wired in a later task; for
-/// now Capture + Quit. Actions are injected so this class owns no app logic.
-final class StatusItemController: NSObject {
+/// The menu-bar (NSStatusItem) shell. Every global action gets a menu item
+/// whose key-equivalent HINT mirrors the effective (rebindable) hotkey —
+/// refreshed on each menu open via [keyHint]. Actions are injected so this
+/// class owns no app logic; the global items fire through [onAction], the same
+/// Dart dispatcher the real hotkeys use.
+final class StatusItemController: NSObject, NSMenuDelegate {
   private let item: NSStatusItem
 
   /// The menu-bar button, exposed as an anchor view for popovers/share sheets
   /// fired by flows that have no window of their own (e.g. direct captures).
   var anchorButton: NSStatusBarButton? { item.button }
-  private let onCapture: () -> Void
+  private let onAction: (String) -> Void
+  private let keyHint: (String) -> (String, UInt)?
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
   private let onOpenRecent: (String) -> Void
   // The "Open Recent" submenu, rebuilt from the Dart-owned recent list.
   private let recentMenu = NSMenu()
+  // Items whose key-equivalent hint follows a rebindable global action.
+  private var hintedItems: [(NSMenuItem, String)] = []
 
-  init(onCapture: @escaping () -> Void,
+  init(onAction: @escaping (String) -> Void,
+       keyHint: @escaping (String) -> (String, UInt)?,
        onSettings: @escaping () -> Void,
        onOpenImage: @escaping () -> Void,
        onOpenRecent: @escaping (String) -> Void) {
-    self.onCapture = onCapture
+    self.onAction = onAction
+    self.keyHint = keyHint
     self.onSettings = onSettings
     self.onOpenImage = onOpenImage
     self.onOpenRecent = onOpenRecent
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
-    // (anchorButton below exposes the bar button as a popover/share anchor.)
     // Brand Viewfinder mark as a template image: macOS tints it to match the
     // menu-bar appearance (white on a dark bar, black on a light one). Falls back
     // to the system viewfinder symbol if the asset is somehow unavailable.
@@ -35,15 +42,29 @@ final class StatusItemController: NSObject {
     item.button?.image = mark
 
     let menu = NSMenu()
+    menu.delegate = self // refresh the key-equivalent hints on each open
     // App-name header: disabled, non-clickable. action == nil + autoenablesItems
     // (on by default) renders it greyed out; isEnabled = false makes the intent explicit.
     let header = NSMenuItem(title: "Glimpr", action: nil, keyEquivalent: "")
     header.isEnabled = false
     menu.addItem(header)
     menu.addItem(.separator())
-    menu.addItem(menuItem(title: "Capture", action: #selector(capture), key: ""))
+    // Global actions, dispatched through the SAME Dart path as the hotkeys.
+    // Action-key literals mirror lib/shortcuts/shortcut_actions.dart.
+    menu.addItem(globalItem("Capture", "global.captureArea"))
+    menu.addItem(globalItem("Capture Window", "global.captureWindow"))
+    menu.addItem(globalItem("Capture Display", "global.captureScreen"))
+    menu.addItem(globalItem("Capture Last Region", "global.captureLastRegion"))
     menu.addItem(.separator())
-    menu.addItem(menuItem(title: "Open Image…", action: #selector(openImage), key: "o"))
+    menu.addItem(globalItem("Pin Capture", "global.pinArea"))
+    menu.addItem(globalItem("Pin Clipboard", "global.pinClipboard"))
+    menu.addItem(.separator())
+    // Open Image reveals the warm editor natively (same as the hotkey's end
+    // state) — keep the direct path, but hint with the hotkey's binding.
+    let open = menuItem(title: "Open Image…", action: #selector(openImage), key: "")
+    hintedItems.append((open, "global.openEditor"))
+    menu.addItem(open)
+    menu.addItem(globalItem("Open Editor with Clipboard", "global.openEditorClipboard"))
     let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
@@ -53,6 +74,20 @@ final class StatusItemController: NSObject {
     menu.addItem(.separator())
     menu.addItem(menuItem(title: "Quit Glimpr", action: #selector(quit), key: "q"))
     item.menu = menu
+  }
+
+  /// Refresh the global items' key-equivalent hints from the EFFECTIVE
+  /// bindings just before the menu shows, so rebinds (and unbinds) reflect.
+  func menuWillOpen(_ menu: NSMenu) {
+    for (mi, actionKey) in hintedItems {
+      if let (key, mods) = keyHint(actionKey) {
+        mi.keyEquivalent = key
+        mi.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: mods)
+      } else {
+        mi.keyEquivalent = ""
+        mi.keyEquivalentModifierMask = []
+      }
+    }
   }
 
   /// Replace the "Open Recent" submenu with [paths] (newest first). Called from
@@ -85,7 +120,19 @@ final class StatusItemController: NSObject {
     return mi
   }
 
-  @objc private func capture() { onCapture() }
+  /// A menu item firing a rebindable global action; its key hint follows the
+  /// effective binding (see menuWillOpen).
+  private func globalItem(_ title: String, _ actionKey: String) -> NSMenuItem {
+    let mi = menuItem(title: title, action: #selector(globalAction(_:)), key: "")
+    mi.representedObject = actionKey
+    hintedItems.append((mi, actionKey))
+    return mi
+  }
+
+  @objc private func globalAction(_ sender: NSMenuItem) {
+    if let key = sender.representedObject as? String { onAction(key) }
+  }
+
   @objc private func openImage() { onOpenImage() }
   @objc private func openRecent(_ sender: NSMenuItem) {
     if let path = sender.representedObject as? String { onOpenRecent(path) }

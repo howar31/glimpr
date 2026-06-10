@@ -7,7 +7,10 @@ class CaptureBridge {
   static const _overlay = MethodChannel('glimpr/overlay');
 
   /// Trigger the overlay capture flow (native captures + pushes + shows).
-  Future<void> beginCapture() => _channel.invokeMethod('beginCapture');
+  /// [pinOnly]: the "capture to pin" mode — the session's confirm runs ONLY
+  /// the pin action instead of the configured after-capture flow.
+  Future<void> beginCapture({bool pinOnly = false}) =>
+      _channel.invokeMethod('beginCapture', {'pinOnly': pinOnly});
 
   /// Capture every display and RETURN the frames to this (control) engine,
   /// WITHOUT showing the overlay — for the direct (non-interactive) modes.
@@ -61,6 +64,22 @@ class CaptureBridge {
   static Future<void> shareSheet(String path) =>
       _channel.invokeMethod('shareSheet', {'path': path});
 
+  /// Pin the image at [path] as a floating always-on-top window — the flow's
+  /// pin leg. [globalRect] (GLOBAL top-left logical) pins it in place over
+  /// where it was captured; null centers it at the image's logical size.
+  /// Static for the same reason as [openInEditor]; the editor engine routes
+  /// over its own channel instead.
+  static Future<void> pinImage(String path, {Rect? globalRect}) =>
+      _channel.invokeMethod('pinImage', {
+        'path': path,
+        if (globalRect != null) ...{
+          'x': globalRect.left,
+          'y': globalRect.top,
+          'w': globalRect.width,
+          'h': globalRect.height,
+        },
+      });
+
   /// Reveal the Settings window (⌘, from the capture overlay). The caller
   /// dismisses the overlay first, since it sits above normal windows.
   Future<void> openSettings() => _channel.invokeMethod('openSettings');
@@ -99,7 +118,8 @@ class CaptureBridge {
 
   /// Register native -> Dart overlay callbacks. Call once per engine at startup.
   void registerOverlayHandlers({
-    required void Function(CapturedDisplay display) onCaptureReady,
+    required void Function(CapturedDisplay display, bool pinOnly)
+        onCaptureReady,
     required void Function(String reason, String message) onCaptureFailed,
     void Function(int activeId, Offset cursor)? onActiveDisplay,
     void Function(Map<String, dynamic> state)? onEditorState,
@@ -111,7 +131,10 @@ class CaptureBridge {
         case 'onCaptureReady':
           final args = (call.arguments as Map);
           final map = (args['display'] as Map).cast<dynamic, dynamic>();
-          onCaptureReady(CapturedDisplay.fromMap(map));
+          onCaptureReady(
+            CapturedDisplay.fromMap(map),
+            (args['pinOnly'] as bool?) ?? false,
+          );
           return null;
         case 'onCaptureFailed':
           final args = (call.arguments as Map);

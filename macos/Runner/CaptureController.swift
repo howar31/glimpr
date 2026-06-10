@@ -32,7 +32,11 @@ final class CaptureController {
       windowID: windowID, showsCursor: showsCursor)
   }
 
-  func triggerCapture() {
+  /// [pinOnly]: the ⌘⌥7 "capture to pin" mode — the overlay session runs as
+  /// usual, but its confirm executes ONLY the pin action instead of the
+  /// configured after-capture flow. Carried to the overlay engines via the
+  /// onCaptureReady payload.
+  func triggerCapture(pinOnly: Bool = false) {
     // Whole body on the main actor: NSAlert + the AppKit overlay work are all
     // MainActor-isolated, and triggerCapture() itself stays nonisolated so it is
     // callable from the method-channel handler and the menu action alike.
@@ -53,7 +57,7 @@ final class CaptureController {
         guard let manager = self.manager() else {
           Self.alert("Overlay manager not ready"); return
         }
-        manager.presentFrames(frames)
+        manager.presentFrames(frames, pinOnly: pinOnly)
       } catch ScreenCapturer.CaptureError.noDisplays {
         Self.alert("No displays found")
       } catch {

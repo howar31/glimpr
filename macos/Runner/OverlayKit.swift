@@ -271,11 +271,17 @@ final class ScreenCapturer {
           let infos = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
+    // When GLIMPR is the frontmost app (clicking the menu-bar menu briefly
+    // activates this LSUIElement agent), the user's real target is the window
+    // that was focused before the click — the frontmost layer-0 window of any
+    // OTHER app. Glimpr's own warm windows are alpha-0 and never match anyway.
+    let myPid = ProcessInfo.processInfo.processIdentifier
+    let matchFrontApp = frontPid != myPid
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             layer == 0,
             let owner = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
-            owner == frontPid,
+            matchFrontApp ? owner == frontPid : owner != myPid,
             let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05,
             let b = w[kCGWindowBounds as String] as? [String: Any],
@@ -555,6 +561,21 @@ final class OverlayManager {
             }
           }
           result(nil)
+        // After-capture flow (overlay engine): always-on-top pin window.
+        case "pinImage":
+          if let a = call.arguments as? [String: Any], let path = a["path"] as? String {
+            let rect: CGRect?
+            if let x = a["x"] as? Double, let y = a["y"] as? Double,
+               let w = a["w"] as? Double, let h = a["h"] as? Double {
+              rect = CGRect(x: x, y: y, width: w, height: h)
+            } else {
+              rect = nil
+            }
+            DispatchQueue.main.async {
+              MainFlutterWindow.shared?.pinImage(path: path, rect: rect)
+            }
+          }
+          result(nil)
         // ⌘, from the capture overlay: PAUSE the freeze (keep it visible, masked)
         // and reveal Settings ABOVE the shield-level overlay; hideSettings resumes
         // when Settings closes.
@@ -694,7 +715,7 @@ final class OverlayManager {
   /// Distribute captured frames to their displays' engines. Each window is
   /// revealed later, in show(displayID:), after its Dart paints the frame and
   /// signals overlayReady — capture-then-show, no blank flash.
-  func presentFrames(_ frames: [[String: Any]]) {
+  func presentFrames(_ frames: [[String: Any]], pinOnly: Bool = false) {
     pendingShow.removeAll()
     // Record the cursor display so only ITS overlay takes key focus on reveal —
     // otherwise, with several displays, the last one revealed steals key and the
@@ -710,7 +731,8 @@ final class OverlayManager {
       let id = CGDirectDisplayID(raw)
       guard let unit = units[id] else { continue }
       pendingShow.insert(id)
-      unit.overlay.invokeMethod("onCaptureReady", arguments: ["display": f])
+      unit.overlay.invokeMethod(
+        "onCaptureReady", arguments: ["display": f, "pinOnly": pinOnly])
     }
     // One authority decides the active display from here until dismiss.
     startCursorTracking()

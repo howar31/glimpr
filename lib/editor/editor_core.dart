@@ -82,6 +82,9 @@ class EditorCore extends StatefulWidget {
   // HUD options (crosshair lines on/off, marching-ants animation on/off), loaded
   // from settings by the host app; shared across both surfaces.
   final HudConfig hud;
+  // The ⌘⌥7 capture-to-pin session (overlay only): the toolbar shows the pin
+  // icon + a mode caption so it cannot be mistaken for a normal capture.
+  final bool pinMode;
   const EditorCore({
     super.key,
     required this.controller,
@@ -90,6 +93,7 @@ class EditorCore extends StatefulWidget {
     this.viewportController,
     this.loupe = const LoupeConfig(),
     this.hud = const HudConfig(),
+    this.pinMode = false,
   });
 
   @override
@@ -2618,6 +2622,7 @@ class _EditorCoreState extends State<EditorCore> {
                         },
                         editorBindings: widget.editorBindings,
                         showCursorToggle: widget.host.cursorImage != null,
+                        pinMode: widget.pinMode,
                       ),
                     ),
                   ),

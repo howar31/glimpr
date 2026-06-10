@@ -46,6 +46,10 @@ class EditorToolbar extends StatelessWidget {
   // Whether to show the mouse-pointer toggle (the capture carried a cursor image —
   // overlay only). Toggles `controller.showCursor`.
   final bool showCursorToggle;
+  // The ⌘⌥7 capture-to-pin session: the Crop tool's icon becomes a pin and a
+  // caption below the bar names the mode, so it cannot be mistaken for a
+  // normal capture. The normal ⌘⌥1 overlay never sets this.
+  final bool pinMode;
   const EditorToolbar({
     super.key,
     required this.controller,
@@ -55,6 +59,7 @@ class EditorToolbar extends StatelessWidget {
     this.showDragHandle = true,
     this.trailing = const [],
     this.showCursorToggle = false,
+    this.pinMode = false,
   });
 
   @override
@@ -108,7 +113,10 @@ class EditorToolbar extends StatelessWidget {
                   _ToolButton(
                     controller: controller,
                     kind: kind,
-                    icon: icon,
+                    // Pin mode: the region tool IS the pin region selector.
+                    icon: pinMode && kind == ToolKind.crop
+                        ? Icons.push_pin
+                        : icon,
                     // Badge = the tool's current binding label (e.g. "C", "1",
                     // "⌘B"); null/unbound => no badge.
                     shortcut: editorBindings[kEditorToolActionKey[kind]]
@@ -133,6 +141,32 @@ class EditorToolbar extends StatelessWidget {
               ],
             ),
           ),
+          if (pinMode) ...[
+            const SizedBox(height: 6),
+            // Mode caption BELOW the bar: names the pin session explicitly.
+            _Bar(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.push_pin, size: 13, color: GlimprTokens.accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Pin mode — the selection floats as a pin',
+                      style: TextStyle(
+                        color: palette.fg,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
         ),
       ),

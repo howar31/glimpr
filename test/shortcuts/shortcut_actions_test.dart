@@ -36,6 +36,8 @@ void main() {
       kCaptureLastRegionKey,
       kOpenEditorKey,
       kOpenEditorClipboardKey,
+      kPinAreaKey,
+      kPinClipboardKey,
     ]);
   });
 

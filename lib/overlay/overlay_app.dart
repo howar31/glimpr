@@ -71,6 +71,9 @@ class _OverlayAppState extends State<OverlayApp> {
   bool _applyingRemote = false;
   // Increments each capture so EditorCanvas is rebuilt fresh (see onCaptureReady).
   int _captureSeq = 0;
+  // The ⌘⌥7 "capture to pin" mode: this session's confirm runs ONLY the pin
+  // action instead of the configured after-capture flow.
+  bool _pinOnly = false;
   // Debounce timer for persisting _toolStyles to the store.
   Timer? _persistTimer;
 
@@ -78,7 +81,8 @@ class _OverlayAppState extends State<OverlayApp> {
   void initState() {
     super.initState();
     _bridge.registerOverlayHandlers(
-      onCaptureReady: (d) async {
+      onCaptureReady: (d, pinOnly) async {
+        _pinOnly = pinOnly;
         // Reseed per-tool styles from disk on EVERY capture so a Settings
         // "Reset all tool styles" (or an edit made on another engine) takes
         // effect on THIS capture — not only after a restart. Kicked off now and
@@ -453,17 +457,21 @@ class _OverlayAppState extends State<OverlayApp> {
         cursorTopLeftNative: cursorTopLeftNative,
         windowTitle: window?.title,
         appName: window?.app,
+        // ⌘⌥7 capture-to-pin: this session runs ONLY the pin action.
+        flowOverride: _pinOnly ? const {FlowAction.pin} : null,
       );
       // Success = every ENABLED leg succeeded (a disabled leg is not a failure).
       // On success play the completion chime (if enabled); on a real failure the
       // overlay is already gone, so surface it via a native alert.
+      final eff = _pinOnly ? const {FlowAction.pin} : cap.flow;
       final ok =
-          (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
-          (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
+          (!eff.contains(FlowAction.save) || result.savedOk) &&
+          (!eff.contains(FlowAction.copy) || result.copiedToClipboard) &&
+          !result.extraErrors.containsKey('pin');
       if (ok) {
         if (cap.completionSound) playComplete();
       } else {
-        _bridge.showError(_summary(result, cap));
+        _bridge.showError(_pinOnly ? 'Pin failed' : _summary(result, cap));
       }
     } catch (e) {
       _bridge.showError('Capture failed: $e');
@@ -516,6 +524,7 @@ class _OverlayAppState extends State<OverlayApp> {
                   hud: _hud,
                   cursorImage: _cursorImage,
                   cursorTopLeft: _cursorTopLeft,
+                  pinMode: _pinOnly,
                 ),
                 // Dim + lock the freeze while a ⌘, Settings detour is open.
                 if (_settingsOpen) const SettingsMask(),

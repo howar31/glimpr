@@ -28,6 +28,8 @@ class EditorCanvas extends StatelessWidget {
   // top-left; null when there is none.
   final ui.Image? cursorImage;
   final Offset? cursorTopLeft;
+  // The ⌘⌥7 capture-to-pin session — toolbar shows the pin icon + caption.
+  final bool pinMode;
 
   const EditorCanvas({
     super.key,
@@ -43,6 +45,7 @@ class EditorCanvas extends StatelessWidget {
     this.rightClickExits = true,
     this.cursorImage,
     this.cursorTopLeft,
+    this.pinMode = false,
   });
 
   @override
@@ -52,6 +55,7 @@ class EditorCanvas extends StatelessWidget {
       editorBindings: editorBindings,
       loupe: loupe,
       hud: hud,
+      pinMode: pinMode,
       host: OverlayEditorHost(
         display: display,
         frozen: frozenImage,

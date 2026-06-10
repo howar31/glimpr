@@ -31,9 +31,20 @@ class NativeHotkeyRegistrar implements HotkeyRegistrar {
   final MethodChannel _channel;
   final _byAction = <String, void Function()>{};
 
+  /// Catch-all for actions fired natively (a menu-bar item) that have NO
+  /// registered hotkey callback (the user unbound the shortcut) — the menu
+  /// item must still work. Set by main()'s control-engine bootstrap.
+  void Function(String actionKey)? fallback;
+
   Future<dynamic> _onNative(MethodCall call) async {
     if (call.method == 'onHotkey') {
-      _byAction[call.arguments as String]?.call();
+      final key = call.arguments as String;
+      final cb = _byAction[key];
+      if (cb != null) {
+        cb();
+      } else {
+        fallback?.call(key);
+      }
     }
     return null;
   }
@@ -49,10 +60,15 @@ class NativeHotkeyRegistrar implements HotkeyRegistrar {
       return const RegisterResult.unavailable(UnavailableReason.error);
     }
     _byAction[actionKey] = onTrigger;
+    final label = binding.logicalKey.keyLabel;
     final ok = await _channel.invokeMethod<bool>('register', {
       'id': actionKey,
       'keyCode': keyCode,
       'modifiers': carbonModifierMask(binding.modifiers),
+      // Menu key-equivalent hint: a one-character key shows ⌘⌥7-style hints
+      // on the menu-bar items; anything else shows no hint.
+      'keyChar': label.length == 1 ? label.toLowerCase() : '',
+      'cocoaMods': cocoaModifierMask(binding.modifiers),
     });
     if (ok == true) return const RegisterResult.ok();
     _byAction.remove(actionKey);

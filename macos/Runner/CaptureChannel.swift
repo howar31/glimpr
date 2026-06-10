@@ -19,7 +19,11 @@ final class CaptureChannel {
     channel = FlutterMethodChannel(name: "glimpr/capture", binaryMessenger: messenger)
     channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
-      case "beginCapture": self?.capture.triggerCapture(); result(nil)
+      case "beginCapture":
+        let pinOnly =
+          ((call.arguments as? [String: Any])?["pinOnly"] as? Bool) ?? false
+        self?.capture.triggerCapture(pinOnly: pinOnly)
+        result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
       // After-capture flow: open the just-exported file in the image editor.
       case "openInEditor":
@@ -34,6 +38,21 @@ final class CaptureChannel {
         if let path = (call.arguments as? [String: Any])?["path"] as? String {
           DispatchQueue.main.async {
             MainFlutterWindow.shared?.showShareSheet(path: path)
+          }
+        }
+        result(nil)
+      // After-capture flow: float the exported file as an always-on-top pin.
+      case "pinImage":
+        if let a = call.arguments as? [String: Any], let path = a["path"] as? String {
+          let rect: CGRect?
+          if let x = a["x"] as? Double, let y = a["y"] as? Double,
+             let w = a["w"] as? Double, let h = a["h"] as? Double {
+            rect = CGRect(x: x, y: y, width: w, height: h)
+          } else {
+            rect = nil
+          }
+          DispatchQueue.main.async {
+            MainFlutterWindow.shared?.pinImage(path: path, rect: rect)
           }
         }
         result(nil)
