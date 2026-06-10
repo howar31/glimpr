@@ -8,6 +8,7 @@ import '../editor/loupe_config.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../output/filename.dart';
+import '../output/flow.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/hotkey_service.dart';
 import '../shortcuts/shortcut_actions.dart';
@@ -48,10 +49,14 @@ const _kTitleBarInset = 52.0;
 // down to fit (and flagged), so the section never reflows while dragging.
 const double _kLoupePreviewStage = 200;
 
+// Sidebar order follows the user's pipeline: how to capture -> what gets
+// produced (and where) -> what happens on completion; General keeps the
+// app-level items, Advanced the expert/danger zone.
 const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
+  ('Capture', Icons.photo_camera_outlined),
   ('Output', Icons.image_outlined),
-  ('Sounds', Icons.volume_up_outlined),
+  ('Workflow', Icons.checklist),
   ('Shortcuts', Icons.keyboard),
   ('Advanced', Icons.memory),
 ];
@@ -63,8 +68,8 @@ class _SettingsAppState extends State<SettingsApp>
   String? _saveDir;
   ImageFormat _format = ImageFormat.png;
   int _jpegQuality = 90;
-  bool _saveToFile = true;
-  bool _copyToClipboard = true;
+  Set<FlowAction> _afterCapture = {FlowAction.copy, FlowAction.save};
+  Set<FlowAction> _afterEditorDone = {FlowAction.copy, FlowAction.save};
   bool _shutterSound = true;
   bool _completionSound = true;
   bool _rightClickExits = true;
@@ -137,8 +142,8 @@ class _SettingsAppState extends State<SettingsApp>
     final dir = await _s.getSaveDirectory();
     final format = await _s.getFormat();
     final quality = await _s.getJpegQuality();
-    final saveToFile = await _s.getSaveToFile();
-    final clip = await _s.getCopyToClipboard();
+    final afterCapture = await _s.getAfterCaptureFlow();
+    final afterEditorDone = await _s.getAfterEditorDoneFlow();
     final shutter = await _s.getShutterSound();
     final complete = await _s.getCompletionSound();
     final rightClick = await _s.getRightClickExits();
@@ -160,8 +165,8 @@ class _SettingsAppState extends State<SettingsApp>
       _saveDir = dir;
       _format = format;
       _jpegQuality = quality;
-      _saveToFile = saveToFile;
-      _copyToClipboard = clip;
+      _afterCapture = afterCapture;
+      _afterEditorDone = afterEditorDone;
       _shutterSound = shutter;
       _completionSound = complete;
       _rightClickExits = rightClick;
@@ -197,6 +202,109 @@ class _SettingsAppState extends State<SettingsApp>
         });
       }
     } catch (_) {}
+  }
+
+  /// Toggle one action in a completion flow and persist it. copy and copyPath
+  /// are mutually exclusive (both write the clipboard) — checking one unchecks
+  /// the other.
+  Future<void> _setFlowAction({
+    required bool capture,
+    required FlowAction action,
+    required bool on,
+  }) async {
+    final next = {...(capture ? _afterCapture : _afterEditorDone)};
+    if (on) {
+      next.add(action);
+      if (action == FlowAction.copy) next.remove(FlowAction.copyPath);
+      if (action == FlowAction.copyPath) next.remove(FlowAction.copy);
+    } else {
+      next.remove(action);
+    }
+    if (capture) {
+      await _s.setAfterCaptureFlow(next);
+      if (mounted) setState(() => _afterCapture = next);
+    } else {
+      await _s.setAfterEditorDoneFlow(next);
+      if (mounted) setState(() => _afterEditorDone = next);
+    }
+  }
+
+  /// The toggle rows for one completion-flow card. copyPath / showInFinder need
+  /// a saved file, so they are disabled (dimmed) until save is checked.
+  List<Widget> _flowRows({required bool capture}) {
+    final flow = capture ? _afterCapture : _afterEditorDone;
+    final hasSave = flow.contains(FlowAction.save);
+
+    Widget toggle(FlowAction a, {bool enabled = true}) {
+      final t = GlassToggle(
+        value: flow.contains(a),
+        onChanged: (v) => _setFlowAction(capture: capture, action: a, on: v),
+      );
+      return enabled
+          ? t
+          : Opacity(opacity: 0.35, child: IgnorePointer(child: t));
+    }
+
+    return [
+      SettingRow(
+        title: 'Copy to clipboard',
+        hint: 'Put the image on the clipboard',
+        trailing: toggle(FlowAction.copy),
+      ),
+      SettingRow(
+        divider: true,
+        title: 'Save to file',
+        hint: 'Write the image to the save folder',
+        trailing: toggle(FlowAction.save),
+      ),
+      SettingRow(
+        divider: true,
+        title: 'Copy file path',
+        hint: hasSave
+            ? 'Put the saved file\'s path on the clipboard (instead of '
+                'the image)'
+            : 'Needs "Save to file"',
+        trailing: toggle(FlowAction.copyPath, enabled: hasSave),
+      ),
+      SettingRow(
+        divider: true,
+        title: 'Show in Finder',
+        hint: hasSave
+            ? 'Reveal the saved file in Finder'
+            : 'Needs "Save to file"',
+        trailing: toggle(FlowAction.showInFinder, enabled: hasSave),
+      ),
+      if (capture)
+        SettingRow(
+          divider: true,
+          title: 'Open in editor',
+          hint: 'Open the result in the image editor for further work',
+          trailing: toggle(FlowAction.openEditor),
+        ),
+    ];
+  }
+
+  /// Muted caption under a flow card: when it runs, plus the empty-selection
+  /// fallback warning.
+  Widget _flowCaption(GlimprTokens t, {required bool capture}) {
+    final flow = capture ? _afterCapture : _afterEditorDone;
+    final when = capture
+        ? 'Runs when a capture is confirmed — overlay ✓/Enter and the '
+            'direct ⌘⌥2/3/4 modes.'
+        : 'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu '
+            'beside Done offers one-off alternatives.';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+      child: Text(
+        flow.isEmpty
+            ? '$when Nothing is selected, so it falls back to Copy to '
+                'clipboard.'
+            : when,
+        style: GlimprType.sansStyle(
+            12, 500, flow.isEmpty ? GlimprTokens.danger : t.fg4,
+            height: 1.4),
+      ),
+    );
   }
 
   Future<void> _chooseDir() async {
@@ -313,7 +421,7 @@ class _SettingsAppState extends State<SettingsApp>
     );
     // The Shortcuts pane is long; pin its Apply/Revert bar to the bottom so it's
     // always reachable without scrolling to the end of the list.
-    if (_section == 3) {
+    if (_section == 4) {
       return Column(
         children: [Expanded(child: list), _shortcutsFooter(t)],
       );
@@ -324,12 +432,14 @@ class _SettingsAppState extends State<SettingsApp>
   List<Widget> _pane(GlimprTokens t) {
     switch (_section) {
       case 1:
-        return _outputPane(t);
+        return _capturePane(t);
       case 2:
-        return _soundsPane(t);
+        return _outputPane(t);
       case 3:
-        return _shortcutsPane(t);
+        return _workflowPane(t);
       case 4:
+        return _shortcutsPane(t);
+      case 5:
         return _advancedPane(t);
       default:
         return _generalPane(t);
@@ -341,37 +451,29 @@ class _SettingsAppState extends State<SettingsApp>
   List<Widget> _generalPane(GlimprTokens t) {
     return [
       _h1('General', t),
-      const SectionLabel('Save location', icon: Icons.folder_outlined),
-      GlassCard.padded(child: _saveFolderBody(t)),
-      const SizedBox(height: 15),
-      const SectionLabel('Destinations', icon: Icons.layers_outlined),
+      const SectionLabel('Startup', icon: Icons.power_settings_new),
       GlassCard.rows([
         SettingRow(
-          title: 'Save to file',
-          hint: 'Write the capture to the save folder',
+          title: 'Launch at login',
+          hint: 'Start Glimpr automatically when you log in',
           trailing: GlassToggle(
-            value: _saveToFile,
+            value: _launchAtLogin,
             onChanged: (v) async {
-              await _s.setSaveToFile(v);
-              if (mounted) setState(() => _saveToFile = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: 'Copy to clipboard',
-          hint: 'Put the image on the clipboard',
-          trailing: GlassToggle(
-            value: _copyToClipboard,
-            onChanged: (v) async {
-              await _s.setCopyToClipboard(v);
-              if (mounted) setState(() => _copyToClipboard = v);
+              final actual = await LoginItem.setEnabled(v);
+              if (mounted) setState(() => _launchAtLogin = actual);
             },
           ),
         ),
       ]),
-      const SizedBox(height: 15),
-      const SectionLabel('Capture', icon: Icons.photo_camera_outlined),
+    ];
+  }
+
+  /// Behaviour of the capture overlay itself (pointer, exit gestures, loupe,
+  /// HUD) — everything about HOW a capture is taken.
+  List<Widget> _capturePane(GlimprTokens t) {
+    return [
+      _h1('Capture', t),
+      const SectionLabel('Behaviour', icon: Icons.photo_camera_outlined),
       GlassCard.rows([
         SettingRow(
           title: 'Mouse pointer',
@@ -445,17 +547,45 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ]),
+    ];
+  }
+
+  /// Completion flows + the sound feedback around them — what happens AFTER a
+  /// capture / the editor's Done.
+  List<Widget> _workflowPane(GlimprTokens t) {
+    return [
+      _h1('Workflow', t),
+      const SectionLabel('After capture', icon: Icons.layers_outlined),
+      GlassCard.rows(_flowRows(capture: true)),
+      _flowCaption(t, capture: true),
       const SizedBox(height: 15),
-      const SectionLabel('Startup', icon: Icons.power_settings_new),
+      const SectionLabel("After editor's Done",
+          icon: Icons.check_circle_outline),
+      GlassCard.rows(_flowRows(capture: false)),
+      _flowCaption(t, capture: false),
+      const SizedBox(height: 15),
+      const SectionLabel('Sounds', icon: Icons.volume_up_outlined),
       GlassCard.rows([
         SettingRow(
-          title: 'Launch at login',
-          hint: 'Start Glimpr automatically when you log in',
+          title: 'Shutter',
+          hint: 'Plays the instant a capture is taken',
           trailing: GlassToggle(
-            value: _launchAtLogin,
+            value: _shutterSound,
             onChanged: (v) async {
-              final actual = await LoginItem.setEnabled(v);
-              if (mounted) setState(() => _launchAtLogin = actual);
+              await _s.setShutterSound(v);
+              if (mounted) setState(() => _shutterSound = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: 'Completion',
+          hint: 'Chimes once the completion flow finishes',
+          trailing: GlassToggle(
+            value: _completionSound,
+            onChanged: (v) async {
+              await _s.setCompletionSound(v);
+              if (mounted) setState(() => _completionSound = v);
             },
           ),
         ),
@@ -618,6 +748,9 @@ class _SettingsAppState extends State<SettingsApp>
     final lossy = _format == ImageFormat.jpeg;
     return [
       _h1('Output', t),
+      const SectionLabel('Save location', icon: Icons.folder_outlined),
+      GlassCard.padded(child: _saveFolderBody(t)),
+      const SizedBox(height: 15),
       const SectionLabel('Format', icon: Icons.image_outlined),
       GlassCard.padded(
         child: Column(
@@ -867,38 +1000,6 @@ class _SettingsAppState extends State<SettingsApp>
         ],
       ),
     );
-  }
-
-  List<Widget> _soundsPane(GlimprTokens t) {
-    return [
-      _h1('Sounds', t),
-      const SectionLabel('Sound', icon: Icons.volume_up_outlined),
-      GlassCard.rows([
-        SettingRow(
-          title: 'Shutter',
-          hint: 'Plays the instant a capture is taken',
-          trailing: GlassToggle(
-            value: _shutterSound,
-            onChanged: (v) async {
-              await _s.setShutterSound(v);
-              if (mounted) setState(() => _shutterSound = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: 'Completion',
-          hint: 'Chimes once the capture is saved / copied',
-          trailing: GlassToggle(
-            value: _completionSound,
-            onChanged: (v) async {
-              await _s.setCompletionSound(v);
-              if (mounted) setState(() => _completionSound = v);
-            },
-          ),
-        ),
-      ]),
-    ];
   }
 
   List<Widget> _advancedPane(GlimprTokens t) {

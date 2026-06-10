@@ -26,6 +26,9 @@ void main() {
     final settings = Settings(FakeStore());
     await tester.pumpWidget(SettingsApp(settings: settings));
     await tester.pumpAndSettle();
+    // The save folder moved to the Output pane.
+    await tester.tap(find.text('Output'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Default'), findsOneWidget);
   });
 
@@ -34,6 +37,8 @@ void main() {
     await settings.setSaveDirectory('/tmp/shots');
     // A fresh mount models opening the settings window with the stored value.
     await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Output'));
     await tester.pumpAndSettle();
     // The wider save-folder line splits the path into an ellipsizing head and a
     // pinned trailing segment, so the full string is no longer one Text widget.

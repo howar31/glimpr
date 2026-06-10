@@ -65,7 +65,8 @@ void main() {
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    expect(find.text('Capture'), findsOneWidget);
+    // Two 'Capture' texts exist now: the sidebar tab + this pane's row title.
+    expect(find.text('Capture'), findsNWidgets(2));
     // Default ⌘⌥1 renders three key caps (two modifiers + the digit). The
     // modifier glyphs are platform-dependent; the digit '1' is not, so assert on
     // it for a host-platform-stable check. Scope to the Global card: the Editor
