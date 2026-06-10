@@ -78,6 +78,57 @@ Future<FlowResult> exportAnnotated({
   );
 }
 
+/// Deliver a natively-encoded direct capture. Fast path: the bytes are FINAL
+/// (no annotations, no decoration) -> straight to the flow, no codec pass.
+/// When decoration is enabled for [kind], decode + composite the decoration +
+/// re-encode — the rare, opted-in path keeps today's codec cost.
+Future<FlowResult> deliverEncodedCapture({
+  required RegionCapture capture,
+  required CaptureSettings cap,
+  required CaptureKind kind,
+  String? windowTitle,
+  String? appName,
+}) async {
+  var bytes = capture.bytes;
+  if (cap.decorateFor(kind)) {
+    final codec = await ui.instantiateImageCodec(capture.bytes);
+    final img = (await codec.getNextFrame()).image;
+    codec.dispose();
+    try {
+      bytes = await compositeAndCrop(
+        frozen: img,
+        drawables: const [],
+        scaleFactor: capture.scaleFactor,
+        logicalSize: Size(capture.rect.width, capture.rect.height),
+        selectionLogical: null,
+        jpeg: cap.isJpeg,
+        jpegQuality: cap.jpegQuality,
+        decoration: DecorationStyle.scaled(capture.scaleFactor),
+        decorationJpegFill: ui.Color(cap.decorationJpegFill),
+      );
+    } finally {
+      img.dispose();
+    }
+  }
+  // Pin-in-place: the captured rect's GLOBAL top-left logical position.
+  final pinRect = capture.rect.shift(capture.displayOrigin);
+  return runFlow(
+    actions: normalizeFlow(cap.flow, forCapture: true),
+    bytes: bytes,
+    saveDir: cap.saveDir,
+    fileName: buildScreenshotName(
+      template: cap.filenameTemplate,
+      t: DateTime.now(),
+      windowTitle: windowTitle,
+      appName: appName,
+      ext: cap.fileExtension,
+    ),
+    soundFn: () async {},
+    pinFn: (p) => CaptureBridge.pinImage(p, globalRect: pinRect),
+    recordRecentFn: recordRecentCapture,
+  );
+}
+
 /// Record a capture-flow save into the shared recent-images store (same
 /// NSUserDefaults list the editor owns), then nudge the editor engine to
 /// refresh its landing gallery + the menu-bar "Open Recent" submenu.

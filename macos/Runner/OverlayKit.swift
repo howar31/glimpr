@@ -52,19 +52,11 @@ final class ScreenCapturer {
       ?? (cachedContent?.displays.first?.displayID ?? CGMainDisplayID())
   }
 
-  /// Captures every display IN PARALLEL and pushes each display's dict to
-  /// [onDisplayReady] (main actor) the moment it is ready — the cursor
-  /// display's task starts first, so the display the user is looking at
-  /// freezes first instead of waiting for the slowest one. Pixels travel as
-  /// raw BGRA8888 (no PNG on the freeze path). Returns after every display
-  /// was pushed. Throws CaptureError.noDisplays or rethrows SCK errors.
-  func captureAll(
-    showsCursor: Bool = false, includeCursorImage: Bool = false,
-    onDisplayReady: @escaping @MainActor ([String: Any]) -> Void
-  ) async throws {
-    // Trust the cache only while its display SET still matches the current
-    // screens; otherwise refetch fresh (the cache goes stale across a display
-    // add/remove, which would drop a hot-plugged display from the capture).
+  /// The cached shareable content, trusted only while its display SET still
+  /// matches the attached screens; otherwise refetched fresh (the cache goes
+  /// stale across a display add/remove, which would drop a hot-plugged
+  /// display from the capture).
+  private func freshContent() async throws -> SCShareableContent {
     let currentIDs = Set(NSScreen.screens.compactMap { Self.screenNumber($0) })
     var shareable = cachedContent
     let cachedIDs = Set((shareable?.displays ?? []).map { $0.displayID })
@@ -75,6 +67,72 @@ final class ScreenCapturer {
     guard let content = shareable, !content.displays.isEmpty else {
       throw CaptureError.noDisplays
     }
+    return content
+  }
+
+  /// Capture ONE display (the cursor display when [displayID] is nil),
+  /// cropped to [rect] (display-local logical points, top-left origin; nil =
+  /// whole display) and encoded to the FINAL output format natively — the
+  /// direct modes' fast path (no full-display PNG round trip through Dart).
+  /// Returns nil when the requested display is not present (the caller picks
+  /// the fallback).
+  func captureRegion(
+    displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
+    jpeg: Bool, jpegQuality: Int
+  ) async throws -> [String: Any]? {
+    let content = try await freshContent()
+    let targetID = displayID ?? cursorDisplayID()
+    guard let d = content.displays.first(where: { $0.displayID == targetID })
+    else { return nil }
+    let scale = Self.scaleFactor(for: d.displayID)
+    let r = rect
+      ?? CGRect(x: 0, y: 0, width: CGFloat(d.width), height: CGFloat(d.height))
+    let cfg = SCStreamConfiguration()
+    // sourceRect crops at capture time (content-space points, display-local
+    // top-left) — no separate CGImage crop pass.
+    cfg.sourceRect = r
+    cfg.width = max(1, Int((r.width * scale).rounded()))
+    cfg.height = max(1, Int((r.height * scale).rounded()))
+    cfg.showsCursor = showsCursor
+    cfg.colorSpaceName = CGColorSpace.sRGB
+    let filter = SCContentFilter(display: d, excludingWindows: [])
+    PerfLog.mark("sckImageBegin display=\(d.displayID)")
+    let cg = try await SCScreenshotManager.captureImage(
+      contentFilter: filter, configuration: cfg)
+    PerfLog.mark("sckImageEnd display=\(d.displayID)")
+    let rep = NSBitmapImageRep(cgImage: cg)
+    let data: Data?
+    if jpeg {
+      let q = max(0, min(100, jpegQuality))
+      data = rep.representation(
+        using: .jpeg, properties: [.compressionFactor: Double(q) / 100.0])
+    } else {
+      data = rep.representation(using: .png, properties: [:])
+    }
+    guard let bytes = data else { return nil }
+    PerfLog.mark("regionEncodeEnd display=\(d.displayID) bytes=\(bytes.count)")
+    let frame = d.frame
+    return [
+      "bytes": FlutterStandardTypedData(bytes: bytes),
+      "displayId": Int(d.displayID),
+      "x": Double(r.origin.x), "y": Double(r.origin.y),
+      "w": Double(r.width), "h": Double(r.height),
+      "left": Double(frame.origin.x), "top": Double(frame.origin.y),
+      "scaleFactor": Double(scale),
+    ]
+  }
+
+  /// Captures every display IN PARALLEL and pushes each display's dict to
+  /// [onDisplayReady] (main actor) the moment it is ready — the cursor
+  /// display's task starts first, so the display the user is looking at
+  /// freezes first instead of waiting for the slowest one. Pixels travel as
+  /// raw BGRA8888 (no PNG on the freeze path). Returns after every display
+  /// was pushed. Throws CaptureError.noDisplays or rethrows SCK errors.
+  func captureAll(
+    showsCursor: Bool = false, includeCursorImage: Bool = false,
+    onDisplayReady: @escaping @MainActor ([String: Any]) -> Void
+  ) async throws {
+    let content = try await freshContent()
     let displays = content.displays
     let cursorID = cursorDisplayID()
     let mouse = NSEvent.mouseLocation

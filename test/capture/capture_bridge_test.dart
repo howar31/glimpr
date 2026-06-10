@@ -10,30 +10,32 @@ void main() {
 
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-  test('captureFrames parses the native list into CapturedDisplay', () async {
+  test('captureRegion parses the native map; null stays null (display gone)',
+      () async {
     messenger.setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'captureFrames');
-      return [
-        {
-          'displayId': 1,
-          'rawBytes': Uint8List(0),
-          'pixelWidth': 0,
-          'pixelHeight': 0,
-          'rowBytes': 0,
-          'left': 0.0,
-          'top': 0.0,
-          'width': 1920.0,
-          'height': 1080.0,
-          'scaleFactor': 2.0,
-          'isCursorDisplay': true,
-          'windows': <dynamic>[],
-        }
-      ];
+      expect(call.method, 'captureRegion');
+      final args = (call.arguments as Map).cast<dynamic, dynamic>();
+      expect(args['displayId'], 7);
+      expect(args['x'], 1.0);
+      expect(args['jpeg'], false);
+      return {
+        'bytes': Uint8List.fromList([1, 2]),
+        'displayId': 7,
+        'x': 1.0, 'y': 2.0, 'w': 30.0, 'h': 40.0,
+        'left': 100.0, 'top': 50.0,
+        'scaleFactor': 2.0,
+      };
     });
-    final frames = await CaptureBridge().captureFrames();
-    expect(frames, hasLength(1));
-    expect(frames.first.displayId, 1);
-    expect(frames.first.isCursorDisplay, isTrue);
+    final rc = await CaptureBridge().captureRegion(
+        displayId: 7, rect: const Rect.fromLTWH(1, 2, 30, 40));
+    expect(rc!.displayId, 7);
+    expect(rc.bytes, hasLength(2));
+    expect(rc.rect, const Rect.fromLTWH(1, 2, 30, 40));
+    expect(rc.displayOrigin, const Offset(100, 50));
+    expect(rc.scaleFactor, 2.0);
+
+    messenger.setMockMethodCallHandler(channel, (call) async => null);
+    expect(await CaptureBridge().captureRegion(displayId: 9), isNull);
   });
 
   test('focusedWindow parses a dict, and null stays null', () async {

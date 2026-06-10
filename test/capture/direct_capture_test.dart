@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import 'dart:ui' show Rect;
+import 'dart:ui' show Offset, Rect;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/capture/capture_kind.dart';
 import 'package:glimpr/capture/captured_display.dart';
@@ -28,119 +28,52 @@ class _FakeStore implements SettingsStore {
   Future<void> remove(String k) async => _m.remove(k);
 }
 
-CapturedDisplay _disp(int id, {bool cursor = false, double w = 1920, double h = 1080}) =>
-    CapturedDisplay(
-      displayId: id,
-      rawBytes: Uint8List(0),
-      pixelWidth: 0,
-      pixelHeight: 0,
-      rowBytes: 0,
-      left: 0,
-      top: 0,
-      width: w,
-      height: h,
+RegionCapture _rc(int displayId, Rect? rect) => RegionCapture(
+      bytes: Uint8List(0),
+      displayId: displayId,
+      rect: rect ?? const Rect.fromLTWH(0, 0, 1920, 1080),
+      displayOrigin: const Offset(0, 0),
       scaleFactor: 2,
-      isCursorDisplay: cursor,
     );
 
 void main() {
-  group('resolveScreenTarget', () {
-    test('picks the cursor display, labelled DISPLAY', () {
-      final t = resolveScreenTarget([_disp(1), _disp(2, cursor: true)]);
-      expect(t!.display.displayId, 2);
-      expect(t.kind, CaptureKind.display);
-      expect(t.selectionLogical, isNull);
-      expect(t.windowTitle, 'DISPLAY');
-      expect(t.appName, 'DISPLAY');
-    });
-    test('falls back to the first display when none is the cursor display', () {
-      final t = resolveScreenTarget([_disp(5), _disp(6)]);
-      expect(t!.display.displayId, 5);
-    });
-    test('returns null when there are no frames', () {
-      expect(resolveScreenTarget(const []), isNull);
-    });
-  });
-
-  group('resolveWindowTarget', () {
-    test('targets the focused window rect on its display', () {
-      final t = resolveWindowTarget([_disp(1, cursor: true), _disp(2)],
-          const FocusedWindowInfo(
-              displayId: 2,
-              rect: Rect.fromLTWH(30, 40, 500, 360),
-              title: 'Editor',
-              app: 'Code'));
-      expect(t!.display.displayId, 2);
-      expect(t.kind, CaptureKind.focusedWindow);
-      expect(t.selectionLogical, const Rect.fromLTWH(30, 40, 500, 360));
-      expect(t.windowTitle, 'Editor');
-      expect(t.appName, 'Code');
-    });
-    test('no focused window -> falls back to the cursor display, whole screen', () {
-      final t = resolveWindowTarget([_disp(1), _disp(2, cursor: true)], null);
-      expect(t!.display.displayId, 2);
-      expect(t.kind, CaptureKind.display); // fallback is a plain display capture
-      expect(t.selectionLogical, isNull);
-    });
-    test('focused window on an uncaptured display -> falls back to screen', () {
-      final t = resolveWindowTarget([_disp(1, cursor: true)],
-          const FocusedWindowInfo(
-              displayId: 99,
-              rect: Rect.fromLTWH(0, 0, 10, 10),
-              title: '',
-              app: ''));
-      expect(t!.display.displayId, 1);
-      expect(t.selectionLogical, isNull);
-    });
-  });
-
-  group('resolveLastRegionTarget', () {
-    test('crops the stored rect on the stored display, labelled LAST', () {
-      final t = resolveLastRegionTarget([_disp(3), _disp(4)],
-          const LastRegion(displayId: 4, rect: Rect.fromLTWH(1, 2, 300, 200)));
-      expect(t!.display.displayId, 4);
-      expect(t.kind, CaptureKind.lastRegion);
-      expect(t.selectionLogical, const Rect.fromLTWH(1, 2, 300, 200));
-      expect(t.windowTitle, 'LAST');
-      expect(t.appName, 'LAST');
-    });
-    test('null region -> null (no-op)', () {
-      expect(resolveLastRegionTarget([_disp(3)], null), isNull);
-    });
-    test('stored display gone -> null (no-op)', () {
-      final t = resolveLastRegionTarget([_disp(3)],
-          const LastRegion(displayId: 99, rect: Rect.fromLTWH(0, 0, 5, 5)));
-      expect(t, isNull);
-    });
-  });
-
   group('DirectCapture orchestrator', () {
     late _FakeStore store;
     late LastRegionStore regionStore;
-    late List<CaptureTarget> delivered;
+    late List<({int? displayId, Rect? rect})> regionCalls;
+    late List<({RegionCapture c, CaptureKind kind, String? title, String? app})>
+        delivered;
     late int shutters;
     late int completes;
     late List<String> errors;
     late List<String> marks;
 
     DirectCapture build({
-      required List<CapturedDisplay> frames,
       FocusedWindowInfo? window,
+      // null -> echo a capture for whatever was asked; otherwise decides per
+      // call (return null = "display gone").
+      RegionCapture? Function(int? displayId, Rect? rect)? onRegion,
     }) {
       store = _FakeStore();
       regionStore = LastRegionStore(store);
+      regionCalls = [];
       delivered = [];
       shutters = 0;
       completes = 0;
       errors = [];
       marks = [];
       return DirectCapture(
-        captureFrames: ({bool showsCursor = false}) async => frames,
+        captureRegion: ({displayId, rect, showsCursor = false, jpeg = false,
+            jpegQuality = 90}) async {
+          regionCalls.add((displayId: displayId, rect: rect));
+          if (onRegion != null) return onRegion(displayId, rect);
+          return _rc(displayId ?? 1, rect);
+        },
         focusedWindow: () async => window,
         settings: Settings(store),
         regionStore: regionStore,
-        deliver: (t, cap) async {
-          delivered.add(t);
+        deliverEncoded: (c, cap, kind, title, app) async {
+          delivered.add((c: c, kind: kind, title: title, app: app));
           return const FlowResult(DeliveryResult(
               savedPath: '/tmp/x.png', copiedToClipboard: true, soundPlayed: false));
         },
@@ -151,22 +84,24 @@ void main() {
       );
     }
 
-    test('screen(): delivers the cursor display, sounds, records full region',
+    test('screen(): bare captureRegion, DISPLAY labels, records full region',
         () async {
-      final dc = build(frames: [_disp(1), _disp(2, cursor: true)]);
+      final dc = build();
       await dc.screen();
-      expect(delivered.single.display.displayId, 2);
-      expect(delivered.single.selectionLogical, isNull);
+      expect(regionCalls.single, (displayId: null, rect: null));
+      expect(delivered.single.kind, CaptureKind.display);
+      expect(delivered.single.title, 'DISPLAY');
+      expect(delivered.single.app, 'DISPLAY');
       expect(shutters, 1);
       expect(completes, 1);
+      expect(marks, ['directDelivered ok=true kind=display']);
       final saved = await regionStore.load();
-      expect(saved!.displayId, 2);
+      expect(saved!.displayId, 1);
       expect(saved.rect, const Rect.fromLTWH(0, 0, 1920, 1080));
     });
 
-    test('window(): delivers the focused window rect + records it', () async {
+    test('window(): fallback passes the focused displayId+rect', () async {
       final dc = build(
-        frames: [_disp(1, cursor: true), _disp(2)],
         window: const FocusedWindowInfo(
             displayId: 2,
             rect: Rect.fromLTWH(5, 6, 100, 80),
@@ -174,10 +109,41 @@ void main() {
             app: 'A'),
       );
       await dc.window();
-      expect(delivered.single.display.displayId, 2);
-      expect(delivered.single.selectionLogical, const Rect.fromLTWH(5, 6, 100, 80));
+      expect(regionCalls.single,
+          (displayId: 2, rect: const Rect.fromLTWH(5, 6, 100, 80)));
+      expect(delivered.single.kind, CaptureKind.focusedWindow);
+      expect(delivered.single.title, 'W');
+      expect(delivered.single.app, 'A');
       final saved = await regionStore.load();
       expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
+    });
+
+    test('window(): no focused window -> bare capture with DISPLAY labels',
+        () async {
+      final dc = build();
+      await dc.window();
+      expect(regionCalls.single, (displayId: null, rect: null));
+      expect(delivered.single.kind, CaptureKind.display);
+      expect(delivered.single.title, 'DISPLAY');
+    });
+
+    test('window(): focused display gone -> retries bare on the cursor display',
+        () async {
+      final dc = build(
+        window: const FocusedWindowInfo(
+            displayId: 99,
+            rect: Rect.fromLTWH(0, 0, 10, 10),
+            title: 'W',
+            app: 'A'),
+        onRegion: (displayId, rect) =>
+            displayId == null ? _rc(1, rect) : null, // 99 is gone
+      );
+      await dc.window();
+      expect(regionCalls, hasLength(2));
+      expect(regionCalls.last, (displayId: null, rect: null));
+      expect(delivered.single.kind, CaptureKind.display);
+      expect(delivered.single.title, 'DISPLAY');
+      expect(errors, isEmpty);
     });
 
     test('window(): uses the per-window image when a windowId is present',
@@ -186,8 +152,6 @@ void main() {
       WindowImage? deliveredWi;
       var completes = 0;
       final dc = DirectCapture(
-        captureFrames: ({bool showsCursor = false}) async =>
-            [_disp(1, cursor: true)],
         focusedWindow: () async => const FocusedWindowInfo(
             displayId: 1,
             rect: Rect.fromLTWH(5, 6, 100, 80),
@@ -219,31 +183,37 @@ void main() {
       expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
     });
 
-    test('lastRegion(): no stored region -> no delivery, no sound', () async {
-      final dc = build(frames: [_disp(1, cursor: true)]);
+    test('lastRegion(): no stored region -> no capture, no sound, no mark',
+        () async {
+      final dc = build();
       await dc.lastRegion();
+      expect(regionCalls, isEmpty);
       expect(delivered, isEmpty);
       expect(shutters, 0);
+      expect(marks, isEmpty);
     });
 
-    test('lastRegion(): replays a stored rect', () async {
-      final dc = build(frames: [_disp(1, cursor: true), _disp(2)]);
+    test('lastRegion(): replays the stored rect with LAST labels', () async {
+      final dc = build();
       await regionStore.save(
           const LastRegion(displayId: 2, rect: Rect.fromLTWH(7, 8, 200, 150)));
       await dc.lastRegion();
-      expect(delivered.single.display.displayId, 2);
-      expect(delivered.single.selectionLogical, const Rect.fromLTWH(7, 8, 200, 150));
+      expect(regionCalls.single,
+          (displayId: 2, rect: const Rect.fromLTWH(7, 8, 200, 150)));
+      expect(delivered.single.kind, CaptureKind.lastRegion);
+      expect(delivered.single.title, 'LAST');
+      expect(marks, ['directDelivered ok=true kind=lastRegion']);
     });
 
-    test('screen(): emits a perf mark naming the kind after delivery', () async {
-      final dc = build(frames: [_disp(1, cursor: true)]);
-      await dc.screen();
-      expect(marks, ['directDelivered ok=true kind=display']);
-    });
-
-    test('lastRegion(): silent no-op emits no perf mark', () async {
-      final dc = build(frames: [_disp(1, cursor: true)]);
+    test('lastRegion(): stored display gone -> silent no-op', () async {
+      final dc = build(onRegion: (displayId, rect) => null);
+      await regionStore.save(
+          const LastRegion(displayId: 99, rect: Rect.fromLTWH(0, 0, 5, 5)));
       await dc.lastRegion();
+      expect(regionCalls, hasLength(1));
+      expect(delivered, isEmpty);
+      expect(shutters, 0);
+      expect(errors, isEmpty);
       expect(marks, isEmpty);
     });
   });

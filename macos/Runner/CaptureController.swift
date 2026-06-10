@@ -10,25 +10,21 @@ final class CaptureController {
 
   init(manager: @escaping () -> OverlayManager?) { self.manager = manager }
 
-  /// Capture all displays and RETURN the frame dicts (no overlay) — for the
-  /// direct (non-interactive) capture modes. Throws if permission is missing or
-  /// there are no displays.
-  func captureFrames(showsCursor: Bool) async throws -> [[String: Any]] {
+  /// Single-target native capture for the direct (non-interactive) modes:
+  /// cursor display when [displayID] is nil, cropped to [rect] when given,
+  /// encoded natively to the final output format. nil when the requested
+  /// display is gone. The cursor is baked per the setting (atomic capture; no
+  /// separate cursor image — that is the overlay's toggleable path).
+  func captureRegion(
+    displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
+    jpeg: Bool, jpegQuality: Int
+  ) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
-    // Direct modes bake the cursor (atomic capture) per the setting; no separate
-    // cursor image (that is the overlay's toggleable path). Interim shim until
-    // the native single-target captureRegion replaces this path entirely:
-    // gather the per-display pushes back into the old batch shape.
-    final class Box { var frames: [[String: Any]] = [] }
-    let box = Box()
-    try await capturer.captureAll(
-      showsCursor: showsCursor, includeCursorImage: false
-    ) { dict in
-      box.frames.append(dict)
-    }
-    return box.frames
+    return try await capturer.captureRegion(
+      displayID: displayID, rect: rect, showsCursor: showsCursor,
+      jpeg: jpeg, jpegQuality: jpegQuality)
   }
 
   /// Capture a single window with real alpha (rounded corners), or nil when no

@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import 'dart:ui' show Rect;
+import 'dart:ui' show Offset, Rect;
 
 /// A snappable top-level window at capture time: its display-local logical [rect]
 /// plus the window [title] and owning [app] name (for naming the saved file).
@@ -73,6 +73,35 @@ class WindowImage {
         width: (m['width'] as num).toInt(),
         height: (m['height'] as num).toInt(),
         scale: (m['scale'] as num).toDouble(),
+      );
+}
+
+/// A natively captured + cropped + encoded single-target capture (the direct
+/// modes). [bytes] are FINAL encoded image data (PNG, or JPEG per settings);
+/// [rect] is the captured rect in display-local LOGICAL points;
+/// [displayOrigin] is the display's global logical origin (pin-in-place).
+class RegionCapture {
+  const RegionCapture({
+    required this.bytes,
+    required this.displayId,
+    required this.rect,
+    required this.displayOrigin,
+    required this.scaleFactor,
+  });
+  final Uint8List bytes;
+  final int displayId;
+  final Rect rect;
+  final Offset displayOrigin;
+  final double scaleFactor;
+
+  factory RegionCapture.fromMap(Map<dynamic, dynamic> m) => RegionCapture(
+        bytes: m['bytes'] as Uint8List,
+        displayId: (m['displayId'] as num).toInt(),
+        rect: Rect.fromLTWH((m['x'] as num).toDouble(), (m['y'] as num).toDouble(),
+            (m['w'] as num).toDouble(), (m['h'] as num).toDouble()),
+        displayOrigin: Offset(
+            (m['left'] as num).toDouble(), (m['top'] as num).toDouble()),
+        scaleFactor: (m['scaleFactor'] as num).toDouble(),
       );
 }
 

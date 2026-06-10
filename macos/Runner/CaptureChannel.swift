@@ -68,17 +68,27 @@ final class CaptureChannel {
           PerfLog.mark(label)
         }
         result(nil)
-      case "captureFrames":
-        // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
-        // and the channel reply must land on the platform (main) thread.
-        let cursor = ((call.arguments as? [String: Any])?["showsCursor"] as? Bool)
-          ?? false
+      case "captureRegion":
+        // Main actor like triggerCapture: the capture reaches NSScreen and the
+        // channel reply must land on the platform (main) thread.
+        let a = call.arguments as? [String: Any]
+        let displayId = (a?["displayId"] as? NSNumber)?.uint32Value
+        let rect: CGRect?
+        if let x = a?["x"] as? Double, let y = a?["y"] as? Double,
+           let w = a?["w"] as? Double, let h = a?["h"] as? Double {
+          rect = CGRect(x: x, y: y, width: w, height: h)
+        } else {
+          rect = nil
+        }
+        let cursor = (a?["showsCursor"] as? Bool) ?? false
+        let jpeg = (a?["jpeg"] as? Bool) ?? false
+        let quality = (a?["quality"] as? Int) ?? 90
         Task { @MainActor in
           do {
-            PerfLog.mark("captureFramesBegin")
-            let frames = try await self?.capture.captureFrames(showsCursor: cursor) ?? []
-            PerfLog.mark("captureFramesEnd displays=\(frames.count)")
-            result(frames)
+            let res = try await self?.capture.captureRegion(
+              displayID: displayId.map { CGDirectDisplayID($0) }, rect: rect,
+              showsCursor: cursor, jpeg: jpeg, jpegQuality: quality)
+            result(res) // nil -> Dart picks the fallback (display gone)
           } catch {
             result(FlutterError(
               code: "capture_failed", message: "\(error)", details: nil))

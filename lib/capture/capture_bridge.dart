@@ -12,17 +12,28 @@ class CaptureBridge {
   Future<void> beginCapture({bool pinOnly = false}) =>
       _channel.invokeMethod('beginCapture', {'pinOnly': pinOnly});
 
-  /// Capture every display and RETURN the frames to this (control) engine,
-  /// WITHOUT showing the overlay — for the direct (non-interactive) modes.
-  Future<List<CapturedDisplay>> captureFrames({bool showsCursor = false}) async {
-    final res = await _channel.invokeMethod(
-      'captureFrames',
-      {'showsCursor': showsCursor},
-    );
-    final list = (res as List).cast<dynamic>();
-    return list
-        .map((e) => CapturedDisplay.fromMap((e as Map).cast<dynamic, dynamic>()))
-        .toList(growable: false);
+  /// Native single-target capture for the direct (non-interactive) modes:
+  /// the cursor display when [displayId] is null, cropped to [rect]
+  /// (display-local logical points) when given, encoded natively (PNG, or
+  /// JPEG at [jpegQuality]). Null when the requested display is not present.
+  Future<RegionCapture?> captureRegion({
+    int? displayId,
+    Rect? rect,
+    bool showsCursor = false,
+    bool jpeg = false,
+    int jpegQuality = 90,
+  }) async {
+    final res = await _channel.invokeMethod('captureRegion', {
+      'displayId': ?displayId,
+      if (rect != null) ...{
+        'x': rect.left, 'y': rect.top, 'w': rect.width, 'h': rect.height,
+      },
+      'showsCursor': showsCursor,
+      'jpeg': jpeg,
+      'quality': jpegQuality,
+    });
+    if (res == null) return null;
+    return RegionCapture.fromMap((res as Map).cast<dynamic, dynamic>());
   }
 
   /// The frontmost focused window's display-local rect + names, or null if none.
