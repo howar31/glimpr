@@ -1,3 +1,4 @@
+import 'dart:async' show Timer;
 import 'package:flutter/widgets.dart';
 import 'glimpr_theme.dart';
 
@@ -684,6 +685,56 @@ class _AccentButtonState extends State<AccentButton> {
 
 /// Quiet text button (ghost). Dims when [onTap] is null; on hover it picks up a
 /// soft fill and a brighter label.
+/// A [GhostButton] for destructive actions: the first click ARMS it (the label
+/// flips to a danger-coloured [confirmLabel]), a second click within the window
+/// fires [onConfirmed]; left untouched it disarms itself after a few seconds.
+class ConfirmGhostButton extends StatefulWidget {
+  const ConfirmGhostButton(
+    this.label, {
+    super.key,
+    required this.confirmLabel,
+    required this.onConfirmed,
+  });
+  final String label;
+  final String confirmLabel;
+  final VoidCallback? onConfirmed;
+
+  @override
+  State<ConfirmGhostButton> createState() => _ConfirmGhostButtonState();
+}
+
+class _ConfirmGhostButtonState extends State<ConfirmGhostButton> {
+  bool _armed = false;
+  Timer? _disarm;
+
+  @override
+  void dispose() {
+    _disarm?.cancel();
+    super.dispose();
+  }
+
+  void _tapped() {
+    if (!_armed) {
+      setState(() => _armed = true);
+      _disarm?.cancel();
+      _disarm = Timer(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _armed = false);
+      });
+      return;
+    }
+    _disarm?.cancel();
+    setState(() => _armed = false); // back to idle once the action fires
+    widget.onConfirmed?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) => GhostButton(
+        _armed ? widget.confirmLabel : widget.label,
+        danger: _armed,
+        onTap: widget.onConfirmed == null ? null : _tapped,
+      );
+}
+
 class GhostButton extends StatefulWidget {
   const GhostButton(this.label, {super.key, required this.onTap, this.danger = false});
   final String label;

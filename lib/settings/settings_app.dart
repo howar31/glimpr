@@ -1,4 +1,3 @@
-import 'dart:async' show Timer;
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -116,24 +115,6 @@ class _SettingsAppState extends State<SettingsApp>
   static const _roleChannel = MethodChannel('glimpr/role');
   void _close() => _roleChannel.invokeMethod('closeSettings');
 
-  // Restart is destructive-ish (kills the app), so the button is two-step: the
-  // first click ARMS it (label flips to a confirm), the second click within the
-  // window relaunches; it disarms itself after a few seconds untouched.
-  bool _restartArmed = false;
-  Timer? _restartDisarm;
-  void _restartTapped() {
-    if (!_restartArmed) {
-      setState(() => _restartArmed = true);
-      _restartDisarm?.cancel();
-      _restartDisarm = Timer(const Duration(seconds: 4), () {
-        if (mounted) setState(() => _restartArmed = false);
-      });
-      return;
-    }
-    _restartDisarm?.cancel();
-    _roleChannel.invokeMethod('relaunch');
-  }
-
   @override
   void initState() {
     super.initState();
@@ -145,7 +126,6 @@ class _SettingsAppState extends State<SettingsApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _filenameController.dispose();
-    _restartDisarm?.cancel();
     super.dispose();
   }
 
@@ -977,12 +957,10 @@ class _SettingsAppState extends State<SettingsApp>
               // One click instead of quit-from-the-menu-bar + reopen: the native
               // side re-opens the bundle after this process exits. Two-step
               // (arm -> confirm) because it kills the running app.
-              GhostButton(
-                _restartArmed
-                    ? 'Click again to restart Glimpr'
-                    : 'Restart Glimpr now',
-                danger: _restartArmed,
-                onTap: _restartTapped,
+              ConfirmGhostButton(
+                'Restart Glimpr now',
+                confirmLabel: 'Click again to restart Glimpr',
+                onConfirmed: () => _roleChannel.invokeMethod('relaunch'),
               ),
             ] else
               Text(
@@ -1007,9 +985,14 @@ class _SettingsAppState extends State<SettingsApp>
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
             ),
             const SizedBox(height: 14),
-            GhostButton('Reset all tool styles', onTap: () {
-              ToolStyleStore(Settings.instance.store).resetAll();
-            }),
+            // Two-step confirm: wipes EVERY tool's saved style, unrecoverable.
+            ConfirmGhostButton(
+              'Reset all tool styles',
+              confirmLabel: 'Click again to reset all tool styles',
+              onConfirmed: () {
+                ToolStyleStore(Settings.instance.store).resetAll();
+              },
+            ),
           ],
         ),
       ),
