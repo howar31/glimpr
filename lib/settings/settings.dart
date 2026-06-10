@@ -3,6 +3,7 @@ import '../capture/capture_kind.dart';
 import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../output/filename.dart';
+import '../output/flow.dart';
 import 'settings_store.dart';
 
 /// Output image format for a saved / copied capture.
@@ -18,8 +19,7 @@ class CaptureSettings {
     this.jpegQuality = 90,
     this.shutterSound = true,
     this.completionSound = true,
-    this.saveToFile = true,
-    this.copyToClipboard = true,
+    this.flow = const {FlowAction.copy, FlowAction.save},
     this.rightClickExits = true,
     this.filenameTemplate = defaultFilenameTemplate,
     this.decorateSnap = false,
@@ -36,8 +36,9 @@ class CaptureSettings {
   final int jpegQuality; // 1-100; used only when format is jpeg
   final bool shutterSound;
   final bool completionSound;
-  final bool saveToFile;
-  final bool copyToClipboard;
+  // The after-capture completion flow (multi-select; see FlowAction). Replaces
+  // the old saveToFile/copyToClipboard pair — those are now flow members.
+  final Set<FlowAction> flow;
   final bool rightClickExits; // right-click on empty space leaves capture mode
   final String filenameTemplate; // tokens: {date} {time} {title} {app}
 
@@ -82,8 +83,10 @@ class Settings {
   static const _jpegQualityKey = 'jpeg_quality';
   static const _shutterSoundKey = 'shutter_sound';
   static const _completionSoundKey = 'completion_sound';
-  static const _saveToFileKey = 'save_to_file';
-  static const _copyToClipboardKey = 'copy_to_clipboard';
+  static const _saveToFileKey = 'save_to_file'; // legacy (pre-flow) toggle
+  static const _copyToClipboardKey = 'copy_to_clipboard'; // legacy (pre-flow)
+  static const _flowAfterCaptureKey = 'flow_after_capture';
+  static const _flowAfterEditorDoneKey = 'flow_after_editor_done';
   static const _rightClickExitsKey = 'right_click_exits';
   static const _confirmOnExitKey = 'confirm_on_exit';
   static const _filenameTemplateKey = 'filename_template';
@@ -135,6 +138,33 @@ class Settings {
 
   Future<bool> getCopyToClipboard() async =>
       (await store.getBool(_copyToClipboardKey)) ?? true;
+
+  // Completion flows ---------------------------------------------------------
+
+  /// The after-capture flow. Falls back to the legacy save/copy toggles when
+  /// the new key has never been written (their defaults true/true reproduce
+  /// the original copy+save behaviour for existing users).
+  Future<Set<FlowAction>> getAfterCaptureFlow() async {
+    final stored = await store.getString(_flowAfterCaptureKey);
+    if (stored != null) return parseFlow(stored);
+    return {
+      if (await getCopyToClipboard()) FlowAction.copy,
+      if (await getSaveToFile()) FlowAction.save,
+    };
+  }
+
+  Future<void> setAfterCaptureFlow(Set<FlowAction> s) =>
+      store.setString(_flowAfterCaptureKey, flowToString(s));
+
+  /// The after-editor-Done flow (openEditor never applies here).
+  Future<Set<FlowAction>> getAfterEditorDoneFlow() async {
+    final stored = await store.getString(_flowAfterEditorDoneKey);
+    if (stored != null) return parseFlow(stored);
+    return {FlowAction.copy, FlowAction.save};
+  }
+
+  Future<void> setAfterEditorDoneFlow(Set<FlowAction> s) =>
+      store.setString(_flowAfterEditorDoneKey, flowToString(s));
   Future<void> setCopyToClipboard(bool v) =>
       store.setBool(_copyToClipboardKey, v);
 
@@ -239,8 +269,7 @@ class Settings {
     jpegQuality: await getJpegQuality(),
     shutterSound: await getShutterSound(),
     completionSound: await getCompletionSound(),
-    saveToFile: await getSaveToFile(),
-    copyToClipboard: await getCopyToClipboard(),
+    flow: await getAfterCaptureFlow(),
     rightClickExits: await getRightClickExits(),
     filenameTemplate: await getFilenameTemplate(),
     decorateSnap: await getDecorateSnap(),

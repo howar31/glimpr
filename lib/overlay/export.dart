@@ -5,17 +5,18 @@ import '../capture/captured_display.dart';
 import '../editor/composite.dart';
 import '../editor/decoration.dart';
 import '../editor/drawable.dart';
-import '../output/deliver.dart';
 import '../output/filename.dart';
+import '../output/flow.dart';
 import '../settings/settings.dart';
 
 /// Composites [frozenImage] (native pixels) + [drawables] (logical coords),
 /// crops to [selectionLogical] (null = whole display), encodes ONCE in the
-/// format from [cap], then delivers per [cap] (file save + clipboard, each
-/// toggleable). The shutter / completion sounds are orchestrated by the caller,
-/// so deliverCapture's own sound leg is suppressed here. Off the freeze path:
-/// compositing + encoding happen here, on commit.
-Future<DeliveryResult> exportAnnotated({
+/// format from [cap], then runs the configured after-capture flow ([cap.flow]:
+/// save / copy / copy-path / show-in-Finder / open-in-editor). The shutter /
+/// completion sounds are orchestrated by the caller, so the flow's sound leg
+/// is suppressed here. Off the freeze path: compositing + encoding happen
+/// here, on commit.
+Future<FlowResult> exportAnnotated({
   required CapturedDisplay display,
   required ui.Image frozenImage,
   required List<Drawable> drawables,
@@ -50,8 +51,9 @@ Future<DeliveryResult> exportAnnotated({
     cursorImage: cursorImage,
     cursorTopLeftNative: cursorTopLeftNative,
   );
-  return deliverCapture(
-    pngBytes: bytes,
+  return runFlow(
+    actions: normalizeFlow(cap.flow, forCapture: true),
+    bytes: bytes,
     saveDir: cap.saveDir,
     fileName: buildScreenshotName(
       template: cap.filenameTemplate,
@@ -61,15 +63,13 @@ Future<DeliveryResult> exportAnnotated({
       ext: cap.fileExtension,
     ),
     soundFn: () async {},
-    saveToFile: cap.saveToFile,
-    copyToClipboard: cap.copyToClipboard,
   );
 }
 
 /// Deliver a natively-captured window image (already alpha-shaped, real rounded
 /// corners) — for the direct "Capture Window" mode. No crop, no annotations;
 /// decoration (if enabled for [kind]) follows the real silhouette.
-Future<DeliveryResult> exportWindowImage({
+Future<FlowResult> exportWindowImage({
   required ui.Image windowImage,
   required double scaleFactor,
   required CaptureSettings cap,
@@ -95,8 +95,9 @@ Future<DeliveryResult> exportWindowImage({
     decorationJpegFill: ui.Color(cap.decorationJpegFill),
     decorationShapeFromAlpha: true,
   );
-  return deliverCapture(
-    pngBytes: bytes,
+  return runFlow(
+    actions: normalizeFlow(cap.flow, forCapture: true),
+    bytes: bytes,
     saveDir: cap.saveDir,
     fileName: buildScreenshotName(
       template: cap.filenameTemplate,
@@ -106,7 +107,5 @@ Future<DeliveryResult> exportWindowImage({
       ext: cap.fileExtension,
     ),
     soundFn: () async {},
-    saveToFile: cap.saveToFile,
-    copyToClipboard: cap.copyToClipboard,
   );
 }

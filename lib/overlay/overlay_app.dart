@@ -11,7 +11,7 @@ import '../editor/editor_controller.dart';
 import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
-import '../output/deliver.dart';
+import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
@@ -458,8 +458,8 @@ class _OverlayAppState extends State<OverlayApp> {
       // On success play the completion chime (if enabled); on a real failure the
       // overlay is already gone, so surface it via a native alert.
       final ok =
-          (!cap.saveToFile || result.savedOk) &&
-          (!cap.copyToClipboard || result.copiedToClipboard);
+          (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
+          (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
       if (ok) {
         if (cap.completionSound) playComplete();
       } else {
@@ -474,9 +474,9 @@ class _OverlayAppState extends State<OverlayApp> {
     }
   }
 
-  String _summary(DeliveryResult r, CaptureSettings cap) {
-    final saveFailed = cap.saveToFile && !r.savedOk;
-    final clipFailed = cap.copyToClipboard && !r.copiedToClipboard;
+  String _summary(FlowResult r, CaptureSettings cap) {
+    final saveFailed = cap.flow.contains(FlowAction.save) && !r.savedOk;
+    final clipFailed = cap.flow.contains(FlowAction.copy) && !r.copiedToClipboard;
     if (saveFailed && clipFailed) return 'Capture failed — not saved or copied';
     if (saveFailed) return 'Copied — file save failed';
     if (clipFailed) return 'Saved — clipboard failed';

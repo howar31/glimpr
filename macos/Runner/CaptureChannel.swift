@@ -21,6 +21,14 @@ final class CaptureChannel {
       switch call.method {
       case "beginCapture": self?.capture.triggerCapture(); result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
+      // After-capture flow: open the just-exported file in the image editor.
+      case "openInEditor":
+        if let path = (call.arguments as? [String: Any])?["path"] as? String {
+          DispatchQueue.main.async {
+            MainFlutterWindow.shared?.openImageFromExternal(path)
+          }
+        }
+        result(nil)
       case "captureFrames":
         // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
         // and the channel reply must land on the platform (main) thread.

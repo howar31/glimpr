@@ -46,6 +46,13 @@ class CaptureBridge {
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
+  /// Open [path] in the standalone image editor — the after-capture flow's
+  /// "open in editor" leg. Static because the flow runner calls it without a
+  /// bridge instance; both the control and overlay engines' native `glimpr/
+  /// capture` handlers route it to the warm editor window.
+  static Future<void> openInEditor(String path) =>
+      _channel.invokeMethod('openInEditor', {'path': path});
+
   /// Reveal the Settings window (⌘, from the capture overlay). The caller
   /// dismisses the overlay first, since it sits above normal windows.
   Future<void> openSettings() => _channel.invokeMethod('openSettings');

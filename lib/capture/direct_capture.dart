@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'dart:ui' show Rect;
-import '../output/deliver.dart';
+import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../overlay/export.dart';
 import '../settings/settings.dart';
@@ -82,7 +82,7 @@ CaptureTarget? resolveLastRegionTarget(
 }
 
 /// Decodes the chosen frame and delivers it with no annotations.
-Future<DeliveryResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) async {
+Future<FlowResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) async {
   final codec = await ui.instantiateImageCodec(t.display.pngBytes);
   final ui.Image image;
   try {
@@ -108,7 +108,7 @@ Future<DeliveryResult> _defaultDeliver(CaptureTarget t, CaptureSettings cap) asy
 
 /// Decodes a natively-captured window image (real alpha / rounded corners) and
 /// delivers it directly — the "Capture Window" path. No display crop.
-Future<DeliveryResult> _defaultDeliverWindow(
+Future<FlowResult> _defaultDeliverWindow(
     WindowImage wi, CaptureSettings cap, FocusedWindowInfo info) async {
   final codec = await ui.instantiateImageCodec(wi.pngBytes);
   final ui.Image image;
@@ -141,8 +141,8 @@ class DirectCapture {
     Future<WindowImage?> Function(int, {bool showsCursor})? captureWindowImage,
     Settings? settings,
     LastRegionStore? regionStore,
-    Future<DeliveryResult> Function(CaptureTarget, CaptureSettings)? deliver,
-    Future<DeliveryResult> Function(WindowImage, CaptureSettings, FocusedWindowInfo)?
+    Future<FlowResult> Function(CaptureTarget, CaptureSettings)? deliver,
+    Future<FlowResult> Function(WindowImage, CaptureSettings, FocusedWindowInfo)?
         deliverWindow,
     void Function()? shutter,
     void Function()? complete,
@@ -164,8 +164,8 @@ class DirectCapture {
   final Future<WindowImage?> Function(int, {bool showsCursor}) _captureWindowImage;
   final Settings _settings;
   final LastRegionStore _regionStore;
-  final Future<DeliveryResult> Function(CaptureTarget, CaptureSettings) _deliver;
-  final Future<DeliveryResult> Function(
+  final Future<FlowResult> Function(CaptureTarget, CaptureSettings) _deliver;
+  final Future<FlowResult> Function(
       WindowImage, CaptureSettings, FocusedWindowInfo) _deliverWindow;
   final void Function() _shutter;
   final void Function() _complete;
@@ -194,8 +194,8 @@ class DirectCapture {
         if (cap.shutterSound) _shutter();
         try {
           final result = await _deliverWindow(wi, cap, info!);
-          final ok = (!cap.saveToFile || result.savedOk) &&
-              (!cap.copyToClipboard || result.copiedToClipboard);
+          final ok = (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
+              (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
           if (ok) {
             if (cap.completionSound) _complete();
           } else {
@@ -234,8 +234,8 @@ class DirectCapture {
     if (cap.shutterSound) _shutter();
     try {
       final result = await _deliver(target, cap);
-      final ok = (!cap.saveToFile || result.savedOk) &&
-          (!cap.copyToClipboard || result.copiedToClipboard);
+      final ok = (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
+          (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
       if (ok) {
         if (cap.completionSound) _complete();
       } else {

@@ -538,6 +538,15 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self.dismiss(); result(nil)
+        // After-capture flow (overlay engine): open the exported file in the
+        // image editor — routed to the control window's warm editor.
+        case "openInEditor":
+          if let path = (call.arguments as? [String: Any])?["path"] as? String {
+            DispatchQueue.main.async {
+              MainFlutterWindow.shared?.openImageFromExternal(path)
+            }
+          }
+          result(nil)
         // ⌘, from the capture overlay: PAUSE the freeze (keep it visible, masked)
         // and reveal Settings ABOVE the shield-level overlay; hideSettings resumes
         // when Settings closes.

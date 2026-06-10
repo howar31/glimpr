@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_store.dart';
 
@@ -40,8 +41,7 @@ void main() {
     expect(cap.jpegQuality, 90);
     expect(cap.shutterSound, isTrue);
     expect(cap.completionSound, isTrue);
-    expect(cap.saveToFile, isTrue);
-    expect(cap.copyToClipboard, isTrue);
+    expect(cap.flow, {FlowAction.copy, FlowAction.save});
     expect(cap.rightClickExits, isTrue);
   });
 
@@ -74,9 +74,29 @@ void main() {
     final cap = await s.loadCapture();
     expect(cap.shutterSound, isFalse);
     expect(cap.completionSound, isFalse);
-    expect(cap.saveToFile, isFalse);
-    expect(cap.copyToClipboard, isFalse);
+    expect(cap.flow, isEmpty); // legacy toggles off -> empty (normalized at run)
     expect(cap.rightClickExits, isFalse);
+  });
+
+  test('after-capture flow migrates from the legacy save/copy toggles',
+      () async {
+    final s = Settings(FakeStore());
+    await s.setSaveToFile(false); // legacy: copy only
+    expect(await s.getAfterCaptureFlow(), {FlowAction.copy});
+    // Once the new key is written it wins over the legacy toggles.
+    await s.setAfterCaptureFlow({FlowAction.save, FlowAction.showInFinder});
+    expect(await s.getAfterCaptureFlow(),
+        {FlowAction.save, FlowAction.showInFinder});
+  });
+
+  test('after-editor-done flow defaults to copy+save and round-trips',
+      () async {
+    final s = Settings(FakeStore());
+    expect(await s.getAfterEditorDoneFlow(),
+        {FlowAction.copy, FlowAction.save});
+    await s.setAfterEditorDoneFlow({FlowAction.copyPath, FlowAction.save});
+    expect(await s.getAfterEditorDoneFlow(),
+        {FlowAction.copyPath, FlowAction.save});
   });
 
   test('loadLoupe defaults to span 12 / zoom 8 when unset', () async {

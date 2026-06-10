@@ -14,6 +14,8 @@ import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
 import '../overlay/toolbar.dart';
+import '../output/flow.dart';
+import '../output/sounds.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -226,9 +228,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
 
   /// Record a successfully-opened file path in the recent list and refresh both
   /// the landing list and the native menu. Pastes have no path → not recorded.
+  /// Temp files (e.g. the capture flow's open-in-editor without a save) are
+  /// transient — recording them would leave dead /tmp entries until pruned.
   Future<void> _recordRecent(String path) async {
     final store = _recentStore;
     if (store == null) return;
+    if (p.isWithin(Directory.systemTemp.path, path)) return;
     try {
       await store.add(path);
     } catch (_) {
@@ -365,20 +370,23 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     } catch (_) {}
   }
 
-  /// Copy the annotated image to the clipboard.
-  Future<void> _copy() => _export(saveToFile: false, copyToClipboard: true);
+  /// Done: run the user-configured after-editor flow (Settings), then CLOSE the
+  /// editor — Done means the work is finished, unlike the one-off ▾ actions
+  /// which keep the window open. A failed leg keeps the window open so the
+  /// error toast can be acted on.
+  Future<void> _done() async {
+    final flow = await Settings.instance.getAfterEditorDoneFlow();
+    final ok = await _runActions(normalizeFlow(flow, forCapture: false));
+    if (ok && mounted) await _closeAndReset();
+  }
 
-  /// Save the annotated image to the configured folder.
-  Future<void> _save() => _export(saveToFile: true, copyToClipboard: false);
-
-  /// Composite + deliver the annotated image and show a result toast. The shared
-  /// [_exporting] guard covers both Copy and Save so rapid clicks don't re-fire.
-  Future<void> _export({
-    required bool saveToFile,
-    required bool copyToClipboard,
-  }) async {
+  /// Run [actions] (the Done flow or a one-off from the chevron menu) over the
+  /// composited image and toast the outcome. Returns true when EVERY requested
+  /// leg succeeded. The shared [_exporting] guard covers Done and every one-off
+  /// so rapid clicks don't re-fire.
+  Future<bool> _runActions(Set<FlowAction> actions) async {
     final baseImage = _image, controller = _controller;
-    if (baseImage == null || controller == null || _exporting) return;
+    if (baseImage == null || controller == null || _exporting) return false;
     setState(() => _exporting = true);
     try {
       final cap = _cap;
@@ -390,26 +398,47 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         drawables: doc.drawables,
         jpeg: cap.isJpeg,
         jpegQuality: cap.jpegQuality,
-        saveToFile: saveToFile,
-        copyToClipboard: copyToClipboard,
+        actions: actions,
         saveDir: cap.saveDir,
         sourceName: _sourceName,
       );
-      if (!mounted) return;
-      if (copyToClipboard) {
-        _toast(result.copiedToClipboard
-            ? 'Copied to clipboard'
-            : 'Copy failed');
-      } else {
-        // Clear dirty only on a confirmed file save, not on clipboard copy.
-        if (result.savedOk && mounted) setState(() => _dirty = false);
-        _toast(result.savedOk
-            ? 'Saved to ${result.savedPath}'
-            : 'Save failed');
+      if (!mounted) return false;
+      // Clear dirty only on a confirmed file save, not on clipboard copy.
+      if (actions.contains(FlowAction.save) && result.savedOk) {
+        setState(() => _dirty = false);
+        // The saved output is a real artifact — put it in Open Recent (macOS
+        // document-app convention), so Done/Save feed the list too.
+        await _recordRecent(result.savedPath!);
       }
+      _toast(_flowToast(actions, result));
+      final ok =
+          (!actions.contains(FlowAction.copy) || result.copiedToClipboard) &&
+              (!actions.contains(FlowAction.save) || result.savedOk) &&
+              result.extraErrors.isEmpty;
+      // Same completion chime as a capture's delivery (the editor has no
+      // shutter moment, so completion is its only sound), behind the same
+      // Workflow > Sounds toggle.
+      if (ok && cap.completionSound) playComplete();
+      return ok;
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  /// One line summarizing every leg the flow ran, e.g. "Copied · Saved" or
+  /// "Saved to /path · Copy failed".
+  String _flowToast(Set<FlowAction> actions, FlowResult r) {
+    final parts = <String>[
+      if (actions.contains(FlowAction.copy))
+        r.copiedToClipboard ? 'Copied' : 'Copy failed',
+      if (actions.contains(FlowAction.save))
+        r.savedOk ? 'Saved to ${r.savedPath}' : 'Save failed',
+      if (actions.contains(FlowAction.copyPath))
+        r.errors.containsKey('copyPath') ? 'Copy path failed' : 'Path copied',
+      if (actions.contains(FlowAction.showInFinder))
+        if (r.errors.containsKey('showInFinder')) 'Reveal failed',
+    ];
+    return parts.isEmpty ? 'Done' : parts.join(' · ');
   }
 
   /// Aurora-styled "discard unsaved changes?" confirmation. Returns true to
@@ -715,7 +744,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     final host = ImageEditorHost(
       image: image,
       bytes: bytes,
-      onComplete: _save,
+      onComplete: _done,
       activeSignal: _active,
       onOpenSettings: _openSettings,
     );
@@ -773,21 +802,55 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             onTap: _openPanel,
           ),
           const SizedBox(width: 4),
+          // Done = run the configured after-editor flow (Settings). The chevron
+          // offers one-off deviations that run INSTEAD of the flow.
           _BarAction(
-            icon: Icons.copy_outlined,
-            label: 'Copy',
-            onTap: _exporting ? null : _copy,
-          ),
-          const SizedBox(width: 4),
-          _BarAction(
-            icon: Icons.save_outlined,
-            label: 'Save',
+            icon: Icons.check,
+            label: 'Done',
             accent: true,
-            onTap: _exporting ? null : _save,
+            onTap: _exporting ? null : _done,
+          ),
+          PopupMenuButton<Set<FlowAction>>(
+            tooltip: 'One-off action (instead of the Done flow)',
+            enabled: !_exporting,
+            position: PopupMenuPosition.over,
+            offset: const Offset(0, -8),
+            color: const Color(0xF2202830),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            onSelected: _runActions,
+            itemBuilder: (_) => [
+              _oneOff('Copy only', Icons.copy_outlined, {FlowAction.copy}),
+              _oneOff('Save only', Icons.save_outlined, {FlowAction.save}),
+              _oneOff('Copy file path', Icons.link,
+                  {FlowAction.save, FlowAction.copyPath}),
+              _oneOff('Show in Finder', Icons.folder_outlined,
+                  {FlowAction.save, FlowAction.showInFinder}),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Icon(Icons.expand_more, size: 18, color: Colors.white70),
+            ),
           ),
         ],
       );
   }
+
+  PopupMenuItem<Set<FlowAction>> _oneOff(
+          String label, IconData icon, Set<FlowAction> actions) =>
+      PopupMenuItem(
+        value: actions,
+        height: 36,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.white70),
+            const SizedBox(width: 10),
+            Text(label,
+                style: const TextStyle(color: Colors.white, fontSize: 13.5)),
+          ],
+        ),
+      );
 }
 
 /// Undo / redo icon pair styled to sit inside the toolbar's glass bar, enabled

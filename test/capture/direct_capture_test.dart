@@ -6,6 +6,7 @@ import 'package:glimpr/capture/captured_display.dart';
 import 'package:glimpr/capture/direct_capture.dart';
 import 'package:glimpr/capture/last_region.dart';
 import 'package:glimpr/output/deliver.dart';
+import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_store.dart';
 
@@ -135,8 +136,8 @@ void main() {
         regionStore: regionStore,
         deliver: (t, cap) async {
           delivered.add(t);
-          return const DeliveryResult(
-              savedPath: '/tmp/x.png', copiedToClipboard: true, soundPlayed: false);
+          return const FlowResult(DeliveryResult(
+              savedPath: '/tmp/x.png', copiedToClipboard: true, soundPlayed: false));
         },
         shutter: () => shutters++,
         complete: () => completes++,
@@ -194,8 +195,8 @@ void main() {
         },
         deliverWindow: (wi, cap, info) async {
           deliveredWi = wi;
-          return const DeliveryResult(
-              savedPath: '/x.png', copiedToClipboard: true, soundPlayed: true);
+          return const FlowResult(DeliveryResult(
+              savedPath: '/x.png', copiedToClipboard: true, soundPlayed: true));
         },
         settings: Settings(s),
         regionStore: LastRegionStore(s),
