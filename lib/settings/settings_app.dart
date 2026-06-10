@@ -1276,6 +1276,7 @@ class _SettingsAppState extends State<SettingsApp>
         ToolKind.step => 'Numbered step',
         ToolKind.stamp => 'Image stamp',
         ToolKind.magnify => 'Magnify',
+        ToolKind.spotlight => 'Spotlight',
         // The "paste" slot is the universal SELECT tool (select / move / resize
         // / delete any drawable); the paste ACTION is the Cmd-V "Paste image"
         // command above.

@@ -85,6 +85,10 @@ class EditorDocument {
     return _commit(next);
   }
 
+  /// Replace the whole drawable list as ONE undoable step. Used by the spotlight
+  /// layer-wide restyle (every hole updates together) and commitSpotlight.
+  EditorDocument withDrawables(List<Drawable> next) => _commit(next);
+
   /// Replace [i] in the CURRENT state WITHOUT creating an undo step. For async
   /// cosmetic backfills (e.g. a pixelate mosaic finishing after the region was
   /// already committed) that must not become a separate undo entry.

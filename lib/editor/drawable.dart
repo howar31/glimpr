@@ -304,6 +304,28 @@ class MagnifyDrawable extends Drawable implements RectShaped {
       MagnifyDrawable(sourceRect, destCenter, s);
 }
 
+/// A spotlight hole: everything OUTSIDE the union of all spotlight rects is
+/// dimmed (and optionally blurred/pixelated) by ONE shared background layer the
+/// painter renders; this drawable is just one bright hole in it. Layer-wide
+/// params (dim/effect/strength/feather) ride the style and are kept equal across
+/// all spotlights by the controller; rect + cornerRadius are per-hole.
+class SpotlightDrawable extends Drawable implements RectShaped {
+  @override
+  final Rect rect;
+  const SpotlightDrawable(this.rect, DrawStyle style) : super(style);
+
+  @override
+  Rect get bounds => rect;
+
+  @override
+  SpotlightDrawable moved(Offset d) => SpotlightDrawable(rect.shift(d), style);
+
+  @override
+  SpotlightDrawable resizedTo(Rect r) => SpotlightDrawable(r, style);
+
+  SpotlightDrawable withStyle(DrawStyle s) => SpotlightDrawable(rect, s);
+}
+
 /// Bounding box of a list of control points (>= 1).
 Rect _pointsBounds(List<Offset> pts) {
   var minX = pts.first.dx, minY = pts.first.dy;

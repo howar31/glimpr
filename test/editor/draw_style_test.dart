@@ -303,4 +303,56 @@ void main() {
         kMagnifyFactorMin);
     expect(const DrawStyle(magnifyFactor: 3.0) == const DrawStyle(), isFalse);
   });
+
+  group('spotlight style fields', () {
+    test('defaults', () {
+      const s = DrawStyle();
+      expect(s.spotlightDim, kSpotlightDimDefault);
+      expect(s.spotlightEffect, SpotlightEffect.none);
+      expect(s.spotlightFeather, kSpotlightFeatherDefault);
+    });
+
+    test('defaults are omitted from JSON (byte-identical export)', () {
+      final j = const DrawStyle().toJson();
+      expect(j.containsKey('spotlightDim'), isFalse);
+      expect(j.containsKey('spotlightEffect'), isFalse);
+      expect(j.containsKey('spotlightFeather'), isFalse);
+    });
+
+    test('non-defaults round-trip through JSON', () {
+      const s = DrawStyle(
+        spotlightDim: 80,
+        spotlightEffect: SpotlightEffect.pixelate,
+        spotlightFeather: 0,
+      );
+      final back = DrawStyle.fromJson(s.toJson());
+      expect(back.spotlightDim, 80);
+      expect(back.spotlightEffect, SpotlightEffect.pixelate);
+      expect(back.spotlightFeather, 0);
+      expect(back, s);
+    });
+
+    test('fromJson clamps and falls back', () {
+      final s = DrawStyle.fromJson({
+        'spotlightDim': 500,
+        'spotlightEffect': 'garbage',
+        'spotlightFeather': -3,
+      });
+      expect(s.spotlightDim, kSpotlightDimMax);
+      expect(s.spotlightEffect, SpotlightEffect.none);
+      expect(s.spotlightFeather, kSpotlightFeatherMin);
+    });
+
+    test('copyWith carries spotlight fields', () {
+      final s = const DrawStyle().copyWith(
+        spotlightDim: 30,
+        spotlightEffect: SpotlightEffect.blur,
+        spotlightFeather: 10,
+      );
+      expect(s.spotlightDim, 30);
+      expect(s.spotlightEffect, SpotlightEffect.blur);
+      expect(s.spotlightFeather, 10);
+      expect(s == const DrawStyle(), isFalse);
+    });
+  });
 }

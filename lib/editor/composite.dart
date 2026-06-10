@@ -3,9 +3,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as imglib;
 import 'decoration.dart';
+import 'draw_style.dart';
 import 'drawable.dart';
 import 'drawable_painter.dart';
 import 'raster.dart';
+import 'spotlight.dart';
 
 /// A logical rect scaled to native pixels.
 Rect _nativeRect(Rect r, double s) =>
@@ -86,6 +88,20 @@ Future<Uint8List> compositeAndCrop({
       );
     }
   }
+  // Spotlight layer: ONE full-canvas blur/pixelate of the base image (the live
+  // canvas shows the same via the effect cache). Null when no spotlight wants
+  // an effect -> the painter renders the layer dim-only / not at all.
+  ui.Image? spotlightImg;
+  final layer = spotlightLayerStyle(drawables); // the layer-carrying DrawStyle
+  if (layer != null && layer.spotlightEffect != SpotlightEffect.none) {
+    final fullNative = Rect.fromLTWH(
+        0, 0, frozen.width.toDouble(), frozen.height.toDouble());
+    spotlightImg = layer.spotlightEffect == SpotlightEffect.blur
+        ? await blurRegion(
+            frozen, fullNative, blurSigmaNative(layer.strength, scaleFactor))
+        : await pixelateRegion(
+            frozen, fullNative, pixelateCellNative(layer.strength));
+  }
   // Layer 2: drawables, scaled logical->native. Paste-image carries its own
   // bitmap; blur/pixelate draw their pre-rasterised region images.
   canvas.save();
@@ -95,6 +111,7 @@ Future<Uint8List> compositeAndCrop({
     effectImage: (d) => effects[d],
     baseImage: frozen,
     baseScale: scaleFactor,
+    spotlightImage: spotlightImg,
   ).paint(canvas, logicalSize);
   canvas.restore();
   final picture = recorder.endRecording();
@@ -107,6 +124,7 @@ Future<Uint8List> compositeAndCrop({
   for (final img in effects.values) {
     img.dispose();
   }
+  spotlightImg?.dispose();
 
   // Opt-in decoration: wrap the cropped content in margin + rounded corners +
   // drop shadow. JPEG (no alpha) fills the transparent region with the fill

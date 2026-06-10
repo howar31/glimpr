@@ -160,4 +160,25 @@ void main() {
     expect(m2.sourceRect, m.sourceRect);
     expect(m2.destCenter, const Offset(50, 60));
   });
+
+  group('SpotlightDrawable', () {
+    const style = DrawStyle();
+    const rect = Rect.fromLTWH(10, 20, 100, 50);
+
+    test('bounds == rect; moved shifts; resizedTo replaces', () {
+      const d = SpotlightDrawable(rect, style);
+      expect(d.bounds, rect);
+      expect(d.moved(const Offset(5, -5)).rect,
+          const Rect.fromLTWH(15, 15, 100, 50));
+      const r2 = Rect.fromLTWH(0, 0, 30, 30);
+      expect(d.resizedTo(r2).rect, r2);
+    });
+
+    test('withStyle keeps rect', () {
+      const d = SpotlightDrawable(rect, style);
+      final s2 = style.copyWith(spotlightDim: 10);
+      expect(d.withStyle(s2).style.spotlightDim, 10);
+      expect(d.withStyle(s2).rect, rect);
+    });
+  });
 }

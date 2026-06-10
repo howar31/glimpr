@@ -7,6 +7,7 @@ import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'geometry.dart';
+import 'spotlight.dart';
 import 'text_metrics.dart';
 
 // ---- drop-shadow tunables (DrawStyle.shadow) ---------------------------------
@@ -270,18 +271,79 @@ class DrawablePainter extends CustomPainter {
   final EffectImageLookup? effectImage;
   final ui.Image? baseImage; // the magnify tool samples this directly
   final double baseScale; // logical -> native for the magnify source sample
+  final ui.Image? spotlightImage; // full-canvas blur/pixelate for the spotlight layer
   const DrawablePainter({
     required this.drawables,
     this.effectImage,
     this.baseImage,
     this.baseScale = 1,
+    this.spotlightImage,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final d in drawables) {
-      _paintOne(canvas, d, size);
+    final layerStyle = spotlightLayerStyle(drawables);
+    if (layerStyle == null) {
+      for (final d in drawables) {
+        _paintOne(canvas, d, size);
+      }
+      return;
     }
+    // Spotlight present: raster regions are part of the photo (painted under
+    // the dim), the shared spotlight layer next, every other annotation above
+    // it so ink/text/images never get dimmed.
+    for (final d in drawables) {
+      if (paintsUnderSpotlight(d)) _paintOne(canvas, d, size);
+    }
+    _paintSpotlightLayer(canvas, size, layerStyle);
+    for (final d in drawables) {
+      if (!paintsUnderSpotlight(d)) _paintOne(canvas, d, size);
+    }
+  }
+
+  /// ONE shared background layer: the optional full-canvas blur/pixelate image,
+  /// a dim wash over it, then every spotlight rect punched out (dstOut) with a
+  /// feathered (MaskFilter.blur) rounded-rect hole — one pass through both the
+  /// effect image and the dim so the soft edge is consistent.
+  void _paintSpotlightLayer(Canvas canvas, Size size, DrawStyle layer) {
+    final full = Offset.zero & size;
+    final dimAlpha = layer.spotlightDim / 100;
+    final effect =
+        layer.spotlightEffect == SpotlightEffect.none ? null : spotlightImage;
+    if (dimAlpha <= 0 && effect == null) return; // nothing visible to draw
+    canvas.saveLayer(full, Paint());
+    if (effect != null) {
+      canvas.drawImageRect(
+        effect,
+        Rect.fromLTWH(0, 0, effect.width.toDouble(), effect.height.toDouble()),
+        full,
+        Paint()
+          ..filterQuality = layer.spotlightEffect == SpotlightEffect.blur
+              ? FilterQuality.medium
+              : FilterQuality.none,
+      );
+    }
+    if (dimAlpha > 0) {
+      canvas.drawRect(
+        full,
+        Paint()..color = const Color(0xFF000000).withValues(alpha: dimAlpha),
+      );
+    }
+    final sigma = spotlightSigma(layer.spotlightFeather);
+    for (final d in drawables) {
+      if (d is! SpotlightDrawable) continue;
+      final radius = resolveCornerRadius(d.style.cornerRadius, d.rect);
+      final hole = Paint()
+        ..blendMode = BlendMode.dstOut
+        ..color = const Color(0xFFFFFFFF)
+        ..isAntiAlias = true;
+      if (sigma > 0) {
+        hole.maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
+      }
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(d.rect, Radius.circular(radius)), hole);
+    }
+    canvas.restore();
   }
 
   void _paintOne(Canvas canvas, Drawable d, Size size) {
@@ -429,6 +491,8 @@ class DrawablePainter extends CustomPainter {
         );
       case MagnifyDrawable():
         _paintMagnify(canvas, d);
+      case SpotlightDrawable():
+        break; // painted by the shared spotlight-layer pass, not per-drawable
     }
   }
 
@@ -764,7 +828,9 @@ class DrawablePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(DrawablePainter old) =>
-      old.drawables != drawables || old.effectImage != effectImage;
+      old.drawables != drawables ||
+      old.effectImage != effectImage ||
+      old.spotlightImage != spotlightImage;
 }
 
 /// The selected drawable's highlight: a flowing two-tone marching-ants outline

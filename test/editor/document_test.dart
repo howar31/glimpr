@@ -98,4 +98,16 @@ void main() {
     doc = doc.undo();
     expect(lefts(doc), [0, 1]);
   });
+
+  test('withDrawables replaces the list as ONE undo step', () {
+    var doc = const EditorDocument().add(rect(0));
+    doc = doc.withDrawables([
+      const SpotlightDrawable(Rect.fromLTWH(0, 0, 2, 2), style),
+      const SpotlightDrawable(Rect.fromLTWH(5, 5, 2, 2), style),
+    ]);
+    expect(doc.drawables.length, 2);
+    final undone = doc.undo();
+    expect(undone.drawables.length, 1);
+    expect(undone.drawables.single, isA<RectangleDrawable>());
+  });
 }

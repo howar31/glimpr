@@ -73,4 +73,10 @@ void main() {
     expect(hitTestTop([m], const Offset(100, 100)), 0); // in inset
     expect(hitTestTop([m], const Offset(50, 50)), isNull); // neither
   });
+
+  test('spotlight hole hit-tests by containment', () {
+    const d = SpotlightDrawable(Rect.fromLTWH(0, 0, 50, 50), DrawStyle());
+    expect(hitTestTop([d], const Offset(25, 25)), 0);
+    expect(hitTestTop([d], const Offset(80, 80)), isNull);
+  });
 }

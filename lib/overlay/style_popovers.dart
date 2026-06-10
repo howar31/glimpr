@@ -1209,6 +1209,80 @@ class StepShapePickerPopover extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+
+String spotlightEffectLabel(SpotlightEffect e) => switch (e) {
+      SpotlightEffect.none => 'Dim only',
+      SpotlightEffect.blur => 'Dim + Blur',
+      SpotlightEffect.pixelate => 'Dim + Pixelate',
+    };
+
+/// A small menu choosing the spotlight layer's background treatment.
+class SpotlightEffectPickerPopover extends StatelessWidget {
+  const SpotlightEffectPickerPopover({
+    Key? key,
+    required this.selected,
+    required this.onSelected,
+  }) : super(key: key);
+
+  final SpotlightEffect selected;
+  final ValueChanged<SpotlightEffect> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    const accent = GlimprTokens.accent;
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final e in SpotlightEffect.values)
+            InkWell(
+              onTap: () => onSelected(e),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      switch (e) {
+                        SpotlightEffect.none => Icons.brightness_6,
+                        SpotlightEffect.blur => Icons.blur_on,
+                        SpotlightEffect.pixelate => Icons.grid_on,
+                      },
+                      size: 16,
+                      color: e == selected ? accent : fg,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        spotlightEffectLabel(e),
+                        style: TextStyle(
+                          color: e == selected ? accent : fg,
+                          fontSize: 14,
+                          fontWeight:
+                              e == selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 22,
+                      child: e == selected
+                          ? const Icon(Icons.check, size: 16, color: accent)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // RadiusPickerPopover  (rectangle corner radius)
 // ---------------------------------------------------------------------------
 

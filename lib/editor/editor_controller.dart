@@ -4,6 +4,7 @@ import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'document.dart';
+import 'spotlight.dart';
 
 /// Fixed down-right offset applied to a duplicated annotation so the copy is
 /// visibly distinct from and grabbable over its source.
@@ -24,6 +25,7 @@ enum ToolKind {
   paste,
   stamp,
   magnify,
+  spotlight,
 }
 
 enum EditorPhase { annotate, crop }
@@ -52,6 +54,7 @@ ToolKind? toolKindForDrawable(Drawable d) => switch (d) {
       BlurDrawable() => ToolKind.blur,
       PixelateDrawable() => ToolKind.pixelate,
       MagnifyDrawable() => ToolKind.magnify,
+      SpotlightDrawable() => ToolKind.spotlight,
       ImageDrawable() => null,
     };
 
@@ -184,6 +187,12 @@ class EditorController {
       magnifyFactor: f.clamp(kMagnifyFactorMin, kMagnifyFactorMax)));
   void setMagnifyConnector(bool on) =>
       _updateStyle(style.value.copyWith(magnifyConnector: on));
+  void setSpotlightDim(int v) => _updateStyle(style.value
+      .copyWith(spotlightDim: v.clamp(kSpotlightDimMin, kSpotlightDimMax)));
+  void setSpotlightEffect(SpotlightEffect e) =>
+      _updateStyle(style.value.copyWith(spotlightEffect: e));
+  void setSpotlightFeather(double f) => _updateStyle(style.value.copyWith(
+      spotlightFeather: f.clamp(kSpotlightFeatherMin, kSpotlightFeatherMax)));
   void setCurvePoints(int n) => _updateStyle(style.value
       .copyWith(curvePoints: n.clamp(kCurvePointsMin, kCurvePointsMax)));
   void setStrength(double s) => _updateStyle(style.value
@@ -259,7 +268,75 @@ class EditorController {
     if (!_hasSelection && tool.value != ToolKind.crop) {
       toolStyles[tool.value] = s;
     }
-    _restyleSelected();
+    final i = selectedIndex.value;
+    final sel = (i != null && i < document.value.drawables.length)
+        ? document.value.drawables[i]
+        : null;
+    if (sel is SpotlightDrawable) {
+      // The selected hole takes the FULL style (incl. per-hole cornerRadius);
+      // the other holes take the layer-wide fields — one commit, one undo step.
+      _restyleSpotlights(i!);
+    } else {
+      _restyleSelected();
+      _syncSpotlightLayer(); // no-op unless the spotlight TOOL is active
+    }
+  }
+
+  /// Spotlight restyle: the selected hole takes the full bar style (incl.
+  /// per-hole cornerRadius); every other hole takes only the layer-wide fields.
+  /// ONE withDrawables commit = one undo step.
+  void _restyleSpotlights(int selected) {
+    final src = style.value;
+    final drawables = document.value.drawables;
+    var changed = false;
+    final next = <Drawable>[];
+    for (var k = 0; k < drawables.length; k++) {
+      final d = drawables[k];
+      if (d is! SpotlightDrawable) {
+        next.add(d);
+        continue;
+      }
+      final want = k == selected ? src : mergeSpotlightLayerFields(d.style, src);
+      if (want != d.style) changed = true;
+      next.add(d.withStyle(want));
+    }
+    if (changed) document.value = document.value.withDrawables(next);
+  }
+
+  /// ONE background per image: with the spotlight TOOL active and nothing
+  /// selected, a bar change still updates the layer — copy the layer-wide fields
+  /// (dim/effect/strength/feather) onto EVERY spotlight drawable. Per-hole
+  /// fields stay untouched. No-op when nothing changes (no undo-stack spam).
+  void _syncSpotlightLayer() {
+    if (_hasSelection || tool.value != ToolKind.spotlight) return;
+    final src = style.value;
+    var changed = false;
+    final next = <Drawable>[];
+    for (final d in document.value.drawables) {
+      if (d is SpotlightDrawable) {
+        final merged = mergeSpotlightLayerFields(d.style, src);
+        if (merged != d.style) {
+          changed = true;
+          next.add(d.withStyle(merged));
+          continue;
+        }
+      }
+      next.add(d);
+    }
+    if (changed) document.value = document.value.withDrawables(next);
+  }
+
+  /// Commit a new spotlight hole: append it AND equalise the layer-wide fields
+  /// of every existing hole to the new one's, in ONE undoable commit.
+  void commitSpotlight(SpotlightDrawable d) {
+    final next = <Drawable>[
+      for (final e in document.value.drawables)
+        e is SpotlightDrawable
+            ? e.withStyle(mergeSpotlightLayerFields(e.style, d.style))
+            : e,
+      d,
+    ];
+    document.value = document.value.withDrawables(next);
   }
 
   /// "Edit": when a drawable is selected (hovered/clicked), a style change also
@@ -281,6 +358,7 @@ class EditorController {
       BlurDrawable() => d.withStyle(style.value),
       PixelateDrawable() => d.withStyle(style.value),
       MagnifyDrawable() => d.withStyle(style.value),
+      SpotlightDrawable() => d.withStyle(style.value),
       // Pasted images carry no editable style.
       ImageDrawable() => d,
     };

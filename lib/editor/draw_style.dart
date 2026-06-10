@@ -137,6 +137,28 @@ const double kMagnifyFactorDefault = 2.0;
 const double kMagnifyFactorMin = 1.5;
 const double kMagnifyFactorMax = 6.0;
 
+/// Spotlight background-layer params (spotlight tool only; other tools carry but
+/// ignore them). ONE shared layer per image: dim opacity (percent), an optional
+/// blur/pixelate treatment of the background (its intensity rides the shared
+/// [DrawStyle.strength] field, same units as the Blur/Pixelate tools), and the
+/// feather (soft-edge) radius of every hole in LOGICAL px.
+const int kSpotlightDimDefault = 55;
+const int kSpotlightDimMin = 0;
+const int kSpotlightDimMax = 90;
+const double kSpotlightFeatherDefault = 24;
+const double kSpotlightFeatherMin = 0;
+const double kSpotlightFeatherMax = 64;
+
+/// Background treatment outside the spotlight holes (composes with the dim).
+enum SpotlightEffect { none, blur, pixelate }
+
+SpotlightEffect _spotlightEffectFromName(Object? name) {
+  for (final e in SpotlightEffect.values) {
+    if (e.name == name) return e;
+  }
+  return SpotlightEffect.none;
+}
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -157,6 +179,9 @@ class DrawStyle {
   final StepShape stepShape; // step badge outline shape; circle = legacy
   final double magnifyFactor; // magnify inset zoom; inset = source * factor
   final bool magnifyConnector; // draw the source->inset connector lines
+  final int spotlightDim; // background dim percent; spotlight only
+  final SpotlightEffect spotlightEffect; // background blur/pixelate; spotlight only
+  final double spotlightFeather; // hole soft-edge radius (logical px)
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -176,6 +201,9 @@ class DrawStyle {
     this.stepShape = StepShape.circle,
     this.magnifyFactor = kMagnifyFactorDefault,
     this.magnifyConnector = true,
+    this.spotlightDim = kSpotlightDimDefault,
+    this.spotlightEffect = SpotlightEffect.none,
+    this.spotlightFeather = kSpotlightFeatherDefault,
   });
 
   DrawStyle copyWith({
@@ -197,6 +225,9 @@ class DrawStyle {
     StepShape? stepShape,
     double? magnifyFactor,
     bool? magnifyConnector,
+    int? spotlightDim,
+    SpotlightEffect? spotlightEffect,
+    double? spotlightFeather,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -216,6 +247,9 @@ class DrawStyle {
     stepShape: stepShape ?? this.stepShape,
     magnifyFactor: magnifyFactor ?? this.magnifyFactor,
     magnifyConnector: magnifyConnector ?? this.magnifyConnector,
+    spotlightDim: spotlightDim ?? this.spotlightDim,
+    spotlightEffect: spotlightEffect ?? this.spotlightEffect,
+    spotlightFeather: spotlightFeather ?? this.spotlightFeather,
   );
 
   Map<String, dynamic> toJson() => {
@@ -237,6 +271,11 @@ class DrawStyle {
     if (stepShape != StepShape.circle) 'stepShape': stepShape.name,
     if (magnifyFactor != kMagnifyFactorDefault) 'magnifyFactor': magnifyFactor,
     if (!magnifyConnector) 'magnifyConnector': false,
+    if (spotlightDim != kSpotlightDimDefault) 'spotlightDim': spotlightDim,
+    if (spotlightEffect != SpotlightEffect.none)
+      'spotlightEffect': spotlightEffect.name,
+    if (spotlightFeather != kSpotlightFeatherDefault)
+      'spotlightFeather': spotlightFeather,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -264,6 +303,12 @@ class DrawStyle {
     magnifyFactor: ((j['magnifyFactor'] as num?)?.toDouble() ?? kMagnifyFactorDefault)
         .clamp(kMagnifyFactorMin, kMagnifyFactorMax),
     magnifyConnector: j['magnifyConnector'] as bool? ?? true,
+    spotlightDim: ((j['spotlightDim'] as num?)?.toInt() ?? kSpotlightDimDefault)
+        .clamp(kSpotlightDimMin, kSpotlightDimMax),
+    spotlightEffect: _spotlightEffectFromName(j['spotlightEffect']),
+    spotlightFeather:
+        ((j['spotlightFeather'] as num?)?.toDouble() ?? kSpotlightFeatherDefault)
+            .clamp(kSpotlightFeatherMin, kSpotlightFeatherMax),
   );
 
   @override
@@ -286,10 +331,14 @@ class DrawStyle {
       other.stepStart == stepStart &&
       other.stepShape == stepShape &&
       other.magnifyFactor == magnifyFactor &&
-      other.magnifyConnector == magnifyConnector;
+      other.magnifyConnector == magnifyConnector &&
+      other.spotlightDim == spotlightDim &&
+      other.spotlightEffect == spotlightEffect &&
+      other.spotlightFeather == spotlightFeather;
   @override
-  int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
+  int get hashCode => Object.hashAll([color, strokeWidth, fontSize, fontFamily,
       texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
       cornerRadius, outlineColor, arrowHeadScale, stepStart, stepShape,
-      magnifyFactor, magnifyConnector);
+      magnifyFactor, magnifyConnector, spotlightDim, spotlightEffect,
+      spotlightFeather]);
 }

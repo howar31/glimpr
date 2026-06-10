@@ -26,6 +26,7 @@ import 'hit_test.dart';
 import 'hud_config.dart';
 import 'loupe_config.dart';
 import 'raster.dart';
+import 'spotlight.dart';
 import 'text_metrics.dart';
 import 'viewport.dart';
 
@@ -352,6 +353,7 @@ class _EditorCoreState extends State<EditorCore> {
     ToolKind.pixelate,
     ToolKind.rectangle,
     ToolKind.ellipse,
+    ToolKind.spotlight,
   };
 
   /// A drag / edit gesture is in progress (suppresses the window-snap highlight).
@@ -362,7 +364,10 @@ class _EditorCoreState extends State<EditorCore> {
   /// The dimming scrim stays crop-only.
   bool get _showsCrosshair {
     final t = c.tool.value;
-    return t == ToolKind.crop || t == ToolKind.blur || t == ToolKind.pixelate;
+    return t == ToolKind.crop ||
+        t == ToolKind.blur ||
+        t == ToolKind.pixelate ||
+        t == ToolKind.spotlight;
   }
 
   /// Eyedropper (colour sampler) mode is on for THIS (active) canvas.
@@ -557,10 +562,38 @@ class _EditorCoreState extends State<EditorCore> {
         _buildEffect(buildKey);
       }
     }
+    // Spotlight layer: ONE full-canvas effect image when any spotlight wants a
+    // background blur/pixelate. Keyed like a region at the full canvas rect.
+    // Moving/resizing a hole does NOT invalidate it (it samples the base
+    // image); only an effect-kind or strength change rebuilds.
+    final layer = spotlightLayerStyle(drawables);
+    if (layer != null && layer.spotlightEffect != SpotlightEffect.none) {
+      final fullRect = Offset.zero & _canvasSize;
+      final isBlur = layer.spotlightEffect == SpotlightEffect.blur;
+      final ck = (isBlur, fullRect);
+      needed.add(ck);
+      final cur = _effectCache[ck];
+      final buildKey = (isBlur, fullRect, layer.strength);
+      if ((cur == null || cur.$2 != layer.strength) &&
+          !_effectPending.contains(buildKey)) {
+        _buildEffect(buildKey);
+      }
+    }
     for (final k
         in _effectCache.keys.where((k) => !needed.contains(k)).toList()) {
       _effectCache.remove(k)?.$1.dispose();
     }
+  }
+
+  /// The cached full-canvas effect image for the spotlight layer, or null (the
+  /// layer then renders dim-only while the image computes / when effect = none).
+  ui.Image? _spotlightLayerImage() {
+    final layer = spotlightLayerStyle(_effectiveDrawables());
+    if (layer == null || layer.spotlightEffect == SpotlightEffect.none) {
+      return null;
+    }
+    final isBlur = layer.spotlightEffect == SpotlightEffect.blur;
+    return _effectCache[(isBlur, Offset.zero & _canvasSize)]?.$1;
   }
 
   Future<void> _buildEffect((bool, Rect, double) buildKey) async {
@@ -766,6 +799,8 @@ class _EditorCoreState extends State<EditorCore> {
         return (d) => d is ImageDrawable;
       case ToolKind.magnify:
         return (d) => d is MagnifyDrawable;
+      case ToolKind.spotlight:
+        return (d) => d is SpotlightDrawable;
       case ToolKind.paste:
         // The "paste" slot is the universal SELECT tool: it operates on EVERY
         // drawable type (select / move / resize / delete), so it matches all.
@@ -786,6 +821,7 @@ class _EditorCoreState extends State<EditorCore> {
     ToolKind.paste,
     ToolKind.stamp,
     ToolKind.magnify,
+    ToolKind.spotlight,
   };
 
   // Tools whose drawable is a Segmented shape (two endpoint handles, not box
@@ -1279,6 +1315,15 @@ class _EditorCoreState extends State<EditorCore> {
           _selectAndPin(hit);
         }
         return;
+      case ToolKind.spotlight:
+        if (_hitActiveType(p) case final hit?) {
+          _selectAndPin(hit);
+        } else if (win != null) {
+          c.commitSpotlight(SpotlightDrawable(win.rect, style));
+        } else {
+          _selectAndPin(null);
+        }
+        return;
       case ToolKind.arrow:
       case ToolKind.line:
       case ToolKind.pen:
@@ -1709,6 +1754,13 @@ class _EditorCoreState extends State<EditorCore> {
             Offset(srcR.width * f / 2 + 16, srcR.height * f / 2 + 16);
         setState(() => _preview = MagnifyDrawable(srcR, destC, c.style.value));
         break;
+      case ToolKind.spotlight:
+        final cp = shift ? _squareCorner(s, p) : p;
+        setState(() {
+          _cursor = p; // keep the crosshair/loupe on the dragging corner
+          _preview = SpotlightDrawable(Rect.fromPoints(s, cp), c.style.value);
+        });
+        break;
       case ToolKind.text:
       case ToolKind.step:
       case ToolKind.paste:
@@ -1837,7 +1889,13 @@ class _EditorCoreState extends State<EditorCore> {
       out = PenDrawable(
           decimateByDistance(prev.points, kPenSmoothMinDist), prev.style);
     }
-    c.commitDrawable(out);
+    if (out is SpotlightDrawable) {
+      // One commit appends the hole AND equalises the layer-wide fields of any
+      // existing holes (one background per image).
+      c.commitSpotlight(out);
+    } else {
+      c.commitDrawable(out);
+    }
   }
 
   // ---- build -------------------------------------------------------------
@@ -1909,6 +1967,7 @@ class _EditorCoreState extends State<EditorCore> {
             ? (c.document.value.canvasImage ?? widget.host.baseImage)
             : widget.host.baseImage,
         baseScale: widget.host.pixelScale,
+        spotlightImage: _spotlightLayerImage(),
       ),
       size: _canvasSize,
     );

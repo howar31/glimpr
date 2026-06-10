@@ -406,6 +406,7 @@ enum _OpenPopover {
   lineStyle,
   arrowHeads,
   stepShape,
+  spotlightEffect,
 }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
@@ -746,6 +747,27 @@ class _OptionsRowState extends State<_OptionsRow> {
     );
   }
 
+  void _openSpotlightEffectPopover() {
+    if (_open == _OpenPopover.spotlightEffect) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    _showPopover(
+      _OpenPopover.spotlightEffect,
+      _barLink,
+      width: 180,
+      child: SpotlightEffectPickerPopover(
+        selected: _c.style.value.spotlightEffect,
+        onSelected: (e) {
+          _c.setSpotlightEffect(e);
+          _closePopover();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
   /// Inserts the [OverlayEntry] that hosts [child] above the toolbar, anchored
   /// to [link] and dismissed by a full-screen outside-tap barrier.
   void _showPopover(
@@ -847,7 +869,10 @@ class _OptionsRowState extends State<_OptionsRow> {
         // The style controls show for color/raster tools (the EFFECTIVE type);
         // the selection-action cluster shows whenever ANYTHING is selected —
         // including a pasted image, which has no style bar at all.
-        final hasStyleBar = colorTools.contains(tool) || isRasterEffect;
+        // Spotlight has no colour; its bar is the dim/effect/feather cluster.
+        final isSpotlight = tool == ToolKind.spotlight;
+        final hasStyleBar =
+            colorTools.contains(tool) || isRasterEffect || isSpotlight;
         final sel = _c.selectedIndex.value;
         final hasSelection =
             sel != null && sel >= 0 && sel < _c.document.value.drawables.length;
@@ -908,7 +933,8 @@ class _OptionsRowState extends State<_OptionsRow> {
         };
         final showsFill = fillTools.contains(tool);
         final showsOutline = tool == ToolKind.text;
-        final showsCornerRadius = tool == ToolKind.rectangle;
+        // The spotlight hole reuses the Radius pill (per-hole corner radius).
+        final showsCornerRadius = tool == ToolKind.rectangle || isSpotlight;
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
@@ -932,7 +958,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                   // presets live inside the picker now. Hidden for the raster
                   // effects — blur/pixelate have no colour, they get a strength
                   // stepper instead.
-                  if (!isRasterEffect)
+                  if (!isRasterEffect && !isSpotlight)
                     _ColorButton(color: style.color, onTap: _openColorPopover),
                   if (showsFill) ...[
                     const SizedBox(width: 6),
@@ -1104,6 +1130,64 @@ class _OptionsRowState extends State<_OptionsRow> {
                       key: const ValueKey('font-button'),
                       label: style.fontFamily ?? 'System',
                       onTap: _openFontPopover,
+                    ),
+                  ],
+                  if (isSpotlight) ...[
+                    _NumberStepper(
+                      key: const ValueKey('spotlight-dim-stepper'),
+                      controller: _c,
+                      read: (s) => s.spotlightDim.toDouble(),
+                      write: (v) => _c.setSpotlightDim(v.round()),
+                      min: kSpotlightDimMin.toDouble(),
+                      max: kSpotlightDimMax.toDouble(),
+                      step: 5,
+                      suffix: '%',
+                      leadingIcon: Icons.brightness_6,
+                      leadingTooltip: 'Background dim',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
+                    const SizedBox(width: 8),
+                    _TextureButton(
+                      key: const ValueKey('spotlight-effect-picker'),
+                      label: spotlightEffectLabel(style.spotlightEffect),
+                      tooltip: 'Background treatment',
+                      onTap: _openSpotlightEffectPopover,
+                    ),
+                    if (style.spotlightEffect != SpotlightEffect.none) ...[
+                      const SizedBox(width: 8),
+                      _NumberStepper(
+                        key: const ValueKey('spotlight-strength-stepper'),
+                        controller: _c,
+                        read: (s) => s.strength,
+                        write: _c.setStrength,
+                        min: 4,
+                        max: 64,
+                        step: 2,
+                        suffix: 'px',
+                        leadingIcon:
+                            style.spotlightEffect == SpotlightEffect.blur
+                                ? Icons.blur_on
+                                : Icons.grid_on,
+                        leadingTooltip:
+                            style.spotlightEffect == SpotlightEffect.blur
+                                ? 'Blur strength'
+                                : 'Pixel size',
+                        onEditingDone: widget.onPtEditingDone,
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    _NumberStepper(
+                      key: const ValueKey('spotlight-feather-stepper'),
+                      controller: _c,
+                      read: (s) => s.spotlightFeather,
+                      write: _c.setSpotlightFeather,
+                      min: kSpotlightFeatherMin,
+                      max: kSpotlightFeatherMax,
+                      step: 2,
+                      suffix: 'px',
+                      leadingIcon: Icons.blur_linear,
+                      leadingTooltip: 'Edge feather',
+                      onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
                   if (isMagnify) ...[
