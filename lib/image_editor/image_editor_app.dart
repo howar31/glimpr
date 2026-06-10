@@ -381,6 +381,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Future<void> _done() async {
     final flow = await Settings.instance.getAfterEditorDoneFlow();
     final ok = await _runActions(normalizeFlow(flow, forCapture: false));
+    // Done always closes on success — the share picker (if in the flow) is
+    // anchored to the menu-bar icon, so it survives the window going away.
     if (ok && mounted) await _closeAndReset();
   }
 
@@ -405,6 +407,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         actions: actions,
         saveDir: cap.saveDir,
         sourceName: _sourceName,
+        // Route the share leg over the editor's own channel (this engine has
+        // no glimpr/capture handler); native anchors it to the menu-bar icon.
+        shareFn: (path) => _channel.invokeMethod('shareSheet', {'path': path}),
       );
       if (!mounted) return false;
       // Clear dirty only on a confirmed file save, not on clipboard copy.
@@ -441,6 +446,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         r.errors.containsKey('copyPath') ? 'Copy path failed' : 'Path copied',
       if (actions.contains(FlowAction.showInFinder))
         if (r.errors.containsKey('showInFinder')) 'Reveal failed',
+      if (actions.contains(FlowAction.shareSheet))
+        if (r.errors.containsKey('shareSheet')) 'Share failed',
     ];
     return parts.isEmpty ? 'Done' : parts.join(' · ');
   }
@@ -905,6 +912,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                   {FlowAction.save, FlowAction.copyPath}),
               _oneOff(t, 'Show in Finder', Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
+              _oneOff(t, 'Share…', Icons.ios_share, {FlowAction.shareSheet}),
             ],
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),

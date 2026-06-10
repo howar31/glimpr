@@ -283,6 +283,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "openSettings":
         self?.revealSettings()
         result(nil)
+      // Editor Done flow / one-off: share sheet anchored to the editor window.
+      case "shareSheet":
+        if let path = (call.arguments as? [String: Any])?["path"] as? String {
+          self?.showShareSheet(path: path)
+        }
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -425,6 +431,22 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     case "None": break
     default: w.zoom(nil) // "Maximize" / unset
     }
+  }
+
+  // Retains the share picker while it is on screen (it would deallocate — and
+  // vanish — the moment the local variable went out of scope).
+  private var sharePicker: NSSharingServicePicker?
+
+  /// Show the macOS share sheet for the file at [path], anchored to the
+  /// menu-bar status item for EVERY source: capture flows have no window left
+  /// by completion time, and the editor's Done closes its window right after
+  /// firing the share — a window-anchored picker would die with it. One anchor
+  /// keeps the behaviour uniform.
+  func showShareSheet(path: String) {
+    guard let button = statusItem?.anchorButton else { return }
+    let picker = NSSharingServicePicker(items: [URL(fileURLWithPath: path)])
+    sharePicker = picker
+    picker.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
   }
 
   private func hideImageEditor() {

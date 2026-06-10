@@ -29,6 +29,14 @@ final class CaptureChannel {
           }
         }
         result(nil)
+      // After-capture flow: macOS share sheet for the exported file.
+      case "shareSheet":
+        if let path = (call.arguments as? [String: Any])?["path"] as? String {
+          DispatchQueue.main.async {
+            MainFlutterWindow.shared?.showShareSheet(path: path)
+          }
+        }
+        result(nil)
       case "captureFrames":
         // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
         // and the channel reply must land on the platform (main) thread.

@@ -15,6 +15,7 @@ enum FlowAction {
   openEditor, // open the result in the standalone image editor (capture only)
   copyPath, // saved file PATH -> clipboard (needs save)
   showInFinder, // reveal the saved file in Finder (needs save)
+  shareSheet, // macOS share menu (AirDrop / Messages / ...) for the file
 }
 
 /// Parse a comma-joined name list (the persisted form). Unknown names are
@@ -59,10 +60,11 @@ class FlowResult {
 
 /// Run a completion flow over an already-encoded image: the save/copy legs go
 /// through [deliverCapture] (independent, partial-failure-aware), then the
-/// extras in order copyPath -> showInFinder -> openEditor. copyPath and
-/// showInFinder need a saved file — without one they record an error rather
-/// than throwing (the Settings UI gates them on save, this guards races).
-/// openEditor falls back to a temp file when nothing was saved.
+/// extras in order copyPath -> showInFinder -> openEditor -> shareSheet.
+/// copyPath and showInFinder need a saved file — without one they record an
+/// error rather than throwing (the Settings UI gates them on save, this guards
+/// races). openEditor and shareSheet fall back to ONE shared temp file when
+/// nothing was saved.
 Future<FlowResult> runFlow({
   required Set<FlowAction> actions,
   required Uint8List bytes,
@@ -74,6 +76,7 @@ Future<FlowResult> runFlow({
   Future<void> Function(String text)? copyTextFn,
   Future<void> Function(String path)? revealFn,
   Future<void> Function(String path)? openEditorFn,
+  Future<void> Function(String path)? shareFn,
   Future<String> Function(Uint8List bytes)? writeTempFn,
 }) async {
   final delivery = await deliverCapture(
@@ -91,10 +94,16 @@ Future<FlowResult> runFlow({
       copyTextFn ?? (t) => Clipboard.setData(ClipboardData(text: t));
   final reveal = revealFn ?? _revealInFinder;
   final openEditor = openEditorFn ?? CaptureBridge.openInEditor;
+  final share = shareFn ?? CaptureBridge.shareSheet;
   final writeTemp = writeTempFn ?? ((b) => _writeTemp(b, fileName));
 
   final extra = <String, String>{};
   final path = delivery.savedPath;
+  // openEditor + shareSheet both need a file; with no save leg they share ONE
+  // temp write.
+  String? tempPath;
+  Future<String> ensureFile() async =>
+      path ?? (tempPath ??= await writeTemp(bytes));
 
   if (actions.contains(FlowAction.copyPath)) {
     if (path == null) {
@@ -120,9 +129,16 @@ Future<FlowResult> runFlow({
   }
   if (actions.contains(FlowAction.openEditor)) {
     try {
-      await openEditor(path ?? await writeTemp(bytes));
+      await openEditor(await ensureFile());
     } catch (e) {
       extra['openEditor'] = '$e';
+    }
+  }
+  if (actions.contains(FlowAction.shareSheet)) {
+    try {
+      await share(await ensureFile());
+    } catch (e) {
+      extra['shareSheet'] = '$e';
     }
   }
   return FlowResult(delivery, extra);

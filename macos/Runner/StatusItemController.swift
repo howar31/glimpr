@@ -4,6 +4,10 @@ import Cocoa
 /// now Capture + Quit. Actions are injected so this class owns no app logic.
 final class StatusItemController: NSObject {
   private let item: NSStatusItem
+
+  /// The menu-bar button, exposed as an anchor view for popovers/share sheets
+  /// fired by flows that have no window of their own (e.g. direct captures).
+  var anchorButton: NSStatusBarButton? { item.button }
   private let onCapture: () -> Void
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
@@ -21,6 +25,7 @@ final class StatusItemController: NSObject {
     self.onOpenRecent = onOpenRecent
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
+    // (anchorButton below exposes the bar button as a popover/share anchor.)
     // Brand Viewfinder mark as a template image: macOS tints it to match the
     // menu-bar appearance (white on a dark bar, black on a light one). Falls back
     // to the system viewfinder symbol if the asset is somehow unavailable.

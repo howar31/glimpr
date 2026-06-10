@@ -108,6 +108,41 @@ void main() {
       expect(opened, ['/tmp/x/shot.png', '/tmp/temp.png']);
     });
 
+    test('shareSheet uses the saved path; unsaved shares ONE temp with '
+        'openEditor', () async {
+      final shared = <String>[];
+      await runFlow(
+        actions: {FlowAction.save, FlowAction.shareSheet},
+        bytes: bytes,
+        fileName: 'shot.png',
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        shareFn: (p) async => shared.add(p),
+        writeTempFn: (b) async => fail('must not write temp'),
+      );
+      expect(shared, ['/tmp/x/shot.png']);
+
+      var tempWrites = 0;
+      final opened = <String>[];
+      await runFlow(
+        actions: {FlowAction.openEditor, FlowAction.shareSheet},
+        bytes: bytes,
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        openEditorFn: (p) async => opened.add(p),
+        shareFn: (p) async => shared.add(p),
+        writeTempFn: (b) async {
+          tempWrites++;
+          return '/tmp/temp.png';
+        },
+      );
+      expect(tempWrites, 1); // one shared temp file for both legs
+      expect(opened, ['/tmp/temp.png']);
+      expect(shared, ['/tmp/x/shot.png', '/tmp/temp.png']);
+    });
+
     test('save/copy legs honour the action set (delivery layer reused)',
         () async {
       var clipped = 0;

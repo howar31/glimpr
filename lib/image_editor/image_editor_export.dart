@@ -28,6 +28,9 @@ Future<FlowResult> exportImage({
   required Directory? saveDir,
   required String sourceName,
   RunFlowSeam? run,
+  // The editor engine has no glimpr/capture handler, so its share leg rides
+  // the editor's own channel — injected here, forwarded to runFlow.
+  Future<void> Function(String path)? shareFn,
 }) async {
   final bytes = await compositeAndCrop(
     frozen: image,
@@ -45,6 +48,7 @@ Future<FlowResult> exportImage({
             saveDir: saveDir,
             fileName: fileName,
             soundFn: () async {},
+            shareFn: shareFn,
           );
   return fn(
     actions: actions,

@@ -281,6 +281,12 @@ class _SettingsAppState extends State<SettingsApp>
           hint: 'Open the result in the image editor for further work',
           trailing: toggle(FlowAction.openEditor),
         ),
+      SettingRow(
+        divider: true,
+        title: 'Share sheet',
+        hint: 'Open the macOS share menu (AirDrop, Messages, …)',
+        trailing: toggle(FlowAction.shareSheet),
+      ),
     ];
   }
 

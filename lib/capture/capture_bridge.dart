@@ -53,6 +53,14 @@ class CaptureBridge {
   static Future<void> openInEditor(String path) =>
       _channel.invokeMethod('openInEditor', {'path': path});
 
+  /// Show the macOS share sheet for the file at [path] — the completion flow's
+  /// shareSheet leg. Anchored natively: image editor window when visible, else
+  /// the menu-bar status item. Static for the same reason as [openInEditor].
+  /// NOTE: the image editor engine routes this over its own channel instead
+  /// (it has no glimpr/capture handler) — see image_editor_app's shareFn.
+  static Future<void> shareSheet(String path) =>
+      _channel.invokeMethod('shareSheet', {'path': path});
+
   /// Reveal the Settings window (⌘, from the capture overlay). The caller
   /// dismisses the overlay first, since it sits above normal windows.
   Future<void> openSettings() => _channel.invokeMethod('openSettings');
