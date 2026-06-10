@@ -147,6 +147,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       // Menu items fire global actions through the SAME Dart dispatcher as
       // the hotkeys; their key hints mirror the effective bindings.
       onAction: { [weak self] key in self?.hotkeyController?.fireAction(key) },
+      // Dropdown open -> pause the Carbon hotkeys so combos hit the menu's
+      // key equivalents (item fires, menu folds, action runs immediately).
+      onMenuOpen: { [weak self] in self?.hotkeyController?.pauseAll() },
+      onMenuClose: { [weak self] in self?.hotkeyController?.resumeAll() },
       keyHint: { [weak self] key in
         guard let h = self?.hotkeyController?.keyEquivalent(for: key) else { return nil }
         return (h.key, h.mods.rawValue)
@@ -713,9 +717,14 @@ final class HotkeyController {
   private var actionForId: [UInt32: String] = [:] // EventHotKeyID.id -> actionKey
   private var nextId: UInt32 = 1
   private var handlerInstalled = false
+  // The live registrations' specs, kept so pauseAll/resumeAll can drop and
+  // re-create the Carbon registrations without Dart's involvement.
+  private var specs: [String: (keyCode: UInt32, modifiers: UInt32)] = [:]
   // Display hints for the menu-bar items: the EFFECTIVE binding's key
   // character + Cocoa modifier mask per action, pushed by Dart on register.
   private var hints: [String: (key: String, mods: NSEvent.ModifierFlags)] = [:]
+
+
 
   /// The effective binding's menu key-equivalent for [actionKey], or nil when
   /// unbound / not registrable as a one-character equivalent.
@@ -727,6 +736,26 @@ final class HotkeyController {
   /// the menu-bar items so both paths share the Dart-side dispatcher.
   func fireAction(_ actionKey: String) {
     channel.invokeMethod("onHotkey", arguments: actionKey)
+  }
+
+  /// While the status menu is open, Carbon registrations are dropped (specs
+  /// and menu hints stay): a registered combo is swallowed system-wide and
+  /// its handler deferred by menu tracking, whereas a PLAIN key event matches
+  /// the open menu's key equivalents — the item fires, the menu folds, and
+  /// the action dispatches immediately. The one mechanism that works on
+  /// macOS 26 (dispatcher-target handlers and local monitors both stay silent
+  /// during the out-of-process menu tracking).
+  func pauseAll() {
+    for (_, ref) in refs { UnregisterEventHotKey(ref) }
+    refs.removeAll()
+    actionForId.removeAll()
+  }
+
+  /// Re-create the Carbon registrations dropped by [pauseAll].
+  func resumeAll() {
+    for (actionKey, spec) in specs {
+      _ = register(actionKey: actionKey, keyCode: spec.keyCode, modifiers: spec.modifiers)
+    }
   }
 
   init(messenger: FlutterBinaryMessenger) {
@@ -790,7 +819,10 @@ final class HotkeyController {
 
   private func register(actionKey: String, keyCode: UInt32, modifiers: UInt32) -> Bool {
     ensureHandler()
-    unregister(actionKey: actionKey) // replace any existing binding for this action
+    // Replace any existing Carbon ref ONLY — the spec/hint stay (resumeAll
+    // re-registers through here; dropping the hint here erased the menu's
+    // key-equivalents after the first pause/resume cycle).
+    removeRef(actionKey)
     let id = nextId
     nextId += 1
     let hotKeyID = EventHotKeyID(signature: OSType(0x474C_4D52 /* 'GLMR' */), id: id)
@@ -800,13 +832,22 @@ final class HotkeyController {
     if status == noErr, let ref = ref {
       refs[actionKey] = ref
       actionForId[id] = actionKey
+      specs[actionKey] = (keyCode, modifiers)
       return true
     }
     return false
   }
 
+  /// Full removal (Dart unbound the action): ref + spec + menu hint all go.
   private func unregister(actionKey: String) {
     hints.removeValue(forKey: actionKey)
+    specs.removeValue(forKey: actionKey)
+    removeRef(actionKey)
+  }
+
+  /// Drop just the live Carbon registration, keeping spec + hint (used by
+  /// register's replace path and indirectly by pauseAll/resumeAll).
+  private func removeRef(_ actionKey: String) {
     if let ref = refs.removeValue(forKey: actionKey) {
       UnregisterEventHotKey(ref)
       actionForId = actionForId.filter { $0.value != actionKey }
@@ -817,6 +858,7 @@ final class HotkeyController {
     for (_, ref) in refs { UnregisterEventHotKey(ref) }
     refs.removeAll()
     actionForId.removeAll()
+    specs.removeAll()
     hints.removeAll()
   }
 }

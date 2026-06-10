@@ -12,6 +12,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// fired by flows that have no window of their own (e.g. direct captures).
   var anchorButton: NSStatusBarButton? { item.button }
   private let onAction: (String) -> Void
+  private let onMenuOpen: () -> Void
+  private let onMenuClose: () -> Void
   private let keyHint: (String) -> (String, UInt)?
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
@@ -22,11 +24,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private var hintedItems: [(NSMenuItem, String)] = []
 
   init(onAction: @escaping (String) -> Void,
+       onMenuOpen: @escaping () -> Void,
+       onMenuClose: @escaping () -> Void,
        keyHint: @escaping (String) -> (String, UInt)?,
        onSettings: @escaping () -> Void,
        onOpenImage: @escaping () -> Void,
        onOpenRecent: @escaping (String) -> Void) {
     self.onAction = onAction
+    self.onMenuOpen = onMenuOpen
+    self.onMenuClose = onMenuClose
     self.keyHint = keyHint
     self.onSettings = onSettings
     self.onOpenImage = onOpenImage
@@ -79,6 +85,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// Refresh the global items' key-equivalent hints from the EFFECTIVE
   /// bindings just before the menu shows, so rebinds (and unbinds) reflect.
   func menuWillOpen(_ menu: NSMenu) {
+    onMenuOpen() // pause the Carbon hotkeys so combos hit the menu items
     for (mi, actionKey) in hintedItems {
       if let (key, mods) = keyHint(actionKey) {
         mi.keyEquivalent = key
@@ -89,6 +96,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       }
     }
   }
+
+  func menuDidClose(_ menu: NSMenu) {
+    onMenuClose() // restore the Carbon hotkey registrations
+  }
+
 
   /// Replace the "Open Recent" submenu with [paths] (newest first). Called from
   /// the image-editor engine via the editor channel whenever the list changes.
