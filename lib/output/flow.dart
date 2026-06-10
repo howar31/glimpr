@@ -82,6 +82,9 @@ Future<FlowResult> runFlow({
   // close over their global rect here; the default pins centered.
   Future<void> Function(String path)? pinFn,
   Future<String> Function(Uint8List bytes)? writeTempFn,
+  // Called with the saved path after a successful save leg — capture exports
+  // record it into the shared recent-images list. Never fails the flow.
+  Future<void> Function(String path)? recordRecentFn,
 }) async {
   final delivery = await deliverCapture(
     pngBytes: bytes,
@@ -93,6 +96,13 @@ Future<FlowResult> runFlow({
     saveToFile: actions.contains(FlowAction.save),
     copyToClipboard: actions.contains(FlowAction.copy),
   );
+  if (recordRecentFn != null && delivery.savedPath != null) {
+    try {
+      await recordRecentFn(delivery.savedPath!);
+    } catch (_) {
+      // Recents are best-effort bookkeeping — never fail the flow over them.
+    }
+  }
 
   final copyText =
       copyTextFn ?? (t) => Clipboard.setData(ClipboardData(text: t));

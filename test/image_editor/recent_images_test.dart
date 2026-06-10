@@ -45,6 +45,16 @@ void main() {
     });
   });
 
+  group('removeRecent', () {
+    test('removes the path, keeping order', () {
+      expect(removeRecent(['/a', '/b', '/c'], '/b'), ['/a', '/c']);
+    });
+
+    test('is a no-op when the path is absent', () {
+      expect(removeRecent(['/a', '/b'], '/x'), ['/a', '/b']);
+    });
+  });
+
   group('pruneMissing', () {
     test('drops paths whose file no longer exists', () {
       final out = pruneMissing(
@@ -80,14 +90,23 @@ void main() {
       expect(await store.load(), ['/a', '/b']);
     });
 
-    test('add caps at 10', () async {
+    test('add caps at 30 (the landing gallery scrolls)', () async {
       final store = RecentImagesStore(FakeStore());
-      for (var i = 0; i < 12; i++) {
+      for (var i = 0; i < 33; i++) {
         await store.add('/p$i');
       }
       final out = await store.load();
-      expect(out.length, 10);
-      expect(out.first, '/p11');
+      expect(out.length, 30);
+      expect(out.first, '/p32');
+    });
+
+    test('remove drops one entry and keeps the rest', () async {
+      final store = RecentImagesStore(FakeStore());
+      await store.add('/a');
+      await store.add('/b');
+      await store.add('/c');
+      await store.remove('/b');
+      expect(await store.load(), ['/c', '/a']);
     });
 
     test('clear empties the list', () async {

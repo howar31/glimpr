@@ -162,6 +162,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       onOpenRecent: { [weak self] path in
         self?.openImageEditor()
         self?.imageEditorChannel?.invokeMethod("loadPath", arguments: path)
+      },
+      // "Clear Menu" → Dart (the editor engine owns the recent list; it clears
+      // the store and pushes the empty list back to this submenu).
+      onClearRecent: { [weak self] in
+        self?.imageEditorChannel?.invokeMethod("clearRecent", arguments: nil)
       })
 
     // Warm the Image Editor engine + window at launch. A post-launch (on-demand)
@@ -463,6 +468,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     let picker = NSSharingServicePicker(items: [URL(fileURLWithPath: path)])
     sharePicker = picker
     picker.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+  }
+
+  /// A capture engine wrote the shared recent-images store: tell the editor
+  /// engine to reload it (landing gallery + the menu-bar "Open Recent" submenu).
+  func notifyRecentChanged() {
+    imageEditorChannel?.invokeMethod("refreshRecent", arguments: nil)
   }
 
   // The live pin windows; a pin removes itself from here when closed.

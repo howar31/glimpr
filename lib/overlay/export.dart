@@ -6,6 +6,7 @@ import '../capture/captured_display.dart';
 import '../editor/composite.dart';
 import '../editor/decoration.dart';
 import '../editor/drawable.dart';
+import '../image_editor/recent_images.dart';
 import '../output/filename.dart';
 import '../output/flow.dart';
 import '../settings/settings.dart';
@@ -73,7 +74,20 @@ Future<FlowResult> exportAnnotated({
     ),
     soundFn: () async {},
     pinFn: (p) => CaptureBridge.pinImage(p, globalRect: pinRect),
+    recordRecentFn: recordRecentCapture,
   );
+}
+
+/// Record a capture-flow save into the shared recent-images store (same
+/// NSUserDefaults list the editor owns), then nudge the editor engine to
+/// refresh its landing gallery + the menu-bar "Open Recent" submenu.
+Future<void> recordRecentCapture(String path) async {
+  await RecentImagesStore(Settings.instance.store).add(path);
+  try {
+    await CaptureBridge.notifyRecentChanged();
+  } catch (_) {
+    // Channel unavailable (tests) — the store write alone still counts.
+  }
 }
 
 /// Deliver a natively-captured window image (already alpha-shaped, real rounded
@@ -119,5 +133,6 @@ Future<FlowResult> exportWindowImage({
       ext: cap.fileExtension,
     ),
     soundFn: () async {},
+    recordRecentFn: recordRecentCapture,
   );
 }

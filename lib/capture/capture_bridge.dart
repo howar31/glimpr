@@ -80,6 +80,13 @@ class CaptureBridge {
         },
       });
 
+  /// A capture flow just recorded a saved file into the shared recent-images
+  /// store — ask native to forward a refresh to the editor engine (it owns the
+  /// landing gallery and the menu-bar "Open Recent" submenu). Static for the
+  /// same reason as [openInEditor].
+  static Future<void> notifyRecentChanged() =>
+      _channel.invokeMethod('recentChanged');
+
   /// Reveal the Settings window (⌘, from the capture overlay). The caller
   /// dismisses the overlay first, since it sits above normal windows.
   Future<void> openSettings() => _channel.invokeMethod('openSettings');

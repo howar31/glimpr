@@ -18,6 +18,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
   private let onOpenRecent: (String) -> Void
+  private let onClearRecent: () -> Void
   // The "Open Recent" submenu, rebuilt from the Dart-owned recent list.
   private let recentMenu = NSMenu()
   // Items whose key-equivalent hint follows a rebindable global action.
@@ -29,7 +30,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
        keyHint: @escaping (String) -> (String, UInt)?,
        onSettings: @escaping () -> Void,
        onOpenImage: @escaping () -> Void,
-       onOpenRecent: @escaping (String) -> Void) {
+       onOpenRecent: @escaping (String) -> Void,
+       onClearRecent: @escaping () -> Void) {
     self.onAction = onAction
     self.onMenuOpen = onMenuOpen
     self.onMenuClose = onMenuClose
@@ -37,6 +39,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     self.onSettings = onSettings
     self.onOpenImage = onOpenImage
     self.onOpenRecent = onOpenRecent
+    self.onClearRecent = onClearRecent
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
     // Brand Viewfinder mark as a template image: macOS tints it to match the
@@ -124,6 +127,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       mi.representedObject = path
       recentMenu.addItem(mi)
     }
+    // macOS convention: a trailing "Clear Menu" item (Dart owns the list).
+    recentMenu.addItem(.separator())
+    recentMenu.addItem(menuItem(title: "Clear Menu", action: #selector(clearRecent), key: ""))
   }
 
   private func menuItem(title: String, action: Selector, key: String) -> NSMenuItem {
@@ -149,6 +155,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   @objc private func openRecent(_ sender: NSMenuItem) {
     if let path = sender.representedObject as? String { onOpenRecent(path) }
   }
+  @objc private func clearRecent() { onClearRecent() }
   @objc private func settings() { onSettings() }
   @objc private func quit() { NSApp.terminate(nil) }
 }

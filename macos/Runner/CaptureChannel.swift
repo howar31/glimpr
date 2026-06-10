@@ -56,6 +56,13 @@ final class CaptureChannel {
           }
         }
         result(nil)
+      // A capture flow wrote the shared recent-images store: forward a refresh
+      // to the editor engine (it owns the landing gallery + Open Recent menu).
+      case "recentChanged":
+        DispatchQueue.main.async {
+          MainFlutterWindow.shared?.notifyRecentChanged()
+        }
+        result(nil)
       case "captureFrames":
         // Main actor like triggerCapture: captureAll() reaches NSEvent/NSScreen
         // and the channel reply must land on the platform (main) thread.

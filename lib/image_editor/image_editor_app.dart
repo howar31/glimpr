@@ -163,10 +163,19 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         if (mounted) setState(() => _windowActive = true);
         _controller?.requestFocus();
         _reload();
+        // Belt-and-braces: captures may have fed the shared recent store
+        // while this window was in the background.
+        _refreshRecent();
       } else if (call.method == 'windowResignedKey') {
         if (mounted) setState(() => _windowActive = false);
       } else if (call.method == 'requestClose') {
         await _requestClose();
+      } else if (call.method == 'clearRecent') {
+        // The menu-bar "Open Recent" → "Clear Menu" item; Dart owns the list.
+        await _clearRecent();
+      } else if (call.method == 'refreshRecent') {
+        // A capture flow saved a file into the shared recent store.
+        await _refreshRecent();
       }
     });
     // Tell native the handler is installed so a Finder "Open With" that arrived
@@ -244,6 +253,85 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       return;
     }
     await _refreshRecent();
+  }
+
+  /// Drop one entry from the recent list (tile context menu).
+  Future<void> _removeRecent(String path) async {
+    final store = _recentStore;
+    if (store == null) return;
+    try {
+      await store.remove(path);
+    } catch (_) {
+      return;
+    }
+    await _refreshRecent();
+  }
+
+  /// Empty the recent list (tile context menu / native "Clear Menu").
+  Future<void> _clearRecent() async {
+    final store = _recentStore;
+    if (store == null) return;
+    try {
+      await store.clear();
+    } catch (_) {
+      return;
+    }
+    await _refreshRecent();
+  }
+
+  /// Reveal a recent file in Finder (tile context menu). Same mechanism as the
+  /// completion flow's showInFinder leg.
+  void _revealRecent(String path) {
+    Process.run('open', ['-R', path]);
+  }
+
+  /// Copy a recent file's image to the clipboard (tile context menu). Same
+  /// pasteboard call as the delivery copy leg.
+  Future<void> _copyRecent(String path) async {
+    try {
+      await Pasteboard.writeImage(await File(path).readAsBytes());
+      _toast('Copied to clipboard');
+    } catch (_) {
+      _toast('Copy failed');
+    }
+  }
+
+  /// Pin a recent file as a floating window (tile context menu). Routed over
+  /// the editor channel like the Done flow's pin leg (no origin → centered).
+  void _pinRecent(String path) {
+    try {
+      _channel.invokeMethod('pinImage', {'path': path});
+    } catch (_) {}
+  }
+
+  /// Copy a recent file's path to the clipboard (tile context menu).
+  Future<void> _copyRecentPath(String path) async {
+    await Clipboard.setData(ClipboardData(text: path));
+    _toast('Path copied');
+  }
+
+  /// Share a recent file via the macOS share sheet (tile context menu) —
+  /// anchored to the menu-bar icon like every other share source.
+  void _shareRecent(String path) {
+    try {
+      _channel.invokeMethod('shareSheet', {'path': path});
+    } catch (_) {}
+  }
+
+  /// Aurora confirm before emptying the recent list (the tile context menu's
+  /// Clear Recent). The native "Clear Menu" item stays direct — that is the
+  /// macOS document-app convention, and the editor window may be hidden.
+  Future<void> _confirmClearRecent() async {
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null) return;
+    final ok = await showDiscardConfirm(
+      ctx,
+      title: 'Clear Recent?',
+      message: 'Remove all ${_recent.length} entries from the recent list? '
+          'The image files themselves are not touched.',
+      confirmLabel: 'Clear',
+    );
+    if (ok) await _clearRecent();
   }
 
   /// Reload the recent list, drop entries whose file is gone, then update the
@@ -500,6 +588,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     try {
       await _channel.invokeMethod('hideEditor');
     } catch (_) {}
+    _unloadImage();
+  }
+
+  /// Dispose + reset the loaded image; the editor falls back to the landing.
+  void _unloadImage() {
     if (!mounted) return;
     setState(() {
       _image?.dispose();
@@ -510,6 +603,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       _controller = null;
       _dirty = false;
     });
+  }
+
+  /// Toolbar "Open": back to the landing (the open hub — recents grid, Open
+  /// panel, drag, ⌘V) instead of jumping straight into the file dialog.
+  /// Confirms first when there are unsaved annotations.
+  Future<void> _backToLanding() async {
+    if (!await _confirmDiscardIfDirty()) return;
+    _unloadImage();
   }
 
   /// Show the top-centred toast pill (replaces the old floating SnackBar,
@@ -720,73 +821,130 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         }
         return KeyEventResult.ignored;
       },
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: GlassCard.padded(
-            pad: 36,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const GlimprMark(size: 56),
-                const SizedBox(height: 22),
-                Text(
-                  'Open an image to edit',
-                  textAlign: TextAlign.center,
-                  style: GlimprType.sansStyle(
-                    18,
-                    700,
-                    t.fg1,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Annotate, crop, and re-export any image in the same toolkit '
-                  'you use to capture.',
-                  textAlign: TextAlign.center,
-                  style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
-                ),
-                const SizedBox(height: 24),
-                AccentButton(
-                  'Open Image…',
-                  icon: Icons.image_outlined,
-                  onTap: _openPanel,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'or drag an image here · paste with ⌘V',
-                  textAlign: TextAlign.center,
-                  style: GlimprType.sansStyle(11.5, 500, t.fg4),
-                ),
-                _recentList(t),
-              ],
+      child: _recent.isEmpty
+          ? Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: _openCard(t),
+              ),
+            )
+          : _gallery(t),
+    );
+  }
+
+  /// Gallery landing: a slim open bar on top, then a scrollable grid of the
+  /// recent images (captures and opened files) filling the rest of the window.
+  Widget _gallery(GlimprTokens t) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _openBar(t),
+          const SizedBox(height: 22),
+          Text(
+            'Recent',
+            style: GlimprType.sansStyle(11, 700, t.fg4, letterSpacing: 0.4),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.only(bottom: 24),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 190,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 1.22,
+              ),
+              itemCount: _recent.length,
+              itemBuilder: (_, i) {
+                final path = _recent[i];
+                return _RecentTile(
+                  path: path,
+                  onTap: () => _loadPath(path),
+                  onCopy: () => _copyRecent(path),
+                  onCopyPath: () => _copyRecentPath(path),
+                  onShare: () => _shareRecent(path),
+                  onPin: () => _pinRecent(path),
+                  onReveal: () => _revealRecent(path),
+                  onRemove: () => _removeRecent(path),
+                  onClear: _confirmClearRecent,
+                );
+              },
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  /// Recent-files list shown on the landing card (up to 5). Tapping a row loads
-  /// that file; renders nothing when the list is empty.
-  Widget _recentList(GlimprTokens t) {
-    if (_recent.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 22),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Recent',
-            style: GlimprType.sansStyle(11, 700, t.fg4, letterSpacing: 0.4),
+  /// Slim opening bar over the gallery — the centred open card compressed to
+  /// one row: the brand lockup (same as the Settings sidebar header), the Open
+  /// button, and the drag/paste hint.
+  Widget _openBar(GlimprTokens t) {
+    return GlassCard.padded(
+      pad: 14,
+      child: Row(
+        children: [
+          const SizedBox(width: 4),
+          const Lockup(),
+          const SizedBox(width: 18),
+          AccentButton(
+            'Open Image…',
+            icon: Icons.image_outlined,
+            onTap: _openPanel,
           ),
-        ),
-        const SizedBox(height: 6),
-        for (final path in _recent.take(5))
-          _RecentRow(path: path, onTap: () => _loadPath(path)),
-      ],
+          const SizedBox(width: 14),
+          Text(
+            'or drag an image here · paste with ⌘V',
+            style: GlimprType.sansStyle(11.5, 500, t.fg4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The Aurora "open an image" prompt card (logo, copy, Open button, hints).
+  Widget _openCard(GlimprTokens t) {
+    return GlassCard.padded(
+      pad: 36,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const GlimprMark(size: 56),
+          const SizedBox(height: 22),
+          Text(
+            'Open an image to edit',
+            textAlign: TextAlign.center,
+            style: GlimprType.sansStyle(
+              18,
+              700,
+              t.fg1,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Annotate, crop, and re-export any image in the same toolkit '
+            'you use to capture.',
+            textAlign: TextAlign.center,
+            style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
+          ),
+          const SizedBox(height: 24),
+          AccentButton(
+            'Open Image…',
+            icon: Icons.image_outlined,
+            onTap: _openPanel,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'or drag an image here · paste with ⌘V',
+            textAlign: TextAlign.center,
+            style: GlimprType.sansStyle(11.5, 500, t.fg4),
+          ),
+        ],
+      ),
     );
   }
 
@@ -883,9 +1041,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           _HistoryButtons(controller: controller),
           const SizedBox(width: 8),
           _BarAction(
-            icon: Icons.folder_open_outlined,
-            label: 'Open',
-            onTap: _openPanel,
+            icon: Icons.home_outlined,
+            label: 'Home',
+            onTap: _backToLanding,
           ),
           const SizedBox(width: 4),
           // Done = run the configured after-editor flow (Settings). The chevron
@@ -901,6 +1059,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             enabled: !_exporting,
             position: PopupMenuPosition.over,
             offset: const Offset(0, -8),
+            popUpAnimationStyle: AnimationStyle.noAnimation,
             color: t.isDark ? const Color(0xF2202830) : const Color(0xFAFFFFFF),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -1097,18 +1256,37 @@ class _BarActionState extends State<_BarAction> {
   }
 }
 
-/// A tappable recent-file row on the landing card: image glyph + basename over a
-/// dim full path, with a hover wash matching the bar actions.
-class _RecentRow extends StatefulWidget {
-  const _RecentRow({required this.path, required this.onTap});
+/// A recent-file tile on the landing grid: image-first cover thumbnail with a
+/// one-line basename caption; name + full path show in the hover tooltip. Hover
+/// gets the shared nav wash (accent stays reserved for active/selected chrome).
+/// Right-click offers Show in Finder / Remove from Recent / Clear Recent.
+class _RecentTile extends StatefulWidget {
+  const _RecentTile({
+    required this.path,
+    required this.onTap,
+    required this.onCopy,
+    required this.onCopyPath,
+    required this.onShare,
+    required this.onPin,
+    required this.onReveal,
+    required this.onRemove,
+    required this.onClear,
+  });
   final String path;
   final VoidCallback onTap;
+  final VoidCallback onCopy;
+  final VoidCallback onCopyPath;
+  final VoidCallback onShare;
+  final VoidCallback onPin;
+  final VoidCallback onReveal;
+  final VoidCallback onRemove;
+  final VoidCallback onClear;
 
   @override
-  State<_RecentRow> createState() => _RecentRowState();
+  State<_RecentTile> createState() => _RecentTileState();
 }
 
-class _RecentRowState extends State<_RecentRow> {
+class _RecentTileState extends State<_RecentTile> {
   bool _hover = false;
 
   @override
@@ -1121,43 +1299,115 @@ class _RecentRowState extends State<_RecentRow> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          margin: const EdgeInsets.only(bottom: 2),
-          decoration: BoxDecoration(
-            color: _hover ? t.navHoverBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.image_outlined, size: 15, color: t.fg3),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GlimprType.sansStyle(13, 600, t.fg2),
-                    ),
-                    Text(
-                      widget.path,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GlimprType.sansStyle(10.5, 400, t.fg4),
-                    ),
-                  ],
+        onSecondaryTapDown: (d) => _contextMenu(t, d.globalPosition),
+        child: Tooltip(
+          message: '$name\n${widget.path}',
+          waitDuration: const Duration(milliseconds: 400),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: _hover ? t.navHoverBg : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            // The tile fills its grid cell: the thumbnail takes all the
+            // height the caption doesn't need.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _thumbnail(t)),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GlimprType.sansStyle(
+                    8.5,
+                    600,
+                    _hover ? t.fg1 : t.fg3,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// The cover-fit file thumbnail. Decoded at thumbnail resolution
+  /// (cacheHeight bounds the decode, the framework ImageCache keeps it across
+  /// rebuilds); falls back to the generic image glyph when the file is
+  /// unreadable. The inset backdrop shows through transparent PNGs.
+  Widget _thumbnail(GlimprTokens t) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: t.insetBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: t.cardBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Image.file(
+        File(widget.path),
+        fit: BoxFit.cover,
+        // Top edge, not centre: window title bars / page headers are the most
+        // recognisable slice of a tall screenshot.
+        alignment: Alignment.topCenter,
+        cacheHeight: 256,
+        errorBuilder: (_, _, _) =>
+            Icon(Icons.image_outlined, size: 18, color: t.fg3),
+      ),
+    );
+  }
+
+  /// Right-click menu, styled like the editor's Done chevron menu. The menu
+  /// route lives in the app overlay, ABOVE the GlimprTheme scope — pass the
+  /// tokens in rather than re-reading them there.
+  Future<void> _contextMenu(GlimprTokens t, Offset at) async {
+    final action = await showMenu<VoidCallback>(
+      context: context,
+      // left < right and top < bottom anchor the menu's TOP-LEFT at the click,
+      // so it always opens toward the bottom-right of the cursor (macOS feel);
+      // the route still clamps it inside the window near the edges.
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, at.dy + 1),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      color: t.isDark ? const Color(0xF2202830) : const Color(0xFAFFFFFF),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: t.divider),
+      ),
+      items: [
+        _menuItem(t, 'Edit', Icons.edit_outlined, widget.onTap),
+        const PopupMenuDivider(height: 8),
+        _menuItem(t, 'Copy Image', Icons.copy_outlined, widget.onCopy),
+        _menuItem(t, 'Copy Path', Icons.link, widget.onCopyPath),
+        _menuItem(t, 'Share…', Icons.ios_share, widget.onShare),
+        _menuItem(t, 'Pin to Screen', Icons.push_pin_outlined, widget.onPin),
+        _menuItem(t, 'Show in Finder', Icons.folder_outlined, widget.onReveal),
+        const PopupMenuDivider(height: 8),
+        _menuItem(
+            t, 'Remove from Recent', Icons.close_outlined, widget.onRemove),
+        _menuItem(
+            t, 'Clear Recent', Icons.delete_sweep_outlined, widget.onClear),
+      ],
+    );
+    action?.call();
+  }
+
+  PopupMenuItem<VoidCallback> _menuItem(
+          GlimprTokens t, String label, IconData icon, VoidCallback action) =>
+      PopupMenuItem(
+        value: action,
+        height: 36,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: t.fg2),
+            const SizedBox(width: 10),
+            Text(label, style: GlimprType.sansStyle(13.5, 500, t.fg1)),
+          ],
+        ),
+      );
 }
 
 /// Builds an Aurora-tinted confirmation [SnackBar] (floating, brand-bordered).
