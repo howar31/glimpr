@@ -65,9 +65,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.addItem(globalItem("Pin Capture", "global.pinArea"))
     menu.addItem(globalItem("Pin Clipboard", "global.pinClipboard"))
     menu.addItem(.separator())
-    // Open Image reveals the warm editor natively (same as the hotkey's end
+    // Open Editor reveals the warm editor natively (same as the hotkey's end
     // state) — keep the direct path, but hint with the hotkey's binding.
-    let open = menuItem(title: "Open Image…", action: #selector(openImage), key: "")
+    let open = menuItem(title: "Open Editor…", action: #selector(openImage), key: "")
     hintedItems.append((open, "global.openEditor"))
     menu.addItem(open)
     menu.addItem(globalItem("Open Editor with Clipboard", "global.openEditorClipboard"))

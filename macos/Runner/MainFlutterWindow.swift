@@ -167,7 +167,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Warm the Image Editor engine + window at launch. A post-launch (on-demand)
     // engine never starts its render loop (only launch-born engines render — a
     // spike confirmed this), so build it now and keep it hidden at alpha 0 (engine
-    // stays warm), revealed by "Open Image…". Mirrors this window's warm pattern.
+    // stays warm), revealed by "Open Editor…". Mirrors this window's warm pattern.
     setUpImageEditorWindow()
 
     // Resident: keep the engine warm (on-screen, transparent, click-through) so
