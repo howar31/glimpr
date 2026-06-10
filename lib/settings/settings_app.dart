@@ -1,3 +1,4 @@
+import 'dart:async' show Timer;
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -115,6 +116,24 @@ class _SettingsAppState extends State<SettingsApp>
   static const _roleChannel = MethodChannel('glimpr/role');
   void _close() => _roleChannel.invokeMethod('closeSettings');
 
+  // Restart is destructive-ish (kills the app), so the button is two-step: the
+  // first click ARMS it (label flips to a confirm), the second click within the
+  // window relaunches; it disarms itself after a few seconds untouched.
+  bool _restartArmed = false;
+  Timer? _restartDisarm;
+  void _restartTapped() {
+    if (!_restartArmed) {
+      setState(() => _restartArmed = true);
+      _restartDisarm?.cancel();
+      _restartDisarm = Timer(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _restartArmed = false);
+      });
+      return;
+    }
+    _restartDisarm?.cancel();
+    _roleChannel.invokeMethod('relaunch');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +145,7 @@ class _SettingsAppState extends State<SettingsApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _filenameController.dispose();
+    _restartDisarm?.cancel();
     super.dispose();
   }
 
@@ -915,12 +935,15 @@ class _SettingsAppState extends State<SettingsApp>
             ),
             const SizedBox(height: 4),
             Text(
-              'How many displays Glimpr keeps instantly capture-ready — including '
+              'How many displays Glimpr keeps instantly capture-ready, including '
               'displays connected after the app has launched (e.g. plugging into a '
               'dock). Glimpr pre-warms a rendering engine per display so the freeze '
               'overlay appears with no delay.\n\n'
+              'This is a minimum, not a cap: every display already connected when '
+              'Glimpr starts gets a warm engine regardless of this number — it only '
+              'adds spares for displays plugged in later.\n\n'
               'Cost: each engine uses about 100 MB of memory while Glimpr runs. A '
-              'display connected beyond this number still captures, but only shows '
+              'display plugged in beyond this number still captures, but only shows '
               'the frozen frame — its crosshair and toolbar follow correctly after a '
               'restart (which makes every connected display warm again).',
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
@@ -933,7 +956,7 @@ class _SettingsAppState extends State<SettingsApp>
               onChanged: _setWarmTarget,
             ),
             const SizedBox(height: 12),
-            if (_warmTargetInitial != null && _warmTarget != _warmTargetInitial)
+            if (_warmTargetInitial != null && _warmTarget != _warmTargetInitial) ...[
               Row(
                 children: [
                   const Icon(
@@ -949,8 +972,19 @@ class _SettingsAppState extends State<SettingsApp>
                     ),
                   ),
                 ],
-              )
-            else
+              ),
+              const SizedBox(height: 10),
+              // One click instead of quit-from-the-menu-bar + reopen: the native
+              // side re-opens the bundle after this process exits. Two-step
+              // (arm -> confirm) because it kills the running app.
+              GhostButton(
+                _restartArmed
+                    ? 'Click again to restart Glimpr'
+                    : 'Restart Glimpr now',
+                danger: _restartArmed,
+                onTap: _restartTapped,
+              ),
+            ] else
               Text(
                 'Default 2 · applies after restarting Glimpr',
                 style: GlimprType.sansStyle(12, 500, t.fg4),
@@ -958,6 +992,7 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 15),
       const SectionLabel('Tool styles', icon: Icons.brush_outlined),
       GlassCard.padded(
         child: Column(

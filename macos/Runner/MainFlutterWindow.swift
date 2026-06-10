@@ -88,6 +88,22 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       // Open-Editor global hotkeys (control engine → reveal the warm editor).
       case "openImageEditor": self?.openImageEditor(); result(nil)
       case "openImageEditorClipboard": self?.openImageEditorClipboard(); result(nil)
+      // Settings > Advanced: relaunch the app — spawn a detached watcher that
+      // re-opens the bundle once this process exits, then terminate normally
+      // (so the warm-engine count and other launch-read settings re-apply).
+      case "relaunch":
+        let bundlePath = Bundle.main.bundlePath
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = [
+          "-c",
+          "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.1; done; "
+            + "/usr/bin/open \"\(bundlePath)\"",
+        ]
+        try? task.run()
+        result(nil)
+        NSApp.terminate(nil)
       default: result(FlutterMethodNotImplemented)
       }
     }

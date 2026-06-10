@@ -685,9 +685,13 @@ class _AccentButtonState extends State<AccentButton> {
 /// Quiet text button (ghost). Dims when [onTap] is null; on hover it picks up a
 /// soft fill and a brighter label.
 class GhostButton extends StatefulWidget {
-  const GhostButton(this.label, {super.key, required this.onTap});
+  const GhostButton(this.label, {super.key, required this.onTap, this.danger = false});
   final String label;
   final VoidCallback? onTap;
+
+  /// Render the label in the danger colour — for an armed/confirm state of a
+  /// destructive action (e.g. the Settings restart button).
+  final bool danger;
 
   @override
   State<GhostButton> createState() => _GhostButtonState();
@@ -719,7 +723,11 @@ class _GhostButtonState extends State<GhostButton> {
             style: GlimprType.sansStyle(
               13.5,
               600,
-              !enabled ? t.fg4 : (active ? t.fg2 : t.fg3),
+              widget.danger && enabled
+                  ? GlimprTokens.danger
+                  : !enabled
+                      ? t.fg4
+                      : (active ? t.fg2 : t.fg3),
             ),
           ),
         ),
