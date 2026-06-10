@@ -23,6 +23,7 @@ enum ToolKind {
   pixelate,
   paste,
   stamp,
+  magnify,
 }
 
 enum EditorPhase { annotate, crop }
@@ -50,6 +51,7 @@ ToolKind? toolKindForDrawable(Drawable d) => switch (d) {
       StepDrawable() => ToolKind.step,
       BlurDrawable() => ToolKind.blur,
       PixelateDrawable() => ToolKind.pixelate,
+      MagnifyDrawable() => ToolKind.magnify,
       ImageDrawable() => null,
     };
 
@@ -178,6 +180,10 @@ class EditorController {
       style.value.copyWith(stepStart: n.clamp(kStepStartMin, kStepStartMax)));
   void setStepShape(StepShape s) =>
       _updateStyle(style.value.copyWith(stepShape: s));
+  void setMagnifyFactor(double f) => _updateStyle(style.value.copyWith(
+      magnifyFactor: f.clamp(kMagnifyFactorMin, kMagnifyFactorMax)));
+  void setMagnifyConnector(bool on) =>
+      _updateStyle(style.value.copyWith(magnifyConnector: on));
   void setCurvePoints(int n) => _updateStyle(style.value
       .copyWith(curvePoints: n.clamp(kCurvePointsMin, kCurvePointsMax)));
   void setStrength(double s) => _updateStyle(style.value
@@ -274,6 +280,7 @@ class EditorController {
       // Raster regions carry an editable strength (blur radius / block size).
       BlurDrawable() => d.withStyle(style.value),
       PixelateDrawable() => d.withStyle(style.value),
+      MagnifyDrawable() => d.withStyle(style.value),
       // Pasted images carry no editable style.
       ImageDrawable() => d,
     };

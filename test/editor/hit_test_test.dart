@@ -65,4 +65,12 @@ void main() {
     expect(hitTestTop(list, const Offset(50, 50)), 0);
     expect(hitTestTop(list, const Offset(200, 200)), isNull);
   });
+
+  test('magnify hits the source OR the inset, misses elsewhere', () {
+    const m = MagnifyDrawable(Rect.fromLTWH(0, 0, 10, 10), Offset(100, 100),
+        DrawStyle(magnifyFactor: 2.0));
+    expect(hitTestTop([m], const Offset(5, 5)), 0); // in source
+    expect(hitTestTop([m], const Offset(100, 100)), 0); // in inset
+    expect(hitTestTop([m], const Offset(50, 50)), isNull); // neither
+  });
 }

@@ -229,4 +229,16 @@ void main() {
     expect(c.stampBytes, same(bytes));
     c.dispose();
   });
+
+  test('setMagnifyFactor clamps and restyles a selected magnify', () {
+    final c = EditorController();
+    c.commitDrawable(const MagnifyDrawable(
+        Rect.fromLTWH(0, 0, 10, 10), Offset(100, 100), DrawStyle()));
+    c.selectedIndex.value = 0;
+    c.setMagnifyFactor(99); // clamps to max
+    final m = c.document.value.drawables[0] as MagnifyDrawable;
+    expect(m.style.magnifyFactor, kMagnifyFactorMax);
+    expect(m.destRect.width, 10 * kMagnifyFactorMax);
+    c.dispose();
+  });
 }

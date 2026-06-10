@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/geometry.dart';
 
@@ -30,5 +31,26 @@ void main() {
     // dx=5, dy=30 -> w = max(5, 30*3)=90, h=30
     final r = aspectCorner(a, const Offset(15, 50), 3.0);
     expect(r, const Offset(100, 50));
+  });
+
+  test('hullBridges returns two corner-to-corner links between two rects', () {
+    const src = Rect.fromLTWH(0, 0, 10, 10);
+    const dst = Rect.fromLTWH(100, 100, 20, 20);
+    final srcCorners = {src.topLeft, src.topRight, src.bottomRight, src.bottomLeft};
+    final dstCorners = {dst.topLeft, dst.topRight, dst.bottomRight, dst.bottomLeft};
+    final bridges = hullBridges(src, dst);
+    expect(bridges.length, 2);
+    for (final (a, b) in bridges) {
+      // each segment joins exactly one source corner and one dest corner
+      final joinsSrcToDst = (srcCorners.contains(a) && dstCorners.contains(b)) ||
+          (dstCorners.contains(a) && srcCorners.contains(b));
+      expect(joinsSrcToDst, isTrue);
+    }
+  });
+
+  test('hullBridges works for a directly-below inset too', () {
+    const src = Rect.fromLTWH(0, 0, 20, 10);
+    const dst = Rect.fromLTWH(0, 100, 40, 20);
+    expect(hullBridges(src, dst).length, 2);
   });
 }

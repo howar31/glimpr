@@ -842,6 +842,7 @@ class _OptionsRowState extends State<_OptionsRow> {
           ToolKind.highlighter,
           ToolKind.text,
           ToolKind.step,
+          ToolKind.magnify, // border colour
         };
         // The style controls show for color/raster tools (the EFFECTIVE type);
         // the selection-action cluster shows whenever ANYTHING is selected —
@@ -864,8 +865,10 @@ class _OptionsRowState extends State<_OptionsRow> {
           ToolKind.line,
           ToolKind.pen,
           ToolKind.highlighter,
+          ToolKind.magnify, // border width
         };
         final showsWidth = widthTools.contains(tool);
+        final isMagnify = tool == ToolKind.magnify;
         // Font size = glyph size for text, badge radius for the numbered step.
         final showsFont = tool == ToolKind.text || tool == ToolKind.step;
         // The font-FAMILY button is Text-only (Step has no editable family).
@@ -880,6 +883,7 @@ class _OptionsRowState extends State<_OptionsRow> {
           ToolKind.pen,
           ToolKind.text,
           ToolKind.step,
+          ToolKind.magnify, // lens drop shadow
         };
         final showsShadow = shadowTools.contains(tool);
         // Curve-points apply to all Segmented line tools; the line-STYLE picker
@@ -1100,6 +1104,29 @@ class _OptionsRowState extends State<_OptionsRow> {
                       key: const ValueKey('font-button'),
                       label: style.fontFamily ?? 'System',
                       onTap: _openFontPopover,
+                    ),
+                  ],
+                  if (isMagnify) ...[
+                    const SizedBox(width: 8),
+                    _NumberStepper(
+                      key: const ValueKey('magnify-factor-stepper'),
+                      controller: _c,
+                      read: (s) => s.magnifyFactor * 100,
+                      write: (v) => _c.setMagnifyFactor(v / 100),
+                      min: kMagnifyFactorMin * 100,
+                      max: kMagnifyFactorMax * 100,
+                      step: 50,
+                      suffix: '%',
+                      leadingIcon: Icons.zoom_in,
+                      leadingTooltip: 'Magnification',
+                      onEditingDone: widget.onPtEditingDone,
+                    ),
+                    const SizedBox(width: 6),
+                    _ConnectorToggle(
+                      key: const ValueKey('magnify-connector-toggle'),
+                      on: style.magnifyConnector,
+                      onTap: () =>
+                          _c.setMagnifyConnector(!style.magnifyConnector),
                     ),
                   ],
                   if (showsShadow) ...[
@@ -1390,6 +1417,46 @@ class _ShadowToggleState extends State<_ShadowToggle> {
               color: (on || _hover) ? p.glassBorder : Colors.transparent,
             ),
             child: glyph,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Magnify connector toggle: turns the source->inset connector line on/off.
+/// Same accent-on container styling as [_ShadowToggle] but a connector-line glyph
+/// + its own tooltip, so it does not read as the drop-shadow control.
+class _ConnectorToggle extends StatefulWidget {
+  final bool on;
+  final VoidCallback onTap;
+  const _ConnectorToggle({super.key, required this.on, required this.onTap});
+  @override
+  State<_ConnectorToggle> createState() => _ConnectorToggleState();
+}
+
+class _ConnectorToggleState extends State<_ConnectorToggle> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    final on = widget.on;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: on ? 'Connector line: on' : 'Connector line: off',
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: (on || _hover) ? p.glassBorder : Colors.transparent,
+            ),
+            child: Icon(Icons.polyline,
+                size: 18, color: on ? GlimprTokens.accent : p.fg),
           ),
         ),
       ),

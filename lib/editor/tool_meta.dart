@@ -21,4 +21,5 @@ const kEditorToolMeta = <(ToolKind, IconData)>[
   (ToolKind.highlighter, Icons.border_color),
   (ToolKind.step, Icons.looks_one),
   (ToolKind.stamp, Icons.add_photo_alternate),
+  (ToolKind.magnify, Icons.zoom_in),
 ];

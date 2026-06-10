@@ -270,6 +270,40 @@ class ImageDrawable extends Drawable implements RectShaped {
   ImageDrawable resizedTo(Rect r) => ImageDrawable(r, image, style);
 }
 
+/// A magnify callout: the [sourceRect] region of the base image, drawn enlarged
+/// (by `style.magnifyFactor`) as an inset centred at [destCenter]. RectShaped on
+/// the SOURCE, so the source reuses the corner-resize handles; the inset size is
+/// DERIVED (no independent size).
+class MagnifyDrawable extends Drawable implements RectShaped {
+  final Rect sourceRect;
+  final Offset destCenter;
+  const MagnifyDrawable(this.sourceRect, this.destCenter, DrawStyle style)
+      : super(style);
+
+  @override
+  Rect get rect => sourceRect;
+
+  Size get destSize => sourceRect.size * style.magnifyFactor;
+  Rect get destRect => Rect.fromCenter(
+      center: destCenter, width: destSize.width, height: destSize.height);
+
+  @override
+  Rect get bounds => sourceRect.expandToInclude(destRect);
+
+  @override
+  MagnifyDrawable moved(Offset d) =>
+      MagnifyDrawable(sourceRect.shift(d), destCenter + d, style);
+
+  @override
+  MagnifyDrawable resizedTo(Rect r) => MagnifyDrawable(r, destCenter, style);
+
+  MagnifyDrawable withDestCenter(Offset c) =>
+      MagnifyDrawable(sourceRect, c, style);
+
+  MagnifyDrawable withStyle(DrawStyle s) =>
+      MagnifyDrawable(sourceRect, destCenter, s);
+}
+
 /// Bounding box of a list of control points (>= 1).
 Rect _pointsBounds(List<Offset> pts) {
   var minX = pts.first.dx, minY = pts.first.dy;

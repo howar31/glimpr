@@ -127,4 +127,37 @@ void main() {
     expect(d.style.fontFamily, 'Courier');
     expect(d.withStyle(const DrawStyle(fontSize: 12)).style.fontSize, 12);
   });
+
+  test('MagnifyDrawable derives destRect from source size * factor, centred', () {
+    const m = MagnifyDrawable(Rect.fromLTWH(0, 0, 10, 10), Offset(100, 100),
+        DrawStyle(magnifyFactor: 2.0));
+    expect(m.rect, const Rect.fromLTWH(0, 0, 10, 10)); // RectShaped == source
+    expect(m.destRect, const Rect.fromLTWH(90, 90, 20, 20)); // 20x20 @ (100,100)
+    expect(m.bounds, const Rect.fromLTRB(0, 0, 110, 110)); // union
+  });
+
+  test('MagnifyDrawable moved shifts BOTH source and inset', () {
+    const m = MagnifyDrawable(
+        Rect.fromLTWH(0, 0, 10, 10), Offset(100, 100), DrawStyle());
+    final m2 = m.moved(const Offset(5, 7));
+    expect(m2.sourceRect, const Rect.fromLTWH(5, 7, 10, 10));
+    expect(m2.destCenter, const Offset(105, 107));
+  });
+
+  test('MagnifyDrawable resizedTo replaces source; inset follows factor', () {
+    const m = MagnifyDrawable(Rect.fromLTWH(0, 0, 10, 10), Offset(100, 100),
+        DrawStyle(magnifyFactor: 2.0));
+    final m2 = m.resizedTo(const Rect.fromLTWH(0, 0, 20, 10));
+    expect(m2.sourceRect.width, 20);
+    expect(m2.destRect.width, 40);
+    expect(m2.destCenter, const Offset(100, 100));
+  });
+
+  test('MagnifyDrawable withDestCenter moves only the inset', () {
+    const m = MagnifyDrawable(
+        Rect.fromLTWH(0, 0, 10, 10), Offset(100, 100), DrawStyle());
+    final m2 = m.withDestCenter(const Offset(50, 60));
+    expect(m2.sourceRect, m.sourceRect);
+    expect(m2.destCenter, const Offset(50, 60));
+  });
 }

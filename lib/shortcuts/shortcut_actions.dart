@@ -34,6 +34,7 @@ const kEditorToolActionKey = <ToolKind, String>{
   ToolKind.highlighter: 'editor.highlighter',
   ToolKind.step: 'editor.step',
   ToolKind.stamp: 'editor.stamp',
+  ToolKind.magnify: 'editor.magnify',
   ToolKind.paste: 'editor.paste',
 };
 
@@ -104,6 +105,9 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   // Image stamp tool — I (Image).
   kEditorToolActionKey[ToolKind.stamp]!:
       _b(PhysicalKeyboardKey.keyI, LogicalKeyboardKey.keyI),
+  // Magnify callout — M.
+  kEditorToolActionKey[ToolKind.magnify]!:
+      _b(PhysicalKeyboardKey.keyM, LogicalKeyboardKey.keyM),
   // The "paste" slot is the universal Select tool — V (the standard selection-
   // tool key in design apps); ⌘V remains the paste-image action.
   kEditorToolActionKey[ToolKind.paste]!:

@@ -143,6 +143,7 @@ class _EditorCoreState extends State<EditorCore> {
   Offset? _moveStart;
   int? _resizeHandle; // 0-3 corners (TL/TR/BR/BL), 4-7 edge mids (T/R/B/L)
   int? _endpoint; // 0=start 1=end on a Segmented shape (line/arrow/highlighter)
+  bool _magnifyMoveDest = false; // moving a magnify: inset (true) vs source body
   Offset? _dragPos; // last drag position, to re-apply a mid-drag Shift toggle
 
   bool _cropping = false;
@@ -763,6 +764,8 @@ class _EditorCoreState extends State<EditorCore> {
         // The stamp tool targets pasted/placed images (so its placed image is
         // selectable / resizable while the tool stays active for more stamps).
         return (d) => d is ImageDrawable;
+      case ToolKind.magnify:
+        return (d) => d is MagnifyDrawable;
       case ToolKind.paste:
         // The "paste" slot is the universal SELECT tool: it operates on EVERY
         // drawable type (select / move / resize / delete), so it matches all.
@@ -782,6 +785,7 @@ class _EditorCoreState extends State<EditorCore> {
     ToolKind.pixelate,
     ToolKind.paste,
     ToolKind.stamp,
+    ToolKind.magnify,
   };
 
   // Tools whose drawable is a Segmented shape (two endpoint handles, not box
@@ -1280,6 +1284,7 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.pen:
       case ToolKind.highlighter:
       case ToolKind.paste:
+      case ToolKind.magnify:
         _selectAndPin(_hitActiveType(p));
         return;
     }
@@ -1456,6 +1461,7 @@ class _EditorCoreState extends State<EditorCore> {
     _moveStart = null;
     _resizeHandle = null;
     _endpoint = null;
+    _magnifyMoveDest = false;
   }
 
   // Re-apply the active drag's constraint when Shift is pressed/released MID-drag
@@ -1570,6 +1576,10 @@ class _EditorCoreState extends State<EditorCore> {
       _editPreview = drawables[hit];
       _moveStart = p;
       _resizeHandle = null;
+      // For a magnify, a press inside the inset moves the inset (dest wins on
+      // overlap); a press in the source body moves the source.
+      final h = drawables[hit];
+      _magnifyMoveDest = h is MagnifyDrawable && h.destRect.contains(p);
       c.selectedIndex.value = hit;
       _pinned = true; // dragging an existing shape pins it
     } else {
@@ -1689,6 +1699,16 @@ class _EditorCoreState extends State<EditorCore> {
           _preview = PixelateDrawable(Rect.fromPoints(s, cp), c.style.value);
         });
         break;
+      case ToolKind.magnify:
+        // Drag the SOURCE; the inset auto-appears down-right at the default
+        // factor (Shift squares the source like a box tool).
+        final cp = shift ? _squareCorner(s, p) : p;
+        final srcR = Rect.fromPoints(s, cp);
+        final f = c.style.value.magnifyFactor;
+        final destC = srcR.bottomRight +
+            Offset(srcR.width * f / 2 + 16, srcR.height * f / 2 + 16);
+        setState(() => _preview = MagnifyDrawable(srcR, destC, c.style.value));
+        break;
       case ToolKind.text:
       case ToolKind.step:
       case ToolKind.paste:
@@ -1738,7 +1758,15 @@ class _EditorCoreState extends State<EditorCore> {
     } else {
       final start = _moveStart;
       if (start != null) {
-        setState(() => _editPreview = orig.moved(p - start));
+        if (orig is MagnifyDrawable) {
+          // Inset move relocates the loupe; source-body move re-aims the capture
+          // (dest stays). Source RESIZE is handled by the RectShaped branch above.
+          setState(() => _editPreview = _magnifyMoveDest
+              ? orig.withDestCenter(orig.destCenter + (p - start))
+              : orig.resizedTo(orig.sourceRect.shift(p - start)));
+        } else {
+          setState(() => _editPreview = orig.moved(p - start));
+        }
       }
     }
   }
@@ -1876,6 +1904,11 @@ class _EditorCoreState extends State<EditorCore> {
         // (see [_selectionHighlight]) so marching ants don't re-rasterize this.
         drawables: _effectiveDrawables(),
         effectImage: _lookupEffect,
+        // The magnify tool samples the base image directly.
+        baseImage: _interactive
+            ? (c.document.value.canvasImage ?? widget.host.baseImage)
+            : widget.host.baseImage,
+        baseScale: widget.host.pixelScale,
       ),
       size: _canvasSize,
     );

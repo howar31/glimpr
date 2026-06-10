@@ -48,6 +48,8 @@ bool _hits(Drawable d, Offset p) {
       return d.rect.contains(p);
     case ImageDrawable():
       return d.rect.contains(p);
+    case MagnifyDrawable():
+      return d.sourceRect.contains(p) || d.destRect.contains(p);
   }
 }
 

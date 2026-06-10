@@ -93,6 +93,8 @@ Future<Uint8List> compositeAndCrop({
   DrawablePainter(
     drawables: drawables,
     effectImage: (d) => effects[d],
+    baseImage: frozen,
+    baseScale: scaleFactor,
   ).paint(canvas, logicalSize);
   canvas.restore();
   final picture = recorder.endRecording();

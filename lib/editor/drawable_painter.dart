@@ -6,6 +6,7 @@ import '../overlay/hud_lines.dart';
 import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
+import 'geometry.dart';
 import 'text_metrics.dart';
 
 // ---- drop-shadow tunables (DrawStyle.shadow) ---------------------------------
@@ -267,7 +268,14 @@ typedef EffectImageLookup = ui.Image? Function(Drawable d);
 class DrawablePainter extends CustomPainter {
   final List<Drawable> drawables;
   final EffectImageLookup? effectImage;
-  const DrawablePainter({required this.drawables, this.effectImage});
+  final ui.Image? baseImage; // the magnify tool samples this directly
+  final double baseScale; // logical -> native for the magnify source sample
+  const DrawablePainter({
+    required this.drawables,
+    this.effectImage,
+    this.baseImage,
+    this.baseScale = 1,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -419,7 +427,90 @@ class DrawablePainter extends CustomPainter {
           d.rect,
           Paint()..filterQuality = FilterQuality.medium,
         );
+      case MagnifyDrawable():
+        _paintMagnify(canvas, d);
     }
+  }
+
+  /// Draws a magnify callout: the source region of the base image scaled sharply
+  /// into a right-angle rectangular lens, a plain tool-colour border, the standard
+  /// drop shadow (shared shadow toggle), an always-shown source frame, and — when
+  /// the connector toggle is on — the two corner-to-corner connector lines (the
+  /// convex-hull bridges between source and lens, so they meet exactly at corners,
+  /// which is why the lens stays a square rectangle).
+  void _paintMagnify(Canvas canvas, MagnifyDrawable d) {
+    final base = baseImage;
+    if (base == null) return;
+    final dest = d.destRect; // always a right-angle rectangle
+    final src = Rect.fromLTRB(
+      d.sourceRect.left * baseScale,
+      d.sourceRect.top * baseScale,
+      d.sourceRect.right * baseScale,
+      d.sourceRect.bottom * baseScale,
+    );
+    final color = d.style.color;
+    final w = d.style.strokeWidth;
+    final thin = math.max(1.0, w * 0.6);
+    final bridges = d.style.magnifyConnector
+        ? hullBridges(d.sourceRect, dest)
+        : const <(Offset, Offset)>[];
+
+    // Unified drop shadow (shared shadow toggle) behind the WHOLE callout — the
+    // lens, the source frame, AND the connector lines — in one offset/blur pass.
+    if (d.style.shadow) {
+      canvas.save();
+      canvas.translate(_kShadowOffset.dx, _kShadowOffset.dy);
+      final fillShadow = Paint()
+        ..color = _kShadowColor
+        ..style = PaintingStyle.fill
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _kShadowSigma);
+      final strokeShadow = Paint()
+        ..color = _kShadowColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thin
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _kShadowSigma);
+      // Cast from the BORDER's outer edge (inflate by w/2) so the shadow clears
+      // the thick lens border instead of hiding under it.
+      canvas.drawRect(dest.inflate(w / 2), fillShadow); // the opaque lens
+      canvas.drawRect(d.sourceRect, strokeShadow); // the source frame
+      for (final (p, q) in bridges) {
+        canvas.drawLine(p, q, strokeShadow); // the connector lines
+      }
+      canvas.restore();
+    }
+
+    // Source frame is ALWAYS drawn (marks the captured region); the connector
+    // toggle only adds/removes the bridge LINES.
+    final frame = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = thin
+      ..color = color;
+    canvas.drawRect(d.sourceRect, frame);
+    final link = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = thin
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    for (final (p, q) in bridges) {
+      canvas.drawLine(p, q, link);
+    }
+
+    // Sharp magnified content.
+    canvas.save();
+    canvas.clipRect(dest);
+    canvas.drawImageRect(
+        base, src, dest, Paint()..filterQuality = FilterQuality.high);
+    canvas.restore();
+
+    // Plain tool-colour border.
+    canvas.drawRect(
+      dest,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w
+        ..color = color,
+    );
   }
 
   /// Draws a blur/pixelate region: its pre-rasterised region image (stretched 1:1
@@ -692,6 +783,19 @@ class SelectionHighlightPainter extends CustomPainter {
     final d = selected;
     if (d == null) return;
     final phase = (march?.value ?? 0) * kHudDashPeriod;
+    // Magnify: outline BOTH the source and the inset; resize handles on the
+    // source only (the inset is move-only, its size is factor-derived).
+    if (d is MagnifyDrawable) {
+      for (final box in [d.sourceRect, d.destRect]) {
+        drawMarchingPolyline(
+          canvas,
+          [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft],
+          phase: phase,
+        );
+      }
+      paintResizeHandles(canvas, d.sourceRect);
+      return;
+    }
     // Box flush to the shape's geometric bounds (no outward inflation), so the
     // outline sits right on the shape's baseline.
     final r = d.bounds;

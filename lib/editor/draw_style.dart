@@ -129,6 +129,14 @@ StepShape _stepShapeFromName(Object? name) {
   return StepShape.circle;
 }
 
+/// Magnify-callout factor + connector (magnify tool only; other tools carry but
+/// ignore these). The inset size = source × factor. The magnify lens is always a
+/// right-angle rectangle — its corner-to-corner connector lines require square
+/// corners to meet exactly — so there is no shape/rounding option.
+const double kMagnifyFactorDefault = 2.0;
+const double kMagnifyFactorMin = 1.5;
+const double kMagnifyFactorMax = 6.0;
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
@@ -147,6 +155,8 @@ class DrawStyle {
   final double arrowHeadScale; // arrow head size multiplier; 1.0 = legacy size
   final int stepStart; // step badge numbering floor; 1 = legacy auto-from-1
   final StepShape stepShape; // step badge outline shape; circle = legacy
+  final double magnifyFactor; // magnify inset zoom; inset = source * factor
+  final bool magnifyConnector; // draw the source->inset connector lines
   const DrawStyle({
     this.color = const Color(0xFFFF3B30),
     this.strokeWidth = 4, // matches the medium preset (kStrokeWidths[1])
@@ -164,6 +174,8 @@ class DrawStyle {
     this.arrowHeadScale = kArrowHeadScaleDefault,
     this.stepStart = kStepStartDefault,
     this.stepShape = StepShape.circle,
+    this.magnifyFactor = kMagnifyFactorDefault,
+    this.magnifyConnector = true,
   });
 
   DrawStyle copyWith({
@@ -183,6 +195,8 @@ class DrawStyle {
     double? arrowHeadScale,
     int? stepStart,
     StepShape? stepShape,
+    double? magnifyFactor,
+    bool? magnifyConnector,
   }) => DrawStyle(
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
@@ -200,6 +214,8 @@ class DrawStyle {
     arrowHeadScale: arrowHeadScale ?? this.arrowHeadScale,
     stepStart: stepStart ?? this.stepStart,
     stepShape: stepShape ?? this.stepShape,
+    magnifyFactor: magnifyFactor ?? this.magnifyFactor,
+    magnifyConnector: magnifyConnector ?? this.magnifyConnector,
   );
 
   Map<String, dynamic> toJson() => {
@@ -219,6 +235,8 @@ class DrawStyle {
     if (arrowHeadScale != kArrowHeadScaleDefault) 'arrowHeadScale': arrowHeadScale,
     if (stepStart != kStepStartDefault) 'stepStart': stepStart,
     if (stepShape != StepShape.circle) 'stepShape': stepShape.name,
+    if (magnifyFactor != kMagnifyFactorDefault) 'magnifyFactor': magnifyFactor,
+    if (!magnifyConnector) 'magnifyConnector': false,
   };
 
   factory DrawStyle.fromJson(Map<String, dynamic> j) => DrawStyle(
@@ -243,6 +261,9 @@ class DrawStyle {
     stepStart: ((j['stepStart'] as num?)?.toInt() ?? kStepStartDefault)
         .clamp(kStepStartMin, kStepStartMax),
     stepShape: _stepShapeFromName(j['stepShape']),
+    magnifyFactor: ((j['magnifyFactor'] as num?)?.toDouble() ?? kMagnifyFactorDefault)
+        .clamp(kMagnifyFactorMin, kMagnifyFactorMax),
+    magnifyConnector: j['magnifyConnector'] as bool? ?? true,
   );
 
   @override
@@ -263,9 +284,12 @@ class DrawStyle {
       other.outlineColor == outlineColor &&
       other.arrowHeadScale == arrowHeadScale &&
       other.stepStart == stepStart &&
-      other.stepShape == stepShape;
+      other.stepShape == stepShape &&
+      other.magnifyFactor == magnifyFactor &&
+      other.magnifyConnector == magnifyConnector;
   @override
   int get hashCode => Object.hash(color, strokeWidth, fontSize, fontFamily,
       texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
-      cornerRadius, outlineColor, arrowHeadScale, stepStart, stepShape);
+      cornerRadius, outlineColor, arrowHeadScale, stepStart, stepShape,
+      magnifyFactor, magnifyConnector);
 }

@@ -279,4 +279,28 @@ void main() {
     expect(a.copyWith(stepStart: 3).stepStart, 3);
     expect(a.copyWith(stepShape: StepShape.square).stepShape, StepShape.square);
   });
+
+  test('magnify fields default-omit from JSON and round-trip', () {
+    const def = DrawStyle();
+    expect(def.magnifyFactor, kMagnifyFactorDefault);
+    expect(def.magnifyConnector, isTrue);
+    final dj = def.toJson();
+    expect(dj.containsKey('magnifyFactor'), isFalse);
+    expect(dj.containsKey('magnifyConnector'), isFalse);
+    const s = DrawStyle(magnifyFactor: 3.0, magnifyConnector: false);
+    final j = s.toJson();
+    expect(j['magnifyFactor'], 3.0);
+    expect(j['magnifyConnector'], false);
+    final back = DrawStyle.fromJson(j);
+    expect(back.magnifyFactor, 3.0);
+    expect(back.magnifyConnector, isFalse);
+  });
+
+  test('magnifyFactor clamps on fromJson and participates in ==', () {
+    expect(DrawStyle.fromJson({'magnifyFactor': 99.0}).magnifyFactor,
+        kMagnifyFactorMax);
+    expect(DrawStyle.fromJson({'magnifyFactor': 0.1}).magnifyFactor,
+        kMagnifyFactorMin);
+    expect(const DrawStyle(magnifyFactor: 3.0) == const DrawStyle(), isFalse);
+  });
 }
