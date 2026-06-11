@@ -127,6 +127,11 @@ class LoupePainter extends CustomPainter {
   final List<Drawable> drawables;
   final EffectImageLookup? effectImage;
   final Size logicalSize;
+  // Appearance for the beyond-image backdrop (visible at image edges). The
+  // grid / marker / frame stay difference-blended (any-background legibility),
+  // so this is the only appearance-dependent bit. Defaults to dark (the brand
+  // dark tile in the Settings loupe preview keeps it).
+  final bool dark;
   const LoupePainter({
     required this.image,
     required this.cursorLogical,
@@ -135,6 +140,7 @@ class LoupePainter extends CustomPainter {
     this.drawables = const [],
     this.effectImage,
     this.logicalSize = Size.zero,
+    this.dark = true,
   });
 
   @override
@@ -143,7 +149,12 @@ class LoupePainter extends CustomPainter {
     final rrect = RRect.fromRectAndRadius(dst, const Radius.circular(8));
     canvas.save();
     canvas.clipRRect(rrect);
-    canvas.drawRect(dst, Paint()..color = const Color(0xFF202020));
+    // Beyond-image backdrop: matches the editor checkerboard's base tones.
+    canvas.drawRect(
+      dst,
+      Paint()
+        ..color = dark ? const Color(0xFF202020) : const Color(0xFFE9ECF1),
+    );
 
     final centerPx = cursorLogical * scaleFactor; // native px under the cursor
     // Snap the view to the CENTER of the AIMED pixel: the loupe's middle is
@@ -239,32 +250,53 @@ class LoupePainter extends CustomPainter {
       old.image != image ||
       old.zoom != zoom ||
       old.drawables != drawables ||
-      old.effectImage != effectImage;
+      old.effectImage != effectImage ||
+      old.dark != dark;
 }
 
-// Shared HUD pill (loupe readout + box-size label): dark body + thin light frame,
-// matching the loupe. Wrapped in a transparent Material so its text always gets a
-// real default style — identically in the overlay (no Scaffold ancestor) and the
-// image editor — instead of Flutter's "missing DefaultTextStyle" yellow underline.
-const Color _kHudPillColor = Color(0xF2202020);
-const Color _kHudPillBorder = Color(0x55FFFFFF);
-const TextStyle _kHudText = TextStyle(
+// Shared HUD pill (loupe readout + box-size label): chrome, so it follows the
+// system appearance — dark body + thin light frame in dark mode, a near-white
+// body + slate frame in light mode (the editor toast's pair; the ~95% opaque
+// body keeps it legible over any screenshot in both). Wrapped in a transparent
+// Material so its text always gets a real default style — identically in the
+// overlay (no Scaffold ancestor) and the image editor — instead of Flutter's
+// "missing DefaultTextStyle" yellow underline.
+const Color _kHudPillColorDark = Color(0xF2202020);
+const Color _kHudPillBorderDark = Color(0x55FFFFFF);
+const Color _kHudPillColorLight = Color(0xFAFFFFFF);
+const Color _kHudPillBorderLight = Color(0x1F0F172A);
+const TextStyle _kHudTextDark = TextStyle(
   color: Color(0xFFFFFFFF),
   fontSize: 11,
   height: 1.3,
   decoration: TextDecoration.none, // kill the stray fallback underline
   fontFeatures: [FontFeature.tabularFigures()], // steady digit columns
 );
+const TextStyle _kHudTextLight = TextStyle(
+  color: Color(0xFF14223B),
+  fontSize: 11,
+  height: 1.3,
+  decoration: TextDecoration.none,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
 
-Widget _hudPill(Widget child) => IgnorePointer(
+bool _isDark(BuildContext context) =>
+    MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+
+TextStyle _hudText(bool dark) => dark ? _kHudTextDark : _kHudTextLight;
+
+Widget _hudPill(bool dark, Widget child) => IgnorePointer(
   child: Material(
     type: MaterialType.transparency,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _kHudPillColor,
+        color: dark ? _kHudPillColorDark : _kHudPillColorLight,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _kHudPillBorder, width: 1),
+        border: Border.all(
+          color: dark ? _kHudPillBorderDark : _kHudPillBorderLight,
+          width: 1,
+        ),
       ),
       child: child,
     ),
@@ -291,23 +323,26 @@ class LoupeReadout extends StatelessWidget {
     this.copied,
   });
 
-  TextStyle _lineStyle(String fmt) => copied == fmt
-      ? _kHudText.copyWith(color: GlimprTokens.accent)
-      : _kHudText;
+  TextStyle _lineStyle(String fmt, bool dark) => copied == fmt
+      ? _hudText(dark).copyWith(color: GlimprTokens.accent)
+      : _hudText(dark);
 
   String _check(String fmt) => copied == fmt ? ' ✓' : '';
 
   @override
   Widget build(BuildContext context) {
+    final dark = _isDark(context);
+    final style = _hudText(dark);
     final c = color;
-    if (c == null) return _hudPill(Text('$x, $y', style: _kHudText));
+    if (c == null) return _hudPill(dark, Text('$x, $y', style: style));
     // Coordinates centred over the block; one left-aligned line per color
     // format, swatch beside the HEX.
     return _hudPill(
+      dark,
       Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$x, $y', style: _kHudText),
+          Text('$x, $y', style: style),
           const SizedBox(height: 3),
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -322,17 +357,22 @@ class LoupeReadout extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: c,
                       borderRadius: BorderRadius.circular(3),
-                      border: Border.all(color: _kHudPillBorder),
+                      border: Border.all(
+                        color: dark
+                            ? _kHudPillBorderDark
+                            : _kHudPillBorderLight,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Text('${hexOf(c)}${_check('HEX')}', style: _lineStyle('HEX')),
+                  Text('${hexOf(c)}${_check('HEX')}',
+                      style: _lineStyle('HEX', dark)),
                 ],
               ),
               Text('RGB ${rgbOf(c)}${_check('RGB')}',
-                  style: _lineStyle('RGB')),
+                  style: _lineStyle('RGB', dark)),
               Text('HSL ${hslOf(c)}${_check('HSL')}',
-                  style: _lineStyle('HSL')),
+                  style: _lineStyle('HSL', dark)),
             ],
           ),
         ],
@@ -350,8 +390,14 @@ class BoxSizeLabel extends StatelessWidget {
   const BoxSizeLabel({super.key, required this.w, required this.h});
 
   @override
-  Widget build(BuildContext context) =>
-      _hudPill(Text('$w × $h', style: _kHudText.copyWith(fontWeight: FontWeight.w700)));
+  Widget build(BuildContext context) {
+    final dark = _isDark(context);
+    return _hudPill(
+      dark,
+      Text('$w × $h',
+          style: _hudText(dark).copyWith(fontWeight: FontWeight.w700)),
+    );
+  }
 }
 
 /// The drag-start origin (NATIVE pixels), shown beside the selection's start
@@ -377,16 +423,21 @@ class StartCoordLabel extends StatelessWidget {
       : (cornerLeft ? Icons.north_east : Icons.north_west);
 
   @override
-  Widget build(BuildContext context) => _hudPill(
-    Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(_arrow, size: 11, color: const Color(0xFFFFFFFF)),
-        const SizedBox(width: 2),
-        Text('$startX, $startY', style: _kHudText),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final dark = _isDark(context);
+    final style = _hudText(dark);
+    return _hudPill(
+      dark,
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_arrow, size: 11, color: style.color),
+          const SizedBox(width: 2),
+          Text('$startX, $startY', style: style),
+        ],
+      ),
+    );
+  }
 }
 
 /// A snap highlight around a hovered window: a single rounded outline drawn with

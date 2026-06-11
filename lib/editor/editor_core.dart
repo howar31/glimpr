@@ -2147,6 +2147,8 @@ class _EditorCoreState extends State<EditorCore> {
                 drawables: _effectiveDrawables(),
                 effectImage: _lookupEffect,
                 logicalSize: _canvasSize,
+                dark: MediaQuery.platformBrightnessOf(context) ==
+                    Brightness.dark,
               ),
             ),
             const SizedBox(height: 6),
@@ -2646,6 +2648,8 @@ class _EditorCoreState extends State<EditorCore> {
                                 _canvasSize.width,
                                 _canvasSize.height,
                               ),
+                              dark: MediaQuery.platformBrightnessOf(context) ==
+                                  Brightness.dark,
                             ),
                           ),
                           const SizedBox(height: 6),
