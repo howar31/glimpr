@@ -29,6 +29,7 @@ import 'checkerboard.dart';
 import 'image_editor_export.dart';
 import 'image_editor_host.dart';
 import 'recent_images.dart';
+import 'thumb_cache.dart';
 
 /// Standalone Image Editor window in the Aurora design language (same theme as
 /// the Settings window, following the system light/dark appearance). The native
@@ -1320,8 +1321,20 @@ class _RecentTile extends StatefulWidget {
   State<_RecentTile> createState() => _RecentTileState();
 }
 
+// One cache for every tile; survives gallery rebuilds and window hide/show.
+final ThumbCache _thumbCache = ThumbCache();
+
 class _RecentTileState extends State<_RecentTile> {
   bool _hover = false;
+  // Held across rebuilds so a gallery refresh (windowBecameKey, capture saved)
+  // never re-kicks the lookup; only a path change does.
+  late Future<File?> _thumb = _thumbCache.obtain(widget.path);
+
+  @override
+  void didUpdateWidget(covariant _RecentTile old) {
+    super.didUpdateWidget(old);
+    if (old.path != widget.path) _thumb = _thumbCache.obtain(widget.path);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1369,10 +1382,12 @@ class _RecentTileState extends State<_RecentTile> {
     );
   }
 
-  /// The cover-fit file thumbnail. Decoded at thumbnail resolution
-  /// (cacheHeight bounds the decode, the framework ImageCache keeps it across
-  /// rebuilds); falls back to the generic image glyph when the file is
-  /// unreadable. The inset backdrop shows through transparent PNGs.
+  /// The cover-fit file thumbnail, served from the persisted ThumbCache (a
+  /// ~256px sidecar PNG) so the landing never decodes full-resolution sources
+  /// (F1-3: 30 x 5K recents measured a ~578MB launch transient). Falls back
+  /// to a direct bounded decode when the cache is unavailable, and to the
+  /// generic image glyph when the file is unreadable. The inset backdrop
+  /// shows through transparent PNGs.
   Widget _thumbnail(GlimprTokens t) {
     return Container(
       width: double.infinity,
@@ -1382,15 +1397,26 @@ class _RecentTileState extends State<_RecentTile> {
         border: Border.all(color: t.cardBorder),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.file(
-        File(widget.path),
-        fit: BoxFit.cover,
-        // Top edge, not centre: window title bars / page headers are the most
-        // recognisable slice of a tall screenshot.
-        alignment: Alignment.topCenter,
-        cacheHeight: 256,
-        errorBuilder: (_, _, _) =>
-            Icon(Icons.image_outlined, size: 18, color: t.fg3),
+      child: FutureBuilder<File?>(
+        future: _thumb,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            // Inset backdrop only while the cache resolves — no glyph flash.
+            return const SizedBox.expand();
+          }
+          final file = snap.data ?? File(widget.path);
+          return Image.file(
+            file,
+            fit: BoxFit.cover,
+            // Top edge, not centre: window title bars / page headers are the
+            // most recognisable slice of a tall screenshot.
+            alignment: Alignment.topCenter,
+            // Bounds the fallback's direct decode; a no-op for cache files.
+            cacheHeight: 256,
+            errorBuilder: (_, _, _) =>
+                Icon(Icons.image_outlined, size: 18, color: t.fg3),
+          );
+        },
       ),
     );
   }
