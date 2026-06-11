@@ -16,6 +16,7 @@ import '../overlay/toolbar.dart';
 import '../output/clipboard.dart';
 import '../output/flow.dart';
 import '../output/sounds.dart';
+import '../perf/frame_stats.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -92,10 +93,26 @@ class _ImageEditorAppState extends State<ImageEditorApp>
 
   static const _channel = MethodChannel('glimpr/imageEditor');
 
+  // Perf instrumentation (perf-tune plan M1/M3/M4/M5): named marks + frame
+  // summaries over this engine's own channel (it has no glimpr/capture
+  // handler), landing in the unified-log perf category.
+  late final FrameStatsReporter _frames =
+      FrameStatsReporter(tag: 'editor', sink: _perfMark);
+  bool _galleryReadyMarked = false;
+
+  void _perfMark(String label) {
+    _channel
+        .invokeMethod('perfMark', {'label': label})
+        .then((_) {}, onError: (_) {});
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _frames.attach();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _perfMark('editorFirstFrame'));
 
     // Prefetch per-tool styles, hotkey bindings, and capture settings.
     // Each block is in its own try/catch so a synchronous store construction
@@ -212,6 +229,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     // did (the Open button confirms BEFORE showing the file picker). Direct loads
     // (Finder "Open With" / drag-drop, later) pass confirmed=false.
     if (!confirmed && !await _confirmDiscardIfDirty()) return;
+    _perfMark('editorOpenBegin kind=file');
     late final Uint8List bytes;
     try {
       bytes = await File(path).readAsBytes();
@@ -347,6 +365,13 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     }
     if (!mounted) return;
     setState(() => _recent = list);
+    // M3 anchor: first frame with the landing grid built. Tile thumbnails keep
+    // decoding after this — the decode tail shows up in the RSS curve instead.
+    if (!_galleryReadyMarked) {
+      _galleryReadyMarked = true;
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _perfMark('editorGalleryReady count=${list.length}'));
+    }
     try {
       await _channel.invokeMethod('setRecentImages', list);
     } catch (_) {
@@ -394,6 +419,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       _controller!.document.addListener(_markDirty);
       _dirty = false;
     });
+    // M4 anchor: the opened image's first editable frame.
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _perfMark('editorOpenReady w=${img.width} h=${img.height}'));
   }
 
   void _schedulePersist() {
@@ -408,6 +436,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// only live on the landing state. Confirms-if-dirty (a no-op on landing).
   Future<void> _pasteLoad() async {
     if (!await _confirmDiscardIfDirty()) return;
+    _perfMark('editorOpenBegin kind=clipboard');
     Uint8List? bytes;
     try {
       bytes = await clipboardReadImage();
@@ -482,6 +511,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     final baseImage = _image, controller = _controller;
     if (baseImage == null || controller == null || _exporting) return false;
     setState(() => _exporting = true);
+    _perfMark(
+        'editorExportBegin actions=${actions.map((a) => a.name).join(',')}');
     try {
       final cap = _cap;
       // After a crop-trim the document carries the smaller canvas image; export
@@ -500,7 +531,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         // pin centers (no origin rect from the editor).
         shareFn: (path) => _channel.invokeMethod('shareSheet', {'path': path}),
         pinFn: (path) => _channel.invokeMethod('pinImage', {'path': path}),
+        perfMark: _perfMark,
       );
+      _perfMark('editorExportDone');
       if (!mounted) return false;
       // Clear dirty only on a confirmed file save, not on clipboard copy.
       if (actions.contains(FlowAction.save) && result.savedOk) {
@@ -635,6 +668,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _frames.detach();
     _persistTimer?.cancel();
     _toastTimer?.cancel();
     _toastClearTimer?.cancel();

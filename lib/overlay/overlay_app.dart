@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/capture_kind.dart';
+import '../perf/frame_stats.dart';
 import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../editor/draw_style.dart';
@@ -76,10 +77,22 @@ class _OverlayAppState extends State<OverlayApp> {
   bool _pinOnly = false;
   // Debounce timer for persisting _toolStyles to the store.
   Timer? _persistTimer;
+  // Perf instrumentation: per-interaction frame summaries + the cross-display
+  // broadcast rate, dropped into the unified-log perf marks (M1/M2/M6/M8 in
+  // the perf-tune plan). Silent at idle — engines only render on change.
+  late final FrameStatsReporter _frames =
+      FrameStatsReporter(tag: 'overlay', sink: _perfSink);
+  int _broadcastCount = 0;
+  Timer? _broadcastRateTimer;
+
+  void _perfSink(String label) {
+    CaptureBridge.perfMark(label).then((_) {}, onError: (_) {});
+  }
 
   @override
   void initState() {
     super.initState();
+    _frames.attach();
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d, pinOnly) async {
         _pinOnly = pinOnly;
@@ -261,6 +274,8 @@ class _OverlayAppState extends State<OverlayApp> {
 
   @override
   void dispose() {
+    _frames.detach();
+    _broadcastRateTimer?.cancel();
     _persistTimer?.cancel();
     _detachShared();
     _editor?.dispose();
@@ -282,6 +297,14 @@ class _OverlayAppState extends State<OverlayApp> {
     _bridge.broadcastEditorState({
       'tool': e.tool.value.index,
       ...e.style.value.toJson(),
+    });
+    // M6: count broadcasts per 1s window while they flow (a slider drag fires
+    // one per tick) — the mark itself is at most one channel call per second.
+    _broadcastCount++;
+    _broadcastRateTimer ??= Timer(const Duration(seconds: 1), () {
+      _perfSink('broadcastRate n=$_broadcastCount');
+      _broadcastCount = 0;
+      _broadcastRateTimer = null;
     });
   }
 

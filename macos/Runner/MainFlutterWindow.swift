@@ -309,6 +309,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "openSettings":
         self?.revealSettings()
         result(nil)
+      // Dart-side perf marks from the editor engine (gallery/open/export
+      // timings, frame stats) — this engine has no glimpr/capture handler.
+      case "perfMark":
+        if let label = (call.arguments as? [String: Any])?["label"] as? String {
+          PerfLog.mark(label)
+        }
+        result(nil)
       // Editor Done flow / one-off: share sheet anchored to the menu-bar icon.
       case "shareSheet":
         if let path = (call.arguments as? [String: Any])?["path"] as? String {

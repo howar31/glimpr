@@ -709,6 +709,13 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self.dismiss(); result(nil)
+        // Dart-side perf marks from the overlay engines (frame stats,
+        // broadcast counters) land in the same unified-log perf category.
+        case "perfMark":
+          if let label = (call.arguments as? [String: Any])?["label"] as? String {
+            PerfLog.mark(label)
+          }
+          result(nil)
         // After-capture flow (overlay engine): open the exported file in the
         // image editor — routed to the control window's warm editor.
         case "openInEditor":

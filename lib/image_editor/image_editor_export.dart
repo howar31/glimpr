@@ -32,6 +32,8 @@ Future<FlowResult> exportImage({
   // ride the editor's own channel — injected here, forwarded to runFlow.
   Future<void> Function(String path)? shareFn,
   Future<void> Function(String path)? pinFn,
+  // Optional perf-mark sink (M5): splits composite+encode from the flow legs.
+  void Function(String label)? perfMark,
 }) async {
   final bytes = await compositeAndCrop(
     frozen: image,
@@ -42,6 +44,7 @@ Future<FlowResult> exportImage({
     jpeg: jpeg,
     jpegQuality: jpegQuality,
   );
+  perfMark?.call('editorExportComposited bytes=${bytes.length}');
   final fn = run ??
       ({required actions, required bytes, saveDir, fileName}) => runFlow(
             actions: actions,
