@@ -922,6 +922,18 @@ final class PinPanel: NSPanel {
   private var vaporLayers: [CALayer] = []
   var onClosed: (() -> Void)?
 
+  /// Pins are free-floating references that must reach the screen edges, so
+  /// every programmatic constrain pass (display reconfiguration, zoom
+  /// setFrame) is a pass-through. NOTE this does NOT cover dragging:
+  /// performDrag hands the move to the WindowServer, which enforces its own
+  /// menu-bar top clamp out-of-process (verified: this method is not called
+  /// per-frame during a drag) — that is why the drag below is manual.
+  override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?)
+    -> NSRect
+  {
+    frameRect
+  }
+
   /// [imageFrame] is where the IMAGE sits on screen (AppKit coords); the
   /// window itself extends [margin] beyond it on every side.
   init(image: NSImage, frame imageFrame: NSRect) {
@@ -1047,10 +1059,28 @@ final class PinPanel: NSPanel {
       y: bounds.height - m - closeWrap.frame.height - 8))
   }
 
-  // Drag anywhere: explicit window drag (NSImageView swallows the implicit
-  // movable-by-background path).
+  // Drag anywhere: MANUAL drag loop (NSImageView swallows the implicit
+  // movable-by-background path, and performDrag is no alternative — the
+  // WindowServer's out-of-process drag enforces a menu-bar top clamp that
+  // stops the window's halo edge ~margin short of the screen top and cannot
+  // be disabled from NSWindow). setFrameOrigin is unconstrained, and the
+  // grabbed point stays under the on-screen cursor, so the pin can reach
+  // every edge yet never strands out of reach.
+  private var dragOffset: NSPoint?
+
   override func mouseDown(with event: NSEvent) {
-    performDrag(with: event)
+    let mouse = NSEvent.mouseLocation
+    dragOffset = NSPoint(x: mouse.x - frame.origin.x, y: mouse.y - frame.origin.y)
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    guard let off = dragOffset else { return }
+    let mouse = NSEvent.mouseLocation
+    setFrameOrigin(NSPoint(x: mouse.x - off.x, y: mouse.y - off.y))
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    dragOffset = nil
   }
 
   override func rightMouseDown(with event: NSEvent) {
