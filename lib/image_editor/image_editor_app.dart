@@ -818,6 +818,13 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           children: [
             // Left inset to clear the macOS traffic-light buttons.
             const SizedBox(width: 78),
+            // Back to the gallery landing — navigation lives top-left next to
+            // the window controls (macOS back idiom), NOT in the bottom action
+            // pill. Editor state only; the landing has nowhere to go back to.
+            if (_image != null) ...[
+              _TitleBarHome(onTap: _backToLanding),
+              const SizedBox(width: 6),
+            ],
             // The Viewfinder logo mark (same as the Settings sidebar), replacing
             // the former decorative brand dot.
             const GlimprMark(size: 18),
@@ -1075,14 +1082,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           const SizedBox(width: 8),
           _HistoryButtons(controller: controller),
           const SizedBox(width: 8),
-          _BarAction(
-            icon: Icons.home_outlined,
-            label: 'Home',
-            onTap: _backToLanding,
-          ),
-          const SizedBox(width: 4),
           // Done = run the configured after-editor flow (Settings). The chevron
-          // offers one-off deviations that run INSTEAD of the flow.
+          // offers one-off deviations that run INSTEAD of the flow. (Home moved
+          // to the title bar's top-left — navigation, not an action.)
           _BarAction(
             icon: Icons.check,
             label: 'Done',
@@ -1169,6 +1171,54 @@ class _HistoryButtons extends StatelessWidget {
 
 /// A compact icon-only action button matching the toolbar's foreground palette.
 /// Dims when [onTap] is null.
+/// The title-bar back-to-gallery control: a chevron + house pair on ONE hover
+/// surface, sized for the 32px bar. Reads as navigation (Photos-style back),
+/// distinct from the bottom pill's actions.
+class _TitleBarHome extends StatefulWidget {
+  const _TitleBarHome({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_TitleBarHome> createState() => _TitleBarHomeState();
+}
+
+class _TitleBarHomeState extends State<_TitleBarHome> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final color = _hover ? t.fg1 : t.fg2;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: 'Home',
+          waitDuration: const Duration(milliseconds: 400),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+            decoration: BoxDecoration(
+              color: _hover ? t.navHoverBg : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.chevron_left, size: 16, color: color),
+                Icon(Icons.home_outlined, size: 15, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _IconAction extends StatefulWidget {
   const _IconAction({required this.icon, required this.tooltip, this.onTap});
   final IconData icon;
