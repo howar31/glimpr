@@ -154,7 +154,7 @@ class EditorToolbar extends StatelessWidget {
                     Icon(Icons.push_pin, size: 13, color: GlimprTokens.accent),
                     const SizedBox(width: 6),
                     Text(
-                      'Pin mode — the selection floats as a pin',
+                      'Pin mode: the selection floats as a pin',
                       style: TextStyle(
                         color: palette.fg,
                         fontSize: 11.5,

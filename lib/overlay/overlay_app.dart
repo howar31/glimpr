@@ -709,9 +709,9 @@ class _OverlayAppState extends State<OverlayApp> {
   String _summary(FlowResult r, CaptureSettings cap) {
     final saveFailed = cap.flow.contains(FlowAction.save) && !r.savedOk;
     final clipFailed = cap.flow.contains(FlowAction.copy) && !r.copiedToClipboard;
-    if (saveFailed && clipFailed) return 'Capture failed — not saved or copied';
-    if (saveFailed) return 'Copied — file save failed';
-    if (clipFailed) return 'Saved — clipboard failed';
+    if (saveFailed && clipFailed) return 'Capture failed: not saved or copied';
+    if (saveFailed) return 'Copied, but file save failed';
+    if (clipFailed) return 'Saved, but clipboard failed';
     return 'Capture failed';
   }
 
