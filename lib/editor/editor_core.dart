@@ -416,6 +416,9 @@ class _EditorCoreState extends State<EditorCore> {
   ui.Image? _pixelCacheImage; // identity guard against image swaps (trim)
   ByteData? _pixelCache;
   bool _pixelCacheBuilding = false;
+  // Copy-shortcut feedback: which format line flashes in the readout.
+  String? _copiedFormat;
+  Timer? _copiedFlash;
 
   void _onEyedropperFlip() {
     if (_eyedropper) {
@@ -423,6 +426,8 @@ class _EditorCoreState extends State<EditorCore> {
     } else {
       _pixelCacheImage = null;
       _pixelCache = null;
+      _copiedFlash?.cancel();
+      _copiedFormat = null;
     }
   }
 
@@ -536,6 +541,7 @@ class _EditorCoreState extends State<EditorCore> {
 
   @override
   void dispose() {
+    _copiedFlash?.cancel();
     c.document.removeListener(_rebuild);
     c.selectedIndex.removeListener(_rebuild);
     c.selectedIndex.removeListener(_unpinIfCleared);
@@ -999,13 +1005,25 @@ class _EditorCoreState extends State<EditorCore> {
       if (!_eyedropper) return KeyEventResult.ignored;
       final col = _pixelColorAt(_cursor);
       if (col != null) {
+        final fmt = action == kEditorCopyHexKey
+            ? 'HEX'
+            : action == kEditorCopyRgbKey
+                ? 'RGB'
+                : 'HSL';
         Clipboard.setData(ClipboardData(
-          text: action == kEditorCopyHexKey
+          text: fmt == 'HEX'
               ? hexOf(col)
-              : action == kEditorCopyRgbKey
+              : fmt == 'RGB'
                   ? rgbCssOf(col)
                   : hslCssOf(col),
         ));
+        // Feedback where the eyes already are: the copied line in the loupe
+        // readout flashes accent + a check for a moment.
+        _copiedFlash?.cancel();
+        setState(() => _copiedFormat = fmt);
+        _copiedFlash = Timer(const Duration(milliseconds: 1200), () {
+          if (mounted) setState(() => _copiedFormat = null);
+        });
       }
       return KeyEventResult.handled;
     }
@@ -2156,6 +2174,7 @@ class _EditorCoreState extends State<EditorCore> {
         x: _toPxAimed(_cursor.dx),
         y: _toPxAimed(_cursor.dy),
         color: _eyedropper ? _pixelColorAt(_cursor) : null,
+        copied: _eyedropper ? _copiedFormat : null,
       );
 
   /// A small eyedropper glyph pinned to the lower-right of the aim reticle while

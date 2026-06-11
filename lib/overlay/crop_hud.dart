@@ -276,11 +276,26 @@ Widget _hudPill(Widget child) => IgnorePointer(
 /// used by the overlay and the image editor so the two surfaces look identical.
 /// With the eyedropper active, [color] adds the aimed pixel's color info
 /// (swatch + HEX + RGB + HSL) — the same base-image pixel a click samples.
+/// [copied] ('HEX' | 'RGB' | 'HSL') flashes that line accent + a check as
+/// copy-shortcut feedback, right where the user is already looking.
 class LoupeReadout extends StatelessWidget {
   final int x;
   final int y;
   final Color? color;
-  const LoupeReadout({super.key, required this.x, required this.y, this.color});
+  final String? copied;
+  const LoupeReadout({
+    super.key,
+    required this.x,
+    required this.y,
+    this.color,
+    this.copied,
+  });
+
+  TextStyle _lineStyle(String fmt) => copied == fmt
+      ? _kHudText.copyWith(color: GlimprTokens.accent)
+      : _kHudText;
+
+  String _check(String fmt) => copied == fmt ? ' ✓' : '';
 
   @override
   Widget build(BuildContext context) {
@@ -311,11 +326,13 @@ class LoupeReadout extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Text(hexOf(c), style: _kHudText),
+                  Text('${hexOf(c)}${_check('HEX')}', style: _lineStyle('HEX')),
                 ],
               ),
-              Text('RGB ${rgbOf(c)}', style: _kHudText),
-              Text('HSL ${hslOf(c)}', style: _kHudText),
+              Text('RGB ${rgbOf(c)}${_check('RGB')}',
+                  style: _lineStyle('RGB')),
+              Text('HSL ${hslOf(c)}${_check('HSL')}',
+                  style: _lineStyle('HSL')),
             ],
           ),
         ],
