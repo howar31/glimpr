@@ -201,6 +201,33 @@ class _EditorCoreState extends State<EditorCore> {
   Offset _toLogical(Offset local) =>
       _interactive ? local / _viewport.scale : local;
 
+  /// True when [p] is the OS echoing a half-pixel NUDGED position quantized
+  /// to the integer grid: macOS delivers integer logical pointer positions,
+  /// so the move event a press generates floors a nudged x.5 back to x.0 —
+  /// accepting it would silently undo the nudge by one native pixel in a
+  /// seemingly random direction (verified: the echo lands in the same
+  /// millisecond as the press). A REAL move lands on a different integer and
+  /// passes through.
+  bool _isQuantizedEcho(Offset p) =>
+      p != _cursor &&
+      p == Offset(_cursor.dx.floorToDouble(), _cursor.dy.floorToDouble());
+
+  /// An event-stream position, with the quantized nudge echo redirected to
+  /// the aimed cursor — so the press/drag/tap anchor lands exactly where the
+  /// loupe says, and the aim never shifts on click.
+  Offset _eventPosition(Offset local) {
+    final p = _toLogical(local);
+    return _isQuantizedEcho(p) ? _cursor : p;
+  }
+
+  /// Every _cursor write funnels through here, tagged with its source. The
+  /// tag is currently unused — it exists because hunting the loupe's
+  /// press-shift required logging exactly this (aimed-cell change + writer);
+  /// a future aim regression re-adds one log line here instead of fifteen.
+  void _setCursor(Offset p, String src) {
+    _cursor = p;
+  }
+
   static const _kDrawDevices = <PointerDeviceKind>{
     PointerDeviceKind.mouse,
     PointerDeviceKind.touch,
@@ -669,7 +696,7 @@ class _EditorCoreState extends State<EditorCore> {
     if (mine && !_active) {
       setState(() {
         _active = true;
-        _cursor = sig.cursor; // land the crosshair where the cursor crossed in
+        _setCursor(sig.cursor, 'signal'); // land where the cursor crossed in
       });
       _focus.requestFocus();
     } else if (!mine && _active) {
@@ -1002,7 +1029,7 @@ class _EditorCoreState extends State<EditorCore> {
         );
         final s = _dragStart;
         setState(() {
-          _cursor = next;
+          _setCursor(next, 'nudge');
           if (s != null && c.tool.value == ToolKind.blur) {
             _preview = BlurDrawable(Rect.fromPoints(s, next), c.style.value);
           } else if (s != null && c.tool.value == ToolKind.pixelate) {
@@ -1190,8 +1217,8 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   void _onHover(PointerHoverEvent e) {
-    final p = _toLogical(e.localPosition);
-    setState(() => _cursor = p);
+    final p = _eventPosition(e.localPosition);
+    setState(() => _setCursor(p, 'hover'));
     if (_inCrop) return;
     if (_pinned) return; // a pinned (clicked) selection ignores hover changes
     final drawables = c.document.value.drawables;
@@ -1225,7 +1252,7 @@ class _EditorCoreState extends State<EditorCore> {
       _sampleColorAt(_cursor); // sample where the loupe is (respects arrow-nudge)
       return;
     }
-    final p = _toLogical(d.localPosition);
+    final p = _eventPosition(d.localPosition);
     // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
     // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
     // drawable spanning it. With NO window under the cursor the tools fall back
@@ -1358,7 +1385,7 @@ class _EditorCoreState extends State<EditorCore> {
   /// left button is still held after a right-click cancel.
   void _trackCursor(PointerEvent e) {
     if (!_active) return;
-    final p = _toLogical(e.localPosition);
+    final p = _eventPosition(e.localPosition);
     // Window-snap: highlight the top-most window under the cursor for the snap
     // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging and not
     // while hovering an annotation the tool would engage (then the snap frame is
@@ -1367,7 +1394,7 @@ class _EditorCoreState extends State<EditorCore> {
         ? topmostWindowAt(_windows, p)
         : null;
     setState(() {
-      _cursor = _clampToDisplay(p);
+      _setCursor(_clampToDisplay(p), 'track');
       _hoverWindow = hover?.rect;
     });
   }
@@ -1532,18 +1559,18 @@ class _EditorCoreState extends State<EditorCore> {
     // broken by the pointer straying onto another display (released in _panEnd /
     // _panCancel). Spanning across displays is out of scope.
     widget.host.cursor.setDrawingLock(true);
-    final p = _toLogical(d.localPosition);
+    final p = _eventPosition(d.localPosition);
     // Eyedropper: a drag doesn't draw — just track the cursor (so the loupe
     // follows); _panEnd samples at the release point.
     if (_eyedropper) {
       widget.host.cursor.setDrawingLock(false);
-      setState(() => _cursor = p);
+      setState(() => _setCursor(p, 'eyeStart'));
       return;
     }
     // The editor has no outer pointer tracker (the overlay uses _trackCursor on
     // the full-window Listener), so the reticle/crosshair must advance from the
     // pan stream here — otherwise it freezes at the drag's start point.
-    if (_interactive) setState(() => _cursor = p);
+    if (_interactive) setState(() => _setCursor(p, 'editStart'));
     if (c.tool.value == ToolKind.crop) {
       // Editor: with a pending selection, a press on a corner resizes it and a
       // press inside moves it; elsewhere starts a fresh selection.
@@ -1554,20 +1581,20 @@ class _EditorCoreState extends State<EditorCore> {
         for (var ci = 0; ci < handles.length; ci++) {
           if ((handles[ci] - p).distance <= tol) {
             _cropHandle = ci;
-            setState(() => _cursor = p);
+            setState(() => _setCursor(p, 'handleStart'));
             return;
           }
         }
         if (pending.contains(p)) {
           _cropMoveStart = p;
           _cropMoveOrigin = pending;
-          setState(() => _cursor = p);
+          setState(() => _setCursor(p, 'moveStart'));
           return;
         }
       }
       _cropping = true;
       setState(() {
-        _cursor = p;
+        _setCursor(p, 'cropStart');
         _hoverWindow = null;
       });
       _crop.begin(p);
@@ -1646,7 +1673,7 @@ class _EditorCoreState extends State<EditorCore> {
     // shape stays pinned at the boundary. The editor lets a DRAWING / MOVE run
     // past the image edge (it is masked on screen + clipped on export), but keeps
     // the CROP selection inside the image.
-    final logical = _toLogical(d.localPosition);
+    final logical = _eventPosition(d.localPosition);
     final p = (_interactive && c.tool.value != ToolKind.crop)
         ? logical
         : _clampToDisplay(logical);
@@ -1662,12 +1689,12 @@ class _EditorCoreState extends State<EditorCore> {
       // Right-click cancelled this drag: keep the crosshair tracking the mouse
       // while the left button is still held (no jank if the two buttons aren't
       // released together); a new selection needs a fresh left press.
-      if (_showsCrosshair) setState(() => _cursor = p);
+      if (_showsCrosshair) setState(() => _setCursor(p, 'cancelTrack'));
       return;
     }
     // Editor: advance the reticle/crosshair from the pan stream for EVERY tool
     // (no outer tracker); the crop/blur/pixelate branches below also keep it.
-    if (_interactive) setState(() => _cursor = p);
+    if (_interactive) setState(() => _setCursor(p, 'editU'));
     if (c.tool.value == ToolKind.crop) {
       // Editor: resize a pending selection from its grabbed corner, or move the
       // whole rect; otherwise extend the in-progress selection. Shift squares the
@@ -1691,7 +1718,7 @@ class _EditorCoreState extends State<EditorCore> {
         final to = (shift && a != null) ? _squareCornerIn(a, p, _canvasSize) : p;
         _crop.update(to);
       }
-      setState(() => _cursor = p);
+      setState(() => _setCursor(p, 'cropU'));
       return;
     }
     if (_editIndex != null) {
@@ -1737,14 +1764,14 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.blur:
         final cp = shift ? _squareCorner(s, p) : p;
         setState(() {
-          _cursor = p; // keep the crosshair/loupe on the dragging corner
+          _setCursor(p, 'blurU'); // keep the crosshair/loupe on the corner
           _preview = BlurDrawable(Rect.fromPoints(s, cp), c.style.value);
         });
         break;
       case ToolKind.pixelate:
         final cp = shift ? _squareCorner(s, p) : p;
         setState(() {
-          _cursor = p;
+          _setCursor(p, 'pixU');
           _preview = PixelateDrawable(Rect.fromPoints(s, cp), c.style.value);
         });
         break;
@@ -1761,7 +1788,7 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.spotlight:
         final cp = shift ? _squareCorner(s, p) : p;
         setState(() {
-          _cursor = p; // keep the crosshair/loupe on the dragging corner
+          _setCursor(p, 'spotU'); // keep the crosshair/loupe on the corner
           _preview = SpotlightDrawable(Rect.fromPoints(s, cp), c.style.value);
         });
         break;
@@ -2046,7 +2073,14 @@ class _EditorCoreState extends State<EditorCore> {
   /// The loupe readout — the cursor's current pixel position. The box size +
   /// drag-start are shown at the selection's corner instead (see [BoxSizeLabel]),
   /// not stacked under the loupe.
-  Widget _loupeReadout() => LoupeReadout(x: _toPx(_cursor.dx), y: _toPx(_cursor.dy));
+  /// The AIMED pixel: round(x - 0.5) matches the loupe's snapped center cell
+  /// exactly — floor for interior positions, but stable when the cursor sits
+  /// exactly on a pixel boundary (integer macOS positions on a 2x display),
+  /// where press jitter made floor() flip cells (see LoupePainter).
+  int _toPxAimed(double v) => (v * widget.host.pixelScale - 0.5).round();
+
+  Widget _loupeReadout() =>
+      LoupeReadout(x: _toPxAimed(_cursor.dx), y: _toPxAimed(_cursor.dy));
 
   /// A small eyedropper glyph pinned to the lower-right of the aim reticle while
   /// sampling. The eyedropper reuses the region-tool crosshair/reticle/loupe HUD,

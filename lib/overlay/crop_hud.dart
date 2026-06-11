@@ -145,9 +145,20 @@ class LoupePainter extends CustomPainter {
     canvas.drawRect(dst, Paint()..color = const Color(0xFF202020));
 
     final centerPx = cursorLogical * scaleFactor; // native px under the cursor
+    // Snap the view to the CENTER of the AIMED pixel: the loupe's middle is
+    // then one whole cell, not a pixel boundary, and the grid aligns with
+    // true pixel edges. The pick is round(x - 0.5), NOT floor(x): identical
+    // for interior positions, but stable at exact boundaries — macOS delivers
+    // integer logical cursor positions, which on a 2x display land exactly ON
+    // native boundaries, and a trackpad press emits sub-pixel move jitter
+    // that made floor() flip a whole cell in a random direction per press.
+    final pixelCenter = Offset(
+      (centerPx.dx - 0.5).roundToDouble() + 0.5,
+      (centerPx.dy - 0.5).roundToDouble() + 0.5,
+    );
     final spanPx = size.width / zoom; // native px visible across the loupe
     final src = Rect.fromCenter(
-      center: Offset(centerPx.dx, centerPx.dy),
+      center: pixelCenter,
       width: spanPx,
       height: spanPx,
     );
@@ -163,10 +174,13 @@ class LoupePainter extends CustomPainter {
     // scaleFactor*zoom loupe px, centered on the cursor). This makes committed
     // blur/pixelate (and other drawables) appear in the loupe as on screen.
     if (drawables.isNotEmpty && !logicalSize.isEmpty) {
+      // Same SNAPPED center as the frozen pixels above, so the two layers
+      // stay aligned to the sub-pixel.
+      final snappedLogical = pixelCenter / scaleFactor;
       canvas.save();
       canvas.translate(size.width / 2, size.height / 2);
       canvas.scale(scaleFactor * zoom);
-      canvas.translate(-cursorLogical.dx, -cursorLogical.dy);
+      canvas.translate(-snappedLogical.dx, -snappedLogical.dy);
       DrawablePainter(
         drawables: drawables,
         effectImage: effectImage,
@@ -175,15 +189,19 @@ class LoupePainter extends CustomPainter {
     }
 
     // Pixel grid (one cell per source pixel) — inverting blend so the lines
-    // show over any magnified content.
+    // show over any magnified content. Anchored to TRUE pixel boundaries: the
+    // view is centered on a pixel center, so boundaries sit at half-cell
+    // offsets from the loupe center (not at multiples of zoom from the edge).
     final grid = Paint()
       ..color = const Color(0x66FFFFFF)
       ..strokeWidth = 1
       ..blendMode = BlendMode.difference;
-    for (double x = 0; x <= size.width; x += zoom) {
+    final phaseX = (size.width / 2 - zoom / 2) % zoom;
+    final phaseY = (size.height / 2 - zoom / 2) % zoom;
+    for (double x = phaseX; x <= size.width; x += zoom) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
     }
-    for (double y = 0; y <= size.height; y += zoom) {
+    for (double y = phaseY; y <= size.height; y += zoom) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
