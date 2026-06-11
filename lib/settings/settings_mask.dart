@@ -8,13 +8,22 @@ import 'package:flutter/material.dart';
 /// low-level pausing, but share THIS widget so they look identical.
 ///
 /// The hint sits near the top so it stays visible above the centered Settings
-/// window. Self-contained styling (a dark card, no GlimprTheme dependency) so it
-/// renders correctly in the overlay, which has no theme/Scaffold ancestor.
+/// window. Self-contained palette pair (no GlimprTheme dependency) selected by
+/// the system appearance via MediaQuery, like the toolbar — so it renders
+/// correctly in the overlay, which has no GlimprTheme/Scaffold ancestor. The
+/// dim veil stays dark in both modes (matching the confirm-dialog barrier).
 class SettingsMask extends StatelessWidget {
   const SettingsMask({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final dark =
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final cardBg = dark ? const Color(0xF21A2138) : const Color(0xF2EEF2F7);
+    final cardBorder =
+        dark ? const Color(0x33FFFFFF) : const Color(0x66FFFFFF);
+    final fg = dark ? const Color(0xFFFFFFFF) : const Color(0xFF14223B);
+    final fgDim = dark ? const Color(0xCCFFFFFF) : const Color(0xFF475569);
     return Positioned.fill(
       child: AbsorbPointer(
         child: ColoredBox(
@@ -30,15 +39,15 @@ class SettingsMask extends StatelessWidget {
                     vertical: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xF21A2138),
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0x33FFFFFF)),
+                    border: Border.all(color: cardBorder),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.tune, size: 20, color: Color(0xFFFFFFFF)),
-                      SizedBox(width: 12),
+                    children: [
+                      Icon(Icons.tune, size: 20, color: fg),
+                      const SizedBox(width: 12),
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,17 +55,17 @@ class SettingsMask extends StatelessWidget {
                           Text(
                             'Settings open',
                             style: TextStyle(
-                              color: Color(0xFFFFFFFF),
+                              color: fg,
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
                               decoration: TextDecoration.none,
                             ),
                           ),
-                          SizedBox(height: 3),
+                          const SizedBox(height: 3),
                           Text(
                             'Close the Settings window to continue.',
                             style: TextStyle(
-                              color: Color(0xCCFFFFFF),
+                              color: fgDim,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w400,
                               decoration: TextDecoration.none,
