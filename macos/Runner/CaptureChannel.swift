@@ -348,3 +348,82 @@ enum EncodeChannel {
       properties: [.compressionFactor: Double(quality) / 100.0])
   }
 }
+
+/// Self-owned image clipboard, registered on EVERY engine's messenger (control
+/// / overlay / image editor) so the editor layer can read/write the system
+/// clipboard host-agnostically — replacing the `pasteboard` package. WRITE puts
+/// the already-encoded image on the pasteboard: PNG bytes go straight to the
+/// `.png` type (no NSImage/TIFF detour); other encodings (JPEG) are decoded
+/// once to PNG. READ returns the clipboard image as PNG bytes.
+enum ClipboardChannel {
+  // PNG file signature.
+  private static let pngMagic: [UInt8] = [0x89, 0x50, 0x4E, 0x47]
+
+  static func register(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "glimpr/clipboard", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "writeImage":
+        guard let a = call.arguments as? [String: Any],
+              let data = (a["bytes"] as? FlutterStandardTypedData)?.data
+        else {
+          result(FlutterError(code: "bad_args", message: "no bytes", details: nil))
+          return
+        }
+        if data.starts(with: pngMagic) {
+          // Already PNG — write the bytes directly on the platform thread.
+          result(Self.put(png: data)
+            ? nil
+            : FlutterError(code: "clipboard_write", message: "write failed", details: nil))
+        } else {
+          // JPEG etc. — decode to PNG off the platform thread, then write.
+          DispatchQueue.global(qos: .userInitiated).async {
+            let png = Self.toPNG(data)
+            DispatchQueue.main.async {
+              guard let png else {
+                result(FlutterError(
+                  code: "clipboard_write", message: "not an image", details: nil))
+                return
+              }
+              result(Self.put(png: png)
+                ? nil
+                : FlutterError(code: "clipboard_write", message: "write failed", details: nil))
+            }
+          }
+        }
+      case "readImage":
+        // NSPasteboard reads on the platform (main) thread.
+        result(Self.readImage().map { FlutterStandardTypedData(bytes: $0) })
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  /// Put PNG bytes on the general pasteboard under the `.png` type.
+  private static func put(png: Data) -> Bool {
+    let item = NSPasteboardItem()
+    item.setData(png, forType: .png)
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    return pb.writeObjects([item])
+  }
+
+  /// Decode any image-encoded [data] (JPEG/TIFF/…) once to PNG bytes.
+  private static func toPNG(_ data: Data) -> Data? {
+    guard let img = NSImage(data: data), let tiff = img.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff) else { return nil }
+    return rep.representation(using: .png, properties: [:])
+  }
+
+  /// The clipboard image as PNG bytes: the `.png` type directly when present,
+  /// else any image (TIFF etc.) converted to PNG. nil when no image is present.
+  private static func readImage() -> Data? {
+    let pb = NSPasteboard.general
+    if let png = pb.data(forType: .png) { return png }
+    guard let img = NSImage(pasteboard: pb), let tiff = img.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff) else { return nil }
+    return rep.representation(using: .png, properties: [:])
+  }
+}

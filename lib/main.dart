@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:pasteboard/pasteboard.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'image_editor/image_editor_app.dart';
+import 'output/clipboard.dart';
 import 'output/filename.dart';
 import 'overlay/overlay_app.dart';
 import 'settings/settings.dart';
@@ -79,7 +79,7 @@ Future<void> main() async {
 Future<void> _pinClipboard() async {
   Uint8List? bytes;
   try {
-    bytes = await Pasteboard.image;
+    bytes = await clipboardReadImage();
   } catch (_) {
     bytes = null;
   }

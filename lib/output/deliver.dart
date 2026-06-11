@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:pasteboard/pasteboard.dart';
+import 'clipboard.dart';
 import 'filename.dart';
 import 'saver.dart';
 
@@ -58,7 +58,7 @@ Future<DeliveryResult> deliverCapture({
   final name = fileName ?? screenshotFilename(DateTime.now(), 'png');
   final save =
       saveFn ?? ((b, d, n) => saveBytes(dir: d, fileName: n, bytes: b));
-  final clip = clipboardFn ?? Pasteboard.writeImage;
+  final clip = clipboardFn ?? clipboardWriteImage;
   final sound = soundFn ?? _defaultSound;
 
   final errors = <String, String>{};

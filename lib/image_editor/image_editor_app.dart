@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as p;
 import '../editor/draw_style.dart';
 import '../editor/document.dart';
@@ -14,6 +13,7 @@ import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
 import '../overlay/toolbar.dart';
+import '../output/clipboard.dart';
 import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
@@ -289,7 +289,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// pasteboard call as the delivery copy leg.
   Future<void> _copyRecent(String path) async {
     try {
-      await Pasteboard.writeImage(await File(path).readAsBytes());
+      await clipboardWriteImage(await File(path).readAsBytes());
       _toast('Copied to clipboard');
     } catch (_) {
       _toast('Copy failed');
@@ -410,9 +410,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     if (!await _confirmDiscardIfDirty()) return;
     Uint8List? bytes;
     try {
-      bytes = await Pasteboard.image;
+      bytes = await clipboardReadImage();
     } catch (_) {
-      return; // clipboard plugin unavailable (e.g. tests)
+      return; // clipboard channel unavailable (e.g. tests)
     }
     if (bytes == null) {
       _toast('No image in clipboard');

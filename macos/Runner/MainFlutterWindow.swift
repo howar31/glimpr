@@ -65,6 +65,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       manager: { [weak self] in self?.overlayManager }
     )
     EncodeChannel.register(messenger: flutterViewController.engine.binaryMessenger)
+    ClipboardChannel.register(messenger: flutterViewController.engine.binaryMessenger)
 
     // Native global hotkeys (Carbon RegisterEventHotKey), driven by the control
     // engine's NativeHotkeyRegistrar over `glimpr/hotkeys`.
@@ -265,6 +266,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     let vc = FlutterViewController()
     RegisterGeneratedPlugins(registry: vc)
     EncodeChannel.register(messenger: vc.engine.binaryMessenger)
+    ClipboardChannel.register(messenger: vc.engine.binaryMessenger)
     let role = FlutterMethodChannel(
       name: "glimpr/role", binaryMessenger: vc.engine.binaryMessenger)
     role.setMethodCallHandler { call, result in

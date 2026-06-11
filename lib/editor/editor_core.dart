@@ -5,8 +5,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
-import 'package:pasteboard/pasteboard.dart';
 import '../capture/captured_display.dart';
+import '../output/clipboard.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../overlay/crop_hud.dart';
@@ -689,7 +689,7 @@ class _EditorCoreState extends State<EditorCore> {
     if (_pasting) return;
     _pasting = true;
     try {
-      final bytes = await Pasteboard.image;
+      final bytes = await clipboardReadImage();
       if (bytes == null || !mounted) return;
       final ui.Image img;
       try {
