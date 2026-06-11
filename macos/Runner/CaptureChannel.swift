@@ -83,11 +83,15 @@ final class CaptureChannel {
         let cursor = (a?["showsCursor"] as? Bool) ?? false
         let jpeg = (a?["jpeg"] as? Bool) ?? false
         let quality = (a?["quality"] as? Int) ?? 90
+        // Opt-in decoration: decorate the captured CGImage natively before
+        // encoding, so the direct path never round-trips pixels through Dart.
+        let deco = (a?["decoration"] as? [String: Any]).flatMap(Decoration.spec)
         Task { @MainActor in
           do {
             let res = try await self?.capture.captureRegion(
               displayID: displayId.map { CGDirectDisplayID($0) }, rect: rect,
-              showsCursor: cursor, jpeg: jpeg, jpegQuality: quality)
+              showsCursor: cursor, jpeg: jpeg, jpegQuality: quality,
+              decoration: deco)
             result(res) // nil -> Dart picks the fallback (display gone)
           } catch {
             result(FlutterError(
@@ -116,29 +120,189 @@ final class CaptureChannel {
   }
 }
 
-/// Native JPEG encoder for the editor layer, registered on EVERY engine's
-/// messenger (control / overlay / image editor) so `composite.dart` can call
-/// it host-agnostically: raw RGBA8888 in, JPEG bytes out. The pure-Dart
-/// image-package encoder took seconds for a 5K frame.
+/// CoreGraphics image decoration — margin + rounded-corners (or alpha-shape)
+/// + drop shadow + optional background fill. Shared by two callers: the direct
+/// capture path decorates the captured CGImage in place before encoding (no
+/// Dart pixel round-trip), and the editor's `glimpr/encode` `decorate` method
+/// decorates a Dart-composited RGBA frame (the overlay annotated path). Mirrors
+/// the Dart `applyDecoration` appearance; shadows are NOT required to be
+/// pixel-identical across platforms (owner ruling), so CG's shadow model is
+/// used directly.
+enum Decoration {
+  /// Appearance parameters. Lengths are pre-scale (logical) and multiplied by
+  /// `scale` in [render]; pass already-native-px values with `scale == 1`.
+  struct Spec {
+    let margin: CGFloat
+    let cornerRadius: CGFloat
+    let shadowBlur: CGFloat
+    let shadowDx: CGFloat
+    let shadowDy: CGFloat  // Flutter sense: +y points DOWN
+    let shadowColor: CGColor
+    let fill: CGColor?  // nil -> transparent margins (PNG); set -> JPEG fill
+    let shapeFromAlpha: Bool  // window: cast the shadow from the content alpha
+  }
+
+  /// Parse the channel `decoration` dict. Lengths are doubles; colours are
+  /// ARGB ints (Flutter `Color.toARGB32()`). `fill` absent -> transparent.
+  static func spec(from a: [String: Any]) -> Spec? {
+    guard let margin = (a["margin"] as? NSNumber)?.doubleValue,
+          let radius = (a["cornerRadius"] as? NSNumber)?.doubleValue,
+          let blur = (a["shadowBlur"] as? NSNumber)?.doubleValue,
+          let dx = (a["shadowDx"] as? NSNumber)?.doubleValue,
+          let dy = (a["shadowDy"] as? NSNumber)?.doubleValue,
+          let shadow = (a["shadowColor"] as? NSNumber)?.uint32Value
+    else { return nil }
+    let fill = (a["fill"] as? NSNumber)?.uint32Value
+    return Spec(
+      margin: CGFloat(margin), cornerRadius: CGFloat(radius),
+      shadowBlur: CGFloat(blur), shadowDx: CGFloat(dx), shadowDy: CGFloat(dy),
+      shadowColor: cgColor(argb: shadow),
+      fill: fill.map { cgColor(argb: $0) },
+      shapeFromAlpha: (a["shapeFromAlpha"] as? Bool) ?? false)
+  }
+
+  static func cgColor(argb: UInt32) -> CGColor {
+    CGColor(
+      srgbRed: CGFloat((argb >> 16) & 0xFF) / 255,
+      green: CGFloat((argb >> 8) & 0xFF) / 255,
+      blue: CGFloat(argb & 0xFF) / 255,
+      alpha: CGFloat((argb >> 24) & 0xFF) / 255)
+  }
+
+  /// Render `content` decorated into a new, larger CGImage, scaling the spec's
+  /// lengths by `scale`. Returns nil only if a bitmap context can't be made.
+  static func render(_ content: CGImage, spec: Spec, scale: CGFloat) -> CGImage? {
+    let radius = spec.cornerRadius * scale
+    let blur = spec.shadowBlur * scale
+    let dx = spec.shadowDx * scale
+    let dy = spec.shadowDy * scale
+    // effectiveMargin: never smaller than the shadow reach (mirrors Dart).
+    let m = max(spec.margin * scale, blur + max(abs(dx), abs(dy)))
+    let cw = CGFloat(content.width), ch = CGFloat(content.height)
+    let outW = Int((cw + 2 * m).rounded()), outH = Int((ch + 2 * m).rounded())
+    guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
+          let ctx = CGContext(
+            data: nil, width: outW, height: outH, bitsPerComponent: 8,
+            bytesPerRow: 0, space: cs,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { return nil }
+    // CoreGraphics is bottom-left; anchor the content so the TOP margin is m
+    // (matches Dart's top-left Offset(m, m)). Flutter's +y-down shadow offset
+    // becomes -dy in this space.
+    let contentRect = CGRect(
+      x: m, y: CGFloat(outH) - m - ch, width: cw, height: ch)
+    if let fill = spec.fill {
+      ctx.setFillColor(fill)
+      ctx.fill(CGRect(x: 0, y: 0, width: CGFloat(outW), height: CGFloat(outH)))
+    }
+    let shadowOffset = CGSize(width: dx, height: -dy)
+    if spec.shapeFromAlpha {
+      // The content carries its real silhouette; cast the shadow from its alpha
+      // and draw the content on top in one pass (no rounded-rect clip).
+      ctx.saveGState()
+      ctx.setShadow(offset: shadowOffset, blur: blur, color: spec.shadowColor)
+      ctx.draw(content, in: contentRect)
+      ctx.restoreGState()
+    } else {
+      let path = CGPath(
+        roundedRect: contentRect, cornerWidth: radius, cornerHeight: radius,
+        transform: nil)
+      // Cast the rounded-rect shadow from an opaque fill (then covered by the
+      // opaque capture, so the fill colour never shows).
+      ctx.saveGState()
+      ctx.setShadow(offset: shadowOffset, blur: blur, color: spec.shadowColor)
+      ctx.addPath(path)
+      ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+      ctx.fillPath()
+      ctx.restoreGState()
+      // Content, clipped to the rounded rect (also trims a snapped window's
+      // corner-gap pixels).
+      ctx.saveGState()
+      ctx.addPath(path)
+      ctx.clip()
+      ctx.draw(content, in: contentRect)
+      ctx.restoreGState()
+    }
+    return ctx.makeImage()
+  }
+
+  /// A CGImage wrapping tightly-packed RGBA8888 (premultiplied) — the dart:ui
+  /// rawRgba layout, matching premultipliedLast.
+  static func cgImage(rgba: Data, width: Int, height: Int) -> CGImage? {
+    var pixels = rgba
+    return pixels.withUnsafeMutableBytes { buf -> CGImage? in
+      guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
+            let ctx = CGContext(
+              data: buf.baseAddress, width: width, height: height,
+              bitsPerComponent: 8, bytesPerRow: width * 4, space: cs,
+              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+      else { return nil }
+      return ctx.makeImage()
+    }
+  }
+
+  /// Encode a CGImage to PNG or JPEG (ImageIO via NSBitmapImageRep).
+  static func encode(_ image: CGImage, jpeg: Bool, quality: Int) -> Data? {
+    let rep = NSBitmapImageRep(cgImage: image)
+    if jpeg {
+      let q = max(0, min(100, quality))
+      return rep.representation(
+        using: .jpeg, properties: [.compressionFactor: Double(q) / 100.0])
+    }
+    return rep.representation(using: .png, properties: [:])
+  }
+}
+
+/// Native encoder for the editor layer, registered on EVERY engine's messenger
+/// (control / overlay / image editor) so `composite.dart` can call it
+/// host-agnostically. `jpeg`: raw RGBA8888 in, JPEG bytes out (the pure-Dart
+/// image-package encoder took seconds for a 5K frame). `decorate`: raw RGBA8888
+/// + a decoration spec in, the decorated frame encoded (PNG/JPEG) out — used by
+/// the overlay annotated path, where annotations must composite in Dart first.
 enum EncodeChannel {
   static func register(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "glimpr/encode", binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
-      guard call.method == "jpeg",
-            let a = call.arguments as? [String: Any],
-            let data = a["rgba"] as? FlutterStandardTypedData,
-            let w = a["width"] as? Int, let h = a["height"] as? Int,
-            w > 0, h > 0, data.data.count >= w * h * 4
-      else { result(nil); return }
-      let quality = max(0, min(100, (a["quality"] as? Int) ?? 90))
-      // CPU-bound encode off the platform thread; the reply hops back.
-      DispatchQueue.global(qos: .userInitiated).async {
-        let bytes = Self.encodeJpeg(
-          rgba: data.data, width: w, height: h, quality: quality)
-        DispatchQueue.main.async {
-          result(bytes.map { FlutterStandardTypedData(bytes: $0) })
+      switch call.method {
+      case "jpeg":
+        guard let a = call.arguments as? [String: Any],
+              let data = a["rgba"] as? FlutterStandardTypedData,
+              let w = a["width"] as? Int, let h = a["height"] as? Int,
+              w > 0, h > 0, data.data.count >= w * h * 4
+        else { result(nil); return }
+        let quality = max(0, min(100, (a["quality"] as? Int) ?? 90))
+        // CPU-bound encode off the platform thread; the reply hops back.
+        DispatchQueue.global(qos: .userInitiated).async {
+          let bytes = Self.encodeJpeg(
+            rgba: data.data, width: w, height: h, quality: quality)
+          DispatchQueue.main.async {
+            result(bytes.map { FlutterStandardTypedData(bytes: $0) })
+          }
         }
+      case "decorate":
+        guard let a = call.arguments as? [String: Any],
+              let data = a["rgba"] as? FlutterStandardTypedData,
+              let w = a["width"] as? Int, let h = a["height"] as? Int,
+              w > 0, h > 0, data.data.count >= w * h * 4,
+              let deco = a["decoration"] as? [String: Any],
+              let spec = Decoration.spec(from: deco)
+        else { result(nil); return }
+        let scale = CGFloat((a["scale"] as? NSNumber)?.doubleValue ?? 1.0)
+        let jpeg = (a["jpeg"] as? Bool) ?? false
+        let quality = max(0, min(100, (a["quality"] as? Int) ?? 90))
+        DispatchQueue.global(qos: .userInitiated).async {
+          var out: Data?
+          if let cg = Decoration.cgImage(rgba: data.data, width: w, height: h),
+             let decorated = Decoration.render(cg, spec: spec, scale: scale) {
+            out = Decoration.encode(decorated, jpeg: jpeg, quality: quality)
+          }
+          DispatchQueue.main.async {
+            result(out.map { FlutterStandardTypedData(bytes: $0) })
+          }
+        }
+      default:
+        result(FlutterMethodNotImplemented)
       }
     }
   }

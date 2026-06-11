@@ -22,6 +22,7 @@ class CaptureBridge {
     bool showsCursor = false,
     bool jpeg = false,
     int jpegQuality = 90,
+    Map<String, dynamic>? decoration,
   }) async {
     final res = await _channel.invokeMethod('captureRegion', {
       'displayId': ?displayId,
@@ -31,6 +32,7 @@ class CaptureBridge {
       'showsCursor': showsCursor,
       'jpeg': jpeg,
       'quality': jpegQuality,
+      'decoration': ?decoration,
     });
     if (res == null) return null;
     return RegionCapture.fromMap((res as Map).cast<dynamic, dynamic>());

@@ -5,6 +5,7 @@ import 'package:glimpr/capture/capture_kind.dart';
 import 'package:glimpr/capture/captured_display.dart';
 import 'package:glimpr/capture/direct_capture.dart';
 import 'package:glimpr/capture/last_region.dart';
+import 'package:glimpr/editor/decoration.dart';
 import 'package:glimpr/output/deliver.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/settings/settings.dart';
@@ -41,6 +42,7 @@ void main() {
     late _FakeStore store;
     late LastRegionStore regionStore;
     late List<({int? displayId, Rect? rect})> regionCalls;
+    late List<Map<String, dynamic>?> regionDecorations;
     late List<({RegionCapture c, CaptureKind kind, String? title, String? app})>
         delivered;
     late int shutters;
@@ -57,6 +59,7 @@ void main() {
       store = _FakeStore();
       regionStore = LastRegionStore(store);
       regionCalls = [];
+      regionDecorations = [];
       delivered = [];
       shutters = 0;
       completes = 0;
@@ -64,8 +67,9 @@ void main() {
       marks = [];
       return DirectCapture(
         captureRegion: ({displayId, rect, showsCursor = false, jpeg = false,
-            jpegQuality = 90}) async {
+            jpegQuality = 90, decoration}) async {
           regionCalls.add((displayId: displayId, rect: rect));
+          regionDecorations.add(decoration);
           if (onRegion != null) return onRegion(displayId, rect);
           return _rc(displayId ?? 1, rect);
         },
@@ -98,6 +102,27 @@ void main() {
       final saved = await regionStore.load();
       expect(saved!.displayId, 1);
       expect(saved.rect, const Rect.fromLTWH(0, 0, 1920, 1080));
+    });
+
+    test('decoration off (default): no decoration spec passed to captureRegion',
+        () async {
+      final dc = build();
+      await dc.screen();
+      expect(regionDecorations.single, isNull);
+    });
+
+    test('decoration on for the kind: logical spec passed to captureRegion',
+        () async {
+      final dc = build();
+      await Settings(store).setDecorateDisplay(true);
+      await dc.screen();
+      final spec = regionDecorations.single;
+      expect(spec, isNotNull);
+      expect(spec!['margin'], kDecorMarginLogical);
+      expect(spec['cornerRadius'], kDecorCornerRadiusLogical);
+      expect(spec['shapeFromAlpha'], false);
+      // PNG (default): no opaque fill -> margins stay transparent.
+      expect(spec.containsKey('fill'), false);
     });
 
     test('window(): fallback passes the focused displayId+rect', () async {

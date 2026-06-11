@@ -78,7 +78,7 @@ final class ScreenCapturer {
   /// the fallback).
   func captureRegion(
     displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
-    jpeg: Bool, jpegQuality: Int
+    jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil
   ) async throws -> [String: Any]? {
     let content = try await freshContent()
     let targetID = displayID ?? cursorDisplayID()
@@ -100,7 +100,11 @@ final class ScreenCapturer {
     let cg = try await SCScreenshotManager.captureImage(
       contentFilter: filter, configuration: cfg)
     PerfLog.mark("sckImageEnd display=\(d.displayID)")
-    let rep = NSBitmapImageRep(cgImage: cg)
+    // Opt-in decoration: wrap the captured pixels natively (margin + rounded
+    // corners + drop shadow) before encoding — the direct path never hands the
+    // pixels back to Dart. A render failure (rare) degrades to the plain image.
+    let image = decoration.flatMap { Decoration.render(cg, spec: $0, scale: scale) } ?? cg
+    let rep = NSBitmapImageRep(cgImage: image)
     let data: Data?
     if jpeg {
       let q = max(0, min(100, jpegQuality))

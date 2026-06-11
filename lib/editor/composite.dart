@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as imglib;
+import 'decorate_bridge.dart';
 import 'decoration.dart';
 import 'draw_style.dart';
 import 'encode_bridge.dart';
@@ -157,6 +158,27 @@ Future<Uint8List> compositeAndCrop({
     output = masked;
   }
   if (decoration != null) {
+    // Native CG decoration + encode in ONE pass — no second dart:ui raster of
+    // the 5K frame. The composited content goes over as raw RGBA; native wraps
+    // it (margin + corners/shape + shadow + fill) and returns the FINAL bytes.
+    // Falls back to the dart:ui path below when the channel is unavailable.
+    final raw = await output.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final native = await decorateNative(
+      rgba: raw!.buffer.asUint8List(),
+      width: output.width,
+      height: output.height,
+      scale: 1.0, // toNativeSpec carries already-scaled (native-px) values
+      spec: decoration.toNativeSpec(
+        fillArgb: jpeg ? decorationJpegFill.toARGB32() : null,
+        shapeFromAlpha: decorationShapeFromAlpha,
+      ),
+      jpeg: jpeg,
+      quality: jpegQuality,
+    );
+    if (native != null) {
+      output.dispose();
+      return native;
+    }
     final decorated = await applyDecoration(
       output,
       decoration,

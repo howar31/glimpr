@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'dart:ui' show Rect;
+import '../editor/decoration.dart';
 import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../overlay/export.dart';
@@ -51,7 +52,8 @@ class DirectCapture {
             Rect? rect,
             bool showsCursor,
             bool jpeg,
-            int jpegQuality})?
+            int jpegQuality,
+            Map<String, dynamic>? decoration})?
         captureRegion,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
     Future<WindowImage?> Function(int, {bool showsCursor})? captureWindowImage,
@@ -90,7 +92,8 @@ class DirectCapture {
       Rect? rect,
       bool showsCursor,
       bool jpeg,
-      int jpegQuality}) _captureRegion;
+      int jpegQuality,
+      Map<String, dynamic>? decoration}) _captureRegion;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
   final Future<WindowImage?> Function(int, {bool showsCursor}) _captureWindowImage;
   final Settings _settings;
@@ -197,6 +200,15 @@ class DirectCapture {
     bool silentOnMissingDisplay = false,
   }) async {
     final cap = await _settings.loadCapture();
+    // Opt-in decoration is applied NATIVELY inside captureRegion (the captured
+    // CGImage is wrapped before encoding), so the delivered bytes are final —
+    // no Dart decode/composite/re-encode for the direct modes.
+    final decoration = cap.decorateFor(kind)
+        ? logicalDecorationSpec(
+            fillArgb: cap.isJpeg ? cap.decorationJpegFill : null,
+            shapeFromAlpha: false,
+          )
+        : null;
     final RegionCapture? result;
     try {
       result = await _captureRegion(
@@ -205,6 +217,7 @@ class DirectCapture {
         showsCursor: cap.captureCursor,
         jpeg: cap.isJpeg,
         jpegQuality: cap.jpegQuality,
+        decoration: decoration,
       );
     } catch (e) {
       _showError('Capture failed: $e');

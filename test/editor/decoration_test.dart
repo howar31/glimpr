@@ -76,6 +76,59 @@ void main() {
     expect(s.shadowOffset, kDecorShadowOffsetLogical * 2.0);
   });
 
+  test('decorationSpecMap carries the values; fill omitted when null', () {
+    final m = decorationSpecMap(
+      margin: 120,
+      cornerRadius: 24,
+      shadowBlur: 28,
+      shadowOffset: const ui.Offset(0, 12),
+      shadowColorArgb: 0x59000000,
+      shapeFromAlpha: false,
+    );
+    expect(m['margin'], 120);
+    expect(m['cornerRadius'], 24);
+    expect(m['shadowBlur'], 28);
+    expect(m['shadowDx'], 0);
+    expect(m['shadowDy'], 12);
+    expect(m['shadowColor'], 0x59000000);
+    expect(m['shapeFromAlpha'], false);
+    expect(m.containsKey('fill'), false);
+  });
+
+  test('decorationSpecMap includes fill + shapeFromAlpha when set', () {
+    final m = decorationSpecMap(
+      margin: 1,
+      cornerRadius: 0,
+      shadowBlur: 0,
+      shadowOffset: ui.Offset.zero,
+      shadowColorArgb: 0,
+      fillArgb: 0xFFFFFFFF,
+      shapeFromAlpha: true,
+    );
+    expect(m['fill'], 0xFFFFFFFF);
+    expect(m['shapeFromAlpha'], true);
+  });
+
+  test('logicalDecorationSpec mirrors the kDecor* constants', () {
+    final m = logicalDecorationSpec(shapeFromAlpha: false);
+    expect(m['margin'], kDecorMarginLogical);
+    expect(m['cornerRadius'], kDecorCornerRadiusLogical);
+    expect(m['shadowBlur'], kDecorShadowBlurLogical);
+    expect(m['shadowDx'], kDecorShadowOffsetLogical.dx);
+    expect(m['shadowDy'], kDecorShadowOffsetLogical.dy);
+    expect(m['shadowColor'], kDecorShadowColor.toARGB32());
+  });
+
+  test('toNativeSpec carries the style\'s scaled (native-px) values', () {
+    final s = DecorationStyle.scaled(2.0);
+    final m = s.toNativeSpec(fillArgb: 0xFFFFFFFF, shapeFromAlpha: true);
+    expect(m['margin'], kDecorMarginLogical * 2.0);
+    expect(m['cornerRadius'], kDecorCornerRadiusLogical * 2.0);
+    expect(m['shadowDy'], kDecorShadowOffsetLogical.dy * 2.0);
+    expect(m['fill'], 0xFFFFFFFF);
+    expect(m['shapeFromAlpha'], true);
+  });
+
   test('shapeFromContentAlpha keeps the content alpha (no re-clip)', () async {
     // Content with a hard transparent right half (a stand-in window silhouette).
     final rec = ui.PictureRecorder();

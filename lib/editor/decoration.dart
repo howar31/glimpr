@@ -43,7 +43,67 @@ class DecorationStyle {
     margin,
     shadowBlur + math.max(shadowOffset.dx.abs(), shadowOffset.dy.abs()),
   );
+
+  /// The native CG decorator's `decoration` sub-map carrying THESE (already
+  /// scaled) appearance values; the native side multiplies by `scale` (pass
+  /// 1.0 since the values are native-px). [fillArgb] non-null fills the margin
+  /// (JPEG); null keeps it transparent (PNG).
+  Map<String, dynamic> toNativeSpec({
+    int? fillArgb,
+    required bool shapeFromAlpha,
+  }) =>
+      decorationSpecMap(
+        margin: margin,
+        cornerRadius: cornerRadius,
+        shadowBlur: shadowBlur,
+        shadowOffset: shadowOffset,
+        shadowColorArgb: shadowColor.toARGB32(),
+        fillArgb: fillArgb,
+        shapeFromAlpha: shapeFromAlpha,
+      );
 }
+
+/// Build the `decoration` channel sub-map for the native CG decorator
+/// (`glimpr/encode` decorate / captureRegion). Lengths are passed verbatim and
+/// multiplied by the native `scale`: pass logical constants with the display
+/// scale, or already-scaled values with scale 1.
+Map<String, dynamic> decorationSpecMap({
+  required double margin,
+  required double cornerRadius,
+  required double shadowBlur,
+  required ui.Offset shadowOffset,
+  required int shadowColorArgb,
+  int? fillArgb,
+  required bool shapeFromAlpha,
+}) =>
+    {
+      'margin': margin,
+      'cornerRadius': cornerRadius,
+      'shadowBlur': shadowBlur,
+      'shadowDx': shadowOffset.dx,
+      'shadowDy': shadowOffset.dy,
+      'shadowColor': shadowColorArgb,
+      'fill': ?fillArgb,
+      'shapeFromAlpha': shapeFromAlpha,
+    };
+
+/// The shared LOGICAL decoration spec (the kDecor* constants) for the native
+/// direct-capture path, where Dart does not yet know the display scale — native
+/// multiplies these by the captured display's scale. Mirrors
+/// [DecorationStyle.scaled]'s source constants so both paths look identical.
+Map<String, dynamic> logicalDecorationSpec({
+  int? fillArgb,
+  required bool shapeFromAlpha,
+}) =>
+    decorationSpecMap(
+      margin: kDecorMarginLogical,
+      cornerRadius: kDecorCornerRadiusLogical,
+      shadowBlur: kDecorShadowBlurLogical,
+      shadowOffset: kDecorShadowOffsetLogical,
+      shadowColorArgb: kDecorShadowColor.toARGB32(),
+      fillArgb: fillArgb,
+      shapeFromAlpha: shapeFromAlpha,
+    );
 
 /// Wrap [content] in [style]'s margin + rounded corners + drop shadow, returning
 /// a NEW, larger image. When [fill] is non-null (JPEG output) the whole canvas is

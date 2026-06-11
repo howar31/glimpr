@@ -78,10 +78,11 @@ Future<FlowResult> exportAnnotated({
   );
 }
 
-/// Deliver a natively-encoded direct capture. Fast path: the bytes are FINAL
-/// (no annotations, no decoration) -> straight to the flow, no codec pass.
-/// When decoration is enabled for [kind], decode + composite the decoration +
-/// re-encode — the rare, opted-in path keeps today's codec cost.
+/// Deliver a natively-encoded direct capture. The bytes are ALWAYS final — no
+/// annotations, and opt-in decoration is applied natively inside captureRegion
+/// (the captured CGImage is wrapped before encoding) — so this is a pure
+/// delivery: straight to the flow, no codec pass. [kind] is retained for the
+/// signature symmetry with the other delivery entry points.
 Future<FlowResult> deliverEncodedCapture({
   required RegionCapture capture,
   required CaptureSettings cap,
@@ -89,27 +90,7 @@ Future<FlowResult> deliverEncodedCapture({
   String? windowTitle,
   String? appName,
 }) async {
-  var bytes = capture.bytes;
-  if (cap.decorateFor(kind)) {
-    final codec = await ui.instantiateImageCodec(capture.bytes);
-    final img = (await codec.getNextFrame()).image;
-    codec.dispose();
-    try {
-      bytes = await compositeAndCrop(
-        frozen: img,
-        drawables: const [],
-        scaleFactor: capture.scaleFactor,
-        logicalSize: Size(capture.rect.width, capture.rect.height),
-        selectionLogical: null,
-        jpeg: cap.isJpeg,
-        jpegQuality: cap.jpegQuality,
-        decoration: DecorationStyle.scaled(capture.scaleFactor),
-        decorationJpegFill: ui.Color(cap.decorationJpegFill),
-      );
-    } finally {
-      img.dispose();
-    }
-  }
+  final bytes = capture.bytes;
   // Pin-in-place: the captured rect's GLOBAL top-left logical position.
   final pinRect = capture.rect.shift(capture.displayOrigin);
   return runFlow(

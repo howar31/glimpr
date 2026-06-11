@@ -17,14 +17,14 @@ final class CaptureController {
   /// separate cursor image — that is the overlay's toggleable path).
   func captureRegion(
     displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
-    jpeg: Bool, jpegQuality: Int
+    jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil
   ) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
     return try await capturer.captureRegion(
       displayID: displayID, rect: rect, showsCursor: showsCursor,
-      jpeg: jpeg, jpegQuality: jpegQuality)
+      jpeg: jpeg, jpegQuality: jpegQuality, decoration: decoration)
   }
 
   /// Capture a single window with real alpha (rounded corners), or nil when no
