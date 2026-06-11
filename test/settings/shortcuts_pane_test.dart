@@ -284,4 +284,92 @@ void main() {
     expect(find.text('Press keys…'), findsNothing);
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
   });
+
+  testWidgets('a duplicate combo flags both rows and ghosts Apply',
+      (tester) async {
+    final settings = Settings(FakeStore());
+    await _openShortcuts(tester, settings);
+
+    // Bind the FIRST two global rows to the same ⌘G combo.
+    for (final recorder in [
+      _inGlobal(find.byType(HotkeyRecorderField)).first,
+      _inGlobal(find.byType(HotkeyRecorderField)).at(1),
+    ]) {
+      await tester.tap(recorder);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyG);
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyG);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+      await tester.pumpAndSettle();
+    }
+
+    // Both rows carry the Duplicate warning.
+    expect(_inGlobal(find.text('Duplicate')), findsNWidgets(2));
+
+    // The footer shows: draft is dirty but INVALID, so Apply renders as a dead
+    // ghost (no live accent button) while Revert stays active. (The shared
+    // _scrollToFooter targets GhostButton, which is ambiguous here — the dead
+    // Apply is a GhostButton too — so scroll to the Revert label instead.)
+    await tester.scrollUntilVisible(
+      find.text('Revert'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AccentButton, 'Apply'), findsNothing);
+    final ghostApply = tester.widget<GhostButton>(
+      find.widgetWithText(GhostButton, 'Apply'),
+    );
+    expect(ghostApply.onTap, isNull);
+
+    // Fix the duplicate: jump back up and reset the second row -> warnings
+    // clear and Apply comes back as the live accent button.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+    await tester.pumpAndSettle();
+    await tester.tap(_inGlobal(find.byTooltip('Reset to default')).last);
+    await tester.pumpAndSettle();
+    expect(_inGlobal(find.text('Duplicate')), findsNothing);
+    await _scrollToFooter(tester);
+    expect(find.widgetWithText(AccentButton, 'Apply'), findsOneWidget);
+  });
+
+  testWidgets('editor tool row records a bare key and resets to default',
+      (tester) async {
+    // Editor cards sit below the Capture card; enlarge the surface so the
+    // TOOLS card is built and on-screen for direct interaction.
+    tester.view.physicalSize = const Size(1000, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final settings = Settings(FakeStore());
+    await _openShortcuts(tester, settings);
+
+    // The TOOLS card is the second GlassCard; its rows take a BARE key
+    // (requireModifier: false). Rebind the first tool row to 'X' (unused by
+    // any editor default).
+    final toolsCard = find.byType(GlassCard).at(1);
+    Finder inTools(Finder matching) =>
+        find.descendant(of: toolsCard, matching: matching);
+    await tester.tap(inTools(find.byType(HotkeyRecorderField)).first);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyX);
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyX);
+    await tester.pumpAndSettle();
+
+    // The bare key is ACCEPTED on an editor row (unlike the global rows): the
+    // new cap shows, no modifier warning, and the dirty+valid draft offers a
+    // live Apply.
+    expect(inTools(find.widgetWithText(KeyCap, 'X')), findsOneWidget);
+    expect(inTools(find.text('Needs a modifier')), findsNothing);
+    expect(find.widgetWithText(AccentButton, 'Apply'), findsOneWidget);
+
+    // Per-row Reset restores the tool's default and the draft is clean again.
+    await tester.tap(inTools(find.byTooltip('Reset to default')));
+    await tester.pumpAndSettle();
+    expect(inTools(find.widgetWithText(KeyCap, 'X')), findsNothing);
+    expect(find.text('Apply'), findsNothing);
+  });
 }
