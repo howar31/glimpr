@@ -1230,6 +1230,21 @@ class _SettingsAppState extends State<SettingsApp>
             'Move the selection above others',
           ),
           (kEditorSendToBackKey, 'Send to back', 'Move the selection below others'),
+          (
+            kEditorCopyHexKey,
+            'Copy color as HEX',
+            'While the color picker is sampling',
+          ),
+          (
+            kEditorCopyRgbKey,
+            'Copy color as RGB',
+            'While the color picker is sampling',
+          ),
+          (
+            kEditorCopyHslKey,
+            'Copy color as HSL',
+            'While the color picker is sampling',
+          ),
         ])
           SettingRow(
             title: cmd.$2,

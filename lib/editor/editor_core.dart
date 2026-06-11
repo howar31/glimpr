@@ -15,6 +15,7 @@ import '../overlay/selection_controller.dart';
 import '../overlay/selection_scrim.dart';
 import '../overlay/toolbar.dart';
 import '../overlay/window_snap.dart';
+import 'color_info.dart';
 import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
@@ -408,31 +409,81 @@ class _EditorCoreState extends State<EditorCore> {
   /// (keeping the tool's current alpha so e.g. the highlighter stays translucent),
   /// then leave eyedropper mode. Reads ONE pixel via a 1x1 render — no full-image
   /// byte copy, so it stays light even for a 5K capture.
+  // Raw pixels of the CURRENT canvas image, cached while the eyedropper is
+  // active so the loupe's live color readout (and the click sample) is an
+  // O(1) array lookup instead of a per-move GPU readback. ~4 bytes/px held
+  // only for the eyedropper session; dropped on deactivate.
+  ui.Image? _pixelCacheImage; // identity guard against image swaps (trim)
+  ByteData? _pixelCache;
+  bool _pixelCacheBuilding = false;
+
+  void _onEyedropperFlip() {
+    if (_eyedropper) {
+      _ensurePixelCache();
+    } else {
+      _pixelCacheImage = null;
+      _pixelCache = null;
+    }
+  }
+
+  Future<void> _ensurePixelCache() async {
+    final img = _canvasImage;
+    if (_pixelCacheBuilding ||
+        (identical(_pixelCacheImage, img) && _pixelCache != null)) {
+      return;
+    }
+    _pixelCacheBuilding = true;
+    final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+    _pixelCacheBuilding = false;
+    if (!mounted || !_eyedropper || !identical(img, _canvasImage)) return;
+    setState(() {
+      _pixelCacheImage = img;
+      _pixelCache = data;
+    });
+  }
+
+  /// The AIMED pixel's color from the cache, or null while it builds (or the
+  /// canvas image was swapped — then a rebuild is scheduled). Base pixels
+  /// only, matching what a click samples.
+  Color? _pixelColorAt(Offset logical) {
+    final img = _pixelCacheImage;
+    final data = _pixelCache;
+    if (img == null || data == null || !identical(img, _canvasImage)) {
+      if (_eyedropper) scheduleMicrotask(_ensurePixelCache);
+      return null;
+    }
+    final px = _toPxAimed(logical.dx).clamp(0, img.width - 1);
+    final py = _toPxAimed(logical.dy).clamp(0, img.height - 1);
+    final b = data.buffer.asUint8List(); // rawRgba: R, G, B, A
+    final i = (py * img.width + px) * 4;
+    return Color.fromARGB(255, b[i], b[i + 1], b[i + 2]);
+  }
+
   Future<void> _sampleColorAt(Offset logical) async {
-    final img = widget.host.baseImage;
-    final px = (logical.dx * widget.host.pixelScale).round().clamp(
-      0,
-      img.width - 1,
-    );
-    final py = (logical.dy * widget.host.pixelScale).round().clamp(
-      0,
-      img.height - 1,
-    );
-    final recorder = ui.PictureRecorder();
-    ui.Canvas(
-      recorder,
-    ).drawImage(img, Offset(-px.toDouble(), -py.toDouble()), ui.Paint());
-    final pic = recorder.endRecording();
-    final one = await pic.toImage(1, 1);
-    pic.dispose();
-    final data = await one.toByteData(format: ui.ImageByteFormat.rawRgba);
-    one.dispose();
-    if (data != null) {
-      final b = data.buffer.asUint8List(); // rawRgba: R, G, B, A
+    var sampled = _pixelColorAt(logical);
+    if (sampled == null) {
+      // Cache still building: 1x1 render of the CURRENT canvas image (the
+      // displayed pixels — after a trim the host base would be offset).
+      final img = _canvasImage;
+      final px = _toPxAimed(logical.dx).clamp(0, img.width - 1);
+      final py = _toPxAimed(logical.dy).clamp(0, img.height - 1);
+      final recorder = ui.PictureRecorder();
+      ui.Canvas(
+        recorder,
+      ).drawImage(img, Offset(-px.toDouble(), -py.toDouble()), ui.Paint());
+      final pic = recorder.endRecording();
+      final one = await pic.toImage(1, 1);
+      pic.dispose();
+      final data = await one.toByteData(format: ui.ImageByteFormat.rawRgba);
+      one.dispose();
+      if (data != null) {
+        final b = data.buffer.asUint8List(); // rawRgba: R, G, B, A
+        sampled = Color.fromARGB(255, b[0], b[1], b[2]);
+      }
+    }
+    if (sampled != null) {
       final keepAlpha = c.style.value.color.a; // preserve the tool's alpha (0..1)
-      c.setColor(
-        Color.fromARGB(255, b[0], b[1], b[2]).withValues(alpha: keepAlpha),
-      );
+      c.setColor(sampled.withValues(alpha: keepAlpha));
     }
     c.stopEyedropper();
   }
@@ -467,6 +518,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.addListener(_rebuild);
     c.tool.addListener(_onToolChanged);
     c.eyedropperActive.addListener(_rebuild);
+    c.eyedropperActive.addListener(_onEyedropperFlip);
     c.showCursor.addListener(_rebuild);
     c.refocus.addListener(_onRefocusRequested);
     c.stampPick.addListener(_onStampPick);
@@ -489,6 +541,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.removeListener(_rebuild);
     c.tool.removeListener(_onToolChanged);
     c.eyedropperActive.removeListener(_rebuild);
+    c.eyedropperActive.removeListener(_onEyedropperFlip);
     c.showCursor.removeListener(_rebuild);
     c.refocus.removeListener(_onRefocusRequested);
     c.stampPick.removeListener(_onStampPick);
@@ -934,6 +987,23 @@ class _EditorCoreState extends State<EditorCore> {
             action == kEditorPasteKey ||
             action == kEditorDeleteKey ||
             (action != null && kEditorToolActionKey.containsValue(action)))) {
+      return KeyEventResult.handled;
+    }
+    if (action == kEditorCopyHexKey ||
+        action == kEditorCopyRgbKey ||
+        action == kEditorCopyHslKey) {
+      // Copy the loupe's aimed color — only meaningful while sampling.
+      if (!_eyedropper) return KeyEventResult.ignored;
+      final col = _pixelColorAt(_cursor);
+      if (col != null) {
+        Clipboard.setData(ClipboardData(
+          text: action == kEditorCopyHexKey
+              ? hexOf(col)
+              : action == kEditorCopyRgbKey
+                  ? rgbCssOf(col)
+                  : hslCssOf(col),
+        ));
+      }
       return KeyEventResult.handled;
     }
     if (action == kEditorUndoKey) {
@@ -2079,8 +2149,11 @@ class _EditorCoreState extends State<EditorCore> {
   /// where press jitter made floor() flip cells (see LoupePainter).
   int _toPxAimed(double v) => (v * widget.host.pixelScale - 0.5).round();
 
-  Widget _loupeReadout() =>
-      LoupeReadout(x: _toPxAimed(_cursor.dx), y: _toPxAimed(_cursor.dy));
+  Widget _loupeReadout() => LoupeReadout(
+        x: _toPxAimed(_cursor.dx),
+        y: _toPxAimed(_cursor.dy),
+        color: _eyedropper ? _pixelColorAt(_cursor) : null,
+      );
 
   /// A small eyedropper glyph pinned to the lower-right of the aim reticle while
   /// sampling. The eyedropper reuses the region-tool crosshair/reticle/loupe HUD,

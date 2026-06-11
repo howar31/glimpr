@@ -21,6 +21,11 @@ const kEditorConfirmKey = 'editor.confirmExport';
 const kEditorDuplicateKey = 'editor.duplicateSelected';
 const kEditorBringToFrontKey = 'editor.bringToFront';
 const kEditorSendToBackKey = 'editor.sendToBack';
+// Eyedropper color-copy keys: copy the loupe's aimed color to the clipboard
+// in one format each. Act ONLY while the color picker is sampling.
+const kEditorCopyHexKey = 'editor.copyColorHex';
+const kEditorCopyRgbKey = 'editor.copyColorRgb';
+const kEditorCopyHslKey = 'editor.copyColorHsl';
 
 /// Maps each editor tool to its action key.
 const kEditorToolActionKey = <ToolKind, String>{
@@ -82,6 +87,15 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kEditorConfirmKey: _b(PhysicalKeyboardKey.enter, LogicalKeyboardKey.enter),
   kEditorDuplicateKey: _b(PhysicalKeyboardKey.keyD, LogicalKeyboardKey.keyD,
       {HotkeyModifier.meta}),
+  // Shift-letter (NOT alt: macOS alt+letter yields a special-character
+  // logical key that never matches; shift keeps the letter's logical key and
+  // the modifier set distinguishes these from the plain-letter tool keys).
+  kEditorCopyHexKey: _b(PhysicalKeyboardKey.keyH, LogicalKeyboardKey.keyH,
+      {HotkeyModifier.shift}),
+  kEditorCopyRgbKey: _b(PhysicalKeyboardKey.keyR, LogicalKeyboardKey.keyR,
+      {HotkeyModifier.shift}),
+  kEditorCopyHslKey: _b(PhysicalKeyboardKey.keyL, LogicalKeyboardKey.keyL,
+      {HotkeyModifier.shift}),
   kEditorBringToFrontKey: _b(
       PhysicalKeyboardKey.bracketRight, LogicalKeyboardKey.bracketRight,
       {HotkeyModifier.meta}),
@@ -220,6 +234,9 @@ String? pickEditorAction(
     kEditorDuplicateKey,
     kEditorBringToFrontKey,
     kEditorSendToBackKey,
+    kEditorCopyHexKey,
+    kEditorCopyRgbKey,
+    kEditorCopyHslKey,
   ];
   for (final k in commands) {
     final b = bindings[k];

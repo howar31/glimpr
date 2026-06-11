@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../editor/color_info.dart';
 import '../editor/drawable.dart';
 import '../editor/drawable_painter.dart';
 import '../theme/glimpr_theme.dart';
@@ -273,14 +274,54 @@ Widget _hudPill(Widget child) => IgnorePointer(
 /// The cursor's pixel position, shown directly under the loupe (NATIVE pixels —
 /// matching the loupe's pixel grid and the saved image). The same widget/style is
 /// used by the overlay and the image editor so the two surfaces look identical.
+/// With the eyedropper active, [color] adds the aimed pixel's color info
+/// (swatch + HEX + RGB + HSL) — the same base-image pixel a click samples.
 class LoupeReadout extends StatelessWidget {
   final int x;
   final int y;
-  const LoupeReadout({super.key, required this.x, required this.y});
+  final Color? color;
+  const LoupeReadout({super.key, required this.x, required this.y, this.color});
 
   @override
-  Widget build(BuildContext context) =>
-      _hudPill(Text('$x, $y', style: _kHudText));
+  Widget build(BuildContext context) {
+    final c = color;
+    if (c == null) return _hudPill(Text('$x, $y', style: _kHudText));
+    // Coordinates centred over the block; one left-aligned line per color
+    // format, swatch beside the HEX.
+    return _hudPill(
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$x, $y', style: _kHudText),
+          const SizedBox(height: 3),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 11,
+                    height: 11,
+                    decoration: BoxDecoration(
+                      color: c,
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(color: _kHudPillBorder),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(hexOf(c), style: _kHudText),
+                ],
+              ),
+              Text('RGB ${rgbOf(c)}', style: _kHudText),
+              Text('HSL ${hslOf(c)}', style: _kHudText),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The box-size readout (W × H, NATIVE pixels), shown beside the selection's
