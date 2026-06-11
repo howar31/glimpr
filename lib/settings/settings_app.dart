@@ -92,6 +92,7 @@ class _SettingsAppState extends State<SettingsApp>
   int _decorationJpegFill = 0xFFFFFFFF;
   int _loupeSpan = kLoupeSpanDefault;
   int _loupeZoom = kLoupeZoomDefault;
+  bool _eyedropperKeysCancel = true;
   bool _hudCrosshair = true;
   bool _hudMarchingAnts = true;
   final _filenameController = TextEditingController();
@@ -160,6 +161,7 @@ class _SettingsAppState extends State<SettingsApp>
     final decFill = await _s.getDecorationJpegFill();
     final loupeSpan = await _s.getLoupeSpan();
     final loupeZoom = await _s.getLoupeZoom();
+    final eyedropperKeys = await _s.getEyedropperToolKeysCancel();
     final hudCrosshair = await _s.getHudCrosshair();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     if (!mounted) return;
@@ -183,6 +185,7 @@ class _SettingsAppState extends State<SettingsApp>
       _decorationJpegFill = decFill;
       _loupeSpan = loupeSpan;
       _loupeZoom = loupeZoom;
+      _eyedropperKeysCancel = eyedropperKeys;
       _hudCrosshair = hudCrosshair;
       _hudMarchingAnts = hudMarchingAnts;
     });
@@ -536,6 +539,23 @@ class _SettingsAppState extends State<SettingsApp>
       const SizedBox(height: 15),
       const SectionLabel('Loupe', icon: Icons.zoom_in),
       GlassCard.padded(child: _loupeBody(t)),
+      const SizedBox(height: 8),
+      GlassCard.rows([
+        SettingRow(
+          title: 'Tool shortcuts while sampling',
+          hint: 'Switch tool ends the color-picker sample immediately; '
+              'Keep sampling ignores tool keys, so a stray key cannot '
+              'interrupt a careful aim.',
+          trailing: Segmented<bool>(
+            value: _eyedropperKeysCancel,
+            options: const [(true, 'Switch tool'), (false, 'Keep sampling')],
+            onChanged: (v) async {
+              await _s.setEyedropperToolKeysCancel(v);
+              if (mounted) setState(() => _eyedropperKeysCancel = v);
+            },
+          ),
+        ),
+      ]),
       const SizedBox(height: 15),
       const SectionLabel('Overlay HUD', icon: Icons.grid_goldenratio),
       GlassCard.rows([

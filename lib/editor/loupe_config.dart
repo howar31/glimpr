@@ -14,25 +14,41 @@ class LoupeConfig {
   final int span; // native px shown per axis
   final int zoom; // loupe px per native px (magnification)
 
+  /// What a tool shortcut does while the eyedropper is sampling: true (the
+  /// default) cancels sampling and switches; false keeps sampling MODAL —
+  /// tool switches are ignored, so a stray key cannot kick the user out of a
+  /// carefully aimed sample.
+  final bool toolKeysCancelSampling;
+
   const LoupeConfig({
     this.span = kLoupeSpanDefault,
     this.zoom = kLoupeZoomDefault,
+    this.toolKeysCancelSampling = true,
   });
 
   /// Builds a config clamped to the valid ranges; null inputs fall back to the
   /// defaults. Use when reading from the store (a corrupt value stays safe).
-  factory LoupeConfig.clamped({int? span, int? zoom}) => LoupeConfig(
-    span: (span ?? kLoupeSpanDefault).clamp(kLoupeSpanMin, kLoupeSpanMax),
-    zoom: (zoom ?? kLoupeZoomDefault).clamp(kLoupeZoomMin, kLoupeZoomMax),
-  );
+  factory LoupeConfig.clamped({
+    int? span,
+    int? zoom,
+    bool? toolKeysCancelSampling,
+  }) =>
+      LoupeConfig(
+        span: (span ?? kLoupeSpanDefault).clamp(kLoupeSpanMin, kLoupeSpanMax),
+        zoom: (zoom ?? kLoupeZoomDefault).clamp(kLoupeZoomMin, kLoupeZoomMax),
+        toolKeysCancelSampling: toolKeysCancelSampling ?? true,
+      );
 
   /// The loupe's on-screen box size (logical px), square.
   double get box => (span * zoom).toDouble();
 
   @override
   bool operator ==(Object other) =>
-      other is LoupeConfig && other.span == span && other.zoom == zoom;
+      other is LoupeConfig &&
+      other.span == span &&
+      other.zoom == zoom &&
+      other.toolKeysCancelSampling == toolKeysCancelSampling;
 
   @override
-  int get hashCode => Object.hash(span, zoom);
+  int get hashCode => Object.hash(span, zoom, toolKeysCancelSampling);
 }

@@ -99,6 +99,7 @@ class Settings {
   static const _captureCursorKey = 'capture_cursor';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
+  static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
   static const _hudCrosshairKey = 'hud_crosshair';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
 
@@ -240,10 +241,20 @@ class Settings {
   Future<void> setLoupeZoom(int v) =>
       store.setInt(_loupeZoomKey, v.clamp(kLoupeZoomMin, kLoupeZoomMax));
 
+  // Eyedropper: what a tool shortcut does while sampling (true = cancel
+  // sampling and switch — the default; false = sampling is modal).
+  Future<bool> getEyedropperToolKeysCancel() async =>
+      (await store.getBool(_eyedropperToolKeysKey)) ?? true;
+  Future<void> setEyedropperToolKeysCancel(bool v) =>
+      store.setBool(_eyedropperToolKeysKey, v);
+
   /// One-shot loupe geometry snapshot, read by the overlay (per capture) and the
   /// image editor (per open).
-  Future<LoupeConfig> loadLoupe() async =>
-      LoupeConfig(span: await getLoupeSpan(), zoom: await getLoupeZoom());
+  Future<LoupeConfig> loadLoupe() async => LoupeConfig(
+        span: await getLoupeSpan(),
+        zoom: await getLoupeZoom(),
+        toolKeysCancelSampling: await getEyedropperToolKeysCancel(),
+      );
 
   // HUD options (crosshair lines + marching-ants animation) ----------------
   Future<bool> getHudCrosshair() async =>

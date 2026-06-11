@@ -517,6 +517,7 @@ class _EditorCoreState extends State<EditorCore> {
     c.selectedIndex.addListener(_unpinIfCleared);
     c.tool.addListener(_rebuild);
     c.tool.addListener(_onToolChanged);
+    c.eyedropperToolSwitchCancels = widget.loupe.toolKeysCancelSampling;
     c.eyedropperActive.addListener(_rebuild);
     c.eyedropperActive.addListener(_onEyedropperFlip);
     c.showCursor.addListener(_rebuild);
@@ -722,6 +723,8 @@ class _EditorCoreState extends State<EditorCore> {
   @override
   void didUpdateWidget(EditorCore old) {
     super.didUpdateWidget(old);
+    // Settings hot-reload (e.g. a ⌘, detour) may change the eyedropper mode.
+    c.eyedropperToolSwitchCancels = widget.loupe.toolKeysCancelSampling;
     // New frozen frame (in-place re-capture) -> the pre-computed images are
     // stale; drop them and recompute for the active tool.
     if (old.host.baseImage != widget.host.baseImage) {

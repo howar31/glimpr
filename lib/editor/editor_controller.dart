@@ -148,7 +148,18 @@ class EditorController {
     style.value = d.style;
   }
 
+  /// What a tool switch does while the eyedropper is sampling: true (the
+  /// default) cancels sampling and switches; false makes sampling MODAL —
+  /// the switch is ignored entirely (keyboard, toolbar, and programmatic
+  /// selections all funnel through [selectTool]). Synced from settings by
+  /// EditorCore.
+  bool eyedropperToolSwitchCancels = true;
+
   void selectTool(ToolKind t) {
+    if (eyedropperActive.value) {
+      if (!eyedropperToolSwitchCancels) return; // modal: stay sampling
+      eyedropperActive.value = false; // explicit tool intent ends the sample
+    }
     tool.value = t;
     phase.value = t == ToolKind.crop ? EditorPhase.crop : EditorPhase.annotate;
     selectedIndex.value = null; // switching tools drops the per-type selection
