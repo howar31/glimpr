@@ -2309,15 +2309,16 @@ class _EditorCoreState extends State<EditorCore> {
               children: [
                 // Layer 1: frozen image (full color, no dim in the annotate phase).
                 // The overlay paints it plain full-screen; the image editor gives it
-                // a rounded border + drop shadow on the checkerboard (owner's image
-                // card), sized to the logical canvas inside the viewport transform.
+                // a border + drop shadow on the checkerboard (owner's image card),
+                // sized to the logical canvas inside the viewport transform. SQUARE
+                // corners: a rounded clip would hide the image's own corner pixels
+                // (the displayed image must stay faithful to the source).
                 RepaintBoundary(
                   child: _interactive
                       ? Container(
                           width: _canvasSize.width,
                           height: _canvasSize.height,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: const Color(
                                 0x14FFFFFF,
@@ -2333,14 +2334,11 @@ class _EditorCoreState extends State<EditorCore> {
                           ),
                           // Render the CURRENT canvas image (cropped after a trim,
                           // else the host base) so a trim updates the display.
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: RawImage(
-                              image: _canvasImage,
-                              width: _canvasSize.width,
-                              height: _canvasSize.height,
-                              fit: BoxFit.fill,
-                            ),
+                          child: RawImage(
+                            image: _canvasImage,
+                            width: _canvasSize.width,
+                            height: _canvasSize.height,
+                            fit: BoxFit.fill,
                           ),
                         )
                       : RawImage(
