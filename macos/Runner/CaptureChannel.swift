@@ -298,6 +298,22 @@ enum EncodeChannel {
             result(bytes.map { FlutterStandardTypedData(bytes: $0) })
           }
         }
+      case "png":
+        // Raw RGBA8888 in, PNG bytes out (ImageIO). dart:ui's own PNG encode
+        // measured ~700ms for a 16.7MP editor export; this is the same swap
+        // the JPEG path already made. Alpha is preserved (window-shape masks).
+        guard let a = call.arguments as? [String: Any],
+              let data = a["rgba"] as? FlutterStandardTypedData,
+              let w = a["width"] as? Int, let h = a["height"] as? Int,
+              w > 0, h > 0, data.data.count >= w * h * 4
+        else { result(nil); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+          let out = Decoration.cgImage(rgba: data.data, width: w, height: h)
+            .flatMap { Decoration.encode($0, jpeg: false, quality: 100) }
+          DispatchQueue.main.async {
+            result(out.map { FlutterStandardTypedData(bytes: $0) })
+          }
+        }
       case "decorate":
         guard let a = call.arguments as? [String: Any],
               let data = a["rgba"] as? FlutterStandardTypedData,

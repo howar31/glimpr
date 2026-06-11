@@ -213,6 +213,18 @@ Future<Uint8List> compositeAndCrop({
     );
     return Uint8List.fromList(encoded);
   }
+  // PNG: like JPEG above, pull the raw RGBA and encode NATIVELY (ImageIO) —
+  // dart:ui's own PNG encode measured ~700ms of the editor's 741ms Done-export
+  // on a 16.7MP frame. toByteData(png) stays as the fallback when the channel
+  // is missing (unit tests, future hosts without the handler).
+  final raw = await output.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (raw != null) {
+    final native = await encodePngNative(raw.buffer.asUint8List(), ow, oh);
+    if (native != null) {
+      output.dispose();
+      return native;
+    }
+  }
   final data = await output.toByteData(format: ui.ImageByteFormat.png);
   output.dispose();
   return data!.buffer.asUint8List();
