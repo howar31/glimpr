@@ -87,6 +87,13 @@ class _OverlayAppState extends State<OverlayApp> {
   // F1-2 throttle state: quiet-window timer + a pending coalesced change.
   Timer? _broadcastTimer;
   bool _broadcastDirty = false;
+  // Display ids of OTHER engines holding unsaved annotations. Drawables never
+  // sync across displays, so a clean display's Esc/right-click would otherwise
+  // silently discard another display's work (dismissOverlay is session-wide).
+  // Each engine broadcasts its own empty<->non-empty transitions immediately
+  // (rare, so they bypass the style throttle).
+  final Set<int> _remoteDirty = {};
+  bool _localDirty = false;
 
   void _perfSink(String label) {
     CaptureBridge.perfMark(label).then((_) {}, onError: (_) {});
@@ -147,6 +154,9 @@ class _OverlayAppState extends State<OverlayApp> {
             ..clear()
             ..addAll(loadedStyles);
         }
+        // New capture session: forget the previous session's dirty bits.
+        _remoteDirty.clear();
+        _localDirty = false;
         setState(() {
           _frozen = frozen;
           _cursorImage = cursorImg;
@@ -241,6 +251,8 @@ class _OverlayAppState extends State<OverlayApp> {
 
   void _resetState() {
     _detachShared();
+    _remoteDirty.clear();
+    _localDirty = false;
     _editor?.dispose();
     _frozen?.dispose();
     _cursorImage?.dispose();
@@ -259,6 +271,7 @@ class _OverlayAppState extends State<OverlayApp> {
     e.style.addListener(_broadcastEditorState);
     e.style.addListener(_schedulePersist);
     e.stampImage.addListener(_broadcastStamp);
+    e.document.addListener(_broadcastLocalDirty);
   }
 
   void _detachShared() {
@@ -266,6 +279,21 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.style.removeListener(_broadcastEditorState);
     _editor?.style.removeListener(_schedulePersist);
     _editor?.stampImage.removeListener(_broadcastStamp);
+    _editor?.document.removeListener(_broadcastLocalDirty);
+  }
+
+  /// Tell the other displays whether THIS display holds unsaved annotations,
+  /// on empty<->non-empty transitions only — their cancel confirm must cover
+  /// work they cannot see. Sent immediately (not throttled): transitions are
+  /// rare and the bit must not lag behind a fast draw-then-Esc.
+  void _broadcastLocalDirty() {
+    final e = _editor;
+    final d = _display;
+    if (e == null || d == null) return;
+    final dirty = e.document.value.drawables.isNotEmpty;
+    if (dirty == _localDirty) return;
+    _localDirty = dirty;
+    _bridge.broadcastEditorState({'dirty': dirty, 'display': d.displayId});
   }
 
   void _schedulePersist() {
@@ -372,6 +400,16 @@ class _OverlayAppState extends State<OverlayApp> {
   void _applyRemoteEditorState(Map<String, dynamic> state) {
     final e = _editor;
     if (e == null) return;
+    // A dirty broadcast carries only the sender's unsaved-annotations bit (no
+    // tool/style) — track it for the cancel confirm and stop here.
+    final dirty = state['dirty'];
+    if (dirty is bool) {
+      final from = (state['display'] as num?)?.toInt();
+      if (from != null) {
+        dirty ? _remoteDirty.add(from) : _remoteDirty.remove(from);
+      }
+      return;
+    }
     // A stamp broadcast carries only the image bytes (no tool/style); decode and
     // apply it on its own async path.
     final stampBytes = state['stampBytes'];
@@ -399,12 +437,16 @@ class _OverlayAppState extends State<OverlayApp> {
 
   /// Cancel path (Esc / right-click on empty space). Confirms first when there are
   /// unsaved annotations and the setting is on, so an accidental exit can't waste
-  /// them; export (success) never routes here.
+  /// them; export (success) never routes here. Covers BOTH this display's
+  /// document and the other displays' broadcast dirty bits — dismissing here
+  /// discards the whole session, including work drawn on a screen this engine
+  /// cannot see.
   Future<void> _onCancelRequested() async {
     if (_confirmingExit) return;
     final editor = _editor;
-    final hasAnnotations =
-        editor != null && editor.document.value.drawables.isNotEmpty;
+    final hasAnnotations = (editor != null &&
+            editor.document.value.drawables.isNotEmpty) ||
+        _remoteDirty.isNotEmpty;
     if (hasAnnotations && await Settings.instance.getConfirmOnExit()) {
       final ctx = _navigatorKey.currentContext;
       if (ctx != null && ctx.mounted) {
@@ -419,7 +461,7 @@ class _OverlayAppState extends State<OverlayApp> {
         if (!ok) {
           // Staying in the capture: the dialog took keyboard focus; hand it back
           // to the editor so tool shortcuts work without a manual click.
-          editor.requestFocus();
+          editor?.requestFocus();
           return;
         }
       }
