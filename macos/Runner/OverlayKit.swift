@@ -252,8 +252,10 @@ final class ScreenCapturer {
     cfg.scalesToFit = true
     cfg.showsCursor = showsCursor
     cfg.colorSpaceName = CGColorSpace.sRGB
+    PerfLog.mark("windowSckBegin id=\(windowID)")
     let cg = try await SCScreenshotManager.captureImage(
       contentFilter: filter, configuration: cfg)
+    PerfLog.mark("windowSckEnd id=\(windowID)")
     let rep = NSBitmapImageRep(cgImage: cg)
     // Some windows are NOT independently capturable — notably a modern System
     // Settings modal alert, which is drawn into its PARENT window's surface
@@ -266,6 +268,7 @@ final class ScreenCapturer {
     // mismatch -> bail so the caller falls back to a plain rectangular crop.
     guard Self.fillsBuffer(rep),
           let png = rep.representation(using: .png, properties: [:]) else { return nil }
+    PerfLog.mark("windowPngEnd id=\(windowID) bytes=\(png.count)")
     return [
       "pngBytes": FlutterStandardTypedData(bytes: png),
       "width": cfg.width,

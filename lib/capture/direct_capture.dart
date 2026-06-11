@@ -129,6 +129,7 @@ class DirectCapture {
         wi = null; // fall through to the rectangular crop
       }
       if (wi != null) {
+        _perfMark('windowImageReceived bytes=${wi.pngBytes.length}');
         if (cap.shutterSound) _shutter();
         try {
           final result = await _deliverWindow(wi, cap, info!);
