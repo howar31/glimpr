@@ -100,4 +100,52 @@ void main() {
     expect(find.byType(IconButton), findsNWidgets(15));
     expect(find.byType(Text), findsNothing);
   });
+
+  testWidgets('every tool button has a tooltip with the shared tool label',
+      (tester) async {
+    await _pumpToolbar(tester, kDefaultBindings);
+
+    // toolLabel is the SAME source the Settings > Shortcuts rows render, so
+    // the tooltip text can never drift from the shortcut row's title.
+    for (final (kind, _) in kEditorToolMeta) {
+      expect(find.byTooltip(toolLabel(kind)), findsOneWidget,
+          reason: 'tooltip for $kind');
+    }
+  });
+
+  testWidgets('pin mode renames the crop slot tooltip to Pin', (tester) async {
+    final c = EditorController();
+    addTearDown(c.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EditorToolbar(
+            controller: c,
+            onMove: (_) {},
+            onPtEditingDone: () {},
+            editorBindings: kDefaultBindings,
+            pinMode: true,
+          ),
+        ),
+      ),
+    );
+
+    // The crop slot IS the pin region selector in pin mode.
+    expect(find.byTooltip('Pin'), findsOneWidget);
+    expect(find.byTooltip('Crop'), findsNothing);
+    // Every other tool keeps its normal label.
+    expect(find.byTooltip('Rectangle'), findsOneWidget);
+  });
+
+  test('the Settings row label combines both crop-slot contexts', () {
+    expect(toolSettingsLabel(ToolKind.crop), 'Crop / Pin');
+    expect(toolLabel(ToolKind.crop), 'Crop');
+    expect(toolLabel(ToolKind.crop, pinMode: true), 'Pin');
+    // Every other tool's Settings row matches its tooltip exactly.
+    for (final (kind, _) in kEditorToolMeta) {
+      if (kind == ToolKind.crop) continue;
+      expect(toolSettingsLabel(kind), toolLabel(kind));
+      expect(toolLabel(kind, pinMode: true), toolLabel(kind));
+    }
+  });
 }

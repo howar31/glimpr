@@ -2198,6 +2198,23 @@ class _EditorCoreState extends State<EditorCore> {
         ),
       );
 
+  /// The same badge language for pin mode: a small pin glyph at the reticle's
+  /// lower-right while the crop slot (= the pin region selector there) is
+  /// aimed, so "selecting what to pin" never reads as a normal crop/export.
+  /// Overlay only — pin mode never exists in the standalone editor.
+  Widget _pinBadge(Offset at) => Positioned(
+        left: at.dx + 11,
+        top: at.dy + 11,
+        child: const IgnorePointer(
+          child: Icon(
+            Icons.push_pin,
+            size: 18,
+            color: Color(0xFFFFFFFF),
+            shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
+          ),
+        ),
+      );
+
   // Vertical space reserved below the loupe for the readout, so the loupe flips
   // above the cursor early enough that the readout stays on-screen too.
   static const double _kLoupeReadoutReserve = 64.0;
@@ -2671,6 +2688,15 @@ class _EditorCoreState extends State<EditorCore> {
                 // Eyedropper badge beside the reticle so colour-sampling mode is
                 // visually distinct from the region tools' identical HUD.
                 if (_eyedropper && !_interactive) _eyedropperBadge(_cursor),
+                // Pin badge beside the reticle while pin mode aims its region
+                // selector (the crop slot) — same language as the eyedropper
+                // badge. The eyedropper wins when both could apply.
+                if (widget.pinMode &&
+                    showHud &&
+                    !_interactive &&
+                    !_eyedropper &&
+                    c.tool.value == ToolKind.crop)
+                  _pinBadge(_cursor),
                 // Gesture layer: the overlay keeps it here (full display, box ==
                 // logical 1:1). For the editor it is lifted to a sibling scoped to
                 // the on-screen image rect (see the return below). The stable key

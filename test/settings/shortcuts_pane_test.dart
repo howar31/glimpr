@@ -97,7 +97,11 @@ void main() {
     expect(find.text('COMMANDS'), findsOneWidget);
     expect(find.text('RESERVED'), findsOneWidget);
     expect(find.text('Undo'), findsOneWidget);
-    expect(find.text('Crop'), findsOneWidget);
+    // The crop slot's row names both of its contexts (crop / pin-mode pin)
+    // and shows both glyphs (the diagonal crop+pin pair in the icon tile).
+    expect(find.text('Crop / Pin'), findsOneWidget);
+    expect(find.byIcon(Icons.crop), findsOneWidget);
+    expect(find.byIcon(Icons.push_pin), findsOneWidget);
     expect(find.text('Cancel / Exit'), findsOneWidget);
     expect(find.text('Commit text'), findsOneWidget);
     // Command-row hints (the ones we added explanations for).

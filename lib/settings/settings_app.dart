@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../editor/editor_controller.dart';
+import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
@@ -1218,8 +1218,16 @@ class _SettingsAppState extends State<SettingsApp>
       GlassCard.rows([
         for (final (tool, icon) in kEditorToolMeta)
           SettingRow(
-            title: _toolLabel(tool),
+            // Shared with the toolbar tooltips (tool_meta) — never drifts.
+            title: toolSettingsLabel(tool),
             icon: icon,
+            // The crop slot's one binding drives crop AND the pin-mode pin
+            // selector: crop keeps the standard 18px glyph (row rhythm) and
+            // the pin rides its corner as a small badge — the toolbar's
+            // shortcut-badge language, crisp-outlined to separate the glyphs.
+            iconWidget: tool == ToolKind.crop
+                ? _CropPinGlyph(t: t)
+                : null,
             trailing: _bindingRow(
               t: t,
               actionKey: kEditorToolActionKey[tool]!,
@@ -1468,27 +1476,6 @@ class _SettingsAppState extends State<SettingsApp>
     ),
   );
 
-  String _toolLabel(ToolKind t) => switch (t) {
-        ToolKind.crop => 'Crop',
-        ToolKind.blur => 'Blur',
-        ToolKind.pixelate => 'Pixelate',
-        ToolKind.rectangle => 'Rectangle',
-        ToolKind.ellipse => 'Ellipse',
-        ToolKind.line => 'Line',
-        ToolKind.arrow => 'Arrow',
-        ToolKind.pen => 'Pen',
-        ToolKind.text => 'Text',
-        ToolKind.highlighter => 'Highlighter',
-        ToolKind.step => 'Numbered step',
-        ToolKind.stamp => 'Image stamp',
-        ToolKind.magnify => 'Magnify',
-        ToolKind.spotlight => 'Spotlight',
-        // The "paste" slot is the universal SELECT tool (select / move / resize
-        // / delete any drawable); the paste ACTION is the Cmd-V "Paste image"
-        // command above.
-        ToolKind.paste => 'Select',
-      };
-
   // A read-only, field-shaped box for reserved (fixed) keys, mirroring the
   // HotkeyRecorderField's idle look (same height / bg / border) so the reserved
   // caps line up with the editable rows. A lock glyph fills the trailing slot
@@ -1705,6 +1692,49 @@ class _LoupePreviewState extends State<_LoupePreview> {
         scaleFactor: 1,
         zoom: widget.zoom.toDouble(),
       ),
+    );
+  }
+}
+
+/// The Crop / Pin row's glyph: the standard 18px crop icon with a small pin
+/// badge riding its bottom-right corner — the toolbar's shortcut-badge
+/// language. The crisp zero-blur outline (8 offsets, toolbar badgeOutline
+/// colors) separates the badge from the crop strokes it overlaps.
+class _CropPinGlyph extends StatelessWidget {
+  const _CropPinGlyph({required this.t});
+  final GlimprTokens t;
+
+  @override
+  Widget build(BuildContext context) {
+    final outline =
+        t.isDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(Icons.crop, size: 18, color: t.accentFg),
+        Positioned(
+          right: -4,
+          bottom: -3,
+          child: Icon(
+            Icons.push_pin,
+            size: 11,
+            color: t.accentFg,
+            shadows: [
+              for (final o in const [
+                Offset(0.7, 0),
+                Offset(-0.7, 0),
+                Offset(0, 0.7),
+                Offset(0, -0.7),
+                Offset(0.7, 0.7),
+                Offset(0.7, -0.7),
+                Offset(-0.7, 0.7),
+                Offset(-0.7, -0.7),
+              ])
+                Shadow(color: outline, offset: o),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

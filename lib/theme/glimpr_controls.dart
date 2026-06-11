@@ -297,6 +297,7 @@ class SettingRow extends StatelessWidget {
     this.hint,
     required this.trailing,
     this.icon,
+    this.iconWidget,
     this.divider = false,
     this.enabled = true,
   });
@@ -305,6 +306,11 @@ class SettingRow extends StatelessWidget {
   final String? hint;
   final Widget trailing;
   final IconData? icon;
+
+  /// Custom glyph rendered inside the standard 34x34 icon tile instead of
+  /// [icon] (e.g. the Crop / Pin row's diagonal dual icon). The tile itself
+  /// (size, fill, radius) is unchanged, so the title column stays aligned.
+  final Widget? iconWidget;
   final bool divider;
   final bool enabled;
 
@@ -315,7 +321,7 @@ class SettingRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       child: Row(
         children: [
-          if (icon != null) ...[
+          if (icon != null || iconWidget != null) ...[
             Container(
               width: 34,
               height: 34,
@@ -324,7 +330,7 @@ class SettingRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
               ),
               alignment: Alignment.center,
-              child: Icon(icon, size: 18, color: t.accentFg),
+              child: iconWidget ?? Icon(icon, size: 18, color: t.accentFg),
             ),
             const SizedBox(width: 16),
           ],

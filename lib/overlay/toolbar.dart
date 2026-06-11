@@ -70,9 +70,13 @@ class EditorToolbar extends StatelessWidget {
     return _ToolbarTheme(
       palette: palette,
       // The toolbar floats at the bottom and every panel/popover grows UPWARD;
-      // tooltips must too, or they cover the bar they describe.
+      // tooltips must too, or they cover the bar they describe. The wait
+      // keeps a sweep across the bar from popping a tooltip per button.
       child: TooltipTheme(
-        data: const TooltipThemeData(preferBelow: false),
+        data: const TooltipThemeData(
+          preferBelow: false,
+          waitDuration: Duration(milliseconds: 500),
+        ),
         child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -113,10 +117,14 @@ class EditorToolbar extends StatelessWidget {
                   _ToolButton(
                     controller: controller,
                     kind: kind,
-                    // Pin mode: the region tool IS the pin region selector.
+                    // Pin mode: the region tool IS the pin region selector
+                    // (icon + name follow; same tool, same key).
                     icon: pinMode && kind == ToolKind.crop
                         ? Icons.push_pin
                         : icon,
+                    // The tool's name, worded identically to its Settings >
+                    // Shortcuts row (same toolLabel source).
+                    tooltip: toolLabel(kind, pinMode: pinMode),
                     // Badge = the tool's current binding label (e.g. "C", "1",
                     // "⌘B"); null/unbound => no badge.
                     shortcut: editorBindings[kEditorToolActionKey[kind]]
@@ -260,11 +268,13 @@ class _ToolButton extends StatelessWidget {
   final EditorController controller;
   final ToolKind kind;
   final IconData icon;
+  final String tooltip; // context-resolved tool name (pin mode renames crop)
   final String? shortcut; // badge label (digit or letter); null = no shortcut
   const _ToolButton({
     required this.controller,
     required this.kind,
     required this.icon,
+    required this.tooltip,
     required this.shortcut,
   });
 
@@ -281,6 +291,7 @@ class _ToolButton extends StatelessWidget {
             IconButton(
               icon: Icon(icon),
               color: on ? GlimprTokens.accent : p.fg,
+              tooltip: tooltip,
               onPressed: () => controller.selectTool(kind),
             ),
             if (shortcut != null)
