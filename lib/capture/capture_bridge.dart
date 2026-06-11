@@ -45,8 +45,9 @@ class CaptureBridge {
     return FocusedWindowInfo.fromMap((res as Map).cast<dynamic, dynamic>());
   }
 
-  /// Capture a single window with real alpha (rounded corners), or null when no
-  /// such window / the native capture failed -> callers fall back to a rect crop.
+  /// The overlay snap MASK: a window's raw alpha shape (BGRA8888), or null when
+  /// no such window / the native capture failed -> the caller drops the mask
+  /// and uses a rectangular crop.
   Future<WindowImage?> captureWindowImage(
     int windowId, {
     bool showsCursor = false,
@@ -57,6 +58,28 @@ class CaptureBridge {
     );
     if (res == null) return null;
     return WindowImage.fromMap((res as Map).cast<dynamic, dynamic>());
+  }
+
+  /// Direct "Capture Window": the FINAL encoded bytes (PNG, or JPEG at
+  /// [jpegQuality]), optionally decorated natively via [decoration] (a logical
+  /// spec; native scales by the window's display scale). Null when no such
+  /// window / the native capture failed -> the caller falls back to a rect crop.
+  Future<Uint8List?> captureWindowDelivered(
+    int windowId, {
+    bool showsCursor = false,
+    bool jpeg = false,
+    int jpegQuality = 90,
+    Map<String, dynamic>? decoration,
+  }) async {
+    final res = await _channel.invokeMethod('captureWindowDelivered', {
+      'windowId': windowId,
+      'showsCursor': showsCursor,
+      'jpeg': jpeg,
+      'quality': jpegQuality,
+      'decoration': ?decoration,
+    });
+    if (res == null) return null;
+    return (res as Map)['bytes'] as Uint8List?;
   }
 
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).

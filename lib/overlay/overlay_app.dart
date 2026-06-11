@@ -431,9 +431,14 @@ class _OverlayAppState extends State<OverlayApp> {
         final wi =
             await _bridge.captureWindowImage(window!.windowId!, showsCursor: false);
         if (wi != null) {
-          final codec = await ui.instantiateImageCodec(wi.pngBytes);
-          windowMask = (await codec.getNextFrame()).image;
-          codec.dispose();
+          // Raw BGRA8888 (premultiplied, sRGB) -> ui.Image without a PNG codec,
+          // same as the freeze path. Only the alpha is used (dstIn mask).
+          final completer = Completer<ui.Image>();
+          ui.decodeImageFromPixels(
+            wi.rawBytes, wi.width, wi.height, ui.PixelFormat.bgra8888,
+            completer.complete, rowBytes: wi.rowBytes,
+          );
+          windowMask = await completer.future;
         }
       } catch (_) {
         /* fall back to a rectangular crop */

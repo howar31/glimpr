@@ -54,25 +54,30 @@ class FocusedWindowInfo {
 }
 
 /// A single window captured natively WITH its real alpha (rounded corners
-/// transparent outside the window shape). [pngBytes] are NATIVE-resolution;
-/// [scale] maps native px -> logical points.
+/// transparent outside the window shape), as RAW BGRA8888 (premultiplied, sRGB)
+/// — the overlay snap mask, where only the alpha shape matters, so no PNG codec
+/// on the wire. [rawBytes] are NATIVE-resolution; [scale] maps native px ->
+/// logical points; [rowBytes] is the stride for `decodeImageFromPixels`.
 class WindowImage {
   const WindowImage({
-    required this.pngBytes,
+    required this.rawBytes,
     required this.width,
     required this.height,
     required this.scale,
+    required this.rowBytes,
   });
-  final Uint8List pngBytes;
+  final Uint8List rawBytes;
   final int width;
   final int height;
   final double scale;
+  final int rowBytes;
 
   factory WindowImage.fromMap(Map<dynamic, dynamic> m) => WindowImage(
-        pngBytes: m['pngBytes'] as Uint8List,
+        rawBytes: m['rawBytes'] as Uint8List,
         width: (m['width'] as num).toInt(),
         height: (m['height'] as num).toInt(),
         scale: (m['scale'] as num).toDouble(),
+        rowBytes: (m['rowBytes'] as num).toInt(),
       );
 }
 

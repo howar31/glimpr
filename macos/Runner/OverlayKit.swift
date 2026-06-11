@@ -227,14 +227,17 @@ final class ScreenCapturer {
 
   /// Capture a SINGLE window with its REAL alpha — the area outside the window's
   /// rounded-corner shape is transparent (a desktop-independent window filter
-  /// composites only this window). Returns PNG bytes (alpha-preserving) + geometry,
-  /// or nil if no SCWindow matches [windowID] so the caller falls back to a rect
-  /// crop. Faithful to the OS-provided window shape (no assumed corner radius).
-  // Static so BOTH the control engine (CaptureController) and EVERY overlay
-  // engine (the snap mask) can call it — each Flutter engine has its own
-  // `glimpr/capture` handler, so the overlay can't reach the control engine's.
-  static func captureWindowImage(windowID: CGWindowID, showsCursor: Bool)
-    async throws -> [String: Any]? {
+  /// composites only this window). Faithful to the OS-provided window shape (no
+  /// assumed corner radius). Shared by two callers via the two public methods
+  /// below: the overlay snap MASK ([captureWindowImage], raw alpha) and the
+  /// direct "Capture Window" DELIVER ([captureWindowDelivered], final bytes).
+  /// nil when no SCWindow matches [windowID], or the window is not
+  /// independently capturable (letterboxed) — the caller falls back to a rect
+  /// crop. Static so BOTH the control engine (CaptureController) and EVERY
+  /// overlay engine can call it — each Flutter engine has its own
+  /// `glimpr/capture` handler, so the overlay can't reach the control engine's.
+  private static func windowCG(windowID: CGWindowID, showsCursor: Bool)
+    async throws -> (cg: CGImage, scale: CGFloat)? {
     // Fetch shareable content fresh (window sets change between captures) and
     // find the target window.
     let shareable = try await SCShareableContent.current
@@ -260,7 +263,6 @@ final class ScreenCapturer {
     let cg = try await SCScreenshotManager.captureImage(
       contentFilter: filter, configuration: cfg)
     PerfLog.mark("windowSckEnd id=\(windowID)")
-    let rep = NSBitmapImageRep(cgImage: cg)
     // Some windows are NOT independently capturable — notably a modern System
     // Settings modal alert, which is drawn into its PARENT window's surface
     // rather than being backed by its own. For those, SCK ignores the per-window
@@ -270,13 +272,42 @@ final class ScreenCapturer {
     // A faithfully-captured window fills its own contentRect buffer, so the
     // midpoint of every edge is opaque; if any is transparent the capture is a
     // mismatch -> bail so the caller falls back to a plain rectangular crop.
-    guard Self.fillsBuffer(rep),
-          let png = rep.representation(using: .png, properties: [:]) else { return nil }
-    PerfLog.mark("windowPngEnd id=\(windowID) bytes=\(png.count)")
+    guard Self.fillsBuffer(NSBitmapImageRep(cgImage: cg)) else { return nil }
+    return (cg, scale)
+  }
+
+  /// Overlay snap MASK: the window's raw BGRA8888 (premultiplied, sRGB) — only
+  /// its alpha is used as a dstIn shape mask, so no PNG codec on the wire.
+  static func captureWindowImage(windowID: CGWindowID, showsCursor: Bool)
+    async throws -> [String: Any]? {
+    guard let (cg, scale) = try await windowCG(
+            windowID: windowID, showsCursor: showsCursor),
+          let (data, rowBytes) = bgraData(from: cg) else { return nil }
+    PerfLog.mark("windowBgraEnd id=\(windowID) bytes=\(data.count)")
     return [
-      "pngBytes": FlutterStandardTypedData(bytes: png),
-      "width": cfg.width,
-      "height": cfg.height,
+      "rawBytes": FlutterStandardTypedData(bytes: data),
+      "width": cg.width,
+      "height": cg.height,
+      "scale": Double(scale),
+      "rowBytes": rowBytes,
+    ]
+  }
+
+  /// Direct "Capture Window" DELIVER: the FINAL encoded bytes (PNG/JPEG),
+  /// optionally wrapped with native CG decoration first. No annotations, so the
+  /// pixels never round-trip through Dart.
+  static func captureWindowDelivered(
+    windowID: CGWindowID, showsCursor: Bool, jpeg: Bool, jpegQuality: Int,
+    decoration: Decoration.Spec?
+  ) async throws -> [String: Any]? {
+    guard let (cg, scale) = try await windowCG(
+      windowID: windowID, showsCursor: showsCursor) else { return nil }
+    let image = decoration.flatMap { Decoration.render(cg, spec: $0, scale: scale) } ?? cg
+    guard let bytes = Decoration.encode(image, jpeg: jpeg, quality: jpegQuality)
+    else { return nil }
+    PerfLog.mark("windowEncodeEnd id=\(windowID) bytes=\(bytes.count)")
+    return [
+      "bytes": FlutterStandardTypedData(bytes: bytes),
       "scale": Double(scale),
     ]
   }

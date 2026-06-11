@@ -38,6 +38,49 @@ void main() {
     expect(await CaptureBridge().captureRegion(displayId: 9), isNull);
   });
 
+  test('captureWindowImage (mask) parses raw BGRA; null stays null', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'captureWindowImage');
+      return {
+        'rawBytes': Uint8List.fromList([1, 2, 3, 4]),
+        'width': 2,
+        'height': 1,
+        'scale': 2.0,
+        'rowBytes': 8,
+      };
+    });
+    final wi = await CaptureBridge().captureWindowImage(99);
+    expect(wi!.rawBytes, hasLength(4));
+    expect(wi.width, 2);
+    expect(wi.rowBytes, 8);
+
+    messenger.setMockMethodCallHandler(channel, (call) async => null);
+    expect(await CaptureBridge().captureWindowImage(99), isNull);
+  });
+
+  test('captureWindowDelivered passes args + returns final bytes; null stays null',
+      () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'captureWindowDelivered');
+      final a = (call.arguments as Map).cast<dynamic, dynamic>();
+      expect(a['windowId'], 99);
+      expect(a['jpeg'], true);
+      expect(a['quality'], 80);
+      expect((a['decoration'] as Map)['shapeFromAlpha'], true);
+      return {'bytes': Uint8List.fromList([9, 8, 7]), 'scale': 2.0};
+    });
+    final bytes = await CaptureBridge().captureWindowDelivered(
+      99,
+      jpeg: true,
+      jpegQuality: 80,
+      decoration: const {'shapeFromAlpha': true},
+    );
+    expect(bytes, Uint8List.fromList([9, 8, 7]));
+
+    messenger.setMockMethodCallHandler(channel, (call) async => null);
+    expect(await CaptureBridge().captureWindowDelivered(99), isNull);
+  });
+
   test('focusedWindow parses a dict, and null stays null', () async {
     messenger.setMockMethodCallHandler(channel, (call) async => {
           'displayId': 2,

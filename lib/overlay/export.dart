@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:ui' show Offset, Rect, Size;
 import '../capture/capture_bridge.dart';
@@ -122,37 +123,17 @@ Future<void> recordRecentCapture(String path) async {
   }
 }
 
-/// Deliver a natively-captured window image (already alpha-shaped, real rounded
-/// corners) — for the direct "Capture Window" mode. No crop, no annotations;
-/// decoration (if enabled for [kind]) follows the real silhouette. No global
-/// origin is available on this path, so its pin leg falls back to centered
-/// (the runFlow default).
-Future<FlowResult> exportWindowImage({
-  required ui.Image windowImage,
-  required double scaleFactor,
+/// Deliver a natively-captured window image — the direct "Capture Window" mode.
+/// The [bytes] are FINAL (real alpha-shaped, decoration applied natively when
+/// enabled): no crop, no annotations, no codec pass — a pure delivery. No
+/// global origin is available on this path, so its pin leg falls back to
+/// centered (the runFlow default).
+Future<FlowResult> deliverWindowBytes({
+  required Uint8List bytes,
   required CaptureSettings cap,
-  required CaptureKind kind,
   String? windowTitle,
   String? appName,
 }) async {
-  final decoration = cap.decorateFor(kind)
-      ? DecorationStyle.scaled(scaleFactor)
-      : null;
-  final bytes = await compositeAndCrop(
-    frozen: windowImage,
-    drawables: const [],
-    scaleFactor: scaleFactor,
-    logicalSize: Size(
-      windowImage.width / scaleFactor,
-      windowImage.height / scaleFactor,
-    ),
-    selectionLogical: null,
-    jpeg: cap.isJpeg,
-    jpegQuality: cap.jpegQuality,
-    decoration: decoration,
-    decorationJpegFill: ui.Color(cap.decorationJpegFill),
-    decorationShapeFromAlpha: true,
-  );
   return runFlow(
     actions: normalizeFlow(cap.flow, forCapture: true),
     bytes: bytes,

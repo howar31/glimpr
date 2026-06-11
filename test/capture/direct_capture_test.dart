@@ -171,10 +171,11 @@ void main() {
       expect(errors, isEmpty);
     });
 
-    test('window(): uses the per-window image when a windowId is present',
+    test('window(): delivers the native final bytes when a windowId is present',
         () async {
       final s = _FakeStore();
-      WindowImage? deliveredWi;
+      Uint8List? deliveredBytes;
+      Map<String, dynamic>? passedDecoration;
       var completes = 0;
       final dc = DirectCapture(
         focusedWindow: () async => const FocusedWindowInfo(
@@ -183,13 +184,17 @@ void main() {
             title: 'W',
             app: 'App',
             windowId: 99),
-        captureWindowImage: (id, {bool showsCursor = false}) async {
+        captureWindowDelivered: (id,
+            {bool showsCursor = false,
+            bool jpeg = false,
+            int jpegQuality = 90,
+            Map<String, dynamic>? decoration}) async {
           expect(id, 99);
-          return WindowImage(
-              pngBytes: Uint8List(0), width: 200, height: 160, scale: 2);
+          passedDecoration = decoration;
+          return Uint8List.fromList([1, 2, 3]);
         },
-        deliverWindow: (wi, cap, info) async {
-          deliveredWi = wi;
+        deliverWindow: (bytes, cap, info) async {
+          deliveredBytes = bytes;
           return const FlowResult(DeliveryResult(
               savedPath: '/x.png', copiedToClipboard: true, soundPlayed: true));
         },
@@ -201,11 +206,48 @@ void main() {
         perfMark: (_) {},
       );
       await dc.window();
-      expect(deliveredWi, isNotNull);
-      expect(deliveredWi!.width, 200);
+      expect(deliveredBytes, Uint8List.fromList([1, 2, 3]));
+      expect(passedDecoration, isNull); // decoration off by default
       expect(completes, 1);
       final saved = await LastRegionStore(s).load();
       expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
+    });
+
+    test('window(): decoration on -> alpha-shape spec passed to native', () async {
+      final s = _FakeStore();
+      await Settings(s).setDecorateWindow(true);
+      Map<String, dynamic>? passedDecoration;
+      final dc = DirectCapture(
+        focusedWindow: () async => const FocusedWindowInfo(
+            displayId: 1,
+            rect: Rect.fromLTWH(5, 6, 100, 80),
+            title: 'W',
+            app: 'App',
+            windowId: 99),
+        captureWindowDelivered: (id,
+            {bool showsCursor = false,
+            bool jpeg = false,
+            int jpegQuality = 90,
+            Map<String, dynamic>? decoration}) async {
+          passedDecoration = decoration;
+          return Uint8List.fromList([1]);
+        },
+        deliverWindow: (bytes, cap, info) async => const FlowResult(
+            DeliveryResult(
+                savedPath: '/x.png',
+                copiedToClipboard: true,
+                soundPlayed: true)),
+        settings: Settings(s),
+        regionStore: LastRegionStore(s),
+        shutter: () {},
+        complete: () {},
+        showError: (_) {},
+        perfMark: (_) {},
+      );
+      await dc.window();
+      expect(passedDecoration, isNotNull);
+      expect(passedDecoration!['shapeFromAlpha'], true);
+      expect(passedDecoration!['margin'], kDecorMarginLogical);
     });
 
     test('lastRegion(): no stored region -> no capture, no sound, no mark',

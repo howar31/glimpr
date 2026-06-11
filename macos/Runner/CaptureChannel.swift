@@ -114,6 +114,24 @@ final class CaptureChannel {
               code: "capture_failed", message: "\(error)", details: nil))
           }
         }
+      case "captureWindowDelivered":
+        let a = call.arguments as? [String: Any]
+        let wid = (a?["windowId"] as? NSNumber)?.uint32Value ?? 0
+        let cursor = (a?["showsCursor"] as? Bool) ?? false
+        let jpeg = (a?["jpeg"] as? Bool) ?? false
+        let quality = (a?["quality"] as? Int) ?? 90
+        let deco = (a?["decoration"] as? [String: Any]).flatMap(Decoration.spec)
+        Task { @MainActor in
+          do {
+            let img = try await self?.capture.captureWindowDelivered(
+              windowID: CGWindowID(wid), showsCursor: cursor, jpeg: jpeg,
+              jpegQuality: quality, decoration: deco)
+            result(img) // nil -> Dart falls back to a rectangular crop
+          } catch {
+            result(FlutterError(
+              code: "capture_failed", message: "\(error)", details: nil))
+          }
+        }
       default: result(FlutterMethodNotImplemented)
       }
     }

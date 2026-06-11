@@ -58,12 +58,17 @@ void main() {
     expect(without.cursorLeft, isNull);
   });
 
-  test('WindowImage.fromMap parses geometry', () {
+  test('WindowImage.fromMap parses raw BGRA geometry', () {
     final wi = WindowImage.fromMap({
-      'pngBytes': Uint8List(0), 'width': 200, 'height': 160, 'scale': 2.0,
+      'rawBytes': Uint8List(0),
+      'width': 200,
+      'height': 160,
+      'scale': 2.0,
+      'rowBytes': 800,
     });
     expect(wi.width, 200);
     expect(wi.height, 160);
     expect(wi.scale, 2.0);
+    expect(wi.rowBytes, 800);
   });
 }

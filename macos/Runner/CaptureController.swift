@@ -27,14 +27,28 @@ final class CaptureController {
       jpeg: jpeg, jpegQuality: jpegQuality, decoration: decoration)
   }
 
-  /// Capture a single window with real alpha (rounded corners), or nil when no
-  /// such window — for the direct "Capture Window" mode and the overlay snap mask.
+  /// Single window's raw alpha shape (rounded corners) — the overlay snap mask;
+  /// nil when no such window. Used as a dstIn mask, so only the alpha matters.
   func captureWindowImage(windowID: CGWindowID, showsCursor: Bool) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
     return try await ScreenCapturer.captureWindowImage(
       windowID: windowID, showsCursor: showsCursor)
+  }
+
+  /// Direct "Capture Window" — the FINAL encoded bytes (optionally decorated
+  /// natively); nil when no such window so the caller falls back to a rect crop.
+  func captureWindowDelivered(
+    windowID: CGWindowID, showsCursor: Bool, jpeg: Bool, jpegQuality: Int,
+    decoration: Decoration.Spec?
+  ) async throws -> [String: Any]? {
+    guard capturer.hasPermissionOrRequest() else {
+      throw ScreenCapturer.CaptureError.noDisplays
+    }
+    return try await ScreenCapturer.captureWindowDelivered(
+      windowID: windowID, showsCursor: showsCursor, jpeg: jpeg,
+      jpegQuality: jpegQuality, decoration: decoration)
   }
 
   /// [pinOnly]: the ⌘⌥7 "capture to pin" mode — the overlay session runs as

@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 import '../editor/decoration.dart';
 import '../output/flow.dart';
@@ -15,29 +15,17 @@ import 'last_region.dart';
 const kDisplayCaptureLabel = 'DISPLAY';
 const kLastRegionCaptureLabel = 'LAST';
 
-/// Deliver a natively-captured window image (real alpha / rounded corners)
-/// directly — the "Capture Window" path. No display crop.
+/// Deliver a natively-captured window image (real alpha / rounded corners,
+/// decoration applied natively) directly — the "Capture Window" path. The
+/// [bytes] are FINAL; no decode, composite, or display crop.
 Future<FlowResult> _defaultDeliverWindow(
-    WindowImage wi, CaptureSettings cap, FocusedWindowInfo info) async {
-  final codec = await ui.instantiateImageCodec(wi.pngBytes);
-  final ui.Image image;
-  try {
-    image = (await codec.getNextFrame()).image;
-  } finally {
-    codec.dispose();
-  }
-  try {
-    return await exportWindowImage(
-      windowImage: image,
-      scaleFactor: wi.scale,
-      cap: cap,
-      kind: CaptureKind.focusedWindow,
-      windowTitle: info.title.isEmpty ? null : info.title,
-      appName: info.app.isEmpty ? null : info.app,
-    );
-  } finally {
-    image.dispose();
-  }
+    Uint8List bytes, CaptureSettings cap, FocusedWindowInfo info) async {
+  return deliverWindowBytes(
+    bytes: bytes,
+    cap: cap,
+    windowTitle: info.title.isEmpty ? null : info.title,
+    appName: info.app.isEmpty ? null : info.app,
+  );
 }
 
 /// Orchestrates the three non-interactive capture modes in the control engine.
@@ -56,13 +44,18 @@ class DirectCapture {
             Map<String, dynamic>? decoration})?
         captureRegion,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
-    Future<WindowImage?> Function(int, {bool showsCursor})? captureWindowImage,
+    Future<Uint8List?> Function(int,
+            {bool showsCursor,
+            bool jpeg,
+            int jpegQuality,
+            Map<String, dynamic>? decoration})?
+        captureWindowDelivered,
     Settings? settings,
     LastRegionStore? regionStore,
     Future<FlowResult> Function(
             RegionCapture, CaptureSettings, CaptureKind, String?, String?)?
         deliverEncoded,
-    Future<FlowResult> Function(WindowImage, CaptureSettings, FocusedWindowInfo)?
+    Future<FlowResult> Function(Uint8List, CaptureSettings, FocusedWindowInfo)?
         deliverWindow,
     void Function()? shutter,
     void Function()? complete,
@@ -70,8 +63,8 @@ class DirectCapture {
     void Function(String)? perfMark,
   })  : _captureRegion = captureRegion ?? CaptureBridge().captureRegion,
         _focusedWindow = focusedWindow ?? CaptureBridge().focusedWindow,
-        _captureWindowImage =
-            captureWindowImage ?? CaptureBridge().captureWindowImage,
+        _captureWindowDelivered =
+            captureWindowDelivered ?? CaptureBridge().captureWindowDelivered,
         _settings = settings ?? Settings.instance,
         _regionStore = regionStore ?? LastRegionStore(Settings.instance.store),
         _deliverEncoded = deliverEncoded ??
@@ -95,14 +88,18 @@ class DirectCapture {
       int jpegQuality,
       Map<String, dynamic>? decoration}) _captureRegion;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
-  final Future<WindowImage?> Function(int, {bool showsCursor}) _captureWindowImage;
+  final Future<Uint8List?> Function(int,
+      {bool showsCursor,
+      bool jpeg,
+      int jpegQuality,
+      Map<String, dynamic>? decoration}) _captureWindowDelivered;
   final Settings _settings;
   final LastRegionStore _regionStore;
   final Future<FlowResult> Function(
           RegionCapture, CaptureSettings, CaptureKind, String?, String?)
       _deliverEncoded;
   final Future<FlowResult> Function(
-      WindowImage, CaptureSettings, FocusedWindowInfo) _deliverWindow;
+      Uint8List, CaptureSettings, FocusedWindowInfo) _deliverWindow;
   final void Function() _shutter;
   final void Function() _complete;
   final void Function(String) _showError;
@@ -122,20 +119,31 @@ class DirectCapture {
     final info = await _focusedWindow();
     if (info?.windowId != null) {
       final cap = await _settings.loadCapture();
-      WindowImage? wi;
+      // Decoration (when enabled) follows the window's real silhouette; applied
+      // natively, so the delivered bytes are final.
+      final decoration = cap.decorateFor(CaptureKind.focusedWindow)
+          ? logicalDecorationSpec(
+              fillArgb: cap.isJpeg ? cap.decorationJpegFill : null,
+              shapeFromAlpha: true,
+            )
+          : null;
+      Uint8List? bytes;
       try {
-        wi = await _captureWindowImage(
+        bytes = await _captureWindowDelivered(
           info!.windowId!,
           showsCursor: cap.captureCursor,
+          jpeg: cap.isJpeg,
+          jpegQuality: cap.jpegQuality,
+          decoration: decoration,
         );
       } catch (_) {
-        wi = null; // fall through to the rectangular crop
+        bytes = null; // fall through to the rectangular crop
       }
-      if (wi != null) {
-        _perfMark('windowImageReceived bytes=${wi.pngBytes.length}');
+      if (bytes != null) {
+        _perfMark('windowImageReceived bytes=${bytes.length}');
         if (cap.shutterSound) _shutter();
         try {
-          final result = await _deliverWindow(wi, cap, info!);
+          final result = await _deliverWindow(bytes, cap, info!);
           final ok = (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
               (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
           if (ok) {
