@@ -723,7 +723,13 @@ class _OverlayAppState extends State<OverlayApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
+      // Both themes so Material defaults (e.g. toolbar tooltips) follow the
+      // system appearance; our chrome resolves its own palettes regardless.
       theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.transparent,
+      ),
       home: (d == null || frozen == null || editor == null)
           // Idle: fully transparent until a capture sets the frozen frame.
           ? const SizedBox.shrink()
