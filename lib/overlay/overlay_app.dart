@@ -22,6 +22,7 @@ import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
 import 'editor_canvas.dart';
 import 'export.dart';
+import 'session_op_log.dart';
 
 /// The per-display overlay engine's app. Idle = transparent; on capture it hosts
 /// the annotation editor (EditorCanvas) over the frozen image and, on export,
@@ -94,6 +95,17 @@ class _OverlayAppState extends State<OverlayApp> {
   // (rare, so they bypass the style throttle).
   final Set<int> _remoteDirty = {};
   bool _localDirty = false;
+  // Session-global undo/redo: every engine keeps an identical replica of the
+  // session op log; ⌘Z/⇧⌘Z anywhere target the SESSION's latest op and route
+  // to the owning display (see SessionOpLog). _lastDepth detects local
+  // commits (unguarded history-depth +1); _applyingProtocol marks document
+  // changes driven by the protocol itself (remote undo/redo, redo-tail
+  // clears) so they are not re-broadcast as new ops.
+  final SessionOpLog _opLog = SessionOpLog();
+  int _lastDepth = 1;
+  bool _applyingProtocol = false;
+  // Session-global single selection: a claim on one display clears the others.
+  bool _applyingRemoteSel = false;
 
   void _perfSink(String label) {
     CaptureBridge.perfMark(label).then((_) {}, onError: (_) {});
@@ -154,9 +166,12 @@ class _OverlayAppState extends State<OverlayApp> {
             ..clear()
             ..addAll(loadedStyles);
         }
-        // New capture session: forget the previous session's dirty bits.
+        // New capture session: forget the previous session's dirty bits and
+        // op log (fresh document = depth 1).
         _remoteDirty.clear();
         _localDirty = false;
+        _opLog.clear();
+        _lastDepth = 1;
         setState(() {
           _frozen = frozen;
           _cursorImage = cursorImg;
@@ -253,6 +268,8 @@ class _OverlayAppState extends State<OverlayApp> {
     _detachShared();
     _remoteDirty.clear();
     _localDirty = false;
+    _opLog.clear();
+    _lastDepth = 1;
     _editor?.dispose();
     _frozen?.dispose();
     _cursorImage?.dispose();
@@ -272,6 +289,10 @@ class _OverlayAppState extends State<OverlayApp> {
     e.style.addListener(_schedulePersist);
     e.stampImage.addListener(_broadcastStamp);
     e.document.addListener(_broadcastLocalDirty);
+    e.document.addListener(_trackLocalOp);
+    e.selectedIndex.addListener(_broadcastSelection);
+    e.undoOverride = _globalUndo;
+    e.redoOverride = _globalRedo;
   }
 
   void _detachShared() {
@@ -280,6 +301,77 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.style.removeListener(_schedulePersist);
     _editor?.stampImage.removeListener(_broadcastStamp);
     _editor?.document.removeListener(_broadcastLocalDirty);
+    _editor?.document.removeListener(_trackLocalOp);
+    _editor?.selectedIndex.removeListener(_broadcastSelection);
+    _editor?.undoOverride = null;
+    _editor?.redoOverride = null;
+  }
+
+  /// Session op-log bookkeeping for THIS display's document: an unguarded
+  /// history-depth +1 is a user-committed op — stamp it with the next session
+  /// clock and broadcast. Protocol-driven changes only resync the depth.
+  void _trackLocalOp() {
+    final e = _editor;
+    final d = _display;
+    if (e == null || d == null) return;
+    final depth = e.document.value.historyDepth;
+    final grew = depth == _lastDepth + 1;
+    _lastDepth = depth;
+    if (_applyingProtocol || !grew) return;
+    final clock = _opLog.nextClock();
+    _opLog.recordOp(clock, d.displayId);
+    _bridge.broadcastEditorState({'op': clock, 'display': d.displayId});
+  }
+
+  /// ⌘Z routed session-wide (EditorController.undoOverride): target the
+  /// SESSION's latest op; every replica moves it, the owning display
+  /// (possibly not this one) pops its document.
+  void _globalUndo() {
+    final t = _opLog.undoTarget;
+    if (t == null) return;
+    _performUndo(t.clock, t.display);
+    _bridge.broadcastEditorState({'undoOp': t.clock, 'display': t.display});
+  }
+
+  void _globalRedo() {
+    final t = _opLog.redoTarget;
+    if (t == null) return;
+    _performRedo(t.clock, t.display);
+    _bridge.broadcastEditorState({'redoOp': t.clock, 'display': t.display});
+  }
+
+  void _performUndo(int clock, int display) {
+    if (!_opLog.markUndone(clock, display)) return;
+    if (display != _display?.displayId) return;
+    final e = _editor;
+    if (e == null) return;
+    _applyingProtocol = true;
+    e.undoLocal();
+    e.selectedIndex.value = null; // indices shifted under the selection
+    _applyingProtocol = false;
+  }
+
+  void _performRedo(int clock, int display) {
+    if (!_opLog.markRedone(clock, display)) return;
+    if (display != _display?.displayId) return;
+    final e = _editor;
+    if (e == null) return;
+    _applyingProtocol = true;
+    e.redoLocal();
+    e.selectedIndex.value = null;
+    _applyingProtocol = false;
+  }
+
+  /// Session-global single selection: claiming a selection here clears it on
+  /// every other display. Broadcast only on the transition INTO a selection —
+  /// deselects need no message.
+  void _broadcastSelection() {
+    if (_applyingRemoteSel) return;
+    final e = _editor;
+    final d = _display;
+    if (e == null || d == null) return;
+    if (e.selectedIndex.value == null) return;
+    _bridge.broadcastEditorState({'selectedOn': d.displayId});
   }
 
   /// Tell the other displays whether THIS display holds unsaved annotations,
@@ -407,6 +499,43 @@ class _OverlayAppState extends State<OverlayApp> {
       final from = (state['display'] as num?)?.toInt();
       if (from != null) {
         dirty ? _remoteDirty.add(from) : _remoteDirty.remove(from);
+      }
+      return;
+    }
+    // Session op-log traffic: a committed op / undo / redo on another display.
+    final op = state['op'];
+    if (op is int) {
+      final from = (state['display'] as num?)?.toInt();
+      if (from != null) {
+        _opLog.recordOp(op, from);
+        // A new session op invalidates this document's own redo tail too.
+        final doc = e.document.value;
+        if (doc.canRedo) {
+          _applyingProtocol = true;
+          e.document.value = doc.clearedRedo();
+          _applyingProtocol = false;
+        }
+      }
+      return;
+    }
+    final undoOp = state['undoOp'];
+    if (undoOp is int) {
+      final from = (state['display'] as num?)?.toInt();
+      if (from != null) _performUndo(undoOp, from);
+      return;
+    }
+    final redoOp = state['redoOp'];
+    if (redoOp is int) {
+      final from = (state['display'] as num?)?.toInt();
+      if (from != null) _performRedo(redoOp, from);
+      return;
+    }
+    // Another display claimed the session-single annotation selection.
+    if (state['selectedOn'] is num) {
+      if (e.selectedIndex.value != null) {
+        _applyingRemoteSel = true;
+        e.selectedIndex.value = null;
+        _applyingRemoteSel = false;
       }
       return;
     }

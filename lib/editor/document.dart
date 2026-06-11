@@ -41,6 +41,18 @@ class EditorDocument {
   bool get canUndo => _past.length > 1;
   bool get canRedo => _future.isNotEmpty;
 
+  /// Undo-history depth including the current snapshot. Lets a host detect a
+  /// newly-committed op (depth grows by exactly one) without hooking every
+  /// mutator — silent backfills keep the depth unchanged.
+  int get historyDepth => _past.length;
+  int get redoDepth => _future.length;
+
+  /// Drop the redo tail without touching the history. A session-global op on
+  /// ANOTHER display invalidates redo everywhere, mirroring how a local
+  /// commit clears [_future].
+  EditorDocument clearedRedo() =>
+      _future.isEmpty ? this : EditorDocument._(_past, const []);
+
   /// Push a new snapshot with [next] drawables, keeping the current canvas.
   EditorDocument _commit(List<Drawable> next) {
     final cur = _past.last;

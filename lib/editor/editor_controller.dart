@@ -424,8 +424,18 @@ class EditorController {
     selectedIndex.value = 0;
   }
 
-  void undo() => document.value = document.value.undo();
-  void redo() => document.value = document.value.redo();
+  /// Session-global undo/redo seam: the multi-display overlay routes [undo]/
+  /// [redo] through a session-wide op log (the latest op may live on another
+  /// display's document). Single-document hosts (the standalone Image Editor)
+  /// leave these null, so [undo]/[redo] act locally as before. The local
+  /// primitives stay public for the router to call back on the owning display.
+  void Function()? undoOverride;
+  void Function()? redoOverride;
+
+  void undo() => undoOverride != null ? undoOverride!() : undoLocal();
+  void redo() => redoOverride != null ? redoOverride!() : redoLocal();
+  void undoLocal() => document.value = document.value.undo();
+  void redoLocal() => document.value = document.value.redo();
 
   void dispose() {
     tool.dispose();
