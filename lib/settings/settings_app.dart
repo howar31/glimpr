@@ -16,6 +16,7 @@ import '../shortcuts/shortcut_store.dart';
 import '../shortcuts/widgets/hotkey_recorder_field.dart';
 import '../shortcuts/widgets/key_cap_chips.dart';
 import '../editor/tool_style_store.dart';
+import '../image_editor/recent_images.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
@@ -77,6 +78,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _captureCursor = false;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
+  int _recentCap = kRecentImagesCap;
   // The warm target active SINCE launch (what OverlayManager actually built with).
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
@@ -202,6 +204,8 @@ class _SettingsAppState extends State<SettingsApp>
         });
       }
     } catch (_) {}
+    final recentCap = await RecentImagesStore.getCap(_s.store);
+    if (mounted) setState(() => _recentCap = recentCap);
   }
 
   /// Toggle one action in a completion flow and persist it. copy and copyPath
@@ -304,7 +308,7 @@ class _SettingsAppState extends State<SettingsApp>
   Widget _flowCaption(GlimprTokens t, {required bool capture}) {
     final flow = capture ? _afterCapture : _afterEditorDone;
     final when = capture
-        ? 'Runs when a capture is confirmed — overlay ✓/Enter and the '
+        ? 'Runs when a capture is confirmed: overlay ✓/Enter and the '
             'direct ⌘⌥2/3/4 modes.'
         : 'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu '
             'beside Done offers one-off alternatives.';
@@ -621,7 +625,7 @@ class _SettingsAppState extends State<SettingsApp>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Pixel magnifier for crop / blur / pixelate — in the capture overlay '
+          'Pixel magnifier for crop / blur / pixelate, in the capture overlay '
           'and the Image Editor. Nudge the cursor a pixel at a time with the '
           'arrow keys.',
           style: GlimprType.sansStyle(12.5, 400, t.fg3),
@@ -917,6 +921,39 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ]),
+      const SizedBox(height: 15),
+      const SectionLabel('Recent history', icon: Icons.history),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Recent images kept',
+              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'How many images the landing gallery and the menu-bar '
+              'Open Recent keep.',
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 16),
+            // All presets are 5k-1 so the trailing More… tile always closes
+            // the grid as a full rectangle at the minimum window width.
+            Segmented<int>(
+              full: true,
+              value: const [19, 44, 69, 99].contains(_recentCap)
+                  ? _recentCap
+                  : kRecentImagesCap,
+              options: const [(19, '19'), (44, '44'), (69, '69'), (99, '99')],
+              onChanged: (v) async {
+                await RecentImagesStore.setCap(_s.store, v);
+                if (mounted) setState(() => _recentCap = v);
+              },
+            ),
+          ],
+        ),
+      ),
     ];
   }
 
@@ -984,8 +1021,8 @@ class _SettingsAppState extends State<SettingsApp>
         const SizedBox(height: 8),
         _token(t, '{window}', 'The window title, or the app name if it has none'),
         _token(t, '{app}', 'The application name (e.g. Safari)'),
-        _token(t, '{date}', 'Capture date — 2026-06-03'),
-        _token(t, '{time}', 'Capture time — 15-04-09'),
+        _token(t, '{date}', 'Capture date, e.g. 2026-06-03'),
+        _token(t, '{time}', 'Capture time, e.g. 15-04-09'),
         const SizedBox(height: 6),
         Text(
           'Uses the window under the cursor when the capture ends. On bare '
@@ -1036,11 +1073,11 @@ class _SettingsAppState extends State<SettingsApp>
               'dock). Glimpr pre-warms a rendering engine per display so the freeze '
               'overlay appears with no delay.\n\n'
               'This is a minimum, not a cap: every display already connected when '
-              'Glimpr starts gets a warm engine regardless of this number — it only '
+              'Glimpr starts gets a warm engine regardless of this number; it only '
               'adds spares for displays plugged in later.\n\n'
-              'Cost: each engine uses about 100 MB of memory while Glimpr runs. A '
+              'Cost: each engine uses about 10 MB of memory while Glimpr runs. A '
               'display plugged in beyond this number still captures, but only shows '
-              'the frozen frame — its crosshair and toolbar follow correctly after a '
+              'the frozen frame; its crosshair and toolbar follow correctly after a '
               'restart (which makes every connected display warm again).',
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
             ),

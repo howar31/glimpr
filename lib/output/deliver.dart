@@ -43,6 +43,12 @@ Future<void> _defaultSound() =>
 /// save / clipboard legs can be disabled via [saveToFile] / [copyToClipboard]
 /// (a disabled leg is skipped, not failed — its result flag stays false with no
 /// error recorded).
+/// The effective output folder: the configured save directory, or the default
+/// the save leg falls back to. Shared with the gallery's "More…" tile so the
+/// folder it opens is exactly where saves land.
+Directory effectiveSaveDir(Directory? configured) =>
+    configured ?? Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
+
 Future<DeliveryResult> deliverCapture({
   required Uint8List pngBytes,
   Directory? saveDir,
@@ -53,8 +59,7 @@ Future<DeliveryResult> deliverCapture({
   bool saveToFile = true,
   bool copyToClipboard = true,
 }) async {
-  final dir =
-      saveDir ?? Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
+  final dir = effectiveSaveDir(saveDir);
   final name = fileName ?? screenshotFilename(DateTime.now(), 'png');
   final save =
       saveFn ?? ((b, d, n) => saveBytes(dir: d, fileName: n, bytes: b));

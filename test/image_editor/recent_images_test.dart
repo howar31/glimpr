@@ -90,14 +90,32 @@ void main() {
       expect(await store.load(), ['/a', '/b']);
     });
 
-    test('add caps at 30 (the landing gallery scrolls)', () async {
+    test('add caps at the default (44 = 5k-1, the More tile completes rows)',
+        () async {
       final store = RecentImagesStore(FakeStore());
-      for (var i = 0; i < 33; i++) {
+      for (var i = 0; i < kRecentImagesCap + 3; i++) {
         await store.add('/p$i');
       }
       final out = await store.load();
-      expect(out.length, 30);
-      expect(out.first, '/p32');
+      expect(out.length, kRecentImagesCap);
+      expect(out.first, '/p${kRecentImagesCap + 2}');
+    });
+
+    test('a configured cap applies to add AND retroactively to load',
+        () async {
+      final fake = FakeStore();
+      final store = RecentImagesStore(fake);
+      for (var i = 0; i < 10; i++) {
+        await store.add('/p$i');
+      }
+      // Shrink the cap below the existing length: load trims immediately.
+      await RecentImagesStore.setCap(fake, 4);
+      final out = await store.load();
+      expect(out.length, 4);
+      expect(out.first, '/p9');
+      // And new adds keep respecting it.
+      await store.add('/new');
+      expect((await store.load()).length, 4);
     });
 
     test('remove drops one entry and keeps the rest', () async {

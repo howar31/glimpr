@@ -14,6 +14,7 @@ import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
 import '../overlay/toolbar.dart';
 import '../output/clipboard.dart';
+import '../output/deliver.dart';
 import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../perf/frame_stats.dart';
@@ -26,6 +27,7 @@ import '../theme/confirm_dialog.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'checkerboard.dart';
+import 'gallery_layout.dart';
 import 'image_editor_export.dart';
 import 'image_editor_host.dart';
 import 'recent_images.dart';
@@ -302,6 +304,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// completion flow's showInFinder leg.
   void _revealRecent(String path) {
     Process.run('open', ['-R', path]);
+  }
+
+  /// The gallery's trailing "More…" tile: open the save folder in Finder —
+  /// the gallery shows the capped recents, the folder holds everything.
+  void _openSaveFolder() {
+    Process.run('open', [effectiveSaveDir(_cap.saveDir).path]);
   }
 
   /// Copy a recent file's image to the clipboard (tile context menu). Same
@@ -877,29 +885,51 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Gallery landing: a slim open bar on top, then a scrollable grid of the
   /// recent images (captures and opened files) filling the rest of the window.
   Widget _gallery(GlimprTokens t) {
+    // The grid's horizontal inset lives INSIDE the scroll view (not on an
+    // outer Padding): the viewport then spans the window, so the overlay
+    // scrollbar draws at the window edge instead of over the last column.
+    // Visual margins are unchanged (28px all the same).
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+      padding: const EdgeInsets.only(top: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _openBar(t),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: _openBar(t),
+          ),
           const SizedBox(height: 22),
-          Text(
-            'Recent',
-            style: GlimprType.sansStyle(11, 700, t.fg4, letterSpacing: 0.4),
+          Padding(
+            padding: const EdgeInsets.only(left: 28),
+            child: Text(
+              'Recent',
+              style: GlimprType.sansStyle(11, 700, t.fg4, letterSpacing: 0.4),
+            ),
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.only(bottom: 24),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 190,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 1.22,
+            // Tiles grow with the window (galleryColumns: fewest columns whose
+            // rows still fit the viewport, tile width clamped min..max) so a
+            // large window fills with content instead of dead space.
+            child: LayoutBuilder(
+              builder: (context, box) => GridView.builder(
+              padding: const EdgeInsets.fromLTRB(28, 0, 28, 24),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                // +1 = the trailing "More…" utility tile; the cap is a
+                // multiple of the min-width column count minus one, so the
+                // grid closes as a full rectangle at the smallest window.
+                // Width minus the grid's own horizontal padding (28 + 28).
+                crossAxisCount: galleryColumns(
+                    box.maxWidth - 56, box.maxHeight - 24, _recent.length + 1),
+                mainAxisSpacing: kGallerySpacing,
+                crossAxisSpacing: kGallerySpacing,
+                childAspectRatio: kGalleryTileRatio,
               ),
-              itemCount: _recent.length,
+              itemCount: _recent.length + 1,
               itemBuilder: (_, i) {
+                if (i == _recent.length) {
+                  return _MoreTile(onTap: _openSaveFolder);
+                }
                 final path = _recent[i];
                 return _RecentTile(
                   path: path,
@@ -913,6 +943,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                   onClear: _confirmClearRecent,
                 );
               },
+              ),
             ),
           ),
         ],
@@ -1171,6 +1202,104 @@ class _HistoryButtons extends StatelessWidget {
 
 /// A compact icon-only action button matching the toolbar's foreground palette.
 /// Dims when [onTap] is null.
+/// The gallery's trailing utility cell: a quiet dashed placeholder that opens
+/// the save folder in Finder. Visually distinct from the photo tiles (no
+/// thumbnail, dashed border) so it reads as "beyond the list", not content.
+class _MoreTile extends StatefulWidget {
+  const _MoreTile({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_MoreTile> createState() => _MoreTileState();
+}
+
+class _MoreTileState extends State<_MoreTile> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final color = _hover ? t.fg1 : t.fg3;
+    // Same dynamic-size tooltip anchoring as _RecentTile.
+    return LayoutBuilder(
+      builder: (context, box) => MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: 'Open the save folder in Finder',
+          waitDuration: const Duration(milliseconds: 400),
+          verticalOffset: box.maxHeight / 2 + 8,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: _hover ? t.navHoverBg : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            // Mirror _RecentTile's geometry (thumbnail area + caption row) so
+            // the dashed box aligns with the photo tiles around it.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: CustomPaint(
+                    painter: _DashedRRectPainter(
+                        _hover ? t.fg3 : t.cardBorder),
+                    child: SizedBox.expand(
+                      child: Icon(Icons.folder_open, size: 20, color: color),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'More…',
+                  maxLines: 1,
+                  style: GlimprType.sansStyle(8.5, 600, color),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+}
+
+/// A 1px dashed rounded-rect outline (Flutter has no dashed BorderSide).
+class _DashedRRectPainter extends CustomPainter {
+  const _DashedRRectPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        (Offset.zero & size).deflate(0.5),
+        const Radius.circular(8),
+      ));
+    const dash = 5.0, gap = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        final end = d + dash < metric.length ? d + dash : metric.length;
+        canvas.drawPath(metric.extractPath(d, end), paint);
+        d += dash + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRRectPainter old) => old.color != color;
+}
+
 /// The title-bar back-to-gallery control: a chevron + house pair on ONE hover
 /// surface, sized for the 32px bar. Reads as navigation (Photos-style back),
 /// distinct from the bottom pill's actions.
@@ -1390,7 +1519,11 @@ class _RecentTileState extends State<_RecentTile> {
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
     final name = p.basename(widget.path);
-    return MouseRegion(
+    // Tiles are dynamically sized now: Tooltip offsets from the TARGET CENTER,
+    // so a fixed offset floats mid-tile on large tiles — anchor it just past
+    // the cell's bottom edge instead (half the measured height + a margin).
+    return LayoutBuilder(
+      builder: (context, box) => MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -1400,6 +1533,7 @@ class _RecentTileState extends State<_RecentTile> {
         child: Tooltip(
           message: '$name\n${widget.path}',
           waitDuration: const Duration(milliseconds: 400),
+          verticalOffset: box.maxHeight / 2 + 8,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.all(4),
@@ -1428,6 +1562,7 @@ class _RecentTileState extends State<_RecentTile> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
