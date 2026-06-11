@@ -84,6 +84,9 @@ class _OverlayAppState extends State<OverlayApp> {
       FrameStatsReporter(tag: 'overlay', sink: _perfSink);
   int _broadcastCount = 0;
   Timer? _broadcastRateTimer;
+  // F1-2 throttle state: quiet-window timer + a pending coalesced change.
+  Timer? _broadcastTimer;
+  bool _broadcastDirty = false;
 
   void _perfSink(String label) {
     CaptureBridge.perfMark(label).then((_) {}, onError: (_) {});
@@ -276,6 +279,7 @@ class _OverlayAppState extends State<OverlayApp> {
   void dispose() {
     _frames.detach();
     _broadcastRateTimer?.cancel();
+    _broadcastTimer?.cancel();
     _persistTimer?.cancel();
     _detachShared();
     _editor?.dispose();
@@ -286,9 +290,35 @@ class _OverlayAppState extends State<OverlayApp> {
   }
 
   /// Push the active tool + style to the other displays (skipped while applying
-  /// a remote update, so the two engines don't ping-pong).
+  /// a remote update, so the two engines don't ping-pong). Throttled: a slider
+  /// drag fires the style listener per tick (measured 40-58/sec), so sends are
+  /// leading+trailing coalesced to <=10/sec — a discrete change (tool switch,
+  /// single pick) still syncs instantly, and a drag's END state always lands
+  /// via the trailing send. The receiving display only mirrors the option bar
+  /// and drawing defaults, so a <=100ms lag is invisible.
   void _broadcastEditorState() {
     if (_applyingRemote) return;
+    if (_editor == null) return;
+    if (_broadcastTimer != null) {
+      _broadcastDirty = true;
+      return;
+    }
+    _sendEditorState();
+    _startBroadcastQuiet();
+  }
+
+  void _startBroadcastQuiet() {
+    _broadcastTimer = Timer(const Duration(milliseconds: 100), () {
+      _broadcastTimer = null;
+      if (!_broadcastDirty) return;
+      _broadcastDirty = false;
+      if (_editor == null) return; // capture ended while coalescing
+      _sendEditorState();
+      _startBroadcastQuiet();
+    });
+  }
+
+  void _sendEditorState() {
     final e = _editor;
     if (e == null) return;
     // Send the full DrawStyle JSON (same shape as persistence) so EVERY style
@@ -298,8 +328,8 @@ class _OverlayAppState extends State<OverlayApp> {
       'tool': e.tool.value.index,
       ...e.style.value.toJson(),
     });
-    // M6: count broadcasts per 1s window while they flow (a slider drag fires
-    // one per tick) — the mark itself is at most one channel call per second.
+    // M6: count actual sends per 1s window while they flow — the mark itself
+    // is at most one channel call per second.
     _broadcastCount++;
     _broadcastRateTimer ??= Timer(const Duration(seconds: 1), () {
       _perfSink('broadcastRate n=$_broadcastCount');
