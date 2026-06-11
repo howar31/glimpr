@@ -2858,16 +2858,27 @@ class _CropConfirmBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Chrome: follow the system appearance (the confirm dialog's card pair);
+    // the ✔/✖ colors stay, same lightness family as the accent so they read
+    // in both modes.
+    final dark =
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     return Material(
       type: MaterialType.transparency,
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: const Color(0xF21A2236),
+          color: dark ? const Color(0xF21A2236) : const Color(0xF2EEF2F7),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0x33FFFFFF)),
-          boxShadow: const [
-            BoxShadow(color: Color(0x66000000), blurRadius: 12, offset: Offset(0, 4)),
+          border: Border.all(
+            color: dark ? const Color(0x33FFFFFF) : const Color(0x66FFFFFF),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: dark ? const Color(0x66000000) : const Color(0x2E0F172A),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: Row(
