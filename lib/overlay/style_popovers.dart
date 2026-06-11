@@ -238,6 +238,7 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
     if (widget.onPickFromScreen == null) return _hexTextField();
     // Hex field + eyedropper as two equal-height (34px) bordered boxes so the row
     // reads as one unit; the TextField itself is borderless inside its box.
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     return Row(
       children: [
         Expanded(
@@ -247,7 +248,7 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: dark ? Colors.white24 : Colors.black26),
             ),
             child: _hexTextField(bordered: false),
           ),
@@ -259,8 +260,13 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
   }
 
   Widget _hexTextField({bool bordered = true}) {
-    const outline = OutlineInputBorder(
-      borderSide: BorderSide(color: Colors.white24),
+    // Resolve from the system appearance, mirroring the toolbar's palette —
+    // the popover glass is light in light mode, so white-on-dark won't read.
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fgDim = dark ? Colors.white54 : const Color(0xFF64748B);
+    final outline = OutlineInputBorder(
+      borderSide: BorderSide(color: dark ? Colors.white24 : Colors.black26),
     );
     return TextField(
       key: const ValueKey('hex-field'),
@@ -275,18 +281,19 @@ class _ColorPickerPopoverState extends State<ColorPickerPopover> {
         border: bordered ? outline : InputBorder.none,
         enabledBorder: bordered ? outline : InputBorder.none,
         focusedBorder: bordered
-            ? const OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.white54),
-              )
+            ? OutlineInputBorder(borderSide: BorderSide(color: fgDim))
             : InputBorder.none,
         hintText: '#RRGGBB or #AARRGGBB',
-        hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+        hintStyle: TextStyle(
+          color: dark ? Colors.white38 : const Color(0xFF94A3B8),
+          fontSize: 12,
+        ),
       ),
-      cursorColor: Colors.white,
-      style: const TextStyle(
+      cursorColor: fg,
+      style: TextStyle(
         fontFamily: 'monospace',
         fontSize: 13,
-        color: Colors.white,
+        color: fg,
       ),
       textInputAction: TextInputAction.done,
       onSubmitted: (text) {
@@ -449,6 +456,8 @@ class _EyedropperButtonState extends State<_EyedropperButton> {
 
   @override
   Widget build(BuildContext context) {
+    // Same appearance-resolved palette as the hex field beside it.
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     return Tooltip(
       message: 'Pick a colour from the screen',
       child: MouseRegion(
@@ -464,16 +473,22 @@ class _EyedropperButtonState extends State<_EyedropperButton> {
               height: 34,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: hover ? Colors.white12 : Colors.transparent,
+                color: hover
+                    ? (dark ? Colors.white12 : const Color(0x140F172A))
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: hover ? Colors.white54 : Colors.white24,
+                  color: hover
+                      ? (dark ? Colors.white54 : const Color(0xFF64748B))
+                      : (dark ? Colors.white24 : Colors.black26),
                 ),
               ),
               child: Icon(
                 Icons.colorize,
                 size: 18,
-                color: hover ? Colors.white : Colors.white70,
+                color: hover
+                    ? (dark ? Colors.white : const Color(0xFF14223B))
+                    : (dark ? Colors.white70 : const Color(0xFF475569)),
               ),
             ),
           ),

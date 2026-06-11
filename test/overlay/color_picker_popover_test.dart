@@ -37,4 +37,45 @@ void main() {
     await t.pump();
     expect(changed, const Color(0xFF0000FF));
   });
+
+  // The hex field + eyedropper button are chrome on the themed popover glass,
+  // so they follow the system appearance like every other popover.
+  testWidgets('hex field and eyedropper follow the system appearance',
+      (t) async {
+    Future<void> pump(Brightness b) async {
+      t.platformDispatcher.platformBrightnessTestValue = b;
+      addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ColorPickerPopover(
+            color: const Color(0xFFFF3B30),
+            recents: const [],
+            onChanged: (_) {},
+            onCommit: (_) {},
+            onPickFromScreen: () {},
+          ),
+        ),
+      ));
+    }
+
+    await pump(Brightness.dark);
+    expect(
+      t.widget<TextField>(find.byKey(const ValueKey('hex-field'))).style!.color,
+      Colors.white,
+    );
+    expect(
+      t.widget<Icon>(find.byIcon(Icons.colorize)).color,
+      Colors.white70,
+    );
+
+    await pump(Brightness.light);
+    expect(
+      t.widget<TextField>(find.byKey(const ValueKey('hex-field'))).style!.color,
+      const Color(0xFF14223B),
+    );
+    expect(
+      t.widget<Icon>(find.byIcon(Icons.colorize)).color,
+      const Color(0xFF475569),
+    );
+  });
 }
