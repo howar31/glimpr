@@ -96,6 +96,7 @@ void main() {
   late List<String> copied;
   late List<String> shared;
   late int liveSelects;
+  late int completes;
 
   RecordController build({FocusedWindowInfo? window}) {
     // Seed a temp save folder so the output-path leg never touches the real
@@ -110,8 +111,10 @@ void main() {
     copied = [];
     shared = [];
     liveSelects = 0;
+    completes = 0;
     return RecordController(
       beginLiveSelect: () async => liveSelects++,
+      complete: () => completes++,
       bridge: bridge,
       settings: Settings(store),
       focusedWindow: () async => window,
@@ -264,6 +267,49 @@ void main() {
       expect(s['mode'], kRecordModeDisplay);
       expect(s['displayId'], 3);
       expect(s['outputPath'], contains('DISPLAY'));
+    });
+
+    test('a relayed selection honours the one-shot toolbar overrides',
+        () async {
+      final rc = build();
+      await Settings(store).setRecordSystemAudio(false);
+      await Settings(store).setRecordShowCursor(true);
+      await rc.toggle(kRecordModeRegion);
+      bridge.selection({
+        'displayId': 1,
+        'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
+        'showsCursor': false,
+        'systemAudio': true,
+        'microphone': true,
+        'hevc': true,
+        'fps': 60,
+      });
+      await pumpEventQueue(times: 40);
+      final s = bridge.starts.single;
+      expect(s['showsCursor'], isFalse); // override wins over the setting
+      expect(s['systemAudio'], isTrue);
+      expect(s['microphone'], isTrue);
+      expect(s['hevc'], isTrue);
+      expect(s['fps'], 60);
+      // The persisted settings stayed untouched (one-shot only).
+      expect(await Settings(store).getRecordSystemAudio(), isFalse);
+    });
+
+    test('finishing plays the completion sound honouring the Sounds setting',
+        () async {
+      final rc = build();
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.mp4');
+      await pumpEventQueue(times: 20);
+      expect(completes, 1); // completion_sound defaults ON
+
+      await Settings(store).setCompletionSound(false);
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec2.mp4');
+      await pumpEventQueue(times: 20);
+      expect(completes, 1); // no second chime
     });
 
     test('a cancelled live-select returns to idle without starting', () async {

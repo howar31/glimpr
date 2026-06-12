@@ -100,10 +100,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
     // Open Editor reveals the warm editor natively (same as the hotkey's end
     // state) — keep the direct path, but hint with the hotkey's binding.
-    let open = menuItem(title: L.s("Open Editor…", "開啟編輯器…"), action: #selector(openImage), key: "")
+    let open = menuItem(title: L.s("Open Image Editor", "開啟圖片編輯器"), action: #selector(openImage), key: "")
     hintedItems.append((open, "global.openEditor"))
     menu.addItem(open)
-    menu.addItem(globalItem(L.s("Open Editor with Clipboard", "以剪貼簿開啟編輯器"), "global.openEditorClipboard"))
+    menu.addItem(globalItem(L.s("Open Image Editor with Clipboard", "以剪貼簿開啟圖片編輯器"), "global.openEditorClipboard"))
     let recentItem = NSMenuItem(title: L.s("Open Recent", "開啟最近項目"), action: nil, keyEquivalent: "")
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
@@ -182,21 +182,75 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   }
 
   /// Recording state: red record icon + swap the start items for Stop/Abort.
+  /// Recording state: the BRAND icon stays (owner: a bare red dot reads as
+  /// "which app is this?") inside a fixed red rounded frame, while the glyph
+  /// itself breathes red <-> the bar's label tone (white on a dark menu bar,
+  /// near-black on a light one - a pure white phase would vanish there).
+  /// Animated by swapping the button image at 10 Hz (negligible cost, runs
+  /// only while recording). Also swaps the start items for Stop/Abort.
   func setRecording(_ active: Bool) {
     guard active != isRecordingState else { return }
     isRecordingState = active
     if active {
-      let rec = NSImage(
-        systemSymbolName: "record.circle.fill",
-        accessibilityDescription: "Recording")
-      rec?.isTemplate = false
-      item.button?.image =
-        rec?.withSymbolConfiguration(.init(paletteColors: [.systemRed])) ?? rec
+      recordingPhase = 0
+      let timer = Timer.scheduledTimer(
+        withTimeInterval: 0.1, repeats: true
+      ) { [weak self] _ in
+        guard let self else { return }
+        self.recordingPhase += 0.1
+        self.item.button?.image = self.recordingIcon(phase: self.recordingPhase)
+      }
+      RunLoop.main.add(timer, forMode: .common)
+      recordingTimer = timer
+      item.button?.image = recordingIcon(phase: 0)
     } else {
+      recordingTimer?.invalidate()
+      recordingTimer = nil
       item.button?.image = normalImage
     }
     for mi in recordControlItems { mi.isHidden = !active }
     for mi in recordStartItems { mi.isHidden = active }
+  }
+
+  private var recordingTimer: Timer?
+  private var recordingPhase: Double = 0
+
+  /// Fixed red rounded frame + the brand glyph tinted along a ~1.6 s
+  /// red <-> label-tone breathing curve.
+  private func recordingIcon(phase: Double) -> NSImage {
+    let size = normalImage?.size ?? NSSize(width: 18, height: 18)
+    let t = 0.5 - 0.5 * cos(phase * 2 * .pi / 1.6) // 0..1..0, 1.6 s period
+    let dark = item.button?.effectiveAppearance
+      .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    let tone: CGFloat = dark ? 1.0 : 0.15
+    let red = NSColor.systemRed.usingColorSpace(.sRGB) ?? NSColor.systemRed
+    let glyphTint = NSColor(
+      srgbRed: red.redComponent + (tone - red.redComponent) * t,
+      green: red.greenComponent + (tone - red.greenComponent) * t,
+      blue: red.blueComponent + (tone - red.blueComponent) * t,
+      alpha: 1)
+    let mark = normalImage
+    let img = NSImage(size: size, flipped: false) { rect in
+      // Fixed red frame around the icon.
+      let frame = NSBezierPath(
+        roundedRect: rect.insetBy(dx: 0.75, dy: 0.75), xRadius: 4, yRadius: 4)
+      frame.lineWidth = 1.5
+      NSColor.systemRed.setStroke()
+      frame.stroke()
+      // The brand glyph, breathing, inset inside the frame.
+      if let mark, let tinted = mark.copy() as? NSImage {
+        tinted.lockFocus()
+        glyphTint.set()
+        NSRect(origin: .zero, size: tinted.size).fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        tinted.isTemplate = false
+        tinted.draw(in: rect.insetBy(dx: 3, dy: 3), from: .zero,
+                    operation: .sourceOver, fraction: 1)
+      }
+      return true
+    }
+    img.isTemplate = false
+    return img
   }
 
   @objc private func recordStop() { onRecordStop?() }

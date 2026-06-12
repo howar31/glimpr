@@ -92,6 +92,9 @@ class EditorCore extends StatefulWidget {
   /// ignored), the loupe samples live pixels, the toolbar shows the record
   /// caption.
   final bool recordMode;
+
+  /// One-shot per-recording overrides rendered in the record-mode toolbar.
+  final RecordOverrides? recordOverrides;
   // Capture layer stack caption below the toolbar (overlay only; null =
   // hidden); accent marks the transient "top layer was replaced" notice.
   final String? layerCaption;
@@ -106,6 +109,7 @@ class EditorCore extends StatefulWidget {
     this.hud = const HudConfig(),
     this.pinMode = false,
     this.recordMode = false,
+    this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
   });
@@ -538,6 +542,8 @@ class _EditorCoreState extends State<EditorCore> {
       widget.host.size.height - 60, // dy = toolbar BOTTOM; options grow upward
     );
     _active = widget.host.startsActive; // launch display starts active
+    // Live-select: keep the loupe's pixels live under a stationary cursor.
+    if (widget.host.liveSelect) _startLiveLoupeTimer();
     _overCanvas = widget.host.startsActive; // pointer starts over canvas
     _windows = widget.host.snapWindows;
     c.document.addListener(_rebuild);
@@ -591,6 +597,7 @@ class _EditorCoreState extends State<EditorCore> {
     _textFocus.dispose();
     _marchTimer?.cancel();
     _march.dispose();
+    _liveLoupeTimer?.cancel();
     _liveLoupeImg?.dispose();
     super.dispose();
   }
@@ -2235,6 +2242,19 @@ class _EditorCoreState extends State<EditorCore> {
   ui.Image? _liveLoupeImg;
   Offset? _liveLoupeAt;
   bool _liveLoupeFetching = false;
+  // LIVE refresh: the native stream runs at 30 fps regardless; this timer
+  // re-samples the patch under a STATIONARY cursor so the loupe tracks the
+  // moving screen, not just the moving mouse. Tiny: span²×4 bytes (~576 B
+  // at the default span) per tick, only while the live session is up.
+  Timer? _liveLoupeTimer;
+
+  void _startLiveLoupeTimer() {
+    _liveLoupeTimer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      if (!_active || !_overCanvas) return;
+      _liveLoupeAt = null; // force a re-fetch at the current cursor
+      _maybeFetchLiveLoupe();
+    });
+  }
 
   void _maybeFetchLiveLoupe() {
     final fetch = widget.host.liveLoupeSample;
@@ -2363,6 +2383,21 @@ class _EditorCoreState extends State<EditorCore> {
         child: const IgnorePointer(
           child: Icon(
             Icons.push_pin,
+            size: 18,
+            color: Color(0xFFFFFFFF),
+            shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
+          ),
+        ),
+      );
+
+  /// The record-mode aim badge (videocam beside the reticle) — the pin
+  /// badge's language for the recording live-select session.
+  Widget _recordBadge(Offset at) => Positioned(
+        left: at.dx + 11,
+        top: at.dy + 11,
+        child: const IgnorePointer(
+          child: Icon(
+            Icons.videocam,
             size: 18,
             color: Color(0xFFFFFFFF),
             shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
@@ -2821,6 +2856,12 @@ class _EditorCoreState extends State<EditorCore> {
                     !_eyedropper &&
                     c.tool.value == ToolKind.crop)
                   _pinBadge(_cursor),
+                // Record mode aims with the same badge language (videocam).
+                if (widget.recordMode &&
+                    showHud &&
+                    !_interactive &&
+                    c.tool.value == ToolKind.crop)
+                  _recordBadge(_cursor),
                 // Gesture layer: the overlay keeps it here (full display, box ==
                 // logical 1:1). For the editor it is lifted to a sibling scoped to
                 // the on-screen image rect (see the return below). The stable key
@@ -2909,6 +2950,7 @@ class _EditorCoreState extends State<EditorCore> {
                           showCursorToggle: widget.host.cursorImage != null,
                           pinMode: widget.pinMode,
                           recordMode: widget.recordMode,
+                          recordOverrides: widget.recordOverrides,
                           layerCaption: widget.layerCaption,
                           layerAccent: widget.layerAccent,
                         ),

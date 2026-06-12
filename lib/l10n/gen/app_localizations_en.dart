@@ -139,7 +139,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionAfterCapture => 'After screenshot';
 
   @override
-  String get settingsSectionAfterEditorDone => 'After editor\'s Done';
+  String get settingsSectionAfterEditorDone => 'After Image Editor\'s Done';
 
   @override
   String get settingsSectionSounds => 'Sounds';
@@ -174,11 +174,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFlowShowInFinderHint => 'Reveal the saved file in Finder';
 
   @override
-  String get settingsFlowOpenInEditor => 'Open in editor';
+  String get settingsFlowOpenInEditor => 'Open in Image Editor';
 
   @override
   String get settingsFlowOpenInEditorHint =>
-      'Open the result in the image editor for further work';
+      'Open the result in the Image Editor for further work';
 
   @override
   String get settingsFlowShareSheet => 'Share sheet';
@@ -204,7 +204,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFlowEditorCaption =>
-      'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.';
+      'Runs when the Image Editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.';
 
   @override
   String get settingsFlowCaptureCaptionEmpty =>
@@ -212,7 +212,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFlowEditorCaptionEmpty =>
-      'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.';
+      'Runs when the Image Editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.';
 
   @override
   String get settingsSoundShutter => 'Shutter';
@@ -579,13 +579,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionCaptureLastRegionHint => 'Repeat the last screenshot region';
 
   @override
-  String get actionOpenEditor => 'Open Editor';
+  String get actionOpenEditor => 'Open Image Editor';
 
   @override
   String get actionOpenEditorHint => 'Open the Image Editor';
 
   @override
-  String get actionOpenEditorClipboard => 'Open Editor with Clipboard';
+  String get actionOpenEditorClipboard => 'Open Image Editor with Clipboard';
 
   @override
   String get actionOpenEditorClipboardHint =>
@@ -642,7 +642,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolPin => 'Pin';
 
   @override
-  String get toolCropPinCombined => 'Crop / Pin';
+  String get toolRecord => 'Record';
+
+  @override
+  String get toolCropPinCombined => 'Crop / Pin / Record';
 
   @override
   String get toolBlur => 'Blur';
@@ -689,6 +692,21 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get toolbarRecordCaption =>
       'Record mode: the selection starts a recording';
+
+  @override
+  String get toolbarRecordCodec => 'Codec (this recording)';
+
+  @override
+  String get toolbarRecordFps => 'Frame rate (this recording)';
+
+  @override
+  String get toolbarRecordCursor => 'Show cursor (this recording)';
+
+  @override
+  String get toolbarRecordSystemAudio => 'System audio (this recording)';
+
+  @override
+  String get toolbarRecordMicrophone => 'Microphone (this recording)';
 
   @override
   String get toolbarMousePointerShown => 'Mouse pointer: shown';

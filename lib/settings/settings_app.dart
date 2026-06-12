@@ -137,6 +137,11 @@ class _SettingsAppState extends State<SettingsApp>
     final nowRecording = _activeRecorders > 0;
     if (nowRecording && !wasRecording) widget.hotkeyService?.pauseAll();
     if (!nowRecording && wasRecording) widget.hotkeyService?.resumeAll();
+    if (nowRecording != wasRecording) {
+      // Also pause the NATIVE window-level interceptors (⌘W close-window key
+      // equivalent) so combos like ⌘W / ⌘⇧W are recordable too.
+      _roleChannel.invokeMethod('setShortcutRecording', nowRecording);
+    }
   }
 
   Settings get _s => widget.settings;
@@ -797,28 +802,6 @@ class _SettingsAppState extends State<SettingsApp>
             ),
           ),
         ]),
-        const SizedBox(height: 15),
-        SectionLabel(_l.settingsSectionAfterRecording,
-            icon: Icons.flag_outlined),
-        GlassCard.rows([
-          SettingRow(
-            title: _l.settingsFlowCopyFilePath,
-            hint: _l.settingsFlowCopyFilePathHint,
-            trailing: _recordingFlowToggle(FlowAction.copyPath),
-          ),
-          SettingRow(
-            divider: true,
-            title: _l.settingsFlowShowInFinder,
-            hint: _l.settingsFlowShowInFinderHint,
-            trailing: _recordingFlowToggle(FlowAction.showInFinder),
-          ),
-          SettingRow(
-            divider: true,
-            title: _l.settingsFlowShareSheet,
-            hint: _l.settingsFlowShareSheetHint,
-            trailing: _recordingFlowToggle(FlowAction.shareSheet),
-          ),
-        ]),
       ],
     ];
   }
@@ -841,6 +824,38 @@ class _SettingsAppState extends State<SettingsApp>
       SectionLabel(_l.settingsSectionAfterCapture, icon: Icons.layers_outlined),
       GlassCard.rows(_flowRows(capture: true)),
       _flowCaption(t, capture: true),
+      const SizedBox(height: 15),
+      // After-recording flow: lives HERE with its sibling completion flows
+      // (Workflow = everything that runs when something finishes); the
+      // Recording pane keeps only how a recording is made (format/behaviour).
+      SectionLabel(_l.settingsSectionAfterRecording, icon: Icons.flag_outlined),
+      if (!_recordAvailable)
+        GlassCard.padded(
+          child: Text(
+            _l.settingsRecordingUnavailable,
+            style: GlimprType.sansStyle(12.5, 400, t.fg3),
+          ),
+        )
+      else
+        GlassCard.rows([
+          SettingRow(
+            title: _l.settingsFlowCopyFilePath,
+            hint: _l.settingsFlowCopyFilePathHint,
+            trailing: _recordingFlowToggle(FlowAction.copyPath),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsFlowShowInFinder,
+            hint: _l.settingsFlowShowInFinderHint,
+            trailing: _recordingFlowToggle(FlowAction.showInFinder),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsFlowShareSheet,
+            hint: _l.settingsFlowShareSheetHint,
+            trailing: _recordingFlowToggle(FlowAction.shareSheet),
+          ),
+        ]),
       const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionAfterEditorDone,
           icon: Icons.check_circle_outline),
@@ -1976,10 +1991,11 @@ class _LoupePreviewState extends State<_LoupePreview> {
   }
 }
 
-/// The Crop / Pin row's glyph: the standard 18px crop icon with a small pin
-/// badge riding its bottom-right corner — the toolbar's shortcut-badge
-/// language. The crisp zero-blur outline (8 offsets, toolbar badgeOutline
-/// colors) separates the badge from the crop strokes it overlaps.
+/// The Crop / Pin / Record row's glyph: the standard 18px crop icon with a
+/// small pin badge riding its bottom-right corner and a small videocam badge
+/// at its top-right — the toolbar's shortcut-badge language, one badge per
+/// alternate context. The crisp zero-blur outline (8 offsets, toolbar
+/// badgeOutline colors) separates the badges from the crop strokes.
 class _CropPinGlyph extends StatelessWidget {
   const _CropPinGlyph({required this.t});
   final GlimprTokens t;
@@ -1992,6 +2008,28 @@ class _CropPinGlyph extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Icon(Icons.crop, size: 18, color: t.accentFg),
+        Positioned(
+          right: -4,
+          top: -3,
+          child: Icon(
+            Icons.videocam,
+            size: 11,
+            color: t.accentFg,
+            shadows: [
+              for (final o in const [
+                Offset(0.7, 0),
+                Offset(-0.7, 0),
+                Offset(0, 0.7),
+                Offset(0, -0.7),
+                Offset(0.7, 0.7),
+                Offset(0.7, -0.7),
+                Offset(-0.7, 0.7),
+                Offset(-0.7, -0.7),
+              ])
+                Shadow(color: outline, offset: o),
+            ],
+          ),
+        ),
         Positioned(
           right: -4,
           bottom: -3,

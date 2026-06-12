@@ -152,9 +152,11 @@ final class RecordingChrome {
               screen.visibleFrame.maxX - stripSize.width - 4)
       origin = NSPoint(x: x, y: y)
     } else {
+      // Display mode: bottom-center, where the selection toolbar lives
+      // (owner: same neighborhood as the overlay toolbar), still draggable.
       origin = NSPoint(
-        x: screen.visibleFrame.maxX - stripSize.width - 16,
-        y: screen.visibleFrame.maxY - stripSize.height - 16)
+        x: screen.frame.midX - stripSize.width / 2,
+        y: screen.frame.minY + 60)
       strip.isMovableByWindowBackground = true
     }
     strip.setFrameOrigin(origin)
@@ -188,19 +190,22 @@ final class RecordingChrome {
   }
 
   private func buildStrip() -> NSWindow {
-    let height: CGFloat = 34
-    let dot = NSView(frame: NSRect(x: 10, y: (height - 8) / 2, width: 8, height: 8))
+    let height: CGFloat = 36
+    let dot = NSView(frame: NSRect(x: 12, y: (height - 8) / 2, width: 8, height: 8))
     dot.wantsLayer = true
     dot.layer?.backgroundColor = NSColor.systemRed.cgColor
     dot.layer?.cornerRadius = 4
 
-    for label in [timerLabel, sizeLabel] {
-      label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-      label.textColor = .white
-      label.sizeToFit()
-    }
+    // System label colors follow the effective appearance (design rule: all
+    // chrome respects light/dark; the red dot is semantic and stays).
+    timerLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    timerLabel.textColor = .labelColor
+    sizeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+    sizeLabel.textColor = .secondaryLabelColor
     timerLabel.stringValue = "00:00"
     sizeLabel.stringValue = "0.0 MB"
+    timerLabel.sizeToFit()
+    sizeLabel.sizeToFit()
 
     let stop = NSButton(
       title: L.s("Stop", "停止"), target: self, action: #selector(stopTapped))
@@ -213,7 +218,7 @@ final class RecordingChrome {
     }
 
     // Manual row layout: dot · timer · size · stop · abort.
-    var x: CGFloat = 26
+    var x: CGFloat = 28
     func place(_ v: NSView) {
       var f = v.frame
       f.origin = NSPoint(x: x, y: (height - f.height) / 2)
@@ -226,14 +231,21 @@ final class RecordingChrome {
     place(abort)
 
     let w = borderlessWindow(
-      frame: NSRect(x: 0, y: 0, width: x, height: height), level: .statusBar)
-    let content = NSView(frame: w.frame)
-    content.wantsLayer = true
-    content.layer?.backgroundColor =
-      NSColor.black.withAlphaComponent(0.75).cgColor
-    content.layer?.cornerRadius = 8
-    for v in [dot, timerLabel, sizeLabel, stop, abort] { content.addSubview(v) }
-    w.contentView = content
+      frame: NSRect(x: 0, y: 0, width: x + 2, height: height), level: .statusBar)
+    // Glass chrome (the app's Aurora design language, same recipe as the
+    // settings window's vibrancy): a behind-window NSVisualEffectView that
+    // follows the SYSTEM light/dark appearance automatically.
+    let glass = NSVisualEffectView(frame: w.frame)
+    glass.material = .hudWindow
+    glass.blendingMode = .behindWindow
+    glass.state = .active
+    glass.wantsLayer = true
+    glass.layer?.cornerRadius = 9
+    glass.layer?.masksToBounds = true
+    glass.layer?.borderWidth = 1
+    glass.layer?.borderColor = NSColor.separatorColor.cgColor
+    for v in [dot, timerLabel, sizeLabel, stop, abort] { glass.addSubview(v) }
+    w.contentView = glass
     return w
   }
 

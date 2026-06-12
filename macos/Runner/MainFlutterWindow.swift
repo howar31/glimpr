@@ -27,6 +27,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var imageEditorReady = false
   // Reached from AppDelegate.application(_:open:) to route external opens.
   static weak var shared: MainFlutterWindow?
+  // True while a Settings shortcut recorder is capturing — pauses the ⌘W
+  // window key-equivalent interception so ⌘W-family combos are recordable.
+  var isShortcutRecording = false
 
   // This window lives on-screen at alpha 0 (warm control engine) and only shows
   // as the Settings window when revealed. While invisible it must NOT be
@@ -96,6 +99,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         result(nil)
       // Open-Editor global hotkeys (control engine → reveal the warm editor).
       case "openImageEditor": self?.openImageEditor(); result(nil)
+      // The Shortcuts pane is recording a combo: window-level key-equivalent
+      // interception (⌘W close) must stand down so the combo is recordable.
+      case "setShortcutRecording":
+        self?.isShortcutRecording = (call.arguments as? Bool) ?? false
+        result(nil)
       case "openImageEditorClipboard": self?.openImageEditorClipboard(); result(nil)
       // Settings > Advanced: relaunch the app — spawn a detached watcher that
       // re-opens the bundle once this process exits, then terminate normally
@@ -586,7 +594,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   // swallow the in-Flutter Cmd-W shortcut, so intercept the key equivalent at the
   // window — ahead of the FlutterView — whenever settings is actually visible.
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    if alphaValue > 0,
+    if alphaValue > 0, !isShortcutRecording,
       event.modifierFlags.contains(.command),
       event.charactersIgnoringModifiers?.lowercased() == "w"
     {

@@ -9,6 +9,7 @@ import '../capture/last_region.dart';
 import '../output/deliver.dart' show effectiveSaveDir;
 import '../output/filename.dart';
 import '../output/flow.dart';
+import '../output/sounds.dart';
 import '../settings/settings.dart';
 import 'record_bridge.dart';
 
@@ -41,6 +42,7 @@ class RecordController {
     Future<void> Function(String path)? shareFn,
     Future<void> Function()? beginLiveSelect,
     Future<void> Function()? cancelLiveSelect,
+    void Function()? complete,
     DateTime Function()? now,
   })  : _bridge = bridge ?? RecordBridge(),
         _settings = settings ?? Settings.instance,
@@ -56,6 +58,7 @@ class RecordController {
             (() => CaptureBridge().beginCapture(liveSelect: true)),
         _cancelLiveSelect =
             cancelLiveSelect ?? (() => CaptureBridge().dismissOverlay()),
+        _complete = complete ?? (() => playComplete()),
         _now = now ?? DateTime.now {
     _bridge.registerHandlers(
       onStarted: _onStarted,
@@ -76,6 +79,7 @@ class RecordController {
   final Future<void> Function(String) _share;
   final Future<void> Function() _beginLiveSelect;
   final Future<void> Function() _cancelLiveSelect;
+  final void Function() _complete;
   final DateTime Function() _now;
 
   RecordPhase _phase = RecordPhase.idle;
@@ -221,11 +225,12 @@ class RecordController {
         displayId: displayId,
         rect: rect,
         windowId: windowId,
-        fps: rec.fps,
-        hevc: rec.hevc,
-        showsCursor: rec.showCursor,
-        systemAudio: rec.systemAudio,
-        microphone: rec.microphone,
+        // The live-select toolbar's one-shot overrides win over the settings.
+        fps: (a['fps'] as num?)?.toInt() ?? rec.fps,
+        hevc: (a['hevc'] as bool?) ?? rec.hevc,
+        showsCursor: (a['showsCursor'] as bool?) ?? rec.showCursor,
+        systemAudio: (a['systemAudio'] as bool?) ?? rec.systemAudio,
+        microphone: (a['microphone'] as bool?) ?? rec.microphone,
       );
     } catch (e) {
       _phase = RecordPhase.idle;
@@ -244,6 +249,9 @@ class RecordController {
   Future<void> _onFinished(String path) async {
     _phase = RecordPhase.idle;
     if (path.isEmpty) return;
+    // No shutter at recording start (owner design); the COMPLETION sound
+    // marks a finished recording, honouring the shared Sounds setting.
+    if ((await _settings.loadCapture()).completionSound) _complete();
     final flow = (await _settings.loadRecording()).flow;
     if (flow.contains(FlowAction.copyPath)) {
       try {

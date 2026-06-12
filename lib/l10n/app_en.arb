@@ -160,7 +160,7 @@
   "@settingsSectionAfterCapture": {
     "description": "Settings > Workflow: After capture section label"
   },
-  "settingsSectionAfterEditorDone": "After editor's Done",
+  "settingsSectionAfterEditorDone": "After Image Editor's Done",
   "@settingsSectionAfterEditorDone": {
     "description": "Settings > Workflow: After editor's Done section label"
   },
@@ -204,11 +204,11 @@
   "@settingsFlowShowInFinderHint": {
     "description": "Settings > Workflow: show-in-Finder flow action hint (save is enabled)"
   },
-  "settingsFlowOpenInEditor": "Open in editor",
+  "settingsFlowOpenInEditor": "Open in Image Editor",
   "@settingsFlowOpenInEditor": {
     "description": "Settings > Workflow: open-in-editor flow action row title"
   },
-  "settingsFlowOpenInEditorHint": "Open the result in the image editor for further work",
+  "settingsFlowOpenInEditorHint": "Open the result in the Image Editor for further work",
   "@settingsFlowOpenInEditorHint": {
     "description": "Settings > Workflow: open-in-editor flow action row hint"
   },
@@ -236,7 +236,7 @@
   "@settingsFlowCaptureCaption": {
     "description": "Settings > Workflow: caption below the After capture flow card (non-empty state)"
   },
-  "settingsFlowEditorCaption": "Runs when the editor's Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.",
+  "settingsFlowEditorCaption": "Runs when the Image Editor's Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.",
   "@settingsFlowEditorCaption": {
     "description": "Settings > Workflow: caption below the After editor's Done flow card (non-empty state)"
   },
@@ -244,7 +244,7 @@
   "@settingsFlowCaptureCaptionEmpty": {
     "description": "Settings > Workflow: caption below the After capture flow card when no actions are selected"
   },
-  "settingsFlowEditorCaptionEmpty": "Runs when the editor's Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.",
+  "settingsFlowEditorCaptionEmpty": "Runs when the Image Editor's Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.",
   "@settingsFlowEditorCaptionEmpty": {
     "description": "Settings > Workflow: caption below the After editor's Done flow card when no actions are selected"
   },
@@ -700,7 +700,7 @@
   "@actionCaptureLastRegionHint": {
     "description": "Global action hint: capture last region"
   },
-  "actionOpenEditor": "Open Editor",
+  "actionOpenEditor": "Open Image Editor",
   "@actionOpenEditor": {
     "description": "Global action label: open editor"
   },
@@ -708,7 +708,7 @@
   "@actionOpenEditorHint": {
     "description": "Global action hint: open editor"
   },
-  "actionOpenEditorClipboard": "Open Editor with Clipboard",
+  "actionOpenEditorClipboard": "Open Image Editor with Clipboard",
   "@actionOpenEditorClipboard": {
     "description": "Global action label: open editor with clipboard"
   },
@@ -773,10 +773,14 @@
     "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
   },
   "toolPin": "Pin",
+  "toolRecord": "Record",
+  "@toolRecord": {
+    "description": "Tool name for the crop slot in a recording live-select session (toolbar tooltip; part of the combined Shortcuts row title)"
+  },
   "@toolPin": {
     "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
   },
-  "toolCropPinCombined": "Crop / Pin",
+  "toolCropPinCombined": "Crop / Pin / Record",
   "@toolCropPinCombined": {
     "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
   },
@@ -836,6 +840,26 @@
   "toolbarRecordCaption": "Record mode: the selection starts a recording",
   "@toolbarRecordCaption": {
     "description": "Overlay toolbar caption during a recording live-select session"
+  },
+  "toolbarRecordCodec": "Codec (this recording)",
+  "@toolbarRecordCodec": {
+    "description": "Record-mode toolbar: one-shot codec chip tooltip"
+  },
+  "toolbarRecordFps": "Frame rate (this recording)",
+  "@toolbarRecordFps": {
+    "description": "Record-mode toolbar: one-shot frame-rate chip tooltip"
+  },
+  "toolbarRecordCursor": "Show cursor (this recording)",
+  "@toolbarRecordCursor": {
+    "description": "Record-mode toolbar: one-shot cursor override toggle tooltip"
+  },
+  "toolbarRecordSystemAudio": "System audio (this recording)",
+  "@toolbarRecordSystemAudio": {
+    "description": "Record-mode toolbar: one-shot system-audio override toggle tooltip"
+  },
+  "toolbarRecordMicrophone": "Microphone (this recording)",
+  "@toolbarRecordMicrophone": {
+    "description": "Record-mode toolbar: one-shot microphone override toggle tooltip"
   },
   "@toolbarPinCaption": {
     "description": "Toolbar: caption below the bar when pin mode is active"

@@ -341,7 +341,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: After editor's Done section label
   ///
   /// In en, this message translates to:
-  /// **'After editor\'s Done'**
+  /// **'After Image Editor\'s Done'**
   String get settingsSectionAfterEditorDone;
 
   /// Settings > Workflow: Sounds section label
@@ -407,13 +407,13 @@ abstract class AppLocalizations {
   /// Settings > Workflow: open-in-editor flow action row title
   ///
   /// In en, this message translates to:
-  /// **'Open in editor'**
+  /// **'Open in Image Editor'**
   String get settingsFlowOpenInEditor;
 
   /// Settings > Workflow: open-in-editor flow action row hint
   ///
   /// In en, this message translates to:
-  /// **'Open the result in the image editor for further work'**
+  /// **'Open the result in the Image Editor for further work'**
   String get settingsFlowOpenInEditorHint;
 
   /// Settings > Workflow: share-sheet flow action row title
@@ -455,7 +455,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: caption below the After editor's Done flow card (non-empty state)
   ///
   /// In en, this message translates to:
-  /// **'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.'**
+  /// **'Runs when the Image Editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.'**
   String get settingsFlowEditorCaption;
 
   /// Settings > Workflow: caption below the After capture flow card when no actions are selected
@@ -467,7 +467,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: caption below the After editor's Done flow card when no actions are selected
   ///
   /// In en, this message translates to:
-  /// **'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.'**
+  /// **'Runs when the Image Editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.'**
   String get settingsFlowEditorCaptionEmpty;
 
   /// Settings > Workflow > Sounds: shutter sound toggle title
@@ -1139,7 +1139,7 @@ abstract class AppLocalizations {
   /// Global action label: open editor
   ///
   /// In en, this message translates to:
-  /// **'Open Editor'**
+  /// **'Open Image Editor'**
   String get actionOpenEditor;
 
   /// Global action hint: open editor
@@ -1151,7 +1151,7 @@ abstract class AppLocalizations {
   /// Global action label: open editor with clipboard
   ///
   /// In en, this message translates to:
-  /// **'Open Editor with Clipboard'**
+  /// **'Open Image Editor with Clipboard'**
   String get actionOpenEditorClipboard;
 
   /// Global action hint: open editor with clipboard
@@ -1250,10 +1250,16 @@ abstract class AppLocalizations {
   /// **'Pin'**
   String get toolPin;
 
+  /// Tool name for the crop slot in a recording live-select session (toolbar tooltip; part of the combined Shortcuts row title)
+  ///
+  /// In en, this message translates to:
+  /// **'Record'**
+  String get toolRecord;
+
   /// Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)
   ///
   /// In en, this message translates to:
-  /// **'Crop / Pin'**
+  /// **'Crop / Pin / Record'**
   String get toolCropPinCombined;
 
   /// Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)
@@ -1345,6 +1351,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Record mode: the selection starts a recording'**
   String get toolbarRecordCaption;
+
+  /// Record-mode toolbar: one-shot codec chip tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Codec (this recording)'**
+  String get toolbarRecordCodec;
+
+  /// Record-mode toolbar: one-shot frame-rate chip tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Frame rate (this recording)'**
+  String get toolbarRecordFps;
+
+  /// Record-mode toolbar: one-shot cursor override toggle tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Show cursor (this recording)'**
+  String get toolbarRecordCursor;
+
+  /// Record-mode toolbar: one-shot system-audio override toggle tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'System audio (this recording)'**
+  String get toolbarRecordSystemAudio;
+
+  /// Record-mode toolbar: one-shot microphone override toggle tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone (this recording)'**
+  String get toolbarRecordMicrophone;
 
   /// Toolbar: cursor-toggle tooltip when the captured cursor layer is visible
   ///

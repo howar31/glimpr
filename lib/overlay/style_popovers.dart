@@ -1403,3 +1403,67 @@ class RadiusPickerPopover extends StatelessWidget {
     );
   }
 }
+
+/// A minimal text choice list (the record-mode codec / fps pickers) — the
+/// line-style picker's row idiom (selected = accent + check) without a
+/// preview column.
+class ChoiceListPopover<T> extends StatelessWidget {
+  const ChoiceListPopover({
+    super.key,
+    required this.selected,
+    required this.options,
+    required this.onSelected,
+  });
+
+  final T selected;
+  final List<(T, String)> options;
+  final ValueChanged<T> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    const accent = GlimprTokens.accent;
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (value, label) in options)
+            InkWell(
+              onTap: () => onSelected(value),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: value == selected ? accent : fg,
+                          fontSize: 13,
+                          fontWeight: value == selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 22,
+                      child: value == selected
+                          ? const Icon(Icons.check, size: 16, color: accent)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

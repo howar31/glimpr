@@ -55,6 +55,9 @@ class EditorToolbar extends StatelessWidget {
   // tools are hidden (nothing is exported, drawings would be discarded) and
   // a caption below the bar names the mode.
   final bool recordMode;
+  // One-shot per-recording overrides (cursor / system audio / microphone),
+  // shown as toggles beside the region tool in record mode.
+  final RecordOverrides? recordOverrides;
   // Capture layer stack caption below the bar (null = hidden); accent marks
   // the transient "top layer was replaced" notice. Owner design: stacking
   // must always be visible, including the replace-at-cap case.
@@ -71,6 +74,7 @@ class EditorToolbar extends StatelessWidget {
     this.showCursorToggle = false,
     this.pinMode = false,
     this.recordMode = false,
+    this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
   });
@@ -102,6 +106,7 @@ class EditorToolbar extends StatelessWidget {
             controller: controller,
             onPtEditingDone: onPtEditingDone,
             editorBindings: editorBindings,
+            recordOverrides: recordMode ? recordOverrides : null,
           ),
           const SizedBox(height: 6),
           // Main tool row LAST = the fixed bottom anchor.
@@ -132,19 +137,41 @@ class EditorToolbar extends StatelessWidget {
                   _ToolButton(
                     controller: controller,
                     kind: kind,
-                    // Pin mode: the region tool IS the pin region selector
-                    // (icon + name follow; same tool, same key).
-                    icon: pinMode && kind == ToolKind.crop
+                    // Pin / record mode: the region tool IS that mode's
+                    // selector (icon + name follow; same tool, same key).
+                    icon: kind == ToolKind.crop && pinMode
                         ? Icons.push_pin
-                        : icon,
+                        : (kind == ToolKind.crop && recordMode
+                            ? Icons.videocam
+                            : icon),
                     // The tool's name, worded identically to its Settings >
                     // Shortcuts row (same toolLabel source).
-                    tooltip: toolLabel(l10n, kind, pinMode: pinMode),
+                    tooltip: toolLabel(l10n, kind,
+                        pinMode: pinMode, recordMode: recordMode),
                     // Badge = the tool's current binding label (e.g. "C", "1",
                     // "⌘B"); null/unbound => no badge.
                     shortcut: editorBindings[kEditorToolActionKey[kind]]
                         ?.label(),
                   ),
+                // Record-mode one-shot overrides (this take only; settings
+                // untouched): cursor / system audio / microphone.
+                if (recordMode && recordOverrides != null) ...[
+                  _RecordToggle(
+                    value: recordOverrides!.showCursor,
+                    icon: Icons.mouse,
+                    tooltip: l10n.toolbarRecordCursor,
+                  ),
+                  _RecordToggle(
+                    value: recordOverrides!.systemAudio,
+                    icon: Icons.volume_up,
+                    tooltip: l10n.toolbarRecordSystemAudio,
+                  ),
+                  _RecordToggle(
+                    value: recordOverrides!.microphone,
+                    icon: Icons.mic,
+                    tooltip: l10n.toolbarRecordMicrophone,
+                  ),
+                ],
                 // Mouse-pointer toggle (overlay, when the capture carried a
                 // cursor) — not a tool: shows/hides the captured cursor layer.
                 if (showCursorToggle) _CursorToggle(controller: controller),
@@ -435,6 +462,63 @@ class _ToolButton extends StatelessWidget {
 
 /// Mouse-pointer toggle: shows/hides the captured cursor layer (overlay only).
 /// Accent-tinted when on, like an active tool.
+/// One-shot per-recording overrides surfaced in the record-mode toolbar:
+/// seeded from the Recording settings, mutated by the toolbar toggles, read
+/// at confirm — the persisted settings are NEVER written (owner design:
+/// override this take only).
+class RecordOverrides {
+  RecordOverrides({
+    required bool showCursor,
+    required bool systemAudio,
+    required bool microphone,
+    required bool hevc,
+    required int fps,
+  })  : showCursor = ValueNotifier(showCursor),
+        systemAudio = ValueNotifier(systemAudio),
+        microphone = ValueNotifier(microphone),
+        hevc = ValueNotifier(hevc),
+        fps = ValueNotifier(fps);
+
+  final ValueNotifier<bool> showCursor;
+  final ValueNotifier<bool> systemAudio;
+  final ValueNotifier<bool> microphone;
+  final ValueNotifier<bool> hevc; // false = H.264
+  final ValueNotifier<int> fps; // 30 | 60
+
+  void dispose() {
+    showCursor.dispose();
+    systemAudio.dispose();
+    microphone.dispose();
+    hevc.dispose();
+    fps.dispose();
+  }
+}
+
+/// A record-override toggle: accent when ON (the _CursorToggle language).
+class _RecordToggle extends StatelessWidget {
+  final ValueNotifier<bool> value;
+  final IconData icon;
+  final String tooltip;
+  const _RecordToggle({
+    required this.value,
+    required this.icon,
+    required this.tooltip,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: value,
+      builder: (_, on, _) => IconButton(
+        icon: Icon(icon),
+        color: on ? GlimprTokens.accent : p.fg,
+        tooltip: tooltip,
+        onPressed: () => value.value = !on,
+      ),
+    );
+  }
+}
+
 class _CursorToggle extends StatelessWidget {
   final EditorController controller;
   const _CursorToggle({required this.controller});
@@ -535,6 +619,8 @@ enum _OpenPopover {
   arrowHeads,
   stepShape,
   spotlightEffect,
+  recordCodec,
+  recordFps,
 }
 
 /// Per-tool options: color (all drawing tools), stroke width (rect/arrow only),
@@ -564,7 +650,12 @@ class _OptionsRow extends StatefulWidget {
     required this.controller,
     required this.onPtEditingDone,
     this.editorBindings = const {},
+    this.recordOverrides,
   });
+
+  // Record-mode one-shot codec/fps pills replace the tool options entirely
+  // (the record session is crop-select only).
+  final RecordOverrides? recordOverrides;
 
   @override
   State<_OptionsRow> createState() => _OptionsRowState();
@@ -833,6 +924,52 @@ class _OptionsRowState extends State<_OptionsRow> {
     );
   }
 
+  void _openRecordCodecPopover() {
+    if (_open == _OpenPopover.recordCodec) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final o = widget.recordOverrides!;
+    _showPopover(
+      _OpenPopover.recordCodec,
+      _barLink,
+      width: 170,
+      child: ChoiceListPopover<bool>(
+        selected: o.hevc.value,
+        options: const [(false, 'H.264'), (true, 'HEVC')],
+        onSelected: (v) {
+          o.hevc.value = v;
+          _closePopover();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
+  void _openRecordFpsPopover() {
+    if (_open == _OpenPopover.recordFps) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final o = widget.recordOverrides!;
+    _showPopover(
+      _OpenPopover.recordFps,
+      _barLink,
+      width: 150,
+      child: ChoiceListPopover<int>(
+        selected: o.fps.value,
+        options: const [(30, '30 fps'), (60, '60 fps')],
+        onSelected: (v) {
+          o.fps.value = v;
+          _closePopover();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
   void _openArrowHeadsPopover() {
     if (_open == _OpenPopover.arrowHeads) {
       _closePopover();
@@ -973,6 +1110,38 @@ class _OptionsRowState extends State<_OptionsRow> {
     // the EFFECTIVE type (the selected annotation's type, else the active tool),
     // so the Select tool can edit any selected annotation and a hidden bar appears
     // once something is selected.
+    final overrides = widget.recordOverrides;
+    if (overrides != null) {
+      // Record mode: the option bar holds the one-shot codec / fps pickers,
+      // in the bar's own pill + popover idiom (same as texture/line-style).
+      final l10n = AppLocalizations.of(context);
+      return CompositedTransformTarget(
+        link: _barLink,
+        child: _Bar(
+          child: ListenableBuilder(
+            listenable: Listenable.merge([overrides.hevc, overrides.fps]),
+            builder: (_, _) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _TextureButton(
+                  key: const ValueKey('record-codec-picker'),
+                  label: overrides.hevc.value ? 'HEVC' : 'H.264',
+                  tooltip: l10n.toolbarRecordCodec,
+                  onTap: _openRecordCodecPopover,
+                ),
+                const SizedBox(width: 8),
+                _TextureButton(
+                  key: const ValueKey('record-fps-picker'),
+                  label: '${overrides.fps.value} fps',
+                  tooltip: l10n.toolbarRecordFps,
+                  onTap: _openRecordFpsPopover,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return ListenableBuilder(
       listenable: Listenable.merge(
           [_c.tool, _c.selectedIndex, _c.document, _c.stampImage]),

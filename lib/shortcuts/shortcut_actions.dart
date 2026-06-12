@@ -250,12 +250,12 @@ const kGlobalActions = <GlobalAction>[
   ),
   GlobalAction(
     actionKey: kOpenEditorKey,
-    label: 'Open Editor',
+    label: 'Open Image Editor',
     hint: 'Open the Image Editor',
   ),
   GlobalAction(
     actionKey: kOpenEditorClipboardKey,
-    label: 'Open Editor with Clipboard',
+    label: 'Open Image Editor with Clipboard',
     hint: 'Open the Image Editor and load the clipboard image',
   ),
   GlobalAction(

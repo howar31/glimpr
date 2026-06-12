@@ -103,7 +103,7 @@ void main() {
     expect(find.text('Undo'), findsOneWidget);
     // The crop slot's row names both of its contexts (crop / pin-mode pin)
     // and shows both glyphs (the diagonal crop+pin pair in the icon tile).
-    expect(find.text('Crop / Pin'), findsOneWidget);
+    expect(find.text('Crop / Pin / Record'), findsOneWidget);
     expect(find.byIcon(Icons.crop), findsOneWidget);
     expect(find.byIcon(Icons.push_pin), findsOneWidget);
     expect(find.text('Cancel / Exit'), findsOneWidget);

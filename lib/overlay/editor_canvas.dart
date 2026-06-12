@@ -8,6 +8,7 @@ import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../shortcuts/hotkey_binding.dart';
 import 'overlay_editor_host.dart';
+import 'toolbar.dart' show RecordOverrides;
 
 /// In-overlay annotation editor for ONE display. Thin wrapper: builds the shared
 /// [EditorCore] with an [OverlayEditorHost] adapter (native cursor + cross-display
@@ -34,6 +35,8 @@ class EditorCanvas extends StatelessWidget {
   // confirm starts a recording. [liveLoupeSample] feeds the loupe live pixels.
   final bool recordMode;
   final Future<Uint8List?> Function(int x, int y, int span)? liveLoupeSample;
+  // One-shot per-recording overrides shown in the record-mode toolbar.
+  final RecordOverrides? recordOverrides;
   // Capture layer stack caption below the toolbar (null = hidden); accent
   // marks the transient "top layer was replaced" notice.
   final String? layerCaption;
@@ -56,6 +59,7 @@ class EditorCanvas extends StatelessWidget {
     this.pinMode = false,
     this.recordMode = false,
     this.liveLoupeSample,
+    this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
   });
@@ -69,6 +73,7 @@ class EditorCanvas extends StatelessWidget {
       hud: hud,
       pinMode: pinMode,
       recordMode: recordMode,
+      recordOverrides: recordOverrides,
       layerCaption: layerCaption,
       layerAccent: layerAccent,
       host: OverlayEditorHost(

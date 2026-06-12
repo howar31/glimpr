@@ -134,7 +134,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionAfterCapture => '截圖後';
 
   @override
-  String get settingsSectionAfterEditorDone => '編輯器完成後';
+  String get settingsSectionAfterEditorDone => '圖片編輯器完成後';
 
   @override
   String get settingsSectionSounds => '音效';
@@ -167,7 +167,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFlowShowInFinderHint => '在 Finder 中顯示已儲存的檔案';
 
   @override
-  String get settingsFlowOpenInEditor => '以編輯器開啟';
+  String get settingsFlowOpenInEditor => '以圖片編輯器開啟';
 
   @override
   String get settingsFlowOpenInEditorHint => '在圖片編輯器中開啟結果以繼續編輯';
@@ -193,7 +193,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsFlowEditorCaption =>
-      '在按下編輯器的「完成」按鈕（或 Enter）時執行；「完成」旁的 ▾ 選單提供單次替代動作。';
+      '在按下圖片編輯器的「完成」按鈕（或 Enter）時執行；「完成」旁的 ▾ 選單提供單次替代動作。';
 
   @override
   String get settingsFlowCaptureCaptionEmpty =>
@@ -201,7 +201,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsFlowEditorCaptionEmpty =>
-      '在按下編輯器的「完成」按鈕（或 Enter）時執行；「完成」旁的 ▾ 選單提供單次替代動作。目前未選取任何動作，將改為複製到剪貼簿。';
+      '在按下圖片編輯器的「完成」按鈕（或 Enter）時執行；「完成」旁的 ▾ 選單提供單次替代動作。目前未選取任何動作，將改為複製到剪貼簿。';
 
   @override
   String get settingsSoundShutter => '快門';
@@ -309,7 +309,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDecorationPinNote =>
-      '裝飾僅套用於輸出的圖片（檔案、剪貼簿、分享、編輯器）；釘選一律使用未裝飾的原圖。';
+      '裝飾僅套用於輸出的圖片（檔案、剪貼簿、分享、圖片編輯器）；釘選一律使用未裝飾的原圖。';
 
   @override
   String get settingsSectionRecording => '螢幕錄影';
@@ -354,7 +354,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecentImagesKept => '保留的最近圖片數';
 
   @override
-  String get settingsRecentImagesKeptHint => '編輯器起始頁與選單列「開啟最近項目」保留的圖片數量。';
+  String get settingsRecentImagesKeptHint => '圖片編輯器起始頁與選單列「開啟最近項目」保留的圖片數量。';
 
   @override
   String get settingsSectionMultiDisplay => '多螢幕';
@@ -543,13 +543,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionCaptureLastRegionHint => '重複上一次的截圖範圍';
 
   @override
-  String get actionOpenEditor => '開啟編輯器';
+  String get actionOpenEditor => '開啟圖片編輯器';
 
   @override
   String get actionOpenEditorHint => '開啟圖片編輯器';
 
   @override
-  String get actionOpenEditorClipboard => '以剪貼簿開啟編輯器';
+  String get actionOpenEditorClipboard => '以剪貼簿開啟圖片編輯器';
 
   @override
   String get actionOpenEditorClipboardHint => '開啟圖片編輯器並載入剪貼簿圖片';
@@ -600,7 +600,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolPin => '釘選';
 
   @override
-  String get toolCropPinCombined => '裁切／釘選';
+  String get toolRecord => '錄影';
+
+  @override
+  String get toolCropPinCombined => '裁切／釘選／錄影';
 
   @override
   String get toolBlur => '模糊';
@@ -646,6 +649,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get toolbarRecordCaption => '錄影模式：選取範圍後開始錄影';
+
+  @override
+  String get toolbarRecordCodec => '編碼格式（僅此次錄影）';
+
+  @override
+  String get toolbarRecordFps => '影格率（僅此次錄影）';
+
+  @override
+  String get toolbarRecordCursor => '顯示游標（僅此次錄影）';
+
+  @override
+  String get toolbarRecordSystemAudio => '系統音訊（僅此次錄影）';
+
+  @override
+  String get toolbarRecordMicrophone => '麥克風（僅此次錄影）';
 
   @override
   String get toolbarMousePointerShown => '滑鼠指標：顯示';

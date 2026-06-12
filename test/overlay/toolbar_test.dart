@@ -222,15 +222,17 @@ void main() {
     expect(pinDy, greaterThan(barBottom));
   });
 
-  test('the Settings row label combines both crop-slot contexts', () {
-    expect(toolSettingsLabel(l10n, ToolKind.crop), 'Crop / Pin');
+  test('the Settings row label combines the crop-slot contexts', () {
+    expect(toolSettingsLabel(l10n, ToolKind.crop), 'Crop / Pin / Record');
     expect(toolLabel(l10n, ToolKind.crop), 'Crop');
     expect(toolLabel(l10n, ToolKind.crop, pinMode: true), 'Pin');
+    expect(toolLabel(l10n, ToolKind.crop, recordMode: true), 'Record');
     // Every other tool's Settings row matches its tooltip exactly.
     for (final (kind, _) in kEditorToolMeta) {
       if (kind == ToolKind.crop) continue;
       expect(toolSettingsLabel(l10n, kind), toolLabel(l10n, kind));
       expect(toolLabel(l10n, kind, pinMode: true), toolLabel(l10n, kind));
+      expect(toolLabel(l10n, kind, recordMode: true), toolLabel(l10n, kind));
     }
   });
 }

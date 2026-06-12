@@ -33,6 +33,13 @@ class CaptureBridge {
     int? windowId,
     String? title,
     String? app,
+    // One-shot per-recording overrides (toolbar toggles); null = use the
+    // persisted Recording settings.
+    bool? showsCursor,
+    bool? systemAudio,
+    bool? microphone,
+    bool? hevc,
+    int? fps,
     bool cancelled = false,
   }) =>
       _channel.invokeMethod('recordSelection', {
@@ -43,6 +50,11 @@ class CaptureBridge {
         'windowId': ?windowId,
         'title': ?title,
         'app': ?app,
+        'showsCursor': ?showsCursor,
+        'systemAudio': ?systemAudio,
+        'microphone': ?microphone,
+        'hevc': ?hevc,
+        'fps': ?fps,
         'cancelled': cancelled,
       });
 

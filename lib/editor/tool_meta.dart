@@ -8,9 +8,12 @@ import 'editor_controller.dart';
 /// (capture-to-pin) the crop slot IS the pin region selector — same tool,
 /// same key, different commit — so only its NAME follows [pinMode]; the
 /// Settings row shows the combined form via [toolSettingsLabel].
-String toolLabel(AppLocalizations l10n, ToolKind t, {bool pinMode = false}) =>
+String toolLabel(AppLocalizations l10n, ToolKind t,
+        {bool pinMode = false, bool recordMode = false}) =>
     switch (t) {
-      ToolKind.crop => pinMode ? l10n.toolPin : l10n.toolCrop,
+      ToolKind.crop => recordMode
+          ? l10n.toolRecord
+          : (pinMode ? l10n.toolPin : l10n.toolCrop),
       ToolKind.blur => l10n.toolBlur,
       ToolKind.pixelate => l10n.toolPixelate,
       ToolKind.rectangle => l10n.toolRectangle,

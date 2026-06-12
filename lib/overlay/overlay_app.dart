@@ -16,6 +16,7 @@ import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../output/flow.dart';
 import '../record/record_target.dart';
+import 'toolbar.dart' show RecordOverrides;
 import '../output/sounds.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
@@ -83,6 +84,9 @@ class _OverlayAppState extends State<OverlayApp> {
   // Live-select (recording) session: transparent base over the live screen;
   // confirm starts a recording instead of exporting.
   bool _liveSelect = false;
+  // One-shot per-recording overrides (toolbar toggles), seeded from the
+  // Recording settings each live session; read at confirm, never persisted.
+  RecordOverrides? _recordOverrides;
   // Capture layer stack: suspended sessions below the live one. Capacity is
   // re-read from Settings on every capture; 1 = no stacking (live layer is
   // replaced, today's behavior). Each layer is an independent run of
@@ -225,6 +229,26 @@ class _OverlayAppState extends State<OverlayApp> {
         }
         _pinOnly = pinOnly;
         _liveSelect = liveSelect;
+        if (liveSelect) {
+          // Seed the toolbar's one-shot overrides from the persisted settings
+          // (async; the notifiers update the toggles when the read lands).
+          _recordOverrides?.dispose();
+          final overrides = RecordOverrides(
+              showCursor: true,
+              systemAudio: false,
+              microphone: false,
+              hevc: false,
+              fps: 30);
+          _recordOverrides = overrides;
+          Settings.instance.loadRecording().then((r) {
+            if (!mounted || _recordOverrides != overrides) return;
+            overrides.showCursor.value = r.showCursor;
+            overrides.systemAudio.value = r.systemAudio;
+            overrides.microphone.value = r.microphone;
+            overrides.hevc.value = r.hevc;
+            overrides.fps.value = r.fps;
+          });
+        }
         // Reseed BEFORE building the controller so the freshly-loaded styles
         // (incl. a reset that emptied the map) seed this capture's initial tool
         // style. The map instance is shared with the controller, so mutate it in
@@ -832,12 +856,18 @@ class _OverlayAppState extends State<OverlayApp> {
       _dismiss();
       try {
         final target = recordTargetFromSelection(selectionLogical, window);
+        final o = _recordOverrides;
         await _bridge.recordSelection(
           displayId: d.displayId,
           rect: target.rect,
           windowId: target.windowId,
           title: window?.title,
           app: window?.app,
+          showsCursor: o?.showCursor.value,
+          systemAudio: o?.systemAudio.value,
+          microphone: o?.microphone.value,
+          hevc: o?.hevc.value,
+          fps: o?.fps.value,
         );
       } catch (_) {}
       return;
@@ -1011,6 +1041,7 @@ class _OverlayAppState extends State<OverlayApp> {
                   pinMode: _pinOnly,
                   recordMode: _liveSelect,
                   liveLoupeSample: _liveSelect ? _bridge.loupeSample : null,
+                  recordOverrides: _liveSelect ? _recordOverrides : null,
                   layerCaption: _layerCaption,
                   layerAccent: _layerAccent,
                 ),
