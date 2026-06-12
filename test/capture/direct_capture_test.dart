@@ -43,6 +43,7 @@ void main() {
     late LastRegionStore regionStore;
     late List<({int? displayId, Rect? rect})> regionCalls;
     late List<Map<String, dynamic>?> regionDecorations;
+    late List<bool> regionAlsoPlain;
     late List<({RegionCapture c, CaptureKind kind, String? title, String? app})>
         delivered;
     late int shutters;
@@ -60,6 +61,7 @@ void main() {
       regionStore = LastRegionStore(store);
       regionCalls = [];
       regionDecorations = [];
+      regionAlsoPlain = [];
       delivered = [];
       shutters = 0;
       completes = 0;
@@ -67,9 +69,10 @@ void main() {
       marks = [];
       return DirectCapture(
         captureRegion: ({displayId, rect, showsCursor = false, jpeg = false,
-            jpegQuality = 90, decoration}) async {
+            jpegQuality = 90, decoration, alsoPlain = false}) async {
           regionCalls.add((displayId: displayId, rect: rect));
           regionDecorations.add(decoration);
+          regionAlsoPlain.add(alsoPlain);
           if (onRegion != null) return onRegion(displayId, rect);
           return _rc(displayId ?? 1, rect);
         },
@@ -123,6 +126,41 @@ void main() {
       expect(spec['shapeFromAlpha'], false);
       // PNG (default): no opaque fill -> margins stay transparent.
       expect(spec.containsKey('fill'), false);
+      // No pin in the default flow -> no plain rendition requested.
+      expect(regionAlsoPlain.single, isFalse);
+    });
+
+    test('decoration on + pin in flow: captureRegion gets alsoPlain', () async {
+      final dc = build();
+      await Settings(store).setDecorateDisplay(true);
+      await Settings(store).setAfterCaptureFlow(
+          {FlowAction.save, FlowAction.pin});
+      await dc.screen();
+      expect(regionDecorations.single, isNotNull);
+      expect(regionAlsoPlain.single, isTrue);
+    });
+
+    test('decoration on + pin-only flow: decoration skipped, no alsoPlain',
+        () async {
+      final dc = build();
+      await Settings(store).setDecorateDisplay(true);
+      await Settings(store).setAfterCaptureFlow({FlowAction.pin});
+      await dc.screen();
+      expect(regionDecorations.single, isNull);
+      expect(regionAlsoPlain.single, isFalse);
+    });
+
+    test('RegionCapture.fromMap carries the optional plainBytes', () {
+      final m = <dynamic, dynamic>{
+        'bytes': Uint8List.fromList([1]),
+        'plainBytes': Uint8List.fromList([2]),
+        'displayId': 1,
+        'x': 0.0, 'y': 0.0, 'w': 10.0, 'h': 10.0,
+        'left': 0.0, 'top': 0.0, 'scaleFactor': 2.0,
+      };
+      expect(RegionCapture.fromMap(m).plainBytes, [2]);
+      m.remove('plainBytes');
+      expect(RegionCapture.fromMap(m).plainBytes, isNull);
     });
 
     test('window(): fallback passes the focused displayId+rect', () async {
@@ -188,12 +226,13 @@ void main() {
             {bool showsCursor = false,
             bool jpeg = false,
             int jpegQuality = 90,
-            Map<String, dynamic>? decoration}) async {
+            Map<String, dynamic>? decoration,
+            bool alsoPlain = false}) async {
           expect(id, 99);
           passedDecoration = decoration;
-          return Uint8List.fromList([1, 2, 3]);
+          return (bytes: Uint8List.fromList([1, 2, 3]), plainBytes: null);
         },
-        deliverWindow: (bytes, cap, info) async {
+        deliverWindow: (bytes, cap, info, {pinBytes}) async {
           deliveredBytes = bytes;
           return const FlowResult(DeliveryResult(
               savedPath: '/x.png', copiedToClipboard: true, soundPlayed: true));
@@ -228,12 +267,13 @@ void main() {
             {bool showsCursor = false,
             bool jpeg = false,
             int jpegQuality = 90,
-            Map<String, dynamic>? decoration}) async {
+            Map<String, dynamic>? decoration,
+            bool alsoPlain = false}) async {
           passedDecoration = decoration;
-          return Uint8List.fromList([1]);
+          return (bytes: Uint8List.fromList([1]), plainBytes: null);
         },
-        deliverWindow: (bytes, cap, info) async => const FlowResult(
-            DeliveryResult(
+        deliverWindow: (bytes, cap, info, {pinBytes}) async =>
+            const FlowResult(DeliveryResult(
                 savedPath: '/x.png',
                 copiedToClipboard: true,
                 soundPlayed: true)),
@@ -248,6 +288,50 @@ void main() {
       expect(passedDecoration, isNotNull);
       expect(passedDecoration!['shapeFromAlpha'], true);
       expect(passedDecoration!['margin'], kDecorMarginLogical);
+    });
+
+    test('window(): decoration on + pin in flow -> alsoPlain, plain bytes '
+        'reach delivery', () async {
+      final s = _FakeStore();
+      await Settings(s).setDecorateWindow(true);
+      await Settings(s)
+          .setAfterCaptureFlow({FlowAction.save, FlowAction.pin});
+      final plain = Uint8List.fromList([7, 7]);
+      bool? passedAlsoPlain;
+      Uint8List? deliveredPin;
+      final dc = DirectCapture(
+        focusedWindow: () async => const FocusedWindowInfo(
+            displayId: 1,
+            rect: Rect.fromLTWH(5, 6, 100, 80),
+            title: 'W',
+            app: 'App',
+            windowId: 99),
+        captureWindowDelivered: (id,
+            {bool showsCursor = false,
+            bool jpeg = false,
+            int jpegQuality = 90,
+            Map<String, dynamic>? decoration,
+            bool alsoPlain = false}) async {
+          passedAlsoPlain = alsoPlain;
+          return (bytes: Uint8List.fromList([1]), plainBytes: plain);
+        },
+        deliverWindow: (bytes, cap, info, {pinBytes}) async {
+          deliveredPin = pinBytes;
+          return const FlowResult(DeliveryResult(
+              savedPath: '/x.png',
+              copiedToClipboard: true,
+              soundPlayed: true));
+        },
+        settings: Settings(s),
+        regionStore: LastRegionStore(s),
+        shutter: () {},
+        complete: () {},
+        showError: (_) {},
+        perfMark: (_) {},
+      );
+      await dc.window();
+      expect(passedAlsoPlain, isTrue);
+      expect(deliveredPin, plain);
     });
 
     test('lastRegion(): no stored region -> no capture, no sound, no mark',

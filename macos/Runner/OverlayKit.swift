@@ -78,7 +78,8 @@ final class ScreenCapturer {
   /// the fallback).
   func captureRegion(
     displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
-    jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil
+    jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil,
+    alsoPlain: Bool = false
   ) async throws -> [String: Any]? {
     let content = try await freshContent()
     let targetID = displayID ?? cursorDisplayID()
@@ -116,7 +117,7 @@ final class ScreenCapturer {
     guard let bytes = data else { return nil }
     PerfLog.mark("regionEncodeEnd display=\(d.displayID) bytes=\(bytes.count)")
     let frame = d.frame
-    return [
+    var dict: [String: Any] = [
       "bytes": FlutterStandardTypedData(bytes: bytes),
       "displayId": Int(d.displayID),
       "x": Double(r.origin.x), "y": Double(r.origin.y),
@@ -124,6 +125,13 @@ final class ScreenCapturer {
       "left": Double(frame.origin.x), "top": Double(frame.origin.y),
       "scaleFactor": Double(scale),
     ]
+    // The pin leg's plain rendition: the UNDECORATED capture encoded alongside
+    // the decorated bytes (the CGImage is already in hand; one extra encode).
+    if alsoPlain, decoration != nil,
+       let plain = Decoration.encode(cg, jpeg: jpeg, quality: jpegQuality) {
+      dict["plainBytes"] = FlutterStandardTypedData(bytes: plain)
+    }
+    return dict
   }
 
   /// Captures every display IN PARALLEL and pushes each display's dict to
@@ -298,7 +306,7 @@ final class ScreenCapturer {
   /// pixels never round-trip through Dart.
   static func captureWindowDelivered(
     windowID: CGWindowID, showsCursor: Bool, jpeg: Bool, jpegQuality: Int,
-    decoration: Decoration.Spec?
+    decoration: Decoration.Spec?, alsoPlain: Bool = false
   ) async throws -> [String: Any]? {
     guard let (cg, scale) = try await windowCG(
       windowID: windowID, showsCursor: showsCursor) else { return nil }
@@ -306,10 +314,17 @@ final class ScreenCapturer {
     guard let bytes = Decoration.encode(image, jpeg: jpeg, quality: jpegQuality)
     else { return nil }
     PerfLog.mark("windowEncodeEnd id=\(windowID) bytes=\(bytes.count)")
-    return [
+    var dict: [String: Any] = [
       "bytes": FlutterStandardTypedData(bytes: bytes),
       "scale": Double(scale),
     ]
+    // The pin leg's plain rendition, like captureRegion's: the undecorated
+    // window encoded alongside the decorated bytes.
+    if alsoPlain, decoration != nil,
+       let plain = Decoration.encode(cg, jpeg: jpeg, quality: jpegQuality) {
+      dict["plainBytes"] = FlutterStandardTypedData(bytes: plain)
+    }
+    return dict
   }
 
   /// True when the midpoint of each edge of [rep] is opaque. A faithfully

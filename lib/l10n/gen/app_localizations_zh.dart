@@ -305,6 +305,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDecorationJpegFillHint => '儲存為 JPEG 時邊距後方的顏色';
 
   @override
+  String get settingsDecorationPinNote =>
+      '裝飾僅套用於輸出的圖片（檔案、剪貼簿、分享、編輯器）；釘選一律使用未裝飾的原圖。';
+
+  @override
   String get settingsRecentImagesKept => '保留的最近圖片數';
 
   @override

@@ -86,12 +86,13 @@ final class CaptureChannel {
         // Opt-in decoration: decorate the captured CGImage natively before
         // encoding, so the direct path never round-trips pixels through Dart.
         let deco = (a?["decoration"] as? [String: Any]).flatMap(Decoration.spec)
+        let alsoPlain = (a?["alsoPlain"] as? Bool) ?? false
         Task { @MainActor in
           do {
             let res = try await self?.capture.captureRegion(
               displayID: displayId.map { CGDirectDisplayID($0) }, rect: rect,
               showsCursor: cursor, jpeg: jpeg, jpegQuality: quality,
-              decoration: deco)
+              decoration: deco, alsoPlain: alsoPlain)
             result(res) // nil -> Dart picks the fallback (display gone)
           } catch {
             result(FlutterError(
@@ -121,11 +122,12 @@ final class CaptureChannel {
         let jpeg = (a?["jpeg"] as? Bool) ?? false
         let quality = (a?["quality"] as? Int) ?? 90
         let deco = (a?["decoration"] as? [String: Any]).flatMap(Decoration.spec)
+        let alsoPlain = (a?["alsoPlain"] as? Bool) ?? false
         Task { @MainActor in
           do {
             let img = try await self?.capture.captureWindowDelivered(
               windowID: CGWindowID(wid), showsCursor: cursor, jpeg: jpeg,
-              jpegQuality: quality, decoration: deco)
+              jpegQuality: quality, decoration: deco, alsoPlain: alsoPlain)
             result(img) // nil -> Dart falls back to a rectangular crop
           } catch {
             result(FlutterError(

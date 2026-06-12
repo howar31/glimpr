@@ -92,12 +92,18 @@ class RegionCapture {
     required this.rect,
     required this.displayOrigin,
     required this.scaleFactor,
+    this.plainBytes,
   });
   final Uint8List bytes;
   final int displayId;
   final Rect rect;
   final Offset displayOrigin;
   final double scaleFactor;
+
+  /// The UNDECORATED rendition, present only when [bytes] was decorated and
+  /// the flow's pin leg asked for it (alsoPlain) — pin always shows the plain
+  /// capture.
+  final Uint8List? plainBytes;
 
   factory RegionCapture.fromMap(Map<dynamic, dynamic> m) => RegionCapture(
         bytes: m['bytes'] as Uint8List,
@@ -107,6 +113,7 @@ class RegionCapture {
         displayOrigin: Offset(
             (m['left'] as num).toDouble(), (m['top'] as num).toDouble()),
         scaleFactor: (m['scaleFactor'] as num).toDouble(),
+        plainBytes: m['plainBytes'] as Uint8List?,
       );
 }
 

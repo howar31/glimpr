@@ -67,15 +67,22 @@ void main() {
       expect(a['jpeg'], true);
       expect(a['quality'], 80);
       expect((a['decoration'] as Map)['shapeFromAlpha'], true);
-      return {'bytes': Uint8List.fromList([9, 8, 7]), 'scale': 2.0};
+      expect(a['alsoPlain'], true);
+      return {
+        'bytes': Uint8List.fromList([9, 8, 7]),
+        'plainBytes': Uint8List.fromList([6]),
+        'scale': 2.0,
+      };
     });
-    final bytes = await CaptureBridge().captureWindowDelivered(
+    final delivered = await CaptureBridge().captureWindowDelivered(
       99,
       jpeg: true,
       jpegQuality: 80,
       decoration: const {'shapeFromAlpha': true},
+      alsoPlain: true,
     );
-    expect(bytes, Uint8List.fromList([9, 8, 7]));
+    expect(delivered!.bytes, Uint8List.fromList([9, 8, 7]));
+    expect(delivered.plainBytes, Uint8List.fromList([6]));
 
     messenger.setMockMethodCallHandler(channel, (call) async => null);
     expect(await CaptureBridge().captureWindowDelivered(99), isNull);

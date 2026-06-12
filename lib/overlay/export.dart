@@ -35,11 +35,18 @@ Future<FlowResult> exportAnnotated({
   // ⌘⌥7 capture-to-pin session runs {pin} only). Null = cap.flow.
   Set<FlowAction>? flowOverride,
 }) async {
+  final actions = normalizeFlow(flowOverride ?? cap.flow, forCapture: true);
   // Opt-in decoration for this scenario (null = plain, byte-identical output).
   // The appearance is scaled to the display so it looks the same at any DPI.
-  final decoration = cap.decorateFor(kind)
-      ? DecorationStyle.scaled(display.scaleFactor)
-      : null;
+  // The pin leg always consumes the undecorated capture: a pin-only flow
+  // skips decoration entirely; alongside other legs a second plain rendition
+  // is composited for it below.
+  final plan = decorationPlan(
+    decorationEnabled: cap.decorateFor(kind),
+    actions: actions,
+  );
+  final decoration =
+      plan.decorate ? DecorationStyle.scaled(display.scaleFactor) : null;
   final bytes = await compositeAndCrop(
     frozen: frozenImage,
     drawables: drawables,
@@ -57,14 +64,30 @@ Future<FlowResult> exportAnnotated({
     cursorImage: cursorImage,
     cursorTopLeftNative: cursorTopLeftNative,
   );
+  Uint8List? pinBytes;
+  if (plan.needsPlainForPin) {
+    pinBytes = await compositeAndCrop(
+      frozen: frozenImage,
+      drawables: drawables,
+      scaleFactor: display.scaleFactor,
+      logicalSize: Size(display.width, display.height),
+      selectionLogical: selectionLogical,
+      jpeg: cap.isJpeg,
+      jpegQuality: cap.jpegQuality,
+      windowMask: windowMask,
+      cursorImage: cursorImage,
+      cursorTopLeftNative: cursorTopLeftNative,
+    );
+  }
   // Pin-in-place: the captured region's GLOBAL top-left logical rect (whole
   // display when no selection). The pin leg closes over it; other legs ignore.
   final sel = selectionLogical ??
       Rect.fromLTWH(0, 0, display.width, display.height);
   final pinRect = sel.shift(Offset(display.left, display.top));
   return runFlow(
-    actions: normalizeFlow(flowOverride ?? cap.flow, forCapture: true),
+    actions: actions,
     bytes: bytes,
+    pinBytes: pinBytes,
     saveDir: cap.saveDir,
     fileName: buildScreenshotName(
       template: cap.filenameTemplate,
@@ -97,6 +120,9 @@ Future<FlowResult> deliverEncodedCapture({
   return runFlow(
     actions: normalizeFlow(cap.flow, forCapture: true),
     bytes: bytes,
+    // The undecorated sibling (when the capture was decorated): the pin leg
+    // always shows the plain capture, which also keeps pin-in-place aligned.
+    pinBytes: capture.plainBytes,
     saveDir: cap.saveDir,
     fileName: buildScreenshotName(
       template: cap.filenameTemplate,
@@ -133,10 +159,13 @@ Future<FlowResult> deliverWindowBytes({
   required CaptureSettings cap,
   String? windowTitle,
   String? appName,
+  // The undecorated sibling rendition for the flow's pin leg (alsoPlain).
+  Uint8List? pinBytes,
 }) async {
   return runFlow(
     actions: normalizeFlow(cap.flow, forCapture: true),
     bytes: bytes,
+    pinBytes: pinBytes,
     saveDir: cap.saveDir,
     fileName: buildScreenshotName(
       template: cap.filenameTemplate,

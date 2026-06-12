@@ -668,6 +668,12 @@ abstract class AppLocalizations {
   /// **'Colour behind the margin when saving as JPEG'**
   String get settingsDecorationJpegFillHint;
 
+  /// Settings > Output > Decoration: footnote that pin ignores decoration
+  ///
+  /// In en, this message translates to:
+  /// **'Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.'**
+  String get settingsDecorationPinNote;
+
   /// Settings > Output > Recent history: card title
   ///
   /// In en, this message translates to:

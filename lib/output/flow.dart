@@ -46,6 +46,23 @@ Set<FlowAction> normalizeFlow(Set<FlowAction> s, {required bool forCapture}) {
   return out;
 }
 
+/// Decoration is an OUTPUT treatment: the pin leg always consumes the
+/// undecorated capture (a decorated pin is oversized and breaks pin-in-place
+/// alignment). A pin-only flow skips decoration entirely; when pin rides
+/// along other legs the capture additionally produces a plain rendition for
+/// it ([runFlow]'s pinBytes).
+({bool decorate, bool needsPlainForPin}) decorationPlan({
+  required bool decorationEnabled,
+  required Set<FlowAction> actions,
+}) {
+  final decorate =
+      decorationEnabled && actions.any((a) => a != FlowAction.pin);
+  return (
+    decorate: decorate,
+    needsPlainForPin: decorate && actions.contains(FlowAction.pin),
+  );
+}
+
 /// [DeliveryResult] plus the extra flow legs' failures. Exposes the delivery
 /// flags so existing partial-failure checks keep working unchanged.
 class FlowResult {
@@ -69,6 +86,10 @@ class FlowResult {
 Future<FlowResult> runFlow({
   required Set<FlowAction> actions,
   required Uint8List bytes,
+  // The pin leg's plain rendition when [bytes] carries a decorated image —
+  // pin always shows the undecorated capture (see [decorationPlan]). Null =
+  // the pin leg shares [bytes] like every other leg.
+  Uint8List? pinBytes,
   Directory? saveDir,
   String? fileName,
   SaveFn? saveFn,
@@ -144,7 +165,14 @@ Future<FlowResult> runFlow({
   }
   if (actions.contains(FlowAction.pin)) {
     try {
-      await pin(await ensureFile());
+      // The plain rendition gets its OWN temp (distinctly named, so it can
+      // never collide with the shared share/editor temp) — the saved/temp
+      // decorated file must not reach the pin.
+      final pinPath = pinBytes != null
+          ? await (writeTempFn ??
+              ((b) => _writeTemp(b, fileName, prefix: 'pin-')))(pinBytes)
+          : await ensureFile();
+      await pin(pinPath);
     } catch (e) {
       extra['pin'] = '$e';
     }
@@ -172,12 +200,13 @@ Future<void> _revealInFinder(String path) async {
 
 /// Temp file for opening an UNSAVED result in the editor. Extension follows the
 /// flow's [fileName] so a JPEG flow yields a .jpg temp.
-Future<String> _writeTemp(Uint8List bytes, String? fileName) async {
+Future<String> _writeTemp(Uint8List bytes, String? fileName,
+    {String prefix = ''}) async {
   final ext = fileName != null && fileName.contains('.')
       ? fileName.split('.').last
       : 'png';
   final name = screenshotFilename(DateTime.now(), ext);
-  final f = File('${Directory.systemTemp.path}/$name');
+  final f = File('${Directory.systemTemp.path}/$prefix$name');
   await f.writeAsBytes(bytes);
   return f.path;
 }

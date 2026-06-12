@@ -17,14 +17,16 @@ final class CaptureController {
   /// separate cursor image — that is the overlay's toggleable path).
   func captureRegion(
     displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
-    jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil
+    jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil,
+    alsoPlain: Bool = false
   ) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
     return try await capturer.captureRegion(
       displayID: displayID, rect: rect, showsCursor: showsCursor,
-      jpeg: jpeg, jpegQuality: jpegQuality, decoration: decoration)
+      jpeg: jpeg, jpegQuality: jpegQuality, decoration: decoration,
+      alsoPlain: alsoPlain)
   }
 
   /// Single window's raw alpha shape (rounded corners) — the overlay snap mask;
@@ -41,14 +43,14 @@ final class CaptureController {
   /// natively); nil when no such window so the caller falls back to a rect crop.
   func captureWindowDelivered(
     windowID: CGWindowID, showsCursor: Bool, jpeg: Bool, jpegQuality: Int,
-    decoration: Decoration.Spec?
+    decoration: Decoration.Spec?, alsoPlain: Bool = false
   ) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
     return try await ScreenCapturer.captureWindowDelivered(
       windowID: windowID, showsCursor: showsCursor, jpeg: jpeg,
-      jpegQuality: jpegQuality, decoration: decoration)
+      jpegQuality: jpegQuality, decoration: decoration, alsoPlain: alsoPlain)
   }
 
   /// [pinOnly]: the ⌘⌥7 "capture to pin" mode — the overlay session runs as

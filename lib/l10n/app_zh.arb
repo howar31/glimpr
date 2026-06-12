@@ -95,6 +95,7 @@
   "settingsDecorationLastRegionHint": "截取上次範圍模式（⌘⌥4）",
   "settingsDecorationJpegFill": "JPEG 背景填色",
   "settingsDecorationJpegFillHint": "儲存為 JPEG 時邊距後方的顏色",
+  "settingsDecorationPinNote": "裝飾僅套用於輸出的圖片（檔案、剪貼簿、分享、編輯器）；釘選一律使用未裝飾的原圖。",
   "settingsRecentImagesKept": "保留的最近圖片數",
   "settingsRecentImagesKeptHint": "編輯器起始頁與選單列「開啟最近項目」保留的圖片數量。",
   "settingsSectionMultiDisplay": "多螢幕",

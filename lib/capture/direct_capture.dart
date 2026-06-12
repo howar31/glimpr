@@ -17,14 +17,17 @@ const kLastRegionCaptureLabel = 'LAST';
 
 /// Deliver a natively-captured window image (real alpha / rounded corners,
 /// decoration applied natively) directly — the "Capture Window" path. The
-/// [bytes] are FINAL; no decode, composite, or display crop.
+/// [bytes] are FINAL; no decode, composite, or display crop. [pinBytes] is
+/// the undecorated sibling for the flow's pin leg, when one was requested.
 Future<FlowResult> _defaultDeliverWindow(
-    Uint8List bytes, CaptureSettings cap, FocusedWindowInfo info) async {
+    Uint8List bytes, CaptureSettings cap, FocusedWindowInfo info,
+    {Uint8List? pinBytes}) async {
   return deliverWindowBytes(
     bytes: bytes,
     cap: cap,
     windowTitle: info.title.isEmpty ? null : info.title,
     appName: info.app.isEmpty ? null : info.app,
+    pinBytes: pinBytes,
   );
 }
 
@@ -41,21 +44,24 @@ class DirectCapture {
             bool showsCursor,
             bool jpeg,
             int jpegQuality,
-            Map<String, dynamic>? decoration})?
+            Map<String, dynamic>? decoration,
+            bool alsoPlain})?
         captureRegion,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
-    Future<Uint8List?> Function(int,
+    Future<({Uint8List bytes, Uint8List? plainBytes})?> Function(int,
             {bool showsCursor,
             bool jpeg,
             int jpegQuality,
-            Map<String, dynamic>? decoration})?
+            Map<String, dynamic>? decoration,
+            bool alsoPlain})?
         captureWindowDelivered,
     Settings? settings,
     LastRegionStore? regionStore,
     Future<FlowResult> Function(
             RegionCapture, CaptureSettings, CaptureKind, String?, String?)?
         deliverEncoded,
-    Future<FlowResult> Function(Uint8List, CaptureSettings, FocusedWindowInfo)?
+    Future<FlowResult> Function(Uint8List, CaptureSettings, FocusedWindowInfo,
+            {Uint8List? pinBytes})?
         deliverWindow,
     void Function()? shutter,
     void Function()? complete,
@@ -86,20 +92,23 @@ class DirectCapture {
       bool showsCursor,
       bool jpeg,
       int jpegQuality,
-      Map<String, dynamic>? decoration}) _captureRegion;
+      Map<String, dynamic>? decoration,
+      bool alsoPlain}) _captureRegion;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
-  final Future<Uint8List?> Function(int,
+  final Future<({Uint8List bytes, Uint8List? plainBytes})?> Function(int,
       {bool showsCursor,
       bool jpeg,
       int jpegQuality,
-      Map<String, dynamic>? decoration}) _captureWindowDelivered;
+      Map<String, dynamic>? decoration,
+      bool alsoPlain}) _captureWindowDelivered;
   final Settings _settings;
   final LastRegionStore _regionStore;
   final Future<FlowResult> Function(
           RegionCapture, CaptureSettings, CaptureKind, String?, String?)
       _deliverEncoded;
   final Future<FlowResult> Function(
-      Uint8List, CaptureSettings, FocusedWindowInfo) _deliverWindow;
+      Uint8List, CaptureSettings, FocusedWindowInfo,
+      {Uint8List? pinBytes}) _deliverWindow;
   final void Function() _shutter;
   final void Function() _complete;
   final void Function(String) _showError;
@@ -120,30 +129,39 @@ class DirectCapture {
     if (info?.windowId != null) {
       final cap = await _settings.loadCapture();
       // Decoration (when enabled) follows the window's real silhouette; applied
-      // natively, so the delivered bytes are final.
-      final decoration = cap.decorateFor(CaptureKind.focusedWindow)
+      // natively, so the delivered bytes are final. The pin leg always shows
+      // the undecorated capture (decorationPlan): a pin-only flow skips
+      // decoration; alongside other legs native also returns the plain sibling.
+      final plan = decorationPlan(
+        decorationEnabled: cap.decorateFor(CaptureKind.focusedWindow),
+        actions: normalizeFlow(cap.flow, forCapture: true),
+      );
+      final decoration = plan.decorate
           ? logicalDecorationSpec(
               fillArgb: cap.isJpeg ? cap.decorationJpegFill : null,
               shapeFromAlpha: true,
             )
           : null;
-      Uint8List? bytes;
+      ({Uint8List bytes, Uint8List? plainBytes})? delivered;
       try {
-        bytes = await _captureWindowDelivered(
+        delivered = await _captureWindowDelivered(
           info!.windowId!,
           showsCursor: cap.captureCursor,
           jpeg: cap.isJpeg,
           jpegQuality: cap.jpegQuality,
           decoration: decoration,
+          alsoPlain: plan.needsPlainForPin,
         );
       } catch (_) {
-        bytes = null; // fall through to the rectangular crop
+        delivered = null; // fall through to the rectangular crop
       }
-      if (bytes != null) {
+      if (delivered != null) {
+        final bytes = delivered.bytes;
         _perfMark('windowImageReceived bytes=${bytes.length}');
         if (cap.shutterSound) _shutter();
         try {
-          final result = await _deliverWindow(bytes, cap, info!);
+          final result = await _deliverWindow(bytes, cap, info!,
+              pinBytes: delivered.plainBytes);
           final ok = (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
               (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
           if (ok) {
@@ -210,8 +228,15 @@ class DirectCapture {
     final cap = await _settings.loadCapture();
     // Opt-in decoration is applied NATIVELY inside captureRegion (the captured
     // CGImage is wrapped before encoding), so the delivered bytes are final —
-    // no Dart decode/composite/re-encode for the direct modes.
-    final decoration = cap.decorateFor(kind)
+    // no Dart decode/composite/re-encode for the direct modes. The pin leg
+    // always shows the undecorated capture (decorationPlan): a pin-only flow
+    // skips decoration; alongside other legs native also returns the plain
+    // sibling (RegionCapture.plainBytes).
+    final plan = decorationPlan(
+      decorationEnabled: cap.decorateFor(kind),
+      actions: normalizeFlow(cap.flow, forCapture: true),
+    );
+    final decoration = plan.decorate
         ? logicalDecorationSpec(
             fillArgb: cap.isJpeg ? cap.decorationJpegFill : null,
             shapeFromAlpha: false,
@@ -226,6 +251,7 @@ class DirectCapture {
         jpeg: cap.isJpeg,
         jpegQuality: cap.jpegQuality,
         decoration: decoration,
+        alsoPlain: plan.needsPlainForPin,
       );
     } catch (e) {
       _showError('Capture failed: $e');

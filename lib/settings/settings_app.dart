@@ -1040,6 +1040,14 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ]),
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          _l.settingsDecorationPinNote,
+          style: GlimprType.sansStyle(12, 400, t.fg4),
+        ),
+      ),
       const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionRecentHistory, icon: Icons.history),
       GlassCard.padded(

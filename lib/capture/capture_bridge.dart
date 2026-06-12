@@ -23,6 +23,9 @@ class CaptureBridge {
     bool jpeg = false,
     int jpegQuality = 90,
     Map<String, dynamic>? decoration,
+    // Also return the UNDECORATED rendition (plainBytes) when decorating —
+    // the flow's pin leg always consumes the plain capture.
+    bool alsoPlain = false,
   }) async {
     final res = await _channel.invokeMethod('captureRegion', {
       'displayId': ?displayId,
@@ -33,6 +36,7 @@ class CaptureBridge {
       'jpeg': jpeg,
       'quality': jpegQuality,
       'decoration': ?decoration,
+      'alsoPlain': alsoPlain,
     });
     if (res == null) return null;
     return RegionCapture.fromMap((res as Map).cast<dynamic, dynamic>());
@@ -62,14 +66,17 @@ class CaptureBridge {
 
   /// Direct "Capture Window": the FINAL encoded bytes (PNG, or JPEG at
   /// [jpegQuality]), optionally decorated natively via [decoration] (a logical
-  /// spec; native scales by the window's display scale). Null when no such
-  /// window / the native capture failed -> the caller falls back to a rect crop.
-  Future<Uint8List?> captureWindowDelivered(
+  /// spec; native scales by the window's display scale). [alsoPlain] requests
+  /// the UNDECORATED sibling rendition for the flow's pin leg. Null when no
+  /// such window / the native capture failed -> the caller falls back to a
+  /// rect crop.
+  Future<({Uint8List bytes, Uint8List? plainBytes})?> captureWindowDelivered(
     int windowId, {
     bool showsCursor = false,
     bool jpeg = false,
     int jpegQuality = 90,
     Map<String, dynamic>? decoration,
+    bool alsoPlain = false,
   }) async {
     final res = await _channel.invokeMethod('captureWindowDelivered', {
       'windowId': windowId,
@@ -77,9 +84,13 @@ class CaptureBridge {
       'jpeg': jpeg,
       'quality': jpegQuality,
       'decoration': ?decoration,
+      'alsoPlain': alsoPlain,
     });
     if (res == null) return null;
-    return (res as Map)['bytes'] as Uint8List?;
+    final m = res as Map;
+    final bytes = m['bytes'] as Uint8List?;
+    if (bytes == null) return null;
+    return (bytes: bytes, plainBytes: m['plainBytes'] as Uint8List?);
   }
 
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).

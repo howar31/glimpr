@@ -324,6 +324,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Colour behind the margin when saving as JPEG';
 
   @override
+  String get settingsDecorationPinNote =>
+      'Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.';
+
+  @override
   String get settingsRecentImagesKept => 'Recent images kept';
 
   @override

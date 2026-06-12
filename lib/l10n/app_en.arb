@@ -388,6 +388,10 @@
   "@settingsDecorationJpegFillHint": {
     "description": "Settings > Output > Decoration: JPEG fill swatch row hint"
   },
+  "settingsDecorationPinNote": "Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.",
+  "@settingsDecorationPinNote": {
+    "description": "Settings > Output > Decoration: footnote that pin ignores decoration"
+  },
   "settingsRecentImagesKept": "Recent images kept",
   "@settingsRecentImagesKept": {
     "description": "Settings > Output > Recent history: card title"

@@ -40,6 +40,38 @@ void main() {
     });
   });
 
+  group('decorationPlan', () {
+    test('decoration off: never decorate, never plain', () {
+      final p = decorationPlan(
+          decorationEnabled: false,
+          actions: {FlowAction.save, FlowAction.pin});
+      expect(p.decorate, isFalse);
+      expect(p.needsPlainForPin, isFalse);
+    });
+
+    test('pin-only flow: skip decoration entirely', () {
+      final p =
+          decorationPlan(decorationEnabled: true, actions: {FlowAction.pin});
+      expect(p.decorate, isFalse);
+      expect(p.needsPlainForPin, isFalse);
+    });
+
+    test('pin + other legs: decorate AND produce the plain rendition', () {
+      final p = decorationPlan(
+          decorationEnabled: true,
+          actions: {FlowAction.save, FlowAction.pin});
+      expect(p.decorate, isTrue);
+      expect(p.needsPlainForPin, isTrue);
+    });
+
+    test('no pin: decorate, no plain rendition', () {
+      final p =
+          decorationPlan(decorationEnabled: true, actions: {FlowAction.copy});
+      expect(p.decorate, isTrue);
+      expect(p.needsPlainForPin, isFalse);
+    });
+  });
+
   group('runFlow', () {
     Future<String> save(Uint8List b, dir, String n) async => '/tmp/x/$n';
     Future<void> clip(Uint8List b) async {}
@@ -174,6 +206,59 @@ void main() {
         writeTempFn: (b) async => fail('must not write temp'),
       );
       expect(pinned, ['/tmp/temp.png', '/tmp/x/shot.png']);
+    });
+
+    test('pin leg uses pinBytes via its own temp; other legs keep bytes',
+        () async {
+      final pinned = <String>[];
+      final tempWrites = <Uint8List>[];
+      final saved = <Uint8List>[];
+      final plain = Uint8List.fromList([9, 9]);
+      await runFlow(
+        actions: {FlowAction.save, FlowAction.pin},
+        bytes: bytes,
+        pinBytes: plain,
+        fileName: 'shot.png',
+        saveFn: (b, d, n) async {
+          saved.add(b);
+          return '/tmp/x/$n';
+        },
+        clipboardFn: clip,
+        soundFn: () async {},
+        pinFn: (p) async => pinned.add(p),
+        writeTempFn: (b) async {
+          tempWrites.add(b);
+          return '/tmp/pin-temp.png';
+        },
+      );
+      expect(saved.single, bytes);
+      expect(tempWrites.single, plain); // pin wrote ITS OWN temp from pinBytes
+      expect(pinned.single, '/tmp/pin-temp.png'); // not the saved file
+    });
+
+    test('pin + shareSheet with pinBytes: the shared temp keeps the flow '
+        'bytes, the pin temp the plain bytes', () async {
+      final pinned = <String>[];
+      final shared = <String>[];
+      final tempWrites = <Uint8List>[];
+      final plain = Uint8List.fromList([9, 9]);
+      await runFlow(
+        actions: {FlowAction.pin, FlowAction.shareSheet},
+        bytes: bytes,
+        pinBytes: plain,
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        pinFn: (p) async => pinned.add(p),
+        shareFn: (p) async => shared.add(p),
+        writeTempFn: (b) async {
+          tempWrites.add(b);
+          return '/tmp/temp-${tempWrites.length}.png';
+        },
+      );
+      expect(tempWrites, [plain, bytes]); // pin leg runs before shareSheet
+      expect(pinned, ['/tmp/temp-1.png']);
+      expect(shared, ['/tmp/temp-2.png']);
     });
 
     test('save/copy legs honour the action set (delivery layer reused)',
