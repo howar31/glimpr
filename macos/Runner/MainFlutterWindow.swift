@@ -190,7 +190,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // title bar so the Flutter sidebar runs to the top edge behind the traffic
     // lights (macOS preferences style). The content lays out its own top inset.
     self.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
-    self.title = "Glimpr Settings"
+    self.title = L.s("Glimpr Settings", "Glimpr 設定")
     self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
     // Hard-lock the size. Dropping .resizable from the style mask alone proved
@@ -339,7 +339,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered, defer: false)
     w.onCloseShortcut = { [weak self] in self?.requestCloseImageEditor() }
-    w.title = "Image Editor"
+    w.title = L.s("Image Editor", "圖片編輯器")
     // Inline, transparent title bar so the Flutter content runs to the top edge
     // behind the traffic lights (same recipe as the settings window). Flutter
     // draws its own 44px title bar; the canvas/toolbar lay out below it.
@@ -1090,11 +1090,11 @@ final class PinPanel: NSPanel {
       mi.target = self
       menu.addItem(mi)
     }
-    add("Reset Size", #selector(resetSize))
-    add("Save As…", #selector(saveAs))
-    add("Copy to Clipboard", #selector(copyImage))
+    add(L.s("Reset Size", "重設大小"), #selector(resetSize))
+    add(L.s("Save As…", "另存新檔…"), #selector(saveAs))
+    add(L.s("Copy to Clipboard", "複製到剪貼簿"), #selector(copyImage))
     menu.addItem(.separator())
-    add("Close Pin", #selector(closePin))
+    add(L.s("Close Pin", "關閉釘選"), #selector(closePin))
     if let v = contentView {
       NSMenu.popUpContextMenu(menu, with: event, for: v)
     }
@@ -1272,4 +1272,25 @@ enum PerfLog {
   static func mark(_ label: String) {
     logger.log("PERF \(label, privacy: .public)")
   }
+}
+
+/// User-facing native strings (menu bar, pin menu, window titles, alerts),
+/// localized by the SAME Settings choice as the Flutter UI: the Dart side's
+/// SharedPreferencesAsync writes NSUserDefaults key "app_language" with NO
+/// prefix ("system" | "en" | "zh") - unlike the legacy shared_preferences
+/// API, the async API does not add "flutter." -
+/// read once at launch. The language applies on restart, so a static snapshot
+/// is correct by design. Only English and Traditional Chinese exist.
+enum L {
+  static let zh: Bool = {
+    switch UserDefaults.standard.string(forKey: "app_language") {
+    case "zh": return true
+    case "en": return false
+    default:
+      // System: any Chinese UI language resolves to Traditional Chinese,
+      // mirroring the Dart-side resolveAppLocale.
+      return Locale.preferredLanguages.first?.hasPrefix("zh") == true
+    }
+  }()
+  static func s(_ en: String, _ zhHant: String) -> String { zh ? zhHant : en }
 }

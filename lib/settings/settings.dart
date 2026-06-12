@@ -103,6 +103,7 @@ class Settings {
   static const _hudCrosshairKey = 'hud_crosshair';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
   static const _captureLayerCapKey = 'capture_layer_cap';
+  static const _appLanguageKey = 'app_language';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -230,6 +231,19 @@ class Settings {
   // Loupe geometry (shared by overlay + image editor) ----------------------
   // Getters clamp on read too, so a corrupt / out-of-range stored value stays
   // safe.
+  // App language --------------------------------------------------------------
+  // 'system' (default) | 'en' | 'zh' (Traditional Chinese). Applies on
+  // restart; the native side reads the same NSUserDefaults key
+  // ("app_language", no prefix: SharedPreferencesAsync) at launch for its
+  // menu/alert strings.
+  Future<String> getAppLanguage() async {
+    final v = await store.getString(_appLanguageKey);
+    return (v == 'en' || v == 'zh') ? v! : 'system';
+  }
+
+  Future<void> setAppLanguage(String v) =>
+      store.setString(_appLanguageKey, (v == 'en' || v == 'zh') ? v : 'system');
+
   // Capture layer stack ------------------------------------------------------
   // How many freeze layers one overlay session may hold (1-5, default 1).
   // 1 = no stacking: a capture hotkey during a live session replaces it.

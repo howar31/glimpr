@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../l10n/gen/app_localizations.dart';
 import '../../theme/glimpr_theme.dart';
 import '../hotkey_binding.dart';
 import 'key_cap_chips.dart';
@@ -20,7 +21,7 @@ class HotkeyRecorderField extends StatefulWidget {
     required this.onChanged,
     required this.requireModifier,
     this.reservedKeys = const {},
-    this.emptyLabel = 'Disabled',
+    this.emptyLabel,
     this.onRecordingChanged,
   });
 
@@ -36,8 +37,9 @@ class HotkeyRecorderField extends StatefulWidget {
   final ValueChanged<bool>? onRecordingChanged;
 
   /// Shown (as muted text, not a cap) when [value] is null — e.g. "Disabled" for
-  /// the global hotkey, "None" for an editor tool with no shortcut.
-  final String emptyLabel;
+  /// the global hotkey, "None" for an editor tool with no shortcut. Null =
+  /// the localized default ("Disabled").
+  final String? emptyLabel;
 
   @override
   State<HotkeyRecorderField> createState() => _HotkeyRecorderFieldState();
@@ -112,7 +114,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     }
     if (_isModifierKey(key)) return KeyEventResult.handled; // wait for a main key
     if (widget.reservedKeys.contains(key)) {
-      setState(() => _error = 'Reserved key');
+      setState(() => _error = AppLocalizations.of(context).recorderReservedKey);
       return KeyEventResult.handled;
     }
 
@@ -123,7 +125,8 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
     if (widget.requireModifier && pressed.isEmpty) {
-      setState(() => _error = 'Needs a modifier (⌘ ⌥ ⌃ ⇧)');
+      setState(() =>
+          _error = AppLocalizations.of(context).recorderNeedsModifier);
       return KeyEventResult.handled;
     }
     widget.onChanged(HotkeyBinding(
@@ -148,7 +151,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
       return Icon(Icons.keyboard_outlined, size: 15, color: t.fg3);
     }
     return Tooltip(
-      message: 'Clear',
+      message: AppLocalizations.of(context).recorderClear,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -190,11 +193,13 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     // so no element comes/goes to shift the row.
     final Widget primary = _recording
         ? Text(
-            _error ?? 'Press keys…',
+            _error ?? AppLocalizations.of(context).recorderPressKeys,
             style: GlimprType.sansStyle(
                 12.5, 600, hasError ? GlimprTokens.danger : t.fg2),
           )
-        : KeyCapChips(widget.value, emptyLabel: widget.emptyLabel);
+        : KeyCapChips(widget.value,
+            emptyLabel: widget.emptyLabel ??
+                AppLocalizations.of(context).recorderDisabled);
     final Widget content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -221,7 +226,9 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     if (_recording) {
       // Hovering the record area while recording explains the cancel key. The
       // trailing ✕ keeps its own "Clear" tooltip (wins on its own region).
-      field = Tooltip(message: 'Press Esc to cancel', child: field);
+      field = Tooltip(
+          message: AppLocalizations.of(context).recorderEscToCancel,
+          child: field);
     }
     return Focus(
       focusNode: _focus,

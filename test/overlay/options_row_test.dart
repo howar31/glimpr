@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/overlay/toolbar.dart';
 
 Widget _host(EditorController c) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: EditorToolbar(controller: c, onMove: (_) {}, onPtEditingDone: () {}),
   ),
@@ -44,6 +47,8 @@ void main() {
       var commits = 0;
       await t.pumpWidget(
         MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: EditorToolbar(
               controller: c,

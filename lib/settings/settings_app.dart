@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
+import '../l10n/gen/app_localizations.dart';
+import 'app_locale.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../output/filename.dart';
@@ -64,6 +66,11 @@ const _kSections = <(String, IconData)>[
 
 class _SettingsAppState extends State<SettingsApp>
     with WidgetsBindingObserver {
+  // Resolved once per build frame inside the MaterialApp's localizations scope
+  // (set in the Builder in build()). Using a field instead of a context-arg
+  // avoids threading BuildContext through every helper method.
+  late AppLocalizations _l;
+
   int _section = 0;
 
   String? _saveDir;
@@ -80,6 +87,10 @@ class _SettingsAppState extends State<SettingsApp>
   int _warmTarget = 2;
   int _recentCap = kRecentImagesCap;
   int _captureLayerCap = 1;
+  // App language choice + the value active since launch (restart-effective,
+  // like the warm target): the restart hint shows while they differ.
+  String _appLanguage = 'system';
+  String? _appLanguageInitial;
   // The warm target active SINCE launch (what OverlayManager actually built with).
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
@@ -166,6 +177,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudCrosshair = await _s.getHudCrosshair();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final layerCap = await _s.getCaptureLayerCap();
+    final appLanguage = await _s.getAppLanguage();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -191,6 +203,8 @@ class _SettingsAppState extends State<SettingsApp>
       _hudCrosshair = hudCrosshair;
       _hudMarchingAnts = hudMarchingAnts;
       _captureLayerCap = layerCap;
+      _appLanguage = appLanguage;
+      _appLanguageInitial = appLanguage;
     });
     _filenameController.text = template;
     // Login state comes from the OS (SMAppService) over a native channel; query
@@ -257,53 +271,51 @@ class _SettingsAppState extends State<SettingsApp>
 
     return [
       SettingRow(
-        title: 'Copy to clipboard',
-        hint: 'Put the image on the clipboard',
+        title: _l.settingsFlowCopyToClipboard,
+        hint: _l.settingsFlowCopyToClipboardHint,
         trailing: toggle(FlowAction.copy),
       ),
       SettingRow(
         divider: true,
-        title: 'Save to file',
-        hint: 'Write the image to the save folder',
+        title: _l.settingsFlowSaveToFile,
+        hint: _l.settingsFlowSaveToFileHint,
         trailing: toggle(FlowAction.save),
       ),
       SettingRow(
         divider: true,
-        title: 'Copy file path',
+        title: _l.settingsFlowCopyFilePath,
         hint: hasSave
-            ? 'Put the saved file\'s path on the clipboard (instead of '
-                'the image)'
-            : 'Needs "Save to file"',
+            ? _l.settingsFlowCopyFilePathHint
+            : _l.settingsFlowCopyFilePathNeedsSave,
         trailing: toggle(FlowAction.copyPath, enabled: hasSave),
       ),
       SettingRow(
         divider: true,
-        title: 'Show in Finder',
+        title: _l.settingsFlowShowInFinder,
         hint: hasSave
-            ? 'Reveal the saved file in Finder'
-            : 'Needs "Save to file"',
+            ? _l.settingsFlowShowInFinderHint
+            : _l.settingsFlowCopyFilePathNeedsSave,
         trailing: toggle(FlowAction.showInFinder, enabled: hasSave),
       ),
       if (capture)
         SettingRow(
           divider: true,
-          title: 'Open in editor',
-          hint: 'Open the result in the image editor for further work',
+          title: _l.settingsFlowOpenInEditor,
+          hint: _l.settingsFlowOpenInEditorHint,
           trailing: toggle(FlowAction.openEditor),
         ),
       SettingRow(
         divider: true,
-        title: 'Share sheet',
-        hint: 'Open the macOS share menu (AirDrop, Messages, …)',
+        title: _l.settingsFlowShareSheet,
+        hint: _l.settingsFlowShareSheetHint,
         trailing: toggle(FlowAction.shareSheet),
       ),
       SettingRow(
         divider: true,
-        title: 'Pin to screen',
+        title: _l.settingsFlowPinToScreen,
         hint: capture
-            ? 'Float the capture as an always-on-top window, pinned in '
-                'place over where it was taken'
-            : 'Float the result as an always-on-top window (centered)',
+            ? _l.settingsFlowPinToScreenCaptureHint
+            : _l.settingsFlowPinToScreenEditorHint,
         trailing: toggle(FlowAction.pin),
       ),
     ];
@@ -313,18 +325,20 @@ class _SettingsAppState extends State<SettingsApp>
   /// fallback warning.
   Widget _flowCaption(GlimprTokens t, {required bool capture}) {
     final flow = capture ? _afterCapture : _afterEditorDone;
-    final when = capture
-        ? 'Runs when a capture is confirmed: overlay ✓/Enter and the '
-            'direct ⌘⌥2/3/4 modes.'
-        : 'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu '
-            'beside Done offers one-off alternatives.';
+    final String text;
+    if (flow.isEmpty) {
+      text = capture
+          ? _l.settingsFlowCaptureCaptionEmpty
+          : _l.settingsFlowEditorCaptionEmpty;
+    } else {
+      text = capture
+          ? _l.settingsFlowCaptureCaption
+          : _l.settingsFlowEditorCaption;
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
       child: Text(
-        flow.isEmpty
-            ? '$when Nothing is selected, so it falls back to Copy to '
-                'clipboard.'
-            : when,
+        text,
         style: GlimprType.sansStyle(
             12, 500, flow.isEmpty ? GlimprTokens.danger : t.fg4,
             height: 1.4),
@@ -356,6 +370,11 @@ class _SettingsAppState extends State<SettingsApp>
     setState(() => _captureLayerCap = v);
   }
 
+  void _setAppLanguage(String v) {
+    _s.setAppLanguage(v);
+    setState(() => _appLanguage = v);
+  }
+
   @override
   Widget build(BuildContext context) {
     final brightness =
@@ -363,6 +382,10 @@ class _SettingsAppState extends State<SettingsApp>
     final tokens = GlimprTokens.forBrightness(brightness);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      locale: appLocaleOverride,
+      localeListResolutionCallback: resolveAppLocale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         brightness: brightness,
         scaffoldBackgroundColor: Colors.transparent,
@@ -379,16 +402,23 @@ class _SettingsAppState extends State<SettingsApp>
             // The base glass tint that layers over the native vibrancy blur.
             child: Material(
               type: MaterialType.transparency,
-              child: ColoredBox(
-                color: tokens.winBg,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _sidebar(tokens),
-                    Container(width: 1, color: tokens.divider),
-                    Expanded(child: _content(tokens)),
-                  ],
-                ),
+              child: Builder(
+                builder: (ctx) {
+                  // Resolve localizations from a context that is inside the
+                  // MaterialApp's Localizations scope (not the outer context).
+                  _l = AppLocalizations.of(ctx);
+                  return ColoredBox(
+                    color: tokens.winBg,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _sidebar(tokens),
+                        Container(width: 1, color: tokens.divider),
+                        Expanded(child: _content(tokens)),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -398,6 +428,19 @@ class _SettingsAppState extends State<SettingsApp>
   }
 
   // ---- sidebar -----------------------------------------------------------
+
+  // Maps section index to the localized pane title. Must stay in sync with
+  // _kSections order and _pane()'s switch.
+  String _sectionTitle(int i) {
+    switch (i) {
+      case 1: return _l.settingsPaneCapture;
+      case 2: return _l.settingsPaneOutput;
+      case 3: return _l.settingsPaneWorkflow;
+      case 4: return _l.settingsPaneShortcuts;
+      case 5: return _l.settingsPaneAdvanced;
+      default: return _l.settingsPaneGeneral;
+    }
+  }
 
   Widget _sidebar(GlimprTokens t) {
     return Container(
@@ -421,7 +464,7 @@ class _SettingsAppState extends State<SettingsApp>
                     padding: const EdgeInsets.symmetric(vertical: 1.5),
                     child: NavItem(
                       icon: _kSections[i].$2,
-                      label: _kSections[i].$1,
+                      label: _sectionTitle(i),
                       active: _section == i,
                       onTap: () => setState(() => _section = i),
                     ),
@@ -480,12 +523,12 @@ class _SettingsAppState extends State<SettingsApp>
 
   List<Widget> _generalPane(GlimprTokens t) {
     return [
-      _h1('General', t),
-      const SectionLabel('Startup', icon: Icons.power_settings_new),
+      _h1(_l.settingsPaneGeneral, t),
+      SectionLabel(_l.settingsSectionStartup, icon: Icons.power_settings_new),
       GlassCard.rows([
         SettingRow(
-          title: 'Launch at login',
-          hint: 'Start Glimpr automatically when you log in',
+          title: _l.settingsLaunchAtLogin,
+          hint: _l.settingsLaunchAtLoginHint,
           trailing: GlassToggle(
             value: _launchAtLogin,
             onChanged: (v) async {
@@ -495,6 +538,64 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ]),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsLanguage, icon: Icons.translate),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _l.settingsLanguage,
+              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _l.settingsLanguageAppliesAfterRestart,
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 16),
+            // The option names are proper nouns, shown as-is in both
+            // localizations.
+            Segmented<String>(
+              full: true,
+              value: _appLanguage,
+              options: const [
+                ('system', 'System'),
+                ('en', 'English'),
+                ('zh', '繁體中文'),
+              ],
+              onChanged: _setAppLanguage,
+            ),
+            if (_appLanguageInitial != null &&
+                _appLanguage != _appLanguageInitial) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.restart_alt,
+                    size: 15,
+                    color: GlimprTokens.danger,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _l.settingsRestartNotice,
+                      style:
+                          GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ConfirmGhostButton(
+                _l.settingsRestartNow,
+                confirmLabel: _l.settingsRestartNowConfirm,
+                onConfirmed: () => _roleChannel.invokeMethod('relaunch'),
+              ),
+            ],
+          ],
+        ),
+      ),
     ];
   }
 
@@ -502,14 +603,12 @@ class _SettingsAppState extends State<SettingsApp>
   /// HUD) — everything about HOW a capture is taken.
   List<Widget> _capturePane(GlimprTokens t) {
     return [
-      _h1('Capture', t),
-      const SectionLabel('Behaviour', icon: Icons.photo_camera_outlined),
+      _h1(_l.settingsPaneCapture, t),
+      SectionLabel(_l.settingsSectionBehaviour, icon: Icons.photo_camera_outlined),
       GlassCard.rows([
         SettingRow(
-          title: 'Mouse pointer',
-          hint: 'Include the mouse pointer in captures. This is the default; '
-              'in the capture overlay a toolbar button shows/hides it per '
-              'shot without changing this setting.',
+          title: _l.settingsMousePointer,
+          hint: _l.settingsMousePointerHint,
           trailing: GlassToggle(
             value: _captureCursor,
             onChanged: (v) async {
@@ -520,8 +619,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Right-click exits',
-          hint: 'Right-click leaves capture mode (Esc always works)',
+          title: _l.settingsRightClickExits,
+          hint: _l.settingsRightClickExitsHint,
           trailing: GlassToggle(
             value: _rightClickExits,
             onChanged: (v) async {
@@ -532,9 +631,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Confirm before discarding',
-          hint: 'When exiting a capture that still has annotations (right-click '
-              'or Esc), ask before discarding them.',
+          title: _l.settingsConfirmBeforeDiscarding,
+          hint: _l.settingsConfirmBeforeDiscardingHint,
           trailing: GlassToggle(
             value: _confirmOnExit,
             onChanged: (v) async {
@@ -545,18 +643,16 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
       const SizedBox(height: 15),
-      const SectionLabel('Loupe', icon: Icons.zoom_in),
+      SectionLabel(_l.settingsSectionLoupe, icon: Icons.zoom_in),
       GlassCard.padded(child: _loupeBody(t)),
       const SizedBox(height: 8),
       GlassCard.rows([
         SettingRow(
-          title: 'Tool shortcuts while sampling',
-          hint: 'Switch tool ends the color-picker sample immediately; '
-              'Keep sampling ignores tool keys, so a stray key cannot '
-              'interrupt a careful aim.',
+          title: _l.settingsToolShortcutsWhileSampling,
+          hint: _l.settingsToolShortcutsWhileSamplingHint,
           trailing: Segmented<bool>(
             value: _eyedropperKeysCancel,
-            options: const [(true, 'Switch tool'), (false, 'Keep sampling')],
+            options: [(true, _l.settingsSwitchTool), (false, _l.settingsKeepSampling)],
             onChanged: (v) async {
               await _s.setEyedropperToolKeysCancel(v);
               if (mounted) setState(() => _eyedropperKeysCancel = v);
@@ -565,13 +661,11 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
       const SizedBox(height: 15),
-      const SectionLabel('Overlay HUD', icon: Icons.grid_goldenratio),
+      SectionLabel(_l.settingsSectionOverlayHUD, icon: Icons.grid_goldenratio),
       GlassCard.rows([
         SettingRow(
-          title: 'Crosshair',
-          hint: 'Show the full-screen crosshair lines for the region tools '
-              '(crop / blur / pixelate). The centre reticle and loupe stay '
-              'either way.',
+          title: _l.settingsCrosshair,
+          hint: _l.settingsCrosshairHint,
           trailing: GlassToggle(
             value: _hudCrosshair,
             onChanged: (v) async {
@@ -582,9 +676,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Animate marching ants',
-          hint: 'Flow the dashed selection / crosshair / window outlines. Turn '
-              'off for static dashes (less motion, slightly lighter).',
+          title: _l.settingsAnimateMarchingAnts,
+          hint: _l.settingsAnimateMarchingAntsHint,
           trailing: GlassToggle(
             value: _hudMarchingAnts,
             onChanged: (v) async {
@@ -601,21 +694,21 @@ class _SettingsAppState extends State<SettingsApp>
   /// capture / the editor's Done.
   List<Widget> _workflowPane(GlimprTokens t) {
     return [
-      _h1('Workflow', t),
-      const SectionLabel('After capture', icon: Icons.layers_outlined),
+      _h1(_l.settingsPaneWorkflow, t),
+      SectionLabel(_l.settingsSectionAfterCapture, icon: Icons.layers_outlined),
       GlassCard.rows(_flowRows(capture: true)),
       _flowCaption(t, capture: true),
       const SizedBox(height: 15),
-      const SectionLabel("After editor's Done",
+      SectionLabel(_l.settingsSectionAfterEditorDone,
           icon: Icons.check_circle_outline),
       GlassCard.rows(_flowRows(capture: false)),
       _flowCaption(t, capture: false),
       const SizedBox(height: 15),
-      const SectionLabel('Sounds', icon: Icons.volume_up_outlined),
+      SectionLabel(_l.settingsSectionSounds, icon: Icons.volume_up_outlined),
       GlassCard.rows([
         SettingRow(
-          title: 'Shutter',
-          hint: 'Plays the instant a capture is taken',
+          title: _l.settingsSoundShutter,
+          hint: _l.settingsSoundShutterHint,
           trailing: GlassToggle(
             value: _shutterSound,
             onChanged: (v) async {
@@ -626,8 +719,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Completion',
-          hint: 'Chimes once the completion flow finishes',
+          title: _l.settingsSoundCompletion,
+          hint: _l.settingsSoundCompletionHint,
           trailing: GlassToggle(
             value: _completionSound,
             onChanged: (v) async {
@@ -653,9 +746,7 @@ class _SettingsAppState extends State<SettingsApp>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Pixel magnifier for crop / blur / pixelate, in the capture overlay '
-          'and the Image Editor. Nudge the cursor a pixel at a time with the '
-          'arrow keys.',
+          _l.settingsLoupeDescription,
           style: GlimprType.sansStyle(12.5, 400, t.fg3),
         ),
         const SizedBox(height: 16),
@@ -674,8 +765,8 @@ class _SettingsAppState extends State<SettingsApp>
                 children: [
                   _loupeSlider(
                     t,
-                    title: 'Size',
-                    hint: 'Pixels shown per side',
+                    title: _l.settingsLoupeSize,
+                    hint: _l.settingsLoupeSizeHint,
                     value: _loupeSpan,
                     min: kLoupeSpanMin,
                     max: kLoupeSpanMax,
@@ -686,8 +777,8 @@ class _SettingsAppState extends State<SettingsApp>
                   const SizedBox(height: 16),
                   _loupeSlider(
                     t,
-                    title: 'Magnification',
-                    hint: 'How big each pixel is drawn',
+                    title: _l.settingsLoupeMagnification,
+                    hint: _l.settingsLoupeMagnificationHint,
                     value: _loupeZoom,
                     min: kLoupeZoomMin,
                     max: kLoupeZoomMax,
@@ -703,7 +794,7 @@ class _SettingsAppState extends State<SettingsApp>
                       Expanded(
                         child: scaledPreview
                             ? Text(
-                                'Preview reduced to fit',
+                                _l.settingsLoupePreviewReduced,
                                 style: GlimprType.sansStyle(11.5, 400, t.fg4),
                               )
                             : const SizedBox.shrink(),
@@ -711,7 +802,7 @@ class _SettingsAppState extends State<SettingsApp>
                       // Dimmed (disabled) at the defaults — same idiom as the
                       // per-shortcut Reset.
                       GhostButton(
-                        'Reset',
+                        _l.settingsLoupeReset,
                         onTap: isDefault ? null : _resetLoupe,
                       ),
                     ],
@@ -794,11 +885,11 @@ class _SettingsAppState extends State<SettingsApp>
   List<Widget> _outputPane(GlimprTokens t) {
     final lossy = _format == ImageFormat.jpeg;
     return [
-      _h1('Output', t),
-      const SectionLabel('Save location', icon: Icons.folder_outlined),
+      _h1(_l.settingsPaneOutput, t),
+      SectionLabel(_l.settingsSectionSaveLocation, icon: Icons.folder_outlined),
       GlassCard.padded(child: _saveFolderBody(t)),
       const SizedBox(height: 15),
-      const SectionLabel('Format', icon: Icons.image_outlined),
+      SectionLabel(_l.settingsSectionFormat, icon: Icons.image_outlined),
       GlassCard.padded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -841,12 +932,12 @@ class _SettingsAppState extends State<SettingsApp>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Quality',
+                              _l.settingsFormatQuality,
                               style: GlimprType.sansStyle(14.5, 600, t.fg1),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Compression level',
+                              _l.settingsFormatQualityHint,
                               style: GlimprType.sansStyle(12.5, 400, t.fg3),
                             ),
                           ],
@@ -872,14 +963,14 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 15),
-      const SectionLabel('Filename', icon: Icons.text_fields_outlined),
+      SectionLabel(_l.settingsSectionFilename, icon: Icons.text_fields_outlined),
       GlassCard.padded(child: _filenameBody(t)),
       const SizedBox(height: 15),
-      const SectionLabel('Decoration', icon: Icons.filter_frames_outlined),
+      SectionLabel(_l.settingsSectionDecoration, icon: Icons.filter_frames_outlined),
       GlassCard.rows([
         SettingRow(
-          title: 'Window snap',
-          hint: 'Shadow + margin when snapping to a window',
+          title: _l.settingsDecorationWindowSnap,
+          hint: _l.settingsDecorationWindowSnapHint,
           trailing: GlassToggle(
             value: _decorateSnap,
             onChanged: (v) async {
@@ -890,8 +981,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Freehand crop',
-          hint: 'Shadow + margin on a dragged crop region',
+          title: _l.settingsDecorationFreehandCrop,
+          hint: _l.settingsDecorationFreehandCropHint,
           trailing: GlassToggle(
             value: _decorateCrop,
             onChanged: (v) async {
@@ -902,8 +993,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Focused window',
-          hint: 'Capture-focused-window mode (⌘⌥2)',
+          title: _l.settingsDecorationFocusedWindow,
+          hint: _l.settingsDecorationFocusedWindowHint,
           trailing: GlassToggle(
             value: _decorateWindow,
             onChanged: (v) async {
@@ -914,8 +1005,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Display',
-          hint: 'Capture-display mode (⌘⌥3)',
+          title: _l.settingsDecorationDisplay,
+          hint: _l.settingsDecorationDisplayHint,
           trailing: GlassToggle(
             value: _decorateDisplay,
             onChanged: (v) async {
@@ -926,8 +1017,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'Last region',
-          hint: 'Capture-last-region mode (⌘⌥4)',
+          title: _l.settingsDecorationLastRegion,
+          hint: _l.settingsDecorationLastRegionHint,
           trailing: GlassToggle(
             value: _decorateLastRegion,
             onChanged: (v) async {
@@ -938,8 +1029,8 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         SettingRow(
           divider: true,
-          title: 'JPEG background fill',
-          hint: 'Colour behind the margin when saving as JPEG',
+          title: _l.settingsDecorationJpegFill,
+          hint: _l.settingsDecorationJpegFillHint,
           trailing: _DecorationFillSwatch(
             argb: _decorationJpegFill,
             onChanged: (argb) async {
@@ -950,19 +1041,18 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
       const SizedBox(height: 15),
-      const SectionLabel('Recent history', icon: Icons.history),
+      SectionLabel(_l.settingsSectionRecentHistory, icon: Icons.history),
       GlassCard.padded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Recent images kept',
+              _l.settingsRecentImagesKept,
               style: GlimprType.sansStyle(14.5, 600, t.fg1),
             ),
             const SizedBox(height: 4),
             Text(
-              'How many images the landing gallery and the menu-bar '
-              'Open Recent keep.',
+              _l.settingsRecentImagesKeptHint,
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
             ),
             const SizedBox(height: 16),
@@ -1032,7 +1122,7 @@ class _SettingsAppState extends State<SettingsApp>
         const SizedBox(height: 12),
         Row(
           children: [
-            Text('Preview', style: GlimprType.sansStyle(12.5, 600, t.fg4)),
+            Text(_l.settingsFilenamePreview, style: GlimprType.sansStyle(12.5, 600, t.fg4)),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1045,16 +1135,15 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
         const SizedBox(height: 16),
-        Text('Placeholders', style: GlimprType.sansStyle(12.5, 600, t.fg4)),
+        Text(_l.settingsFilenamePlaceholders, style: GlimprType.sansStyle(12.5, 600, t.fg4)),
         const SizedBox(height: 8),
-        _token(t, '{window}', 'The window title, or the app name if it has none'),
-        _token(t, '{app}', 'The application name (e.g. Safari)'),
-        _token(t, '{date}', 'Capture date, e.g. 2026-06-03'),
-        _token(t, '{time}', 'Capture time, e.g. 15-04-09'),
+        _token(t, '{window}', _l.settingsFilenameTokenWindowDesc),
+        _token(t, '{app}', _l.settingsFilenameTokenAppDesc),
+        _token(t, '{date}', _l.settingsFilenameTokenDateDesc),
+        _token(t, '{time}', _l.settingsFilenameTokenTimeDesc),
         const SizedBox(height: 6),
         Text(
-          'Uses the window under the cursor when the capture ends. On bare '
-          'desktop, {window} and {app} are left out.',
+          _l.settingsFilenameNote('{window}', '{app}'),
           style: GlimprType.sansStyle(12, 400, t.fg4),
         ),
       ],
@@ -1084,29 +1173,19 @@ class _SettingsAppState extends State<SettingsApp>
 
   List<Widget> _advancedPane(GlimprTokens t) {
     return [
-      _h1('Advanced', t),
-      const SectionLabel('Multi-display', icon: Icons.memory),
+      _h1(_l.settingsPaneAdvanced, t),
+      SectionLabel(_l.settingsSectionMultiDisplay, icon: Icons.memory),
       GlassCard.padded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Warm capture engines',
+              _l.settingsWarmEnginesTitle,
               style: GlimprType.sansStyle(14.5, 600, t.fg1),
             ),
             const SizedBox(height: 4),
             Text(
-              'How many displays Glimpr keeps instantly capture-ready, including '
-              'displays connected after the app has launched (e.g. plugging into a '
-              'dock). Glimpr pre-warms a rendering engine per display so the freeze '
-              'overlay appears with no delay.\n\n'
-              'This is a minimum, not a cap: every display already connected when '
-              'Glimpr starts gets a warm engine regardless of this number; it only '
-              'adds spares for displays plugged in later.\n\n'
-              'Cost: each engine uses about 10 MB of memory while Glimpr runs. A '
-              'display plugged in beyond this number still captures, but only shows '
-              'the frozen frame; its crosshair and toolbar follow correctly after a '
-              'restart (which makes every connected display warm again).',
+              _l.settingsWarmEnginesBody,
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
             ),
             const SizedBox(height: 16),
@@ -1128,7 +1207,7 @@ class _SettingsAppState extends State<SettingsApp>
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Restart Glimpr for this to take effect.',
+                      _l.settingsRestartNotice,
                       style: GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
                     ),
                   ),
@@ -1139,42 +1218,31 @@ class _SettingsAppState extends State<SettingsApp>
               // side re-opens the bundle after this process exits. Two-step
               // (arm -> confirm) because it kills the running app.
               ConfirmGhostButton(
-                'Restart Glimpr now',
-                confirmLabel: 'Click again to restart Glimpr',
+                _l.settingsRestartNow,
+                confirmLabel: _l.settingsRestartNowConfirm,
                 onConfirmed: () => _roleChannel.invokeMethod('relaunch'),
               ),
             ] else
               Text(
-                'Default 2 · applies after restarting Glimpr',
+                _l.settingsWarmEnginesDefault,
                 style: GlimprType.sansStyle(12, 500, t.fg4),
               ),
           ],
         ),
       ),
       const SizedBox(height: 15),
-      const SectionLabel('Capture layers', icon: Icons.layers_outlined),
+      SectionLabel(_l.settingsSectionCaptureLayers, icon: Icons.layers_outlined),
       GlassCard.padded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Capture layers',
+              _l.settingsCaptureLayersTitle,
               style: GlimprType.sansStyle(14.5, 600, t.fg1),
             ),
             const SizedBox(height: 4),
             Text(
-              'Press the capture shortcut while a capture is already open to '
-              'stack a new freeze on top (the previous layer stays in the '
-              'screenshot, annotations and all); finishing or cancelling a '
-              'layer returns to the one below.\n\n'
-              'With 1 (the default) nothing stacks: a new trigger restarts '
-              'the capture. With 2 to 5, the OLDEST layer is dropped once '
-              'the cap is reached, keeping the most recent ones; the toolbar '
-              'announces both cases.\n\n'
-              'Cost: each stacked layer holds a full-resolution frozen image '
-              'per display (roughly 30 to 60 MB at 4K or 5K) while the '
-              'session is open. Applies on the next capture; no restart '
-              'needed.',
+              _l.settingsCaptureLayersBody,
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
             ),
             const SizedBox(height: 16),
@@ -1188,24 +1256,23 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 15),
-      const SectionLabel('Tool styles', icon: Icons.brush_outlined),
+      SectionLabel(_l.settingsSectionToolStyles, icon: Icons.brush_outlined),
       GlassCard.padded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Reset all tool styles',
+            Text(_l.settingsResetAllToolStyles,
                 style: GlimprType.sansStyle(14.5, 600, t.fg1)),
             const SizedBox(height: 4),
             Text(
-              'Restore every annotation tool (colour, stroke, font size, font) to its '
-              'default. Takes effect on your next capture.',
+              _l.settingsResetAllToolStylesHint,
               style: GlimprType.sansStyle(12.5, 400, t.fg3),
             ),
             const SizedBox(height: 14),
             // Two-step confirm: wipes EVERY tool's saved style, unrecoverable.
             ConfirmGhostButton(
-              'Reset all tool styles',
-              confirmLabel: 'Click again to reset all tool styles',
+              _l.settingsResetAllToolStyles,
+              confirmLabel: _l.settingsResetAllToolStylesConfirm,
               onConfirmed: () {
                 ToolStyleStore(Settings.instance.store).resetAll();
               },
@@ -1239,14 +1306,14 @@ class _SettingsAppState extends State<SettingsApp>
     final dupes = duplicateActionKeys(draft);
 
     return [
-      _h1('Shortcuts', t),
-      const SectionLabel('Capture', icon: Icons.crop_free,
-          note: 'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)'),
+      _h1(_l.settingsPaneShortcuts, t),
+      SectionLabel(_l.settingsPaneCapture, icon: Icons.crop_free,
+          note: _l.settingsShortcutsCaptureNote),
       GlassCard.rows([
         for (final a in kGlobalActions)
           SettingRow(
-            title: a.label,
-            hint: a.hint,
+            title: globalActionLabel(_l, a.actionKey),
+            hint: globalActionHint(_l, a.actionKey),
             trailing: _bindingRow(
               t: t,
               actionKey: a.actionKey,
@@ -1258,12 +1325,12 @@ class _SettingsAppState extends State<SettingsApp>
       ]),
       const SizedBox(height: 24),
       // Tools — tool-selection keys (rebindable), in toolbar order.
-      const SectionLabel('Tools', icon: Icons.palette_outlined),
+      SectionLabel(_l.settingsShortcutsTools, icon: Icons.palette_outlined),
       GlassCard.rows([
         for (final (tool, icon) in kEditorToolMeta)
           SettingRow(
             // Shared with the toolbar tooltips (tool_meta) — never drifts.
-            title: toolSettingsLabel(tool),
+            title: toolSettingsLabel(_l, tool),
             icon: icon,
             // The crop slot's one binding drives crop AND the pin-mode pin
             // selector: crop keeps the standard 18px glyph (row rhythm) and
@@ -1283,39 +1350,39 @@ class _SettingsAppState extends State<SettingsApp>
       ]),
       const SizedBox(height: 24),
       // Commands — annotation / document commands (rebindable).
-      const SectionLabel('Commands', icon: Icons.edit_outlined),
+      SectionLabel(_l.settingsShortcutsCommands, icon: Icons.edit_outlined),
       GlassCard.rows([
-        for (final cmd in const <(String, String, String?)>[
-          (kEditorUndoKey, 'Undo', null),
-          (kEditorRedoKey, 'Redo', null),
-          (kEditorPasteKey, 'Paste image', 'From the clipboard'),
-          (kEditorDeleteKey, 'Delete selected', 'Remove the selected annotation'),
+        for (final cmd in <(String, String, String?)>[
+          (kEditorUndoKey, _l.settingsCmdUndo, null),
+          (kEditorRedoKey, _l.settingsCmdRedo, null),
+          (kEditorPasteKey, _l.settingsCmdPasteImage, _l.settingsCmdPasteImageHint),
+          (kEditorDeleteKey, _l.settingsCmdDeleteSelected, _l.settingsCmdDeleteSelectedHint),
           (
             kEditorConfirmKey,
-            'Export',
-            'Screenshot the snapped window, or the whole screen',
+            _l.settingsCmdExport,
+            _l.settingsCmdExportHint,
           ),
-          (kEditorDuplicateKey, 'Duplicate selected', 'Copy the selected annotation'),
+          (kEditorDuplicateKey, _l.settingsCmdDuplicateSelected, _l.settingsCmdDuplicateSelectedHint),
           (
             kEditorBringToFrontKey,
-            'Bring to front',
-            'Move the selection above others',
+            _l.settingsCmdBringToFront,
+            _l.settingsCmdBringToFrontHint,
           ),
-          (kEditorSendToBackKey, 'Send to back', 'Move the selection below others'),
+          (kEditorSendToBackKey, _l.settingsCmdSendToBack, _l.settingsCmdSendToBackHint),
           (
             kEditorCopyHexKey,
-            'Copy color as HEX',
-            'While the color picker is sampling',
+            _l.settingsCmdCopyHex,
+            _l.settingsCmdCopyColorHint,
           ),
           (
             kEditorCopyRgbKey,
-            'Copy color as RGB',
-            'While the color picker is sampling',
+            _l.settingsCmdCopyRgb,
+            _l.settingsCmdCopyColorHint,
           ),
           (
             kEditorCopyHslKey,
-            'Copy color as HSL',
-            'While the color picker is sampling',
+            _l.settingsCmdCopyHsl,
+            _l.settingsCmdCopyColorHint,
           ),
         ])
           SettingRow(
@@ -1335,26 +1402,26 @@ class _SettingsAppState extends State<SettingsApp>
       // surface each applies to). Rendered in a field-shaped box matching the
       // recorder so the caps line up with the editable rows (a lock glyph
       // replaces the recorder's keyboard/✕ glyph).
-      const SectionLabel('Reserved', icon: Icons.lock_outline),
+      SectionLabel(_l.settingsShortcutsReserved, icon: Icons.lock_outline),
       GlassCard.rows([
         SettingRow(
-          title: 'Cancel / Exit',
-          hint: 'Reserved',
+          title: _l.settingsReservedCancelExit,
+          hint: _l.settingsReservedHint,
           trailing: _reservedField(t, const [KeyCap('esc')]),
         ),
         SettingRow(
-          title: 'Close window',
-          hint: 'Reserved · editor / settings',
+          title: _l.settingsReservedCloseWindow,
+          hint: _l.settingsReservedHintEditorSettings,
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('W')]),
         ),
         SettingRow(
-          title: 'Open Settings',
-          hint: 'Reserved · overlay / editor',
+          title: _l.settingsReservedOpenSettings,
+          hint: _l.settingsReservedHintOverlayEditor,
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap(',')]),
         ),
         SettingRow(
-          title: 'Nudge crosshair',
-          hint: 'Reserved · region tools',
+          title: _l.settingsReservedNudgeCrosshair,
+          hint: _l.settingsReservedHintRegionTools,
           trailing: _reservedField(
             t,
             const [KeyCap('←'), KeyCap('↑'), KeyCap('↓'), KeyCap('→')],
@@ -1362,30 +1429,30 @@ class _SettingsAppState extends State<SettingsApp>
         ),
         // Image-editor viewport zoom — fixed keys (the capture overlay is 1:1).
         SettingRow(
-          title: 'Fit to window',
-          hint: 'Reserved · image editor',
+          title: _l.settingsReservedFitToWindow,
+          hint: _l.settingsReservedHintImageEditor,
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('1')]),
         ),
         SettingRow(
-          title: 'Zoom to 100%',
-          hint: 'Reserved · image editor',
+          title: _l.settingsReservedZoomTo100,
+          hint: _l.settingsReservedHintImageEditor,
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('2')]),
         ),
         // Text-input semantics, fixed while editing a text annotation — one row
         // per action so the keys don't read as a single chord.
         SettingRow(
-          title: 'Commit text',
-          hint: 'Reserved · while editing text',
+          title: _l.settingsReservedCommitText,
+          hint: _l.settingsReservedHintWhileEditingText,
           trailing: _reservedField(t, const [KeyCap('⏎')]),
         ),
         SettingRow(
-          title: 'New line',
-          hint: 'Reserved · while editing text',
+          title: _l.settingsReservedNewLine,
+          hint: _l.settingsReservedHintWhileEditingText,
           trailing: _reservedField(t, const [KeyCap('⇧'), KeyCap('⏎')]),
         ),
         SettingRow(
-          title: 'Cancel text',
-          hint: 'Reserved · while editing text',
+          title: _l.settingsReservedCancelText,
+          hint: _l.settingsReservedHintWhileEditingText,
           trailing: _reservedField(t, const [KeyCap('esc')]),
         ),
       ]),
@@ -1410,12 +1477,12 @@ class _SettingsAppState extends State<SettingsApp>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          GhostButton('Revert', onTap: _revertShortcuts),
+          GhostButton(_l.settingsShortcutsRevert, onTap: _revertShortcuts),
           const SizedBox(width: 8),
           if (allValid)
-            AccentButton('Apply', onTap: _applyShortcuts)
+            AccentButton(_l.settingsShortcutsApply, onTap: _applyShortcuts)
           else
-            GhostButton('Apply', onTap: null),
+            GhostButton(_l.settingsShortcutsApply, onTap: null),
         ],
       ),
     );
@@ -1435,8 +1502,8 @@ class _SettingsAppState extends State<SettingsApp>
         requireModifier && binding != null && !binding.hasModifier;
     final isDupe = dupes.contains(actionKey);
     final warning = needsModifier
-        ? 'Needs a modifier'
-        : (isDupe ? 'Duplicate' : null);
+        ? _l.settingsShortcutsNeedsModifier
+        : (isDupe ? _l.settingsShortcutsDuplicate : null);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1460,7 +1527,7 @@ class _SettingsAppState extends State<SettingsApp>
         Opacity(
           opacity: isDefault ? 0.25 : 1,
           child: IconButton(
-            tooltip: isDefault ? null : 'Reset to default',
+            tooltip: isDefault ? null : _l.settingsShortcutsResetToDefault,
             icon: Icon(Icons.restart_alt, size: 18, color: t.fg3),
             onPressed: isDefault
                 ? null
@@ -1555,23 +1622,23 @@ class _SettingsAppState extends State<SettingsApp>
           children: [
             Expanded(
               child: Text(
-                'Save folder',
+                _l.settingsSaveFolder,
                 style: GlimprType.sansStyle(14.5, 600, t.fg1),
               ),
             ),
             const SizedBox(width: 14),
             AccentButton(
-              'Choose…',
+              _l.settingsSaveFolderChoose,
               icon: Icons.folder_open_outlined,
               onTap: _chooseDir,
             ),
             const SizedBox(width: 8),
-            GhostButton('Reset', onTap: path == null ? null : _resetDir),
+            GhostButton(_l.settingsSaveFolderReset, onTap: path == null ? null : _resetDir),
           ],
         ),
         const SizedBox(height: 10),
         if (path == null)
-          Text('Default · ~/Pictures/Glimpr', style: mono)
+          Text(_l.settingsSaveFolderDefault, style: mono)
         else
           Tooltip(
             message: path,

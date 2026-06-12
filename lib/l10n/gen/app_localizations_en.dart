@@ -1,0 +1,1044 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get settingsLanguage => 'Language';
+
+  @override
+  String get settingsPaneGeneral => 'General';
+
+  @override
+  String get settingsPaneCapture => 'Capture';
+
+  @override
+  String get settingsPaneOutput => 'Output';
+
+  @override
+  String get settingsPaneWorkflow => 'Workflow';
+
+  @override
+  String get settingsPaneShortcuts => 'Shortcuts';
+
+  @override
+  String get settingsPaneAdvanced => 'Advanced';
+
+  @override
+  String get settingsSectionStartup => 'Startup';
+
+  @override
+  String get settingsLaunchAtLogin => 'Launch at login';
+
+  @override
+  String get settingsLaunchAtLoginHint =>
+      'Start Glimpr automatically when you log in';
+
+  @override
+  String get settingsLanguageAppliesAfterRestart =>
+      'Applies after restarting Glimpr';
+
+  @override
+  String get settingsRestartNotice => 'Restart Glimpr for this to take effect.';
+
+  @override
+  String get settingsRestartNow => 'Restart Glimpr now';
+
+  @override
+  String get settingsRestartNowConfirm => 'Click again to restart Glimpr';
+
+  @override
+  String get settingsSectionBehaviour => 'Behaviour';
+
+  @override
+  String get settingsMousePointer => 'Mouse pointer';
+
+  @override
+  String get settingsMousePointerHint =>
+      'Include the mouse pointer in captures. This is the default; in the capture overlay a toolbar button shows/hides it per shot without changing this setting.';
+
+  @override
+  String get settingsRightClickExits => 'Right-click exits';
+
+  @override
+  String get settingsRightClickExitsHint =>
+      'Right-click leaves capture mode (Esc always works)';
+
+  @override
+  String get settingsConfirmBeforeDiscarding => 'Confirm before discarding';
+
+  @override
+  String get settingsConfirmBeforeDiscardingHint =>
+      'When exiting a capture that still has annotations (right-click or Esc), ask before discarding them.';
+
+  @override
+  String get settingsSectionLoupe => 'Loupe';
+
+  @override
+  String get settingsLoupeDescription =>
+      'Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.';
+
+  @override
+  String get settingsLoupeSize => 'Size';
+
+  @override
+  String get settingsLoupeSizeHint => 'Pixels shown per side';
+
+  @override
+  String get settingsLoupeMagnification => 'Magnification';
+
+  @override
+  String get settingsLoupeMagnificationHint => 'How big each pixel is drawn';
+
+  @override
+  String get settingsLoupePreviewReduced => 'Preview reduced to fit';
+
+  @override
+  String get settingsLoupeReset => 'Reset';
+
+  @override
+  String get settingsToolShortcutsWhileSampling =>
+      'Tool shortcuts while sampling';
+
+  @override
+  String get settingsToolShortcutsWhileSamplingHint =>
+      'Switch tool ends the color-picker sample immediately; Keep sampling ignores tool keys, so a stray key cannot interrupt a careful aim.';
+
+  @override
+  String get settingsSwitchTool => 'Switch tool';
+
+  @override
+  String get settingsKeepSampling => 'Keep sampling';
+
+  @override
+  String get settingsSectionOverlayHUD => 'Overlay HUD';
+
+  @override
+  String get settingsCrosshair => 'Crosshair';
+
+  @override
+  String get settingsCrosshairHint =>
+      'Show the full-screen crosshair lines for the region tools (crop / blur / pixelate). The centre reticle and loupe stay either way.';
+
+  @override
+  String get settingsAnimateMarchingAnts => 'Animate marching ants';
+
+  @override
+  String get settingsAnimateMarchingAntsHint =>
+      'Flow the dashed selection / crosshair / window outlines. Turn off for static dashes (less motion, slightly lighter).';
+
+  @override
+  String get settingsSectionAfterCapture => 'After capture';
+
+  @override
+  String get settingsSectionAfterEditorDone => 'After editor\'s Done';
+
+  @override
+  String get settingsSectionSounds => 'Sounds';
+
+  @override
+  String get settingsFlowCopyToClipboard => 'Copy to clipboard';
+
+  @override
+  String get settingsFlowCopyToClipboardHint =>
+      'Put the image on the clipboard';
+
+  @override
+  String get settingsFlowSaveToFile => 'Save to file';
+
+  @override
+  String get settingsFlowSaveToFileHint => 'Write the image to the save folder';
+
+  @override
+  String get settingsFlowCopyFilePath => 'Copy file path';
+
+  @override
+  String get settingsFlowCopyFilePathHint =>
+      'Put the saved file\'s path on the clipboard (instead of the image)';
+
+  @override
+  String get settingsFlowCopyFilePathNeedsSave => 'Needs \"Save to file\"';
+
+  @override
+  String get settingsFlowShowInFinder => 'Show in Finder';
+
+  @override
+  String get settingsFlowShowInFinderHint => 'Reveal the saved file in Finder';
+
+  @override
+  String get settingsFlowOpenInEditor => 'Open in editor';
+
+  @override
+  String get settingsFlowOpenInEditorHint =>
+      'Open the result in the image editor for further work';
+
+  @override
+  String get settingsFlowShareSheet => 'Share sheet';
+
+  @override
+  String get settingsFlowShareSheetHint =>
+      'Open the macOS share menu (AirDrop, Messages, …)';
+
+  @override
+  String get settingsFlowPinToScreen => 'Pin to screen';
+
+  @override
+  String get settingsFlowPinToScreenCaptureHint =>
+      'Float the capture as an always-on-top window, pinned in place over where it was taken';
+
+  @override
+  String get settingsFlowPinToScreenEditorHint =>
+      'Float the result as an always-on-top window (centered)';
+
+  @override
+  String get settingsFlowCaptureCaption =>
+      'Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.';
+
+  @override
+  String get settingsFlowEditorCaption =>
+      'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.';
+
+  @override
+  String get settingsFlowCaptureCaptionEmpty =>
+      'Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.';
+
+  @override
+  String get settingsFlowEditorCaptionEmpty =>
+      'Runs when the editor\'s Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.';
+
+  @override
+  String get settingsSoundShutter => 'Shutter';
+
+  @override
+  String get settingsSoundShutterHint => 'Plays the instant a capture is taken';
+
+  @override
+  String get settingsSoundCompletion => 'Completion';
+
+  @override
+  String get settingsSoundCompletionHint =>
+      'Chimes once the completion flow finishes';
+
+  @override
+  String get settingsSectionSaveLocation => 'Save location';
+
+  @override
+  String get settingsSectionFormat => 'Format';
+
+  @override
+  String get settingsSectionFilename => 'Filename';
+
+  @override
+  String get settingsSectionDecoration => 'Decoration';
+
+  @override
+  String get settingsSectionRecentHistory => 'Recent history';
+
+  @override
+  String get settingsSaveFolder => 'Save folder';
+
+  @override
+  String get settingsSaveFolderChoose => 'Choose…';
+
+  @override
+  String get settingsSaveFolderReset => 'Reset';
+
+  @override
+  String get settingsSaveFolderDefault => 'Default · ~/Pictures/Glimpr';
+
+  @override
+  String get settingsFormatQuality => 'Quality';
+
+  @override
+  String get settingsFormatQualityHint => 'Compression level';
+
+  @override
+  String get settingsFilenamePreview => 'Preview';
+
+  @override
+  String get settingsFilenamePlaceholders => 'Placeholders';
+
+  @override
+  String get settingsFilenameTokenWindowDesc =>
+      'The window title, or the app name if it has none';
+
+  @override
+  String get settingsFilenameTokenAppDesc =>
+      'The application name (e.g. Safari)';
+
+  @override
+  String get settingsFilenameTokenDateDesc => 'Capture date, e.g. 2026-06-03';
+
+  @override
+  String get settingsFilenameTokenTimeDesc => 'Capture time, e.g. 15-04-09';
+
+  @override
+  String settingsFilenameNote(String windowToken, String appToken) {
+    return 'Uses the window under the cursor when the capture ends. On bare desktop, $windowToken and $appToken are left out.';
+  }
+
+  @override
+  String get settingsDecorationWindowSnap => 'Window snap';
+
+  @override
+  String get settingsDecorationWindowSnapHint =>
+      'Shadow + margin when snapping to a window';
+
+  @override
+  String get settingsDecorationFreehandCrop => 'Freehand crop';
+
+  @override
+  String get settingsDecorationFreehandCropHint =>
+      'Shadow + margin on a dragged crop region';
+
+  @override
+  String get settingsDecorationFocusedWindow => 'Focused window';
+
+  @override
+  String get settingsDecorationFocusedWindowHint =>
+      'Capture-focused-window mode (⌘⌥2)';
+
+  @override
+  String get settingsDecorationDisplay => 'Display';
+
+  @override
+  String get settingsDecorationDisplayHint => 'Capture-display mode (⌘⌥3)';
+
+  @override
+  String get settingsDecorationLastRegion => 'Last region';
+
+  @override
+  String get settingsDecorationLastRegionHint =>
+      'Capture-last-region mode (⌘⌥4)';
+
+  @override
+  String get settingsDecorationJpegFill => 'JPEG background fill';
+
+  @override
+  String get settingsDecorationJpegFillHint =>
+      'Colour behind the margin when saving as JPEG';
+
+  @override
+  String get settingsRecentImagesKept => 'Recent images kept';
+
+  @override
+  String get settingsRecentImagesKeptHint =>
+      'How many images the landing gallery and the menu-bar Open Recent keep.';
+
+  @override
+  String get settingsSectionMultiDisplay => 'Multi-display';
+
+  @override
+  String get settingsWarmEnginesTitle => 'Warm capture engines';
+
+  @override
+  String get settingsWarmEnginesBody =>
+      'How many displays Glimpr keeps instantly capture-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still captures, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).';
+
+  @override
+  String get settingsWarmEnginesDefault =>
+      'Default 2 · applies after restarting Glimpr';
+
+  @override
+  String get settingsSectionCaptureLayers => 'Capture layers';
+
+  @override
+  String get settingsCaptureLayersTitle => 'Capture layers';
+
+  @override
+  String get settingsCaptureLayersBody =>
+      'Press the capture shortcut while a capture is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the capture. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next capture; no restart needed.';
+
+  @override
+  String get settingsSectionToolStyles => 'Tool styles';
+
+  @override
+  String get settingsResetAllToolStyles => 'Reset all tool styles';
+
+  @override
+  String get settingsResetAllToolStylesHint =>
+      'Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next capture.';
+
+  @override
+  String get settingsResetAllToolStylesConfirm =>
+      'Click again to reset all tool styles';
+
+  @override
+  String get settingsShortcutsCaptureNote =>
+      'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)';
+
+  @override
+  String get settingsCmdUndo => 'Undo';
+
+  @override
+  String get settingsCmdRedo => 'Redo';
+
+  @override
+  String get settingsCmdPasteImage => 'Paste image';
+
+  @override
+  String get settingsCmdPasteImageHint => 'From the clipboard';
+
+  @override
+  String get settingsCmdDeleteSelected => 'Delete selected';
+
+  @override
+  String get settingsCmdDeleteSelectedHint => 'Remove the selected annotation';
+
+  @override
+  String get settingsCmdExport => 'Export';
+
+  @override
+  String get settingsCmdExportHint =>
+      'Screenshot the snapped window, or the whole screen';
+
+  @override
+  String get settingsCmdDuplicateSelected => 'Duplicate selected';
+
+  @override
+  String get settingsCmdDuplicateSelectedHint => 'Copy the selected annotation';
+
+  @override
+  String get settingsCmdBringToFront => 'Bring to front';
+
+  @override
+  String get settingsCmdBringToFrontHint => 'Move the selection above others';
+
+  @override
+  String get settingsCmdSendToBack => 'Send to back';
+
+  @override
+  String get settingsCmdSendToBackHint => 'Move the selection below others';
+
+  @override
+  String get settingsCmdCopyHex => 'Copy color as HEX';
+
+  @override
+  String get settingsCmdCopyColorHint => 'While the color picker is sampling';
+
+  @override
+  String get settingsCmdCopyRgb => 'Copy color as RGB';
+
+  @override
+  String get settingsCmdCopyHsl => 'Copy color as HSL';
+
+  @override
+  String get settingsReservedCancelExit => 'Cancel / Exit';
+
+  @override
+  String get settingsReservedHint => 'Reserved';
+
+  @override
+  String get settingsReservedCloseWindow => 'Close window';
+
+  @override
+  String get settingsReservedHintEditorSettings =>
+      'Reserved · editor / settings';
+
+  @override
+  String get settingsReservedOpenSettings => 'Open Settings';
+
+  @override
+  String get settingsReservedHintOverlayEditor => 'Reserved · overlay / editor';
+
+  @override
+  String get settingsReservedNudgeCrosshair => 'Nudge crosshair';
+
+  @override
+  String get settingsReservedHintRegionTools => 'Reserved · region tools';
+
+  @override
+  String get settingsReservedFitToWindow => 'Fit to window';
+
+  @override
+  String get settingsReservedHintImageEditor => 'Reserved · image editor';
+
+  @override
+  String get settingsReservedZoomTo100 => 'Zoom to 100%';
+
+  @override
+  String get settingsReservedCommitText => 'Commit text';
+
+  @override
+  String get settingsReservedHintWhileEditingText =>
+      'Reserved · while editing text';
+
+  @override
+  String get settingsReservedNewLine => 'New line';
+
+  @override
+  String get settingsReservedCancelText => 'Cancel text';
+
+  @override
+  String get settingsShortcutsNeedsModifier => 'Needs a modifier';
+
+  @override
+  String get settingsShortcutsDuplicate => 'Duplicate';
+
+  @override
+  String get settingsShortcutsResetToDefault => 'Reset to default';
+
+  @override
+  String get settingsShortcutsRevert => 'Revert';
+
+  @override
+  String get settingsShortcutsApply => 'Apply';
+
+  @override
+  String get settingsShortcutsTools => 'Tools';
+
+  @override
+  String get settingsShortcutsCommands => 'Commands';
+
+  @override
+  String get settingsShortcutsReserved => 'Reserved';
+
+  @override
+  String get actionCapture => 'Capture';
+
+  @override
+  String get actionCaptureHint => 'Start a screen capture';
+
+  @override
+  String get actionCaptureWindow => 'Capture Window';
+
+  @override
+  String get actionCaptureWindowHint => 'Capture the focused window';
+
+  @override
+  String get actionCaptureDisplay => 'Capture Display';
+
+  @override
+  String get actionCaptureDisplayHint => 'Capture the display under the cursor';
+
+  @override
+  String get actionCaptureLastRegion => 'Capture Last Region';
+
+  @override
+  String get actionCaptureLastRegionHint => 'Repeat the last capture region';
+
+  @override
+  String get actionOpenEditor => 'Open Editor';
+
+  @override
+  String get actionOpenEditorHint => 'Open the Image Editor';
+
+  @override
+  String get actionOpenEditorClipboard => 'Open Editor with Clipboard';
+
+  @override
+  String get actionOpenEditorClipboardHint =>
+      'Open the Image Editor and load the clipboard image';
+
+  @override
+  String get actionPinCapture => 'Pin Capture';
+
+  @override
+  String get actionPinCaptureHint =>
+      'Capture a region straight to a floating pin';
+
+  @override
+  String get actionPinClipboard => 'Pin Clipboard';
+
+  @override
+  String get actionPinClipboardHint => 'Float the clipboard image as a pin';
+
+  @override
+  String get toolSelect => 'Select';
+
+  @override
+  String get toolCrop => 'Crop';
+
+  @override
+  String get toolPin => 'Pin';
+
+  @override
+  String get toolCropPinCombined => 'Crop / Pin';
+
+  @override
+  String get toolBlur => 'Blur';
+
+  @override
+  String get toolPixelate => 'Pixelate';
+
+  @override
+  String get toolRectangle => 'Rectangle';
+
+  @override
+  String get toolEllipse => 'Ellipse';
+
+  @override
+  String get toolLine => 'Line';
+
+  @override
+  String get toolArrow => 'Arrow';
+
+  @override
+  String get toolPen => 'Pen';
+
+  @override
+  String get toolText => 'Text';
+
+  @override
+  String get toolHighlighter => 'Highlighter';
+
+  @override
+  String get toolStep => 'Numbered step';
+
+  @override
+  String get toolStamp => 'Image stamp';
+
+  @override
+  String get toolMagnify => 'Magnify';
+
+  @override
+  String get toolSpotlight => 'Spotlight';
+
+  @override
+  String get toolbarPinCaption => 'Pin mode: the selection floats as a pin';
+
+  @override
+  String get toolbarMousePointerShown => 'Mouse pointer: shown';
+
+  @override
+  String get toolbarMousePointerHidden => 'Mouse pointer: hidden';
+
+  @override
+  String get toolbarChooseImage => 'Choose image…';
+
+  @override
+  String get toolbarChangeImage => 'Change image…';
+
+  @override
+  String get toolbarChooseStampImage => 'Choose a stamp image';
+
+  @override
+  String get toolbarFillBackground => 'Background';
+
+  @override
+  String get toolbarFill => 'Fill';
+
+  @override
+  String get toolbarTextOutline => 'Text outline';
+
+  @override
+  String get toolbarColour => 'Colour';
+
+  @override
+  String get toolbarBlurStrength => 'Blur strength';
+
+  @override
+  String get toolbarPixelSize => 'Pixel size';
+
+  @override
+  String get toolbarStrokeWidth => 'Stroke width';
+
+  @override
+  String toolbarRadiusLabel(String value) {
+    return 'Radius: $value';
+  }
+
+  @override
+  String get toolbarCornerRadius => 'Corner radius';
+
+  @override
+  String get toolbarHighlighterTexture => 'Highlighter texture';
+
+  @override
+  String get toolbarLineStyle => 'Line style';
+
+  @override
+  String get toolbarCurvePoints => 'Curve points';
+
+  @override
+  String get toolbarArrowheads => 'Arrowheads';
+
+  @override
+  String get toolbarArrowheadSize => 'Arrowhead size';
+
+  @override
+  String get toolbarFontSize => 'Font size';
+
+  @override
+  String get toolbarBadgeSize => 'Badge size';
+
+  @override
+  String get toolbarStartNumber => 'Start number';
+
+  @override
+  String get toolbarBadgeShape => 'Badge shape';
+
+  @override
+  String get toolbarFontSystem => 'System';
+
+  @override
+  String get toolbarBackgroundDim => 'Background dim';
+
+  @override
+  String get toolbarBackgroundTreatment => 'Background treatment';
+
+  @override
+  String get toolbarEdgeFeather => 'Edge feather';
+
+  @override
+  String get toolbarMagnification => 'Magnification';
+
+  @override
+  String get toolbarDropShadowOn => 'Drop shadow: on';
+
+  @override
+  String get toolbarDropShadowOff => 'Drop shadow: off';
+
+  @override
+  String get toolbarConnectorLineOn => 'Connector line: on';
+
+  @override
+  String get toolbarConnectorLineOff => 'Connector line: off';
+
+  @override
+  String get toolbarResetThisTool => 'Reset this tool';
+
+  @override
+  String get toolbarDuplicate => 'Duplicate';
+
+  @override
+  String get toolbarBringToFront => 'Bring to front';
+
+  @override
+  String get toolbarSendToBack => 'Send to back';
+
+  @override
+  String get popoverSearchFonts => 'Search fonts…';
+
+  @override
+  String get popoverFontSystem => 'System';
+
+  @override
+  String get lineStyleSolid => 'Solid';
+
+  @override
+  String get lineStyleDashed => 'Dashed';
+
+  @override
+  String get lineStyleDotted => 'Dotted';
+
+  @override
+  String get lineStyleLongDash => 'Long dash';
+
+  @override
+  String get lineStyleDashDot => 'Dash-dot';
+
+  @override
+  String get lineStyleDashDotDot => 'Dash-dot-dot';
+
+  @override
+  String get popoverTextureClean => 'Clean';
+
+  @override
+  String get popoverTextureStreaks => 'Streaks';
+
+  @override
+  String get popoverTextureFraged => 'Frayed';
+
+  @override
+  String get popoverArrowHeadEnd => 'End';
+
+  @override
+  String get popoverArrowHeadStart => 'Start';
+
+  @override
+  String get popoverArrowHeadBoth => 'Both';
+
+  @override
+  String get popoverStepShapeCircle => 'Circle';
+
+  @override
+  String get popoverStepShapeSquare => 'Square';
+
+  @override
+  String get popoverSpotlightEffectDimOnly => 'Dim only';
+
+  @override
+  String get popoverSpotlightEffectDimBlur => 'Dim + Blur';
+
+  @override
+  String get popoverSpotlightEffectDimPixelate => 'Dim + Pixelate';
+
+  @override
+  String get popoverPickColourFromScreen => 'Pick a colour from the screen';
+
+  @override
+  String get popoverCornerRadius => 'Corner radius';
+
+  @override
+  String get popoverRadiusAuto => 'Auto';
+
+  @override
+  String get popoverRadiusAutoHint => 'Radius scales with the rectangle’s size';
+
+  @override
+  String get editorTitleBar => 'Image Editor';
+
+  @override
+  String get editorOpenImage => 'Open an image to edit';
+
+  @override
+  String get editorOpenImageSubtitle =>
+      'Annotate, crop, and re-export any image in the same toolkit you use to capture.';
+
+  @override
+  String get editorOpenImageButton => 'Open Image…';
+
+  @override
+  String get editorOpenImageHint => 'or drag an image here · paste with ⌘V';
+
+  @override
+  String get editorGalleryRecent => 'Recent';
+
+  @override
+  String get editorGalleryMoreTooltip => 'Open the save folder in Finder';
+
+  @override
+  String get editorGalleryMoreCaption => 'More…';
+
+  @override
+  String get editorGalleryHome => 'Home';
+
+  @override
+  String get editorContextEdit => 'Edit';
+
+  @override
+  String get editorContextCopyImage => 'Copy Image';
+
+  @override
+  String get editorContextCopyPath => 'Copy Path';
+
+  @override
+  String get editorContextShare => 'Share…';
+
+  @override
+  String get editorContextPinToScreen => 'Pin to Screen';
+
+  @override
+  String get editorContextShowInFinder => 'Show in Finder';
+
+  @override
+  String get editorContextRemoveFromRecent => 'Remove from Recent';
+
+  @override
+  String get editorContextClearRecent => 'Clear Recent';
+
+  @override
+  String get editorClearRecentTitle => 'Clear Recent?';
+
+  @override
+  String editorClearRecentMessage(int count) {
+    return 'Remove all $count entries from the recent list? The image files themselves are not touched.';
+  }
+
+  @override
+  String get editorClearRecentConfirm => 'Clear';
+
+  @override
+  String get editorToastCopiedToClipboard => 'Copied to clipboard';
+
+  @override
+  String get editorToastCopyFailed => 'Copy failed';
+
+  @override
+  String get editorToastPathCopied => 'Path copied';
+
+  @override
+  String get editorToastNoImageInClipboard => 'No image in clipboard';
+
+  @override
+  String get editorToastCannotDecodeClipboard =>
+      'Cannot decode clipboard image';
+
+  @override
+  String editorToastCannotReadFile(String error) {
+    return 'Cannot read file: $error';
+  }
+
+  @override
+  String editorToastCannotDecodeImage(String error) {
+    return 'Cannot decode image: $error';
+  }
+
+  @override
+  String get editorToastCopied => 'Copied';
+
+  @override
+  String get editorToastCopyFlowFailed => 'Copy failed';
+
+  @override
+  String editorToastSavedTo(String path) {
+    return 'Saved to $path';
+  }
+
+  @override
+  String get editorToastSaveFailed => 'Save failed';
+
+  @override
+  String get editorToastCopyPathFailed => 'Copy path failed';
+
+  @override
+  String get editorToastRevealFailed => 'Reveal failed';
+
+  @override
+  String get editorToastShareFailed => 'Share failed';
+
+  @override
+  String get editorToastPinFailed => 'Pin failed';
+
+  @override
+  String get editorToastPinned => 'Pinned';
+
+  @override
+  String get editorToastDone => 'Done';
+
+  @override
+  String get editorDiscardTitle => 'Discard changes?';
+
+  @override
+  String get editorDiscardMessage =>
+      'You have unsaved annotations. Discard them?';
+
+  @override
+  String get editorDoneButton => 'Done';
+
+  @override
+  String get editorMenuOneOffTooltip =>
+      'One-off action (instead of the Done flow)';
+
+  @override
+  String get editorMenuCopyOnly => 'Copy only';
+
+  @override
+  String get editorMenuSaveOnly => 'Save only';
+
+  @override
+  String get editorMenuCopyFilePath => 'Copy file path';
+
+  @override
+  String get editorMenuShowInFinder => 'Show in Finder';
+
+  @override
+  String get editorMenuShare => 'Share…';
+
+  @override
+  String get editorMenuPinToScreen => 'Pin to screen';
+
+  @override
+  String get editorViewFitToWindow => 'Fit to window (⌘1)';
+
+  @override
+  String get editorViewActualSize => 'Actual size · 100% (⌘2)';
+
+  @override
+  String get editorUndoTooltip => 'Undo';
+
+  @override
+  String get editorRedoTooltip => 'Redo';
+
+  @override
+  String get editorCropConfirm => 'Crop (Enter)';
+
+  @override
+  String get editorCropCancel => 'Cancel (Esc)';
+
+  @override
+  String get maskSettingsOpen => 'Settings open';
+
+  @override
+  String get maskSettingsOpenHint => 'Close the Settings window to continue.';
+
+  @override
+  String get confirmDiscardTitle => 'Discard changes?';
+
+  @override
+  String get confirmDiscardMessage =>
+      'You have unsaved annotations. Discard them?';
+
+  @override
+  String get confirmDiscard => 'Discard';
+
+  @override
+  String get confirmCancel => 'Cancel';
+
+  @override
+  String get recorderDisabled => 'Disabled';
+
+  @override
+  String get recorderReservedKey => 'Reserved key';
+
+  @override
+  String get recorderNeedsModifier => 'Needs a modifier (⌘ ⌥ ⌃ ⇧)';
+
+  @override
+  String get recorderClear => 'Clear';
+
+  @override
+  String get recorderPressKeys => 'Press keys…';
+
+  @override
+  String get recorderEscToCancel => 'Press Esc to cancel';
+
+  @override
+  String layersCaption(int depth, int cap) {
+    return 'Layers: $depth/$cap';
+  }
+
+  @override
+  String layerReplacedNotice(int depth, int cap) {
+    return 'Layer replaced ($depth/$cap)';
+  }
+
+  @override
+  String oldestLayerDroppedNotice(int depth, int cap) {
+    return 'Oldest layer dropped ($depth/$cap)';
+  }
+
+  @override
+  String get overlayDiscardLayerTitle => 'Discard this layer?';
+
+  @override
+  String get overlayDiscardLayerMessage =>
+      'You have unsaved annotations on this layer. Discard them and return to the layer below?';
+
+  @override
+  String get overlayDiscardCaptureTitle => 'Discard capture?';
+
+  @override
+  String get overlayDiscardCaptureMessage =>
+      'You have unsaved annotations on this capture. Discard them and exit?';
+
+  @override
+  String get overlayPinFailed => 'Pin failed';
+
+  @override
+  String overlayCaptureFailedError(String error) {
+    return 'Capture failed: $error';
+  }
+
+  @override
+  String get overlayFailedNotSavedOrCopied =>
+      'Capture failed: not saved or copied';
+
+  @override
+  String get overlayFailedSave => 'Copied, but file save failed';
+
+  @override
+  String get overlayFailedClipboard => 'Saved, but clipboard failed';
+
+  @override
+  String get overlayCaptureFailedGeneric => 'Capture failed';
+
+  @override
+  String get keyCapNone => 'None';
+}

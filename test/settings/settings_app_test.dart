@@ -49,6 +49,20 @@ void main() {
     expect(find.byTooltip('/tmp/shots'), findsOneWidget);
   });
 
+  testWidgets('General pane has the language picker', (tester) async {
+    final settings = Settings(FakeStore());
+    await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    // General is the default pane.
+    expect(find.text('Language'), findsOneWidget);
+    await tester.tap(find.text('繁體中文'));
+    await tester.pumpAndSettle();
+    expect(await settings.getAppLanguage(), 'zh');
+    // Changing from the launch value shows the restart hint.
+    expect(find.text('Restart Glimpr for this to take effect.'),
+        findsOneWidget);
+  });
+
   testWidgets('Advanced pane has the capture layers setting', (tester) async {
     // Tall surface so the whole Advanced pane builds (the layers card sits
     // below the multi-display card, off-screen at the default test size).

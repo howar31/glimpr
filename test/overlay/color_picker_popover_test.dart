@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/overlay/style_popovers.dart';
 
 void main() {
   testWidgets('tapping a preset emits onChanged with that colour', (t) async {
     Color? changed;
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: ColorPickerPopover(
           color: const Color(0xFFFF3B30),
@@ -23,6 +26,8 @@ void main() {
   testWidgets('typing a valid hex commits that colour', (t) async {
     Color? changed;
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: ColorPickerPopover(
           color: const Color(0xFFFF3B30),
@@ -46,6 +51,8 @@ void main() {
       t.platformDispatcher.platformBrightnessTestValue = b;
       addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
       await t.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ColorPickerPopover(
             color: const Color(0xFFFF3B30),

@@ -7,6 +7,8 @@ import '../capture/capture_kind.dart';
 import '../perf/frame_stats.dart';
 import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
+import '../l10n/gen/app_localizations.dart';
+import '../settings/app_locale.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../editor/hud_config.dart';
@@ -650,21 +652,22 @@ class _OverlayAppState extends State<OverlayApp> {
     final depth = _layers.suspendedCount + 1;
     if (replaced || evicted) {
       _layerCaption = replaced
-          ? 'Layer replaced ($depth/${_layers.capacity})'
-          : 'Oldest layer dropped ($depth/${_layers.capacity})';
+          ? appL10n.layerReplacedNotice(depth, _layers.capacity)
+          : appL10n.oldestLayerDroppedNotice(depth, _layers.capacity);
       _layerAccent = true;
       _layerNoticeTimer = Timer(const Duration(seconds: 3), () {
         if (!mounted) return;
         setState(() {
           _layerAccent = false;
           _layerCaption = _layers.suspendedCount > 0
-              ? 'Layers: ${_layers.suspendedCount + 1}/${_layers.capacity}'
+              ? appL10n.layersCaption(
+                  _layers.suspendedCount + 1, _layers.capacity)
               : null;
         });
       });
     } else {
       _layerCaption = _layers.suspendedCount > 0
-          ? 'Layers: $depth/${_layers.capacity}'
+          ? appL10n.layersCaption(depth, _layers.capacity)
           : null;
       _layerAccent = false;
     }
@@ -746,12 +749,12 @@ class _OverlayAppState extends State<OverlayApp> {
         final layered = _layers.suspendedCount > 0;
         final ok = await showDiscardConfirm(
           ctx,
-          title: layered ? 'Discard this layer?' : 'Discard capture?',
+          title: layered
+              ? appL10n.overlayDiscardLayerTitle
+              : appL10n.overlayDiscardCaptureTitle,
           message: layered
-              ? 'You have unsaved annotations on this layer. Discard them '
-                  'and return to the layer below?'
-              : 'You have unsaved annotations on this capture. '
-                  'Discard them and exit?',
+              ? appL10n.overlayDiscardLayerMessage
+              : appL10n.overlayDiscardCaptureMessage,
         );
         _confirmingExit = false;
         if (!ok) {
@@ -869,10 +872,11 @@ class _OverlayAppState extends State<OverlayApp> {
       if (ok) {
         if (cap.completionSound) playComplete();
       } else {
-        _bridge.showError(pinOnly ? 'Pin failed' : _summary(result, cap));
+        _bridge.showError(
+            pinOnly ? appL10n.overlayPinFailed : _summary(result, cap));
       }
     } catch (e) {
-      _bridge.showError('Capture failed: $e');
+      _bridge.showError(appL10n.overlayCaptureFailedError('$e'));
     } finally {
       windowMask?.dispose();
       cursorImg?.dispose();
@@ -883,10 +887,10 @@ class _OverlayAppState extends State<OverlayApp> {
   String _summary(FlowResult r, CaptureSettings cap) {
     final saveFailed = cap.flow.contains(FlowAction.save) && !r.savedOk;
     final clipFailed = cap.flow.contains(FlowAction.copy) && !r.copiedToClipboard;
-    if (saveFailed && clipFailed) return 'Capture failed: not saved or copied';
-    if (saveFailed) return 'Copied, but file save failed';
-    if (clipFailed) return 'Saved, but clipboard failed';
-    return 'Capture failed';
+    if (saveFailed && clipFailed) return appL10n.overlayFailedNotSavedOrCopied;
+    if (saveFailed) return appL10n.overlayFailedSave;
+    if (clipFailed) return appL10n.overlayFailedClipboard;
+    return appL10n.overlayCaptureFailedGeneric;
   }
 
   @override
@@ -897,6 +901,10 @@ class _OverlayAppState extends State<OverlayApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
+      locale: appLocaleOverride,
+      localeListResolutionCallback: resolveAppLocale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       // Both themes so Material defaults (e.g. toolbar tooltips) follow the
       // system appearance; our chrome resolves its own palettes regardless.
       theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),

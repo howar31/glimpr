@@ -7,6 +7,7 @@ import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
 import 'output/filename.dart';
 import 'overlay/overlay_app.dart';
+import 'settings/app_locale.dart';
 import 'settings/settings.dart';
 import 'settings/settings_app.dart';
 import 'shortcuts/hotkey_registrar.dart';
@@ -19,6 +20,9 @@ import 'shortcuts/shortcut_store.dart';
 /// resident menu-bar engine, so we mount the right widget tree per engine.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Resolve the language choice once per engine boot (restart-effective);
+  // every MaterialApp reads the resulting appLocaleOverride.
+  await loadAppLocaleOverride();
   final role = await _getRole();
   if (role == 'overlay') {
     runApp(const OverlayApp());

@@ -3,9 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/editor/tool_meta.dart';
+import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/overlay/toolbar.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
+
+// Tests run in the English (template) locale; label assertions are English.
+final AppLocalizations l10n = lookupAppLocalizations(const Locale('en'));
 
 // Pumps a toolbar with the given editor bindings. The default tool is Crop,
 // which has no options row, so the ONLY Text widgets are the per-tool badges —
@@ -18,6 +22,8 @@ Future<EditorController> _pumpToolbar(
   addTearDown(c.dispose);
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: EditorToolbar(
           controller: c,
@@ -108,7 +114,7 @@ void main() {
     // toolLabel is the SAME source the Settings > Shortcuts rows render, so
     // the tooltip text can never drift from the shortcut row's title.
     for (final (kind, _) in kEditorToolMeta) {
-      expect(find.byTooltip(toolLabel(kind)), findsOneWidget,
+      expect(find.byTooltip(toolLabel(l10n, kind)), findsOneWidget,
           reason: 'tooltip for $kind');
     }
   });
@@ -124,6 +130,8 @@ void main() {
     addTearDown(c.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: EditorToolbar(
             controller: c,
@@ -159,6 +167,8 @@ void main() {
             {String? caption, bool accent = false, bool pin = false}) =>
         tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: Stack(
                 children: [
@@ -213,14 +223,14 @@ void main() {
   });
 
   test('the Settings row label combines both crop-slot contexts', () {
-    expect(toolSettingsLabel(ToolKind.crop), 'Crop / Pin');
-    expect(toolLabel(ToolKind.crop), 'Crop');
-    expect(toolLabel(ToolKind.crop, pinMode: true), 'Pin');
+    expect(toolSettingsLabel(l10n, ToolKind.crop), 'Crop / Pin');
+    expect(toolLabel(l10n, ToolKind.crop), 'Crop');
+    expect(toolLabel(l10n, ToolKind.crop, pinMode: true), 'Pin');
     // Every other tool's Settings row matches its tooltip exactly.
     for (final (kind, _) in kEditorToolMeta) {
       if (kind == ToolKind.crop) continue;
-      expect(toolSettingsLabel(kind), toolLabel(kind));
-      expect(toolLabel(kind, pinMode: true), toolLabel(kind));
+      expect(toolSettingsLabel(l10n, kind), toolLabel(l10n, kind));
+      expect(toolLabel(l10n, kind, pinMode: true), toolLabel(l10n, kind));
     }
   });
 }

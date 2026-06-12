@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
+import '../l10n/gen/app_localizations.dart';
+import '../settings/app_locale.dart';
 import '../editor/draw_style.dart';
 import '../editor/document.dart';
 import '../editor/editor_controller.dart';
@@ -54,6 +56,10 @@ class ImageEditorApp extends StatefulWidget {
 
 class _ImageEditorAppState extends State<ImageEditorApp>
     with WidgetsBindingObserver {
+  // Resolved from a context inside the MaterialApp's Localizations scope (set
+  // in the Builder in build()). Using a field instead of a context-arg avoids
+  // threading the parameter through every private helper.
+  late AppLocalizations _l;
   ui.Image? _image;
   Uint8List? _bytes;
   String _sourceName = 'image';
@@ -237,7 +243,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     try {
       bytes = await File(path).readAsBytes();
     } catch (e) {
-      _toast('Cannot read file: $e');
+      _toast(_l.editorToastCannotReadFile('$e'));
       return;
     }
 
@@ -248,7 +254,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       img = frame.image;
       codec.dispose();
     } catch (e) {
-      _toast('Cannot decode image: $e');
+      _toast(_l.editorToastCannotDecodeImage('$e'));
       return;
     }
 
@@ -317,9 +323,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Future<void> _copyRecent(String path) async {
     try {
       await clipboardWriteImage(await File(path).readAsBytes());
-      _toast('Copied to clipboard');
+      _toast(_l.editorToastCopiedToClipboard);
     } catch (_) {
-      _toast('Copy failed');
+      _toast(_l.editorToastCopyFailed);
     }
   }
 
@@ -334,7 +340,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Copy a recent file's path to the clipboard (tile context menu).
   Future<void> _copyRecentPath(String path) async {
     await Clipboard.setData(ClipboardData(text: path));
-    _toast('Path copied');
+    _toast(_l.editorToastPathCopied);
   }
 
   /// Share a recent file via the macOS share sheet (tile context menu) —
@@ -353,10 +359,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     if (ctx == null) return;
     final ok = await showDiscardConfirm(
       ctx,
-      title: 'Clear Recent?',
-      message: 'Remove all ${_recent.length} entries from the recent list? '
-          'The image files themselves are not touched.',
-      confirmLabel: 'Clear',
+      title: _l.editorClearRecentTitle,
+      message: _l.editorClearRecentMessage(_recent.length),
+      confirmLabel: _l.editorClearRecentConfirm,
     );
     if (ok) await _clearRecent();
   }
@@ -453,7 +458,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       return; // clipboard channel unavailable (e.g. tests)
     }
     if (bytes == null) {
-      _toast('No image in clipboard');
+      _toast(_l.editorToastNoImageInClipboard);
       return;
     }
     ui.Image img;
@@ -463,7 +468,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       img = frame.image;
       codec.dispose();
     } catch (e) {
-      _toast('Cannot decode clipboard image');
+      _toast(_l.editorToastCannotDecodeClipboard);
       return;
     }
     if (!mounted) {
@@ -571,19 +576,19 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   String _flowToast(Set<FlowAction> actions, FlowResult r) {
     final parts = <String>[
       if (actions.contains(FlowAction.copy))
-        r.copiedToClipboard ? 'Copied' : 'Copy failed',
+        r.copiedToClipboard ? _l.editorToastCopied : _l.editorToastCopyFlowFailed,
       if (actions.contains(FlowAction.save))
-        r.savedOk ? 'Saved to ${r.savedPath}' : 'Save failed',
+        r.savedOk ? _l.editorToastSavedTo(r.savedPath!) : _l.editorToastSaveFailed,
       if (actions.contains(FlowAction.copyPath))
-        r.errors.containsKey('copyPath') ? 'Copy path failed' : 'Path copied',
+        r.errors.containsKey('copyPath') ? _l.editorToastCopyPathFailed : _l.editorToastPathCopied,
       if (actions.contains(FlowAction.showInFinder))
-        if (r.errors.containsKey('showInFinder')) 'Reveal failed',
+        if (r.errors.containsKey('showInFinder')) _l.editorToastRevealFailed,
       if (actions.contains(FlowAction.shareSheet))
-        if (r.errors.containsKey('shareSheet')) 'Share failed',
+        if (r.errors.containsKey('shareSheet')) _l.editorToastShareFailed,
       if (actions.contains(FlowAction.pin))
-        r.errors.containsKey('pin') ? 'Pin failed' : 'Pinned',
+        r.errors.containsKey('pin') ? _l.editorToastPinFailed : _l.editorToastPinned,
     ];
-    return parts.isEmpty ? 'Done' : parts.join(' · ');
+    return parts.isEmpty ? _l.editorToastDone : parts.join(' · ');
   }
 
   /// Aurora-styled "discard unsaved changes?" confirmation. Returns true to
@@ -596,8 +601,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     try {
       return await showDiscardConfirm(
         ctx,
-        title: 'Discard changes?',
-        message: 'You have unsaved annotations. Discard them?',
+        title: _l.editorDiscardTitle,
+        message: _l.editorDiscardMessage,
       );
     } finally {
       _confirming = false;
@@ -699,6 +704,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
+      locale: appLocaleOverride,
+      localeListResolutionCallback: resolveAppLocale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         brightness: brightness,
         scaffoldBackgroundColor: Colors.transparent,
@@ -712,78 +721,85 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               : const Color(0xFFEFF2F7),
           // A 44px Flutter title bar runs across the top in BOTH states (the OS
           // title is hidden + transparent), with the state content filling below.
-          body: Stack(
-            children: [
-              Column(
+          body: Builder(
+            builder: (ctx) {
+              // Resolve localizations from a context that is inside the
+              // MaterialApp's Localizations scope (not the outer context).
+              _l = AppLocalizations.of(ctx);
+              return Stack(
                 children: [
-                  _titleBar(tokens),
-                  Expanded(
-                    child:
-                        (image == null || bytes == null || controller == null)
-                        ? _landing(tokens)
-                        : _editor(tokens, image, bytes, controller),
+                  Column(
+                    children: [
+                      _titleBar(tokens),
+                      Expanded(
+                        child:
+                            (image == null || bytes == null || controller == null)
+                            ? _landing(tokens)
+                            : _editor(tokens, image, bytes, controller),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              // Toast: a top-centred glass pill just below the title bar —
-              // away from the bottom toolbar pill (the old floating SnackBar
-              // covered it). Non-interactive; fades + slides in/out.
-              Positioned(
-                top: 32 + 12,
-                left: 24,
-                right: 24,
-                child: IgnorePointer(
-                  child: AnimatedSlide(
-                    offset:
-                        _toastVisible ? Offset.zero : const Offset(0, -0.4),
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedOpacity(
-                      opacity: _toastVisible ? 1 : 0,
-                      duration: const Duration(milliseconds: 220),
-                      child: Center(
-                        child: _toastMsg == null
-                            ? const SizedBox.shrink()
-                            : Container(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 560),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 9),
-                                decoration: BoxDecoration(
-                                  color: tokens.isDark
-                                      ? const Color(0xF21A2236)
-                                      : const Color(0xFAFFFFFF),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
+                  // Toast: a top-centred glass pill just below the title bar —
+                  // away from the bottom toolbar pill (the old floating SnackBar
+                  // covered it). Non-interactive; fades + slides in/out.
+                  Positioned(
+                    top: 32 + 12,
+                    left: 24,
+                    right: 24,
+                    child: IgnorePointer(
+                      child: AnimatedSlide(
+                        offset:
+                            _toastVisible ? Offset.zero : const Offset(0, -0.4),
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedOpacity(
+                          opacity: _toastVisible ? 1 : 0,
+                          duration: const Duration(milliseconds: 220),
+                          child: Center(
+                            child: _toastMsg == null
+                                ? const SizedBox.shrink()
+                                : Container(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 560),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 9),
+                                    decoration: BoxDecoration(
                                       color: tokens.isDark
-                                          ? const Color(0x3360A5FA)
-                                          : const Color(0x1F0F172A)),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: tokens.isDark
-                                          ? const Color(0x66000000)
-                                          : const Color(0x2E0F172A),
-                                      blurRadius: 16,
+                                          ? const Color(0xF21A2236)
+                                          : const Color(0xFAFFFFFF),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: tokens.isDark
+                                              ? const Color(0x3360A5FA)
+                                              : const Color(0x1F0F172A)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: tokens.isDark
+                                              ? const Color(0x66000000)
+                                              : const Color(0x2E0F172A),
+                                          blurRadius: 16,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                child: Text(
-                                  _toastMsg!,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GlimprType.sansStyle(
-                                      13.5, 600, tokens.fg1),
-                                ),
-                              ),
+                                    child: Text(
+                                      _toastMsg!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GlimprType.sansStyle(
+                                          13.5, 600, tokens.fg1),
+                                    ),
+                                  ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              // Dim + lock the editor while Settings is open and the editor
-              // isn't the active window (correct regardless of open order).
-              if (_showSettingsMask) const SettingsMask(),
-            ],
+                  // Dim + lock the editor while Settings is open and the editor
+                  // isn't the active window (correct regardless of open order).
+                  if (_showSettingsMask) const SettingsMask(),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -838,7 +854,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             const GlimprMark(size: 18),
             const SizedBox(width: 9),
             Text(
-              'Image Editor',
+              _l.editorTitleBar,
               style: GlimprType.sansStyle(13, 600, t.fg2, letterSpacing: -0.1),
             ),
           ],
@@ -902,7 +918,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           Padding(
             padding: const EdgeInsets.only(left: 28),
             child: Text(
-              'Recent',
+              _l.editorGalleryRecent,
               style: GlimprType.sansStyle(11, 700, t.fg4, letterSpacing: 0.4),
             ),
           ),
@@ -963,13 +979,13 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           const Lockup(),
           const SizedBox(width: 18),
           AccentButton(
-            'Open Image…',
+            _l.editorOpenImageButton,
             icon: Icons.image_outlined,
             onTap: _openPanel,
           ),
           const SizedBox(width: 14),
           Text(
-            'or drag an image here · paste with ⌘V',
+            _l.editorOpenImageHint,
             style: GlimprType.sansStyle(11.5, 500, t.fg4),
           ),
         ],
@@ -988,7 +1004,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           const GlimprMark(size: 56),
           const SizedBox(height: 22),
           Text(
-            'Open an image to edit',
+            _l.editorOpenImage,
             textAlign: TextAlign.center,
             style: GlimprType.sansStyle(
               18,
@@ -999,20 +1015,19 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           ),
           const SizedBox(height: 8),
           Text(
-            'Annotate, crop, and re-export any image in the same toolkit '
-            'you use to capture.',
+            _l.editorOpenImageSubtitle,
             textAlign: TextAlign.center,
             style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
           ),
           const SizedBox(height: 24),
           AccentButton(
-            'Open Image…',
+            _l.editorOpenImageButton,
             icon: Icons.image_outlined,
             onTap: _openPanel,
           ),
           const SizedBox(height: 12),
           Text(
-            'or drag an image here · paste with ⌘V',
+            _l.editorOpenImageHint,
             textAlign: TextAlign.center,
             style: GlimprType.sansStyle(11.5, 500, t.fg4),
           ),
@@ -1102,12 +1117,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           // View controls: fit-to-window / actual size (also ⌘1 / ⌘2).
           _IconAction(
             icon: Icons.fit_screen_outlined,
-            tooltip: 'Fit to window (⌘1)',
+            tooltip: _l.editorViewFitToWindow,
             onTap: _viewport.fit,
           ),
           _IconAction(
             icon: Icons.crop_free,
-            tooltip: 'Actual size · 100% (⌘2)',
+            tooltip: _l.editorViewActualSize,
             onTap: _viewport.actualSize,
           ),
           const SizedBox(width: 8),
@@ -1118,12 +1133,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           // to the title bar's top-left — navigation, not an action.)
           _BarAction(
             icon: Icons.check,
-            label: 'Done',
+            label: _l.editorDoneButton,
             accent: true,
             onTap: _exporting ? null : _done,
           ),
           PopupMenuButton<Set<FlowAction>>(
-            tooltip: 'One-off action (instead of the Done flow)',
+            tooltip: _l.editorMenuOneOffTooltip,
             enabled: !_exporting,
             position: PopupMenuPosition.over,
             offset: const Offset(0, -8),
@@ -1137,14 +1152,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             // The menu route lives in the app overlay, ABOVE the GlimprTheme
             // scope — pass the tokens in rather than re-reading them there.
             itemBuilder: (_) => [
-              _oneOff(t, 'Copy only', Icons.copy_outlined, {FlowAction.copy}),
-              _oneOff(t, 'Save only', Icons.save_outlined, {FlowAction.save}),
-              _oneOff(t, 'Copy file path', Icons.link,
+              _oneOff(t, _l.editorMenuCopyOnly, Icons.copy_outlined, {FlowAction.copy}),
+              _oneOff(t, _l.editorMenuSaveOnly, Icons.save_outlined, {FlowAction.save}),
+              _oneOff(t, _l.editorMenuCopyFilePath, Icons.link,
                   {FlowAction.save, FlowAction.copyPath}),
-              _oneOff(t, 'Show in Finder', Icons.folder_outlined,
+              _oneOff(t, _l.editorMenuShowInFinder, Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
-              _oneOff(t, 'Share…', Icons.ios_share, {FlowAction.shareSheet}),
-              _oneOff(t, 'Pin to screen', Icons.push_pin_outlined,
+              _oneOff(t, _l.editorMenuShare, Icons.ios_share, {FlowAction.shareSheet}),
+              _oneOff(t, _l.editorMenuPinToScreen, Icons.push_pin_outlined,
                   {FlowAction.pin}),
             ],
             child: Padding(
@@ -1179,6 +1194,7 @@ class _HistoryButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return ValueListenableBuilder<EditorDocument>(
       valueListenable: controller.document,
       builder: (_, doc, _) => Row(
@@ -1186,12 +1202,12 @@ class _HistoryButtons extends StatelessWidget {
         children: [
           _IconAction(
             icon: Icons.undo,
-            tooltip: 'Undo',
+            tooltip: l.editorUndoTooltip,
             onTap: doc.canUndo ? controller.undo : null,
           ),
           _IconAction(
             icon: Icons.redo,
-            tooltip: 'Redo',
+            tooltip: l.editorRedoTooltip,
             onTap: doc.canRedo ? controller.redo : null,
           ),
         ],
@@ -1219,6 +1235,7 @@ class _MoreTileState extends State<_MoreTile> {
   @override
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
+    final l = AppLocalizations.of(context);
     final color = _hover ? t.fg1 : t.fg3;
     // Same dynamic-size tooltip anchoring as _RecentTile.
     return LayoutBuilder(
@@ -1229,7 +1246,7 @@ class _MoreTileState extends State<_MoreTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: 'Open the save folder in Finder',
+          message: l.editorGalleryMoreTooltip,
           waitDuration: const Duration(milliseconds: 400),
           verticalOffset: box.maxHeight / 2 + 8,
           child: AnimatedContainer(
@@ -1255,7 +1272,7 @@ class _MoreTileState extends State<_MoreTile> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'More…',
+                  l.editorGalleryMoreCaption,
                   maxLines: 1,
                   style: GlimprType.sansStyle(8.5, 600, color),
                 ),
@@ -1317,6 +1334,7 @@ class _TitleBarHomeState extends State<_TitleBarHome> {
   @override
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
+    final l = AppLocalizations.of(context);
     final color = _hover ? t.fg1 : t.fg2;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -1325,7 +1343,7 @@ class _TitleBarHomeState extends State<_TitleBarHome> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: 'Home',
+          message: l.editorGalleryHome,
           waitDuration: const Duration(milliseconds: 400),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
@@ -1610,6 +1628,7 @@ class _RecentTileState extends State<_RecentTile> {
   /// route lives in the app overlay, ABOVE the GlimprTheme scope — pass the
   /// tokens in rather than re-reading them there.
   Future<void> _contextMenu(GlimprTokens t, Offset at) async {
+    final l = AppLocalizations.of(context);
     final action = await showMenu<VoidCallback>(
       context: context,
       // left < right and top < bottom anchor the menu's TOP-LEFT at the click,
@@ -1623,18 +1642,18 @@ class _RecentTileState extends State<_RecentTile> {
         side: BorderSide(color: t.divider),
       ),
       items: [
-        _menuItem(t, 'Edit', Icons.edit_outlined, widget.onTap),
+        _menuItem(t, l.editorContextEdit, Icons.edit_outlined, widget.onTap),
         const PopupMenuDivider(height: 8),
-        _menuItem(t, 'Copy Image', Icons.copy_outlined, widget.onCopy),
-        _menuItem(t, 'Copy Path', Icons.link, widget.onCopyPath),
-        _menuItem(t, 'Share…', Icons.ios_share, widget.onShare),
-        _menuItem(t, 'Pin to Screen', Icons.push_pin_outlined, widget.onPin),
-        _menuItem(t, 'Show in Finder', Icons.folder_outlined, widget.onReveal),
+        _menuItem(t, l.editorContextCopyImage, Icons.copy_outlined, widget.onCopy),
+        _menuItem(t, l.editorContextCopyPath, Icons.link, widget.onCopyPath),
+        _menuItem(t, l.editorContextShare, Icons.ios_share, widget.onShare),
+        _menuItem(t, l.editorContextPinToScreen, Icons.push_pin_outlined, widget.onPin),
+        _menuItem(t, l.editorContextShowInFinder, Icons.folder_outlined, widget.onReveal),
         const PopupMenuDivider(height: 8),
         _menuItem(
-            t, 'Remove from Recent', Icons.close_outlined, widget.onRemove),
+            t, l.editorContextRemoveFromRecent, Icons.close_outlined, widget.onRemove),
         _menuItem(
-            t, 'Clear Recent', Icons.delete_sweep_outlined, widget.onClear),
+            t, l.editorContextClearRecent, Icons.delete_sweep_outlined, widget.onClear),
       ],
     );
     action?.call();

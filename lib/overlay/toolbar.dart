@@ -6,6 +6,7 @@ import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../editor/font_bridge.dart';
 import '../editor/tool_meta.dart';
+import '../l10n/gen/app_localizations.dart';
 import '../editor/tool_style_store.dart';
 import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -74,6 +75,7 @@ class EditorToolbar extends StatelessWidget {
     final palette = _ToolbarPalette.forBrightness(
       MediaQuery.platformBrightnessOf(context),
     );
+    final l10n = AppLocalizations.of(context);
     return _ToolbarTheme(
       palette: palette,
       // The toolbar floats at the bottom and every panel/popover grows UPWARD;
@@ -131,7 +133,7 @@ class EditorToolbar extends StatelessWidget {
                         : icon,
                     // The tool's name, worded identically to its Settings >
                     // Shortcuts row (same toolLabel source).
-                    tooltip: toolLabel(kind, pinMode: pinMode),
+                    tooltip: toolLabel(l10n, kind, pinMode: pinMode),
                     // Badge = the tool's current binding label (e.g. "C", "1",
                     // "⌘B"); null/unbound => no badge.
                     shortcut: editorBindings[kEditorToolActionKey[kind]]
@@ -185,7 +187,7 @@ class EditorToolbar extends StatelessWidget {
                                 size: 13, color: GlimprTokens.accent),
                             const SizedBox(width: 6),
                             Text(
-                              'Pin mode: the selection floats as a pin',
+                              l10n.toolbarPinCaption,
                               style: TextStyle(
                                 color: palette.fg,
                                 fontSize: 11.5,
@@ -419,12 +421,13 @@ class _CursorToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
+    final l10n = AppLocalizations.of(context);
     return ValueListenableBuilder<bool>(
       valueListenable: controller.showCursor,
       builder: (_, on, _) => IconButton(
         icon: const Icon(Icons.mouse),
         color: on ? GlimprTokens.accent : p.fg,
-        tooltip: on ? 'Mouse pointer: shown' : 'Mouse pointer: hidden',
+        tooltip: on ? l10n.toolbarMousePointerShown : l10n.toolbarMousePointerHidden,
         onPressed: () => controller.showCursor.value = !on,
       ),
     );
@@ -1040,6 +1043,7 @@ class _OptionsRowState extends State<_OptionsRow> {
         final showsOutline = tool == ToolKind.text;
         // The spotlight hole reuses the Radius pill (per-hole corner radius).
         final showsCornerRadius = tool == ToolKind.rectangle || isSpotlight;
+        final l10n = AppLocalizations.of(context);
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
@@ -1052,9 +1056,9 @@ class _OptionsRowState extends State<_OptionsRow> {
                     _TextureButton(
                       key: const ValueKey('stamp-picker'),
                       label: _c.stampImage.value == null
-                          ? 'Choose image…'
-                          : 'Change image…',
-                      tooltip: 'Choose a stamp image',
+                          ? l10n.toolbarChooseImage
+                          : l10n.toolbarChangeImage,
+                      tooltip: l10n.toolbarChooseStampImage,
                       onTap: _c.requestStampPick,
                     ),
                   if (hasStyleBar) ...[
@@ -1071,7 +1075,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       key: const ValueKey('fill-color'),
                       color: style.fillColor,
                       // Same field, two readings: a shape fill vs a text backdrop.
-                      tooltip: tool == ToolKind.text ? 'Background' : 'Fill',
+                      tooltip: tool == ToolKind.text ? l10n.toolbarFillBackground : l10n.toolbarFill,
                       glyph: Icons.format_color_fill,
                       onTap: _openFillPopover,
                     ),
@@ -1081,7 +1085,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                     _ColorButton(
                       key: const ValueKey('outline-color'),
                       color: style.outlineColor,
-                      tooltip: 'Text outline',
+                      tooltip: l10n.toolbarTextOutline,
                       glyph: Icons.format_color_text,
                       onTap: _openOutlinePopover,
                     ),
@@ -1098,7 +1102,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       suffix: 'px',
                       leadingIcon: Icons.blur_on,
                       leadingTooltip:
-                          tool == ToolKind.blur ? 'Blur strength' : 'Pixel size',
+                          tool == ToolKind.blur ? l10n.toolbarBlurStrength : l10n.toolbarPixelSize,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   if (showsWidth) ...[
@@ -1113,7 +1117,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 2,
                       suffix: 'px',
                       leadingIcon: Icons.line_weight,
-                      leadingTooltip: 'Stroke width',
+                      leadingTooltip: l10n.toolbarStrokeWidth,
                       // Hand keyboard focus back to the editor on commit so tool
                       // shortcuts work again (the font field already does this).
                       onEditingDone: widget.onPtEditingDone,
@@ -1127,8 +1131,8 @@ class _OptionsRowState extends State<_OptionsRow> {
                     // has a clear home.
                     _TextureButton(
                       key: const ValueKey('radius-picker'),
-                      label: 'Radius: ${radiusLabel(style.cornerRadius)}',
-                      tooltip: 'Corner radius',
+                      label: l10n.toolbarRadiusLabel(radiusLabel(l10n, style.cornerRadius)),
+                      tooltip: l10n.toolbarCornerRadius,
                       onTap: _openRadiusPopover,
                     ),
                   ],
@@ -1136,8 +1140,8 @@ class _OptionsRowState extends State<_OptionsRow> {
                     const SizedBox(width: 8),
                     _TextureButton(
                       key: const ValueKey('texture-picker'),
-                      label: textureLabel(style.texture),
-                      tooltip: 'Highlighter texture',
+                      label: textureLabel(l10n, style.texture),
+                      tooltip: l10n.toolbarHighlighterTexture,
                       onTap: _openTexturePopover,
                     ),
                   ],
@@ -1145,8 +1149,8 @@ class _OptionsRowState extends State<_OptionsRow> {
                     const SizedBox(width: 8),
                     _TextureButton(
                       key: const ValueKey('line-style-picker'),
-                      label: lineStyleLabel(style.lineStyle),
-                      tooltip: 'Line style',
+                      label: lineStyleLabel(l10n, style.lineStyle),
+                      tooltip: l10n.toolbarLineStyle,
                       onTap: _openLineStylePopover,
                     ),
                   ],
@@ -1162,7 +1166,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 1,
                       suffix: 'pts',
                       leadingIcon: Icons.gesture,
-                      leadingTooltip: 'Curve points',
+                      leadingTooltip: l10n.toolbarCurvePoints,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
@@ -1170,8 +1174,8 @@ class _OptionsRowState extends State<_OptionsRow> {
                     const SizedBox(width: 8),
                     _TextureButton(
                       key: const ValueKey('arrow-heads-picker'),
-                      label: arrowHeadsLabel(style.arrowHeads),
-                      tooltip: 'Arrowheads',
+                      label: arrowHeadsLabel(l10n, style.arrowHeads),
+                      tooltip: l10n.toolbarArrowheads,
                       onTap: _openArrowHeadsPopover,
                     ),
                     const SizedBox(width: 8),
@@ -1186,7 +1190,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 25,
                       suffix: '%',
                       leadingIcon: Icons.arrow_right_alt,
-                      leadingTooltip: 'Arrowhead size',
+                      leadingTooltip: l10n.toolbarArrowheadSize,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
@@ -1202,7 +1206,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       suffix: 'pt',
                       leadingIcon: Icons.format_size,
                       leadingTooltip:
-                          tool == ToolKind.text ? 'Font size' : 'Badge size',
+                          tool == ToolKind.text ? l10n.toolbarFontSize : l10n.toolbarBadgeSize,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
@@ -1218,14 +1222,14 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 1,
                       suffix: '',
                       leadingIcon: Icons.tag,
-                      leadingTooltip: 'Start number',
+                      leadingTooltip: l10n.toolbarStartNumber,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                     const SizedBox(width: 8),
                     _TextureButton(
                       key: const ValueKey('step-shape-picker'),
-                      label: stepShapeLabel(style.stepShape),
-                      tooltip: 'Badge shape',
+                      label: stepShapeLabel(l10n, style.stepShape),
+                      tooltip: l10n.toolbarBadgeShape,
                       onTap: _openStepShapePopover,
                     ),
                   ],
@@ -1233,7 +1237,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                     const SizedBox(width: 8),
                     _FontFamilyButton(
                       key: const ValueKey('font-button'),
-                      label: style.fontFamily ?? 'System',
+                      label: style.fontFamily ?? l10n.toolbarFontSystem,
                       onTap: _openFontPopover,
                     ),
                   ],
@@ -1248,14 +1252,14 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 5,
                       suffix: '%',
                       leadingIcon: Icons.brightness_6,
-                      leadingTooltip: 'Background dim',
+                      leadingTooltip: l10n.toolbarBackgroundDim,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                     const SizedBox(width: 8),
                     _TextureButton(
                       key: const ValueKey('spotlight-effect-picker'),
-                      label: spotlightEffectLabel(style.spotlightEffect),
-                      tooltip: 'Background treatment',
+                      label: spotlightEffectLabel(l10n, style.spotlightEffect),
+                      tooltip: l10n.toolbarBackgroundTreatment,
                       onTap: _openSpotlightEffectPopover,
                     ),
                     if (style.spotlightEffect != SpotlightEffect.none) ...[
@@ -1275,8 +1279,8 @@ class _OptionsRowState extends State<_OptionsRow> {
                                 : Icons.grid_on,
                         leadingTooltip:
                             style.spotlightEffect == SpotlightEffect.blur
-                                ? 'Blur strength'
-                                : 'Pixel size',
+                                ? l10n.toolbarBlurStrength
+                                : l10n.toolbarPixelSize,
                         onEditingDone: widget.onPtEditingDone,
                       ),
                     ],
@@ -1291,7 +1295,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 2,
                       suffix: 'px',
                       leadingIcon: Icons.blur_linear,
-                      leadingTooltip: 'Edge feather',
+                      leadingTooltip: l10n.toolbarEdgeFeather,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                   ],
@@ -1307,7 +1311,7 @@ class _OptionsRowState extends State<_OptionsRow> {
                       step: 50,
                       suffix: '%',
                       leadingIcon: Icons.zoom_in,
-                      leadingTooltip: 'Magnification',
+                      leadingTooltip: l10n.toolbarMagnification,
                       onEditingDone: widget.onPtEditingDone,
                     ),
                     const SizedBox(width: 6),
@@ -1352,20 +1356,20 @@ class _OptionsRowState extends State<_OptionsRow> {
                     ],
                     _ActionIconButton(
                       icon: Icons.content_copy,
-                      tooltip: _actionTip('Duplicate', kEditorDuplicateKey),
+                      tooltip: _actionTip(l10n.toolbarDuplicate, kEditorDuplicateKey),
                       onTap: _c.duplicateSelected,
                     ),
                     const SizedBox(width: 4),
                     _ActionIconButton(
                       icon: Icons.flip_to_front,
                       tooltip:
-                          _actionTip('Bring to front', kEditorBringToFrontKey),
+                          _actionTip(l10n.toolbarBringToFront, kEditorBringToFrontKey),
                       onTap: _c.bringSelectedToFront,
                     ),
                     const SizedBox(width: 4),
                     _ActionIconButton(
                       icon: Icons.flip_to_back,
-                      tooltip: _actionTip('Send to back', kEditorSendToBackKey),
+                      tooltip: _actionTip(l10n.toolbarSendToBack, kEditorSendToBackKey),
                       onTap: _c.sendSelectedToBack,
                     ),
                   ],
@@ -1423,7 +1427,8 @@ class _TextureButton extends StatelessWidget {
 class _ColorButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
-  final String tooltip;
+  // Null resolves to the generic "Colour" label at build time via l10n.
+  final String? tooltip;
   // Optional glyph overlaid centre to tell two swatches apart (the fill swatch
   // carries a fill-bucket icon; the outline swatch carries none).
   final IconData? glyph;
@@ -1431,16 +1436,17 @@ class _ColorButton extends StatelessWidget {
     super.key,
     required this.color,
     required this.onTap,
-    this.tooltip = 'Colour',
+    this.tooltip,
     this.glyph,
   });
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
+    final l10n = AppLocalizations.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Tooltip(
-        message: tooltip,
+        message: tooltip ?? l10n.toolbarColour,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: Container(
@@ -1565,6 +1571,7 @@ class _ShadowToggleState extends State<_ShadowToggle> {
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
+    final l10n = AppLocalizations.of(context);
     final on = widget.on;
     final base = on ? GlimprTokens.accent : p.fg;
     Widget square(Color c) => DecoratedBox(
@@ -1598,7 +1605,7 @@ class _ShadowToggleState extends State<_ShadowToggle> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: on ? 'Drop shadow: on' : 'Drop shadow: off',
+          message: on ? l10n.toolbarDropShadowOn : l10n.toolbarDropShadowOff,
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -1629,6 +1636,7 @@ class _ConnectorToggleState extends State<_ConnectorToggle> {
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
+    final l10n = AppLocalizations.of(context);
     final on = widget.on;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -1637,7 +1645,7 @@ class _ConnectorToggleState extends State<_ConnectorToggle> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: on ? 'Connector line: on' : 'Connector line: off',
+          message: on ? l10n.toolbarConnectorLineOn : l10n.toolbarConnectorLineOff,
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -1674,6 +1682,7 @@ class _ResetToolButtonState extends State<_ResetToolButton> {
   @override
   Widget build(BuildContext context) {
     final p = _ToolbarTheme.of(context);
+    final l10n = AppLocalizations.of(context);
     final icon = Padding(
       padding: const EdgeInsets.all(4),
       child: Icon(
@@ -1691,7 +1700,7 @@ class _ResetToolButtonState extends State<_ResetToolButton> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: 'Reset this tool',
+          message: l10n.toolbarResetThisTool,
           child: DecoratedBox(
             decoration: BoxDecoration(
               shape: BoxShape.circle,

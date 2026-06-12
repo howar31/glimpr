@@ -1,0 +1,1353 @@
+{
+  "@@locale": "en",
+  "settingsLanguage": "Language",
+  "@settingsLanguage": {
+    "description": "Settings > General: the app language picker section label and card title"
+  },
+  "settingsPaneGeneral": "General",
+  "@settingsPaneGeneral": {
+    "description": "Settings sidebar: General pane label"
+  },
+  "settingsPaneCapture": "Capture",
+  "@settingsPaneCapture": {
+    "description": "Settings sidebar: Capture pane label"
+  },
+  "settingsPaneOutput": "Output",
+  "@settingsPaneOutput": {
+    "description": "Settings sidebar: Output pane label"
+  },
+  "settingsPaneWorkflow": "Workflow",
+  "@settingsPaneWorkflow": {
+    "description": "Settings sidebar: Workflow pane label"
+  },
+  "settingsPaneShortcuts": "Shortcuts",
+  "@settingsPaneShortcuts": {
+    "description": "Settings sidebar: Shortcuts pane label"
+  },
+  "settingsPaneAdvanced": "Advanced",
+  "@settingsPaneAdvanced": {
+    "description": "Settings sidebar: Advanced pane label"
+  },
+  "settingsSectionStartup": "Startup",
+  "@settingsSectionStartup": {
+    "description": "Settings > General: Startup section label"
+  },
+  "settingsLaunchAtLogin": "Launch at login",
+  "@settingsLaunchAtLogin": {
+    "description": "Settings > General > Startup: launch at login toggle title"
+  },
+  "settingsLaunchAtLoginHint": "Start Glimpr automatically when you log in",
+  "@settingsLaunchAtLoginHint": {
+    "description": "Settings > General > Startup: launch at login toggle hint"
+  },
+  "settingsLanguageAppliesAfterRestart": "Applies after restarting Glimpr",
+  "@settingsLanguageAppliesAfterRestart": {
+    "description": "Settings > General > Language: subtitle below the language picker"
+  },
+  "settingsRestartNotice": "Restart Glimpr for this to take effect.",
+  "@settingsRestartNotice": {
+    "description": "Settings > General/Advanced: warning shown when a restart-required setting changes"
+  },
+  "settingsRestartNow": "Restart Glimpr now",
+  "@settingsRestartNow": {
+    "description": "Settings > General/Advanced: restart button label (first click)"
+  },
+  "settingsRestartNowConfirm": "Click again to restart Glimpr",
+  "@settingsRestartNowConfirm": {
+    "description": "Settings > General/Advanced: restart button confirm label (second click)"
+  },
+  "settingsSectionBehaviour": "Behaviour",
+  "@settingsSectionBehaviour": {
+    "description": "Settings > Capture: Behaviour section label"
+  },
+  "settingsMousePointer": "Mouse pointer",
+  "@settingsMousePointer": {
+    "description": "Settings > Capture > Behaviour: mouse pointer toggle title"
+  },
+  "settingsMousePointerHint": "Include the mouse pointer in captures. This is the default; in the capture overlay a toolbar button shows/hides it per shot without changing this setting.",
+  "@settingsMousePointerHint": {
+    "description": "Settings > Capture > Behaviour: mouse pointer toggle hint"
+  },
+  "settingsRightClickExits": "Right-click exits",
+  "@settingsRightClickExits": {
+    "description": "Settings > Capture > Behaviour: right-click exits toggle title"
+  },
+  "settingsRightClickExitsHint": "Right-click leaves capture mode (Esc always works)",
+  "@settingsRightClickExitsHint": {
+    "description": "Settings > Capture > Behaviour: right-click exits toggle hint"
+  },
+  "settingsConfirmBeforeDiscarding": "Confirm before discarding",
+  "@settingsConfirmBeforeDiscarding": {
+    "description": "Settings > Capture > Behaviour: confirm on exit toggle title"
+  },
+  "settingsConfirmBeforeDiscardingHint": "When exiting a capture that still has annotations (right-click or Esc), ask before discarding them.",
+  "@settingsConfirmBeforeDiscardingHint": {
+    "description": "Settings > Capture > Behaviour: confirm on exit toggle hint"
+  },
+  "settingsSectionLoupe": "Loupe",
+  "@settingsSectionLoupe": {
+    "description": "Settings > Capture: Loupe section label"
+  },
+  "settingsLoupeDescription": "Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.",
+  "@settingsLoupeDescription": {
+    "description": "Settings > Capture > Loupe: introductory description"
+  },
+  "settingsLoupeSize": "Size",
+  "@settingsLoupeSize": {
+    "description": "Settings > Capture > Loupe: size slider title"
+  },
+  "settingsLoupeSizeHint": "Pixels shown per side",
+  "@settingsLoupeSizeHint": {
+    "description": "Settings > Capture > Loupe: size slider hint"
+  },
+  "settingsLoupeMagnification": "Magnification",
+  "@settingsLoupeMagnification": {
+    "description": "Settings > Capture > Loupe: magnification slider title"
+  },
+  "settingsLoupeMagnificationHint": "How big each pixel is drawn",
+  "@settingsLoupeMagnificationHint": {
+    "description": "Settings > Capture > Loupe: magnification slider hint"
+  },
+  "settingsLoupePreviewReduced": "Preview reduced to fit",
+  "@settingsLoupePreviewReduced": {
+    "description": "Settings > Capture > Loupe: note shown when preview is scaled down"
+  },
+  "settingsLoupeReset": "Reset",
+  "@settingsLoupeReset": {
+    "description": "Settings > Capture > Loupe: reset button label"
+  },
+  "settingsToolShortcutsWhileSampling": "Tool shortcuts while sampling",
+  "@settingsToolShortcutsWhileSampling": {
+    "description": "Settings > Capture: eyedropper tool-switch behavior row title"
+  },
+  "settingsToolShortcutsWhileSamplingHint": "Switch tool ends the color-picker sample immediately; Keep sampling ignores tool keys, so a stray key cannot interrupt a careful aim.",
+  "@settingsToolShortcutsWhileSamplingHint": {
+    "description": "Settings > Capture: eyedropper tool-switch behavior row hint"
+  },
+  "settingsSwitchTool": "Switch tool",
+  "@settingsSwitchTool": {
+    "description": "Settings > Capture: eyedropper keys-cancel segmented option"
+  },
+  "settingsKeepSampling": "Keep sampling",
+  "@settingsKeepSampling": {
+    "description": "Settings > Capture: eyedropper keep-sampling segmented option"
+  },
+  "settingsSectionOverlayHUD": "Overlay HUD",
+  "@settingsSectionOverlayHUD": {
+    "description": "Settings > Capture: Overlay HUD section label"
+  },
+  "settingsCrosshair": "Crosshair",
+  "@settingsCrosshair": {
+    "description": "Settings > Capture > Overlay HUD: crosshair toggle title"
+  },
+  "settingsCrosshairHint": "Show the full-screen crosshair lines for the region tools (crop / blur / pixelate). The centre reticle and loupe stay either way.",
+  "@settingsCrosshairHint": {
+    "description": "Settings > Capture > Overlay HUD: crosshair toggle hint"
+  },
+  "settingsAnimateMarchingAnts": "Animate marching ants",
+  "@settingsAnimateMarchingAnts": {
+    "description": "Settings > Capture > Overlay HUD: marching ants toggle title"
+  },
+  "settingsAnimateMarchingAntsHint": "Flow the dashed selection / crosshair / window outlines. Turn off for static dashes (less motion, slightly lighter).",
+  "@settingsAnimateMarchingAntsHint": {
+    "description": "Settings > Capture > Overlay HUD: marching ants toggle hint"
+  },
+  "settingsSectionAfterCapture": "After capture",
+  "@settingsSectionAfterCapture": {
+    "description": "Settings > Workflow: After capture section label"
+  },
+  "settingsSectionAfterEditorDone": "After editor's Done",
+  "@settingsSectionAfterEditorDone": {
+    "description": "Settings > Workflow: After editor's Done section label"
+  },
+  "settingsSectionSounds": "Sounds",
+  "@settingsSectionSounds": {
+    "description": "Settings > Workflow: Sounds section label"
+  },
+  "settingsFlowCopyToClipboard": "Copy to clipboard",
+  "@settingsFlowCopyToClipboard": {
+    "description": "Settings > Workflow: copy-to-clipboard flow action row title"
+  },
+  "settingsFlowCopyToClipboardHint": "Put the image on the clipboard",
+  "@settingsFlowCopyToClipboardHint": {
+    "description": "Settings > Workflow: copy-to-clipboard flow action row hint"
+  },
+  "settingsFlowSaveToFile": "Save to file",
+  "@settingsFlowSaveToFile": {
+    "description": "Settings > Workflow: save-to-file flow action row title"
+  },
+  "settingsFlowSaveToFileHint": "Write the image to the save folder",
+  "@settingsFlowSaveToFileHint": {
+    "description": "Settings > Workflow: save-to-file flow action row hint"
+  },
+  "settingsFlowCopyFilePath": "Copy file path",
+  "@settingsFlowCopyFilePath": {
+    "description": "Settings > Workflow: copy-file-path flow action row title"
+  },
+  "settingsFlowCopyFilePathHint": "Put the saved file's path on the clipboard (instead of the image)",
+  "@settingsFlowCopyFilePathHint": {
+    "description": "Settings > Workflow: copy-file-path flow action hint (save is enabled)"
+  },
+  "settingsFlowCopyFilePathNeedsSave": "Needs \"Save to file\"",
+  "@settingsFlowCopyFilePathNeedsSave": {
+    "description": "Settings > Workflow: copy-file-path / show-in-finder hint when save is not enabled"
+  },
+  "settingsFlowShowInFinder": "Show in Finder",
+  "@settingsFlowShowInFinder": {
+    "description": "Settings > Workflow: show-in-Finder flow action row title"
+  },
+  "settingsFlowShowInFinderHint": "Reveal the saved file in Finder",
+  "@settingsFlowShowInFinderHint": {
+    "description": "Settings > Workflow: show-in-Finder flow action hint (save is enabled)"
+  },
+  "settingsFlowOpenInEditor": "Open in editor",
+  "@settingsFlowOpenInEditor": {
+    "description": "Settings > Workflow: open-in-editor flow action row title"
+  },
+  "settingsFlowOpenInEditorHint": "Open the result in the image editor for further work",
+  "@settingsFlowOpenInEditorHint": {
+    "description": "Settings > Workflow: open-in-editor flow action row hint"
+  },
+  "settingsFlowShareSheet": "Share sheet",
+  "@settingsFlowShareSheet": {
+    "description": "Settings > Workflow: share-sheet flow action row title"
+  },
+  "settingsFlowShareSheetHint": "Open the macOS share menu (AirDrop, Messages, …)",
+  "@settingsFlowShareSheetHint": {
+    "description": "Settings > Workflow: share-sheet flow action row hint"
+  },
+  "settingsFlowPinToScreen": "Pin to screen",
+  "@settingsFlowPinToScreen": {
+    "description": "Settings > Workflow: pin-to-screen flow action row title"
+  },
+  "settingsFlowPinToScreenCaptureHint": "Float the capture as an always-on-top window, pinned in place over where it was taken",
+  "@settingsFlowPinToScreenCaptureHint": {
+    "description": "Settings > Workflow: pin-to-screen hint for the capture flow"
+  },
+  "settingsFlowPinToScreenEditorHint": "Float the result as an always-on-top window (centered)",
+  "@settingsFlowPinToScreenEditorHint": {
+    "description": "Settings > Workflow: pin-to-screen hint for the editor flow"
+  },
+  "settingsFlowCaptureCaption": "Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.",
+  "@settingsFlowCaptureCaption": {
+    "description": "Settings > Workflow: caption below the After capture flow card (non-empty state)"
+  },
+  "settingsFlowEditorCaption": "Runs when the editor's Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives.",
+  "@settingsFlowEditorCaption": {
+    "description": "Settings > Workflow: caption below the After editor's Done flow card (non-empty state)"
+  },
+  "settingsFlowCaptureCaptionEmpty": "Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.",
+  "@settingsFlowCaptureCaptionEmpty": {
+    "description": "Settings > Workflow: caption below the After capture flow card when no actions are selected"
+  },
+  "settingsFlowEditorCaptionEmpty": "Runs when the editor's Done button (or Enter) fires; the ▾ menu beside Done offers one-off alternatives. Nothing is selected, so it falls back to Copy to clipboard.",
+  "@settingsFlowEditorCaptionEmpty": {
+    "description": "Settings > Workflow: caption below the After editor's Done flow card when no actions are selected"
+  },
+  "settingsSoundShutter": "Shutter",
+  "@settingsSoundShutter": {
+    "description": "Settings > Workflow > Sounds: shutter sound toggle title"
+  },
+  "settingsSoundShutterHint": "Plays the instant a capture is taken",
+  "@settingsSoundShutterHint": {
+    "description": "Settings > Workflow > Sounds: shutter sound toggle hint"
+  },
+  "settingsSoundCompletion": "Completion",
+  "@settingsSoundCompletion": {
+    "description": "Settings > Workflow > Sounds: completion sound toggle title"
+  },
+  "settingsSoundCompletionHint": "Chimes once the completion flow finishes",
+  "@settingsSoundCompletionHint": {
+    "description": "Settings > Workflow > Sounds: completion sound toggle hint"
+  },
+  "settingsSectionSaveLocation": "Save location",
+  "@settingsSectionSaveLocation": {
+    "description": "Settings > Output: Save location section label"
+  },
+  "settingsSectionFormat": "Format",
+  "@settingsSectionFormat": {
+    "description": "Settings > Output: Format section label"
+  },
+  "settingsSectionFilename": "Filename",
+  "@settingsSectionFilename": {
+    "description": "Settings > Output: Filename section label"
+  },
+  "settingsSectionDecoration": "Decoration",
+  "@settingsSectionDecoration": {
+    "description": "Settings > Output: Decoration section label"
+  },
+  "settingsSectionRecentHistory": "Recent history",
+  "@settingsSectionRecentHistory": {
+    "description": "Settings > Output: Recent history section label"
+  },
+  "settingsSaveFolder": "Save folder",
+  "@settingsSaveFolder": {
+    "description": "Settings > Output > Save location: save folder card title"
+  },
+  "settingsSaveFolderChoose": "Choose…",
+  "@settingsSaveFolderChoose": {
+    "description": "Settings > Output > Save location: choose directory button label"
+  },
+  "settingsSaveFolderReset": "Reset",
+  "@settingsSaveFolderReset": {
+    "description": "Settings > Output > Save location: reset to default button label"
+  },
+  "settingsSaveFolderDefault": "Default · ~/Pictures/Glimpr",
+  "@settingsSaveFolderDefault": {
+    "description": "Settings > Output > Save location: shown when no custom folder is set"
+  },
+  "settingsFormatQuality": "Quality",
+  "@settingsFormatQuality": {
+    "description": "Settings > Output > Format: JPEG quality label"
+  },
+  "settingsFormatQualityHint": "Compression level",
+  "@settingsFormatQualityHint": {
+    "description": "Settings > Output > Format: JPEG quality hint"
+  },
+  "settingsFilenamePreview": "Preview",
+  "@settingsFilenamePreview": {
+    "description": "Settings > Output > Filename: preview label"
+  },
+  "settingsFilenamePlaceholders": "Placeholders",
+  "@settingsFilenamePlaceholders": {
+    "description": "Settings > Output > Filename: placeholders section label"
+  },
+  "settingsFilenameTokenWindowDesc": "The window title, or the app name if it has none",
+  "@settingsFilenameTokenWindowDesc": {
+    "description": "Settings > Output > Filename: description for the {window} token"
+  },
+  "settingsFilenameTokenAppDesc": "The application name (e.g. Safari)",
+  "@settingsFilenameTokenAppDesc": {
+    "description": "Settings > Output > Filename: description for the {app} token"
+  },
+  "settingsFilenameTokenDateDesc": "Capture date, e.g. 2026-06-03",
+  "@settingsFilenameTokenDateDesc": {
+    "description": "Settings > Output > Filename: description for the {date} token"
+  },
+  "settingsFilenameTokenTimeDesc": "Capture time, e.g. 15-04-09",
+  "@settingsFilenameTokenTimeDesc": {
+    "description": "Settings > Output > Filename: description for the {time} token"
+  },
+  "settingsFilenameNote": "Uses the window under the cursor when the capture ends. On bare desktop, {windowToken} and {appToken} are left out.",
+  "@settingsFilenameNote": {
+    "description": "Settings > Output > Filename: note about window/app token behavior",
+    "placeholders": {
+      "windowToken": {
+        "type": "String"
+      },
+      "appToken": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsDecorationWindowSnap": "Window snap",
+  "@settingsDecorationWindowSnap": {
+    "description": "Settings > Output > Decoration: window snap toggle title"
+  },
+  "settingsDecorationWindowSnapHint": "Shadow + margin when snapping to a window",
+  "@settingsDecorationWindowSnapHint": {
+    "description": "Settings > Output > Decoration: window snap toggle hint"
+  },
+  "settingsDecorationFreehandCrop": "Freehand crop",
+  "@settingsDecorationFreehandCrop": {
+    "description": "Settings > Output > Decoration: freehand crop toggle title"
+  },
+  "settingsDecorationFreehandCropHint": "Shadow + margin on a dragged crop region",
+  "@settingsDecorationFreehandCropHint": {
+    "description": "Settings > Output > Decoration: freehand crop toggle hint"
+  },
+  "settingsDecorationFocusedWindow": "Focused window",
+  "@settingsDecorationFocusedWindow": {
+    "description": "Settings > Output > Decoration: focused window toggle title"
+  },
+  "settingsDecorationFocusedWindowHint": "Capture-focused-window mode (⌘⌥2)",
+  "@settingsDecorationFocusedWindowHint": {
+    "description": "Settings > Output > Decoration: focused window toggle hint"
+  },
+  "settingsDecorationDisplay": "Display",
+  "@settingsDecorationDisplay": {
+    "description": "Settings > Output > Decoration: display toggle title"
+  },
+  "settingsDecorationDisplayHint": "Capture-display mode (⌘⌥3)",
+  "@settingsDecorationDisplayHint": {
+    "description": "Settings > Output > Decoration: display toggle hint"
+  },
+  "settingsDecorationLastRegion": "Last region",
+  "@settingsDecorationLastRegion": {
+    "description": "Settings > Output > Decoration: last region toggle title"
+  },
+  "settingsDecorationLastRegionHint": "Capture-last-region mode (⌘⌥4)",
+  "@settingsDecorationLastRegionHint": {
+    "description": "Settings > Output > Decoration: last region toggle hint"
+  },
+  "settingsDecorationJpegFill": "JPEG background fill",
+  "@settingsDecorationJpegFill": {
+    "description": "Settings > Output > Decoration: JPEG fill swatch row title"
+  },
+  "settingsDecorationJpegFillHint": "Colour behind the margin when saving as JPEG",
+  "@settingsDecorationJpegFillHint": {
+    "description": "Settings > Output > Decoration: JPEG fill swatch row hint"
+  },
+  "settingsRecentImagesKept": "Recent images kept",
+  "@settingsRecentImagesKept": {
+    "description": "Settings > Output > Recent history: card title"
+  },
+  "settingsRecentImagesKeptHint": "How many images the landing gallery and the menu-bar Open Recent keep.",
+  "@settingsRecentImagesKeptHint": {
+    "description": "Settings > Output > Recent history: card hint"
+  },
+  "settingsSectionMultiDisplay": "Multi-display",
+  "@settingsSectionMultiDisplay": {
+    "description": "Settings > Advanced: Multi-display section label"
+  },
+  "settingsWarmEnginesTitle": "Warm capture engines",
+  "@settingsWarmEnginesTitle": {
+    "description": "Settings > Advanced > Multi-display: warm engines card title"
+  },
+  "settingsWarmEnginesBody": "How many displays Glimpr keeps instantly capture-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still captures, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).",
+  "@settingsWarmEnginesBody": {
+    "description": "Settings > Advanced > Multi-display: warm engines explanatory body (multi-paragraph)"
+  },
+  "settingsWarmEnginesDefault": "Default 2 · applies after restarting Glimpr",
+  "@settingsWarmEnginesDefault": {
+    "description": "Settings > Advanced > Multi-display: caption shown when warm target equals the initial value"
+  },
+  "settingsSectionCaptureLayers": "Capture layers",
+  "@settingsSectionCaptureLayers": {
+    "description": "Settings > Advanced: Capture layers section label"
+  },
+  "settingsCaptureLayersTitle": "Capture layers",
+  "@settingsCaptureLayersTitle": {
+    "description": "Settings > Advanced > Capture layers: card title"
+  },
+  "settingsCaptureLayersBody": "Press the capture shortcut while a capture is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the capture. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next capture; no restart needed.",
+  "@settingsCaptureLayersBody": {
+    "description": "Settings > Advanced > Capture layers: explanatory body (multi-paragraph)"
+  },
+  "settingsSectionToolStyles": "Tool styles",
+  "@settingsSectionToolStyles": {
+    "description": "Settings > Advanced: Tool styles section label"
+  },
+  "settingsResetAllToolStyles": "Reset all tool styles",
+  "@settingsResetAllToolStyles": {
+    "description": "Settings > Advanced > Tool styles: reset button label and card title"
+  },
+  "settingsResetAllToolStylesHint": "Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next capture.",
+  "@settingsResetAllToolStylesHint": {
+    "description": "Settings > Advanced > Tool styles: card hint text"
+  },
+  "settingsResetAllToolStylesConfirm": "Click again to reset all tool styles",
+  "@settingsResetAllToolStylesConfirm": {
+    "description": "Settings > Advanced > Tool styles: confirm label for the two-step reset button"
+  },
+  "settingsShortcutsCaptureNote": "Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)",
+  "@settingsShortcutsCaptureNote": {
+    "description": "Settings > Shortcuts: Capture section note"
+  },
+  "settingsCmdUndo": "Undo",
+  "@settingsCmdUndo": {
+    "description": "Settings > Shortcuts > Commands: Undo row title"
+  },
+  "settingsCmdRedo": "Redo",
+  "@settingsCmdRedo": {
+    "description": "Settings > Shortcuts > Commands: Redo row title"
+  },
+  "settingsCmdPasteImage": "Paste image",
+  "@settingsCmdPasteImage": {
+    "description": "Settings > Shortcuts > Commands: Paste image row title"
+  },
+  "settingsCmdPasteImageHint": "From the clipboard",
+  "@settingsCmdPasteImageHint": {
+    "description": "Settings > Shortcuts > Commands: Paste image row hint"
+  },
+  "settingsCmdDeleteSelected": "Delete selected",
+  "@settingsCmdDeleteSelected": {
+    "description": "Settings > Shortcuts > Commands: Delete selected row title"
+  },
+  "settingsCmdDeleteSelectedHint": "Remove the selected annotation",
+  "@settingsCmdDeleteSelectedHint": {
+    "description": "Settings > Shortcuts > Commands: Delete selected row hint"
+  },
+  "settingsCmdExport": "Export",
+  "@settingsCmdExport": {
+    "description": "Settings > Shortcuts > Commands: Export row title"
+  },
+  "settingsCmdExportHint": "Screenshot the snapped window, or the whole screen",
+  "@settingsCmdExportHint": {
+    "description": "Settings > Shortcuts > Commands: Export row hint"
+  },
+  "settingsCmdDuplicateSelected": "Duplicate selected",
+  "@settingsCmdDuplicateSelected": {
+    "description": "Settings > Shortcuts > Commands: Duplicate selected row title"
+  },
+  "settingsCmdDuplicateSelectedHint": "Copy the selected annotation",
+  "@settingsCmdDuplicateSelectedHint": {
+    "description": "Settings > Shortcuts > Commands: Duplicate selected row hint"
+  },
+  "settingsCmdBringToFront": "Bring to front",
+  "@settingsCmdBringToFront": {
+    "description": "Settings > Shortcuts > Commands: Bring to front row title"
+  },
+  "settingsCmdBringToFrontHint": "Move the selection above others",
+  "@settingsCmdBringToFrontHint": {
+    "description": "Settings > Shortcuts > Commands: Bring to front row hint"
+  },
+  "settingsCmdSendToBack": "Send to back",
+  "@settingsCmdSendToBack": {
+    "description": "Settings > Shortcuts > Commands: Send to back row title"
+  },
+  "settingsCmdSendToBackHint": "Move the selection below others",
+  "@settingsCmdSendToBackHint": {
+    "description": "Settings > Shortcuts > Commands: Send to back row hint"
+  },
+  "settingsCmdCopyHex": "Copy color as HEX",
+  "@settingsCmdCopyHex": {
+    "description": "Settings > Shortcuts > Commands: Copy color as HEX row title"
+  },
+  "settingsCmdCopyColorHint": "While the color picker is sampling",
+  "@settingsCmdCopyColorHint": {
+    "description": "Settings > Shortcuts > Commands: hint for copy-color-as-* rows"
+  },
+  "settingsCmdCopyRgb": "Copy color as RGB",
+  "@settingsCmdCopyRgb": {
+    "description": "Settings > Shortcuts > Commands: Copy color as RGB row title"
+  },
+  "settingsCmdCopyHsl": "Copy color as HSL",
+  "@settingsCmdCopyHsl": {
+    "description": "Settings > Shortcuts > Commands: Copy color as HSL row title"
+  },
+  "settingsReservedCancelExit": "Cancel / Exit",
+  "@settingsReservedCancelExit": {
+    "description": "Settings > Shortcuts > Reserved: Cancel/Exit row title"
+  },
+  "settingsReservedHint": "Reserved",
+  "@settingsReservedHint": {
+    "description": "Settings > Shortcuts > Reserved: generic reserved hint"
+  },
+  "settingsReservedCloseWindow": "Close window",
+  "@settingsReservedCloseWindow": {
+    "description": "Settings > Shortcuts > Reserved: Close window row title"
+  },
+  "settingsReservedHintEditorSettings": "Reserved · editor / settings",
+  "@settingsReservedHintEditorSettings": {
+    "description": "Settings > Shortcuts > Reserved: hint for keys reserved in editor/settings"
+  },
+  "settingsReservedOpenSettings": "Open Settings",
+  "@settingsReservedOpenSettings": {
+    "description": "Settings > Shortcuts > Reserved: Open Settings row title"
+  },
+  "settingsReservedHintOverlayEditor": "Reserved · overlay / editor",
+  "@settingsReservedHintOverlayEditor": {
+    "description": "Settings > Shortcuts > Reserved: hint for keys reserved in overlay/editor"
+  },
+  "settingsReservedNudgeCrosshair": "Nudge crosshair",
+  "@settingsReservedNudgeCrosshair": {
+    "description": "Settings > Shortcuts > Reserved: Nudge crosshair row title"
+  },
+  "settingsReservedHintRegionTools": "Reserved · region tools",
+  "@settingsReservedHintRegionTools": {
+    "description": "Settings > Shortcuts > Reserved: hint for keys reserved in region tools"
+  },
+  "settingsReservedFitToWindow": "Fit to window",
+  "@settingsReservedFitToWindow": {
+    "description": "Settings > Shortcuts > Reserved: Fit to window row title"
+  },
+  "settingsReservedHintImageEditor": "Reserved · image editor",
+  "@settingsReservedHintImageEditor": {
+    "description": "Settings > Shortcuts > Reserved: hint for keys reserved in image editor"
+  },
+  "settingsReservedZoomTo100": "Zoom to 100%",
+  "@settingsReservedZoomTo100": {
+    "description": "Settings > Shortcuts > Reserved: Zoom to 100% row title"
+  },
+  "settingsReservedCommitText": "Commit text",
+  "@settingsReservedCommitText": {
+    "description": "Settings > Shortcuts > Reserved: Commit text row title"
+  },
+  "settingsReservedHintWhileEditingText": "Reserved · while editing text",
+  "@settingsReservedHintWhileEditingText": {
+    "description": "Settings > Shortcuts > Reserved: hint for keys reserved while editing text"
+  },
+  "settingsReservedNewLine": "New line",
+  "@settingsReservedNewLine": {
+    "description": "Settings > Shortcuts > Reserved: New line row title"
+  },
+  "settingsReservedCancelText": "Cancel text",
+  "@settingsReservedCancelText": {
+    "description": "Settings > Shortcuts > Reserved: Cancel text row title"
+  },
+  "settingsShortcutsNeedsModifier": "Needs a modifier",
+  "@settingsShortcutsNeedsModifier": {
+    "description": "Settings > Shortcuts: warning shown when a global shortcut has no modifier"
+  },
+  "settingsShortcutsDuplicate": "Duplicate",
+  "@settingsShortcutsDuplicate": {
+    "description": "Settings > Shortcuts: warning shown when two shortcuts share the same key combo"
+  },
+  "settingsShortcutsResetToDefault": "Reset to default",
+  "@settingsShortcutsResetToDefault": {
+    "description": "Settings > Shortcuts: tooltip on the per-shortcut reset icon button"
+  },
+  "settingsShortcutsRevert": "Revert",
+  "@settingsShortcutsRevert": {
+    "description": "Settings > Shortcuts: Revert button in the footer bar"
+  },
+  "settingsShortcutsApply": "Apply",
+  "@settingsShortcutsApply": {
+    "description": "Settings > Shortcuts: Apply button in the footer bar"
+  },
+  "settingsShortcutsTools": "Tools",
+  "@settingsShortcutsTools": {
+    "description": "Settings > Shortcuts: Tools section label"
+  },
+  "settingsShortcutsCommands": "Commands",
+  "@settingsShortcutsCommands": {
+    "description": "Settings > Shortcuts: Commands section label"
+  },
+  "settingsShortcutsReserved": "Reserved",
+  "@settingsShortcutsReserved": {
+    "description": "Settings > Shortcuts: Reserved section label"
+  },
+  "actionCapture": "Capture",
+  "@actionCapture": {
+    "description": "Global action label: interactive capture"
+  },
+  "actionCaptureHint": "Start a screen capture",
+  "@actionCaptureHint": {
+    "description": "Global action hint: interactive capture"
+  },
+  "actionCaptureWindow": "Capture Window",
+  "@actionCaptureWindow": {
+    "description": "Global action label: capture window"
+  },
+  "actionCaptureWindowHint": "Capture the focused window",
+  "@actionCaptureWindowHint": {
+    "description": "Global action hint: capture window"
+  },
+  "actionCaptureDisplay": "Capture Display",
+  "@actionCaptureDisplay": {
+    "description": "Global action label: capture display"
+  },
+  "actionCaptureDisplayHint": "Capture the display under the cursor",
+  "@actionCaptureDisplayHint": {
+    "description": "Global action hint: capture display"
+  },
+  "actionCaptureLastRegion": "Capture Last Region",
+  "@actionCaptureLastRegion": {
+    "description": "Global action label: capture last region"
+  },
+  "actionCaptureLastRegionHint": "Repeat the last capture region",
+  "@actionCaptureLastRegionHint": {
+    "description": "Global action hint: capture last region"
+  },
+  "actionOpenEditor": "Open Editor",
+  "@actionOpenEditor": {
+    "description": "Global action label: open editor"
+  },
+  "actionOpenEditorHint": "Open the Image Editor",
+  "@actionOpenEditorHint": {
+    "description": "Global action hint: open editor"
+  },
+  "actionOpenEditorClipboard": "Open Editor with Clipboard",
+  "@actionOpenEditorClipboard": {
+    "description": "Global action label: open editor with clipboard"
+  },
+  "actionOpenEditorClipboardHint": "Open the Image Editor and load the clipboard image",
+  "@actionOpenEditorClipboardHint": {
+    "description": "Global action hint: open editor with clipboard"
+  },
+  "actionPinCapture": "Pin Capture",
+  "@actionPinCapture": {
+    "description": "Global action label: pin capture"
+  },
+  "actionPinCaptureHint": "Capture a region straight to a floating pin",
+  "@actionPinCaptureHint": {
+    "description": "Global action hint: pin capture"
+  },
+  "actionPinClipboard": "Pin Clipboard",
+  "@actionPinClipboard": {
+    "description": "Global action label: pin clipboard"
+  },
+  "actionPinClipboardHint": "Float the clipboard image as a pin",
+  "@actionPinClipboardHint": {
+    "description": "Global action hint: pin clipboard"
+  },
+  "toolSelect": "Select",
+  "@toolSelect": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolCrop": "Crop",
+  "@toolCrop": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolPin": "Pin",
+  "@toolPin": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolCropPinCombined": "Crop / Pin",
+  "@toolCropPinCombined": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolBlur": "Blur",
+  "@toolBlur": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolPixelate": "Pixelate",
+  "@toolPixelate": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolRectangle": "Rectangle",
+  "@toolRectangle": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolEllipse": "Ellipse",
+  "@toolEllipse": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolLine": "Line",
+  "@toolLine": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolArrow": "Arrow",
+  "@toolArrow": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolPen": "Pen",
+  "@toolPen": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolText": "Text",
+  "@toolText": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolHighlighter": "Highlighter",
+  "@toolHighlighter": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolStep": "Numbered step",
+  "@toolStep": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolStamp": "Image stamp",
+  "@toolStamp": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolMagnify": "Magnify",
+  "@toolMagnify": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolSpotlight": "Spotlight",
+  "@toolSpotlight": {
+    "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
+  },
+  "toolbarPinCaption": "Pin mode: the selection floats as a pin",
+  "@toolbarPinCaption": {
+    "description": "Toolbar: caption below the bar when pin mode is active"
+  },
+  "toolbarMousePointerShown": "Mouse pointer: shown",
+  "@toolbarMousePointerShown": {
+    "description": "Toolbar: cursor-toggle tooltip when the captured cursor layer is visible"
+  },
+  "toolbarMousePointerHidden": "Mouse pointer: hidden",
+  "@toolbarMousePointerHidden": {
+    "description": "Toolbar: cursor-toggle tooltip when the captured cursor layer is hidden"
+  },
+  "toolbarChooseImage": "Choose image…",
+  "@toolbarChooseImage": {
+    "description": "Toolbar > Stamp options: button label when no stamp image is set"
+  },
+  "toolbarChangeImage": "Change image…",
+  "@toolbarChangeImage": {
+    "description": "Toolbar > Stamp options: button label when a stamp image is already set"
+  },
+  "toolbarChooseStampImage": "Choose a stamp image",
+  "@toolbarChooseStampImage": {
+    "description": "Toolbar > Stamp options: tooltip for the stamp image picker button"
+  },
+  "toolbarFillBackground": "Background",
+  "@toolbarFillBackground": {
+    "description": "Toolbar > Text tool options: fill colour button tooltip (text background)"
+  },
+  "toolbarFill": "Fill",
+  "@toolbarFill": {
+    "description": "Toolbar > Shape tool options: fill colour button tooltip"
+  },
+  "toolbarTextOutline": "Text outline",
+  "@toolbarTextOutline": {
+    "description": "Toolbar > Text tool options: outline colour button tooltip"
+  },
+  "toolbarColour": "Colour",
+  "@toolbarColour": {
+    "description": "Toolbar: default colour button tooltip"
+  },
+  "toolbarBlurStrength": "Blur strength",
+  "@toolbarBlurStrength": {
+    "description": "Toolbar: leading icon tooltip for blur strength stepper"
+  },
+  "toolbarPixelSize": "Pixel size",
+  "@toolbarPixelSize": {
+    "description": "Toolbar: leading icon tooltip for pixelate size stepper"
+  },
+  "toolbarStrokeWidth": "Stroke width",
+  "@toolbarStrokeWidth": {
+    "description": "Toolbar: leading icon tooltip for stroke width stepper"
+  },
+  "toolbarRadiusLabel": "Radius: {value}",
+  "@toolbarRadiusLabel": {
+    "description": "Toolbar > Rectangle options: radius pill label; {value} is the radius (e.g. '8 px' or 'Auto')",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "toolbarCornerRadius": "Corner radius",
+  "@toolbarCornerRadius": {
+    "description": "Toolbar > Rectangle options: radius pill tooltip"
+  },
+  "toolbarHighlighterTexture": "Highlighter texture",
+  "@toolbarHighlighterTexture": {
+    "description": "Toolbar > Highlighter options: texture picker tooltip"
+  },
+  "toolbarLineStyle": "Line style",
+  "@toolbarLineStyle": {
+    "description": "Toolbar > Line/Arrow options: line style picker tooltip"
+  },
+  "toolbarCurvePoints": "Curve points",
+  "@toolbarCurvePoints": {
+    "description": "Toolbar: leading icon tooltip for curve-points stepper"
+  },
+  "toolbarArrowheads": "Arrowheads",
+  "@toolbarArrowheads": {
+    "description": "Toolbar > Arrow options: arrowheads picker tooltip"
+  },
+  "toolbarArrowheadSize": "Arrowhead size",
+  "@toolbarArrowheadSize": {
+    "description": "Toolbar > Arrow options: leading icon tooltip for arrowhead scale stepper"
+  },
+  "toolbarFontSize": "Font size",
+  "@toolbarFontSize": {
+    "description": "Toolbar > Text tool options: leading icon tooltip for font size stepper"
+  },
+  "toolbarBadgeSize": "Badge size",
+  "@toolbarBadgeSize": {
+    "description": "Toolbar > Step tool options: leading icon tooltip for badge size stepper"
+  },
+  "toolbarStartNumber": "Start number",
+  "@toolbarStartNumber": {
+    "description": "Toolbar > Step tool options: leading icon tooltip for start-number stepper"
+  },
+  "toolbarBadgeShape": "Badge shape",
+  "@toolbarBadgeShape": {
+    "description": "Toolbar > Step tool options: badge shape picker tooltip"
+  },
+  "toolbarFontSystem": "System",
+  "@toolbarFontSystem": {
+    "description": "Toolbar > Text tool options: font family button label when no custom font is chosen (system default font)"
+  },
+  "toolbarBackgroundDim": "Background dim",
+  "@toolbarBackgroundDim": {
+    "description": "Toolbar > Spotlight options: leading icon tooltip for background dim stepper"
+  },
+  "toolbarBackgroundTreatment": "Background treatment",
+  "@toolbarBackgroundTreatment": {
+    "description": "Toolbar > Spotlight options: spotlight effect picker tooltip"
+  },
+  "toolbarEdgeFeather": "Edge feather",
+  "@toolbarEdgeFeather": {
+    "description": "Toolbar > Spotlight options: leading icon tooltip for edge feather stepper"
+  },
+  "toolbarMagnification": "Magnification",
+  "@toolbarMagnification": {
+    "description": "Toolbar > Magnify options: leading icon tooltip for magnification stepper"
+  },
+  "toolbarDropShadowOn": "Drop shadow: on",
+  "@toolbarDropShadowOn": {
+    "description": "Toolbar: drop-shadow toggle tooltip when shadow is active"
+  },
+  "toolbarDropShadowOff": "Drop shadow: off",
+  "@toolbarDropShadowOff": {
+    "description": "Toolbar: drop-shadow toggle tooltip when shadow is inactive"
+  },
+  "toolbarConnectorLineOn": "Connector line: on",
+  "@toolbarConnectorLineOn": {
+    "description": "Toolbar > Magnify options: connector-line toggle tooltip when line is visible"
+  },
+  "toolbarConnectorLineOff": "Connector line: off",
+  "@toolbarConnectorLineOff": {
+    "description": "Toolbar > Magnify options: connector-line toggle tooltip when line is hidden"
+  },
+  "toolbarResetThisTool": "Reset this tool",
+  "@toolbarResetThisTool": {
+    "description": "Toolbar: tooltip on the reset-tool icon button"
+  },
+  "toolbarDuplicate": "Duplicate",
+  "@toolbarDuplicate": {
+    "description": "Toolbar: selection action tooltip for duplicate"
+  },
+  "toolbarBringToFront": "Bring to front",
+  "@toolbarBringToFront": {
+    "description": "Toolbar: selection action tooltip for bring-to-front"
+  },
+  "toolbarSendToBack": "Send to back",
+  "@toolbarSendToBack": {
+    "description": "Toolbar: selection action tooltip for send-to-back"
+  },
+  "popoverSearchFonts": "Search fonts…",
+  "@popoverSearchFonts": {
+    "description": "Font picker popover: search field hint text"
+  },
+  "popoverFontSystem": "System",
+  "@popoverFontSystem": {
+    "description": "Font picker popover: pinned row label for the system default font"
+  },
+  "lineStyleSolid": "Solid",
+  "@lineStyleSolid": {
+    "description": "Line style picker: solid line option"
+  },
+  "lineStyleDashed": "Dashed",
+  "@lineStyleDashed": {
+    "description": "Line style picker: dashed line option"
+  },
+  "lineStyleDotted": "Dotted",
+  "@lineStyleDotted": {
+    "description": "Line style picker: dotted line option"
+  },
+  "lineStyleLongDash": "Long dash",
+  "@lineStyleLongDash": {
+    "description": "Line style picker: long-dash line option"
+  },
+  "lineStyleDashDot": "Dash-dot",
+  "@lineStyleDashDot": {
+    "description": "Line style picker: dash-dot line option"
+  },
+  "lineStyleDashDotDot": "Dash-dot-dot",
+  "@lineStyleDashDotDot": {
+    "description": "Line style picker: dash-dot-dot line option"
+  },
+  "popoverTextureClean": "Clean",
+  "@popoverTextureClean": {
+    "description": "Highlighter texture picker: clean texture option"
+  },
+  "popoverTextureStreaks": "Streaks",
+  "@popoverTextureStreaks": {
+    "description": "Highlighter texture picker: streaks texture option"
+  },
+  "popoverTextureFraged": "Frayed",
+  "@popoverTextureFraged": {
+    "description": "Highlighter texture picker: frayed texture option"
+  },
+  "popoverArrowHeadEnd": "End",
+  "@popoverArrowHeadEnd": {
+    "description": "Arrowheads picker: arrowhead at end only"
+  },
+  "popoverArrowHeadStart": "Start",
+  "@popoverArrowHeadStart": {
+    "description": "Arrowheads picker: arrowhead at start only"
+  },
+  "popoverArrowHeadBoth": "Both",
+  "@popoverArrowHeadBoth": {
+    "description": "Arrowheads picker: arrowheads at both ends"
+  },
+  "popoverStepShapeCircle": "Circle",
+  "@popoverStepShapeCircle": {
+    "description": "Step badge shape picker: circle shape"
+  },
+  "popoverStepShapeSquare": "Square",
+  "@popoverStepShapeSquare": {
+    "description": "Step badge shape picker: square shape"
+  },
+  "popoverSpotlightEffectDimOnly": "Dim only",
+  "@popoverSpotlightEffectDimOnly": {
+    "description": "Spotlight effect picker: dim-only option"
+  },
+  "popoverSpotlightEffectDimBlur": "Dim + Blur",
+  "@popoverSpotlightEffectDimBlur": {
+    "description": "Spotlight effect picker: dim and blur option"
+  },
+  "popoverSpotlightEffectDimPixelate": "Dim + Pixelate",
+  "@popoverSpotlightEffectDimPixelate": {
+    "description": "Spotlight effect picker: dim and pixelate option"
+  },
+  "popoverPickColourFromScreen": "Pick a colour from the screen",
+  "@popoverPickColourFromScreen": {
+    "description": "Colour picker popover: eyedropper button tooltip"
+  },
+  "popoverCornerRadius": "Corner radius",
+  "@popoverCornerRadius": {
+    "description": "Radius picker popover: title label"
+  },
+  "popoverRadiusAuto": "Auto",
+  "@popoverRadiusAuto": {
+    "description": "Radius picker popover: Auto toggle label"
+  },
+  "popoverRadiusAutoHint": "Radius scales with the rectangle’s size",
+  "@popoverRadiusAutoHint": {
+    "description": "Radius picker popover: hint below the Auto toggle"
+  },
+  "editorTitleBar": "Image Editor",
+  "@editorTitleBar": {
+    "description": "Image Editor: window title bar label"
+  },
+  "editorOpenImage": "Open an image to edit",
+  "@editorOpenImage": {
+    "description": "Image Editor landing card: headline copy"
+  },
+  "editorOpenImageSubtitle": "Annotate, crop, and re-export any image in the same toolkit you use to capture.",
+  "@editorOpenImageSubtitle": {
+    "description": "Image Editor landing card: subtitle copy below the headline"
+  },
+  "editorOpenImageButton": "Open Image…",
+  "@editorOpenImageButton": {
+    "description": "Image Editor: Open button label (landing card and open bar)"
+  },
+  "editorOpenImageHint": "or drag an image here · paste with ⌘V",
+  "@editorOpenImageHint": {
+    "description": "Image Editor: drag/paste hint below the Open button"
+  },
+  "editorGalleryRecent": "Recent",
+  "@editorGalleryRecent": {
+    "description": "Image Editor gallery landing: section label above the recents grid"
+  },
+  "editorGalleryMoreTooltip": "Open the save folder in Finder",
+  "@editorGalleryMoreTooltip": {
+    "description": "Image Editor gallery: tooltip on the trailing More tile"
+  },
+  "editorGalleryMoreCaption": "More…",
+  "@editorGalleryMoreCaption": {
+    "description": "Image Editor gallery: caption on the trailing More tile"
+  },
+  "editorGalleryHome": "Home",
+  "@editorGalleryHome": {
+    "description": "Image Editor title bar: tooltip on the back-to-gallery home button"
+  },
+  "editorContextEdit": "Edit",
+  "@editorContextEdit": {
+    "description": "Image Editor gallery context menu: open the file in the editor"
+  },
+  "editorContextCopyImage": "Copy Image",
+  "@editorContextCopyImage": {
+    "description": "Image Editor gallery context menu: copy the image to clipboard"
+  },
+  "editorContextCopyPath": "Copy Path",
+  "@editorContextCopyPath": {
+    "description": "Image Editor gallery context menu: copy the file path to clipboard"
+  },
+  "editorContextShare": "Share…",
+  "@editorContextShare": {
+    "description": "Image Editor gallery context menu: share via the macOS share sheet"
+  },
+  "editorContextPinToScreen": "Pin to Screen",
+  "@editorContextPinToScreen": {
+    "description": "Image Editor gallery context menu: pin the image as a floating window"
+  },
+  "editorContextShowInFinder": "Show in Finder",
+  "@editorContextShowInFinder": {
+    "description": "Image Editor gallery context menu: reveal the file in Finder"
+  },
+  "editorContextRemoveFromRecent": "Remove from Recent",
+  "@editorContextRemoveFromRecent": {
+    "description": "Image Editor gallery context menu: remove this entry from the recent list"
+  },
+  "editorContextClearRecent": "Clear Recent",
+  "@editorContextClearRecent": {
+    "description": "Image Editor gallery context menu: clear the entire recent list"
+  },
+  "editorClearRecentTitle": "Clear Recent?",
+  "@editorClearRecentTitle": {
+    "description": "Image Editor: title of the confirm-clear-recent dialog"
+  },
+  "editorClearRecentMessage": "Remove all {count} entries from the recent list? The image files themselves are not touched.",
+  "@editorClearRecentMessage": {
+    "description": "Image Editor: body of the confirm-clear-recent dialog",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "editorClearRecentConfirm": "Clear",
+  "@editorClearRecentConfirm": {
+    "description": "Image Editor: confirm button label for the clear-recent dialog"
+  },
+  "editorToastCopiedToClipboard": "Copied to clipboard",
+  "@editorToastCopiedToClipboard": {
+    "description": "Image Editor gallery: toast shown after copying a recent image to clipboard"
+  },
+  "editorToastCopyFailed": "Copy failed",
+  "@editorToastCopyFailed": {
+    "description": "Image Editor gallery: toast shown when copying a recent image fails"
+  },
+  "editorToastPathCopied": "Path copied",
+  "@editorToastPathCopied": {
+    "description": "Image Editor: toast shown after copying a file path to clipboard"
+  },
+  "editorToastNoImageInClipboard": "No image in clipboard",
+  "@editorToastNoImageInClipboard": {
+    "description": "Image Editor: toast shown when pasting with no image in the clipboard"
+  },
+  "editorToastCannotDecodeClipboard": "Cannot decode clipboard image",
+  "@editorToastCannotDecodeClipboard": {
+    "description": "Image Editor: toast shown when the clipboard image cannot be decoded"
+  },
+  "editorToastCannotReadFile": "Cannot read file: {error}",
+  "@editorToastCannotReadFile": {
+    "description": "Image Editor: toast shown when a file cannot be read",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editorToastCannotDecodeImage": "Cannot decode image: {error}",
+  "@editorToastCannotDecodeImage": {
+    "description": "Image Editor: toast shown when a file image cannot be decoded",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editorToastCopied": "Copied",
+  "@editorToastCopied": {
+    "description": "Image Editor Done flow toast: copy leg succeeded"
+  },
+  "editorToastCopyFlowFailed": "Copy failed",
+  "@editorToastCopyFlowFailed": {
+    "description": "Image Editor Done flow toast: copy leg failed"
+  },
+  "editorToastSavedTo": "Saved to {path}",
+  "@editorToastSavedTo": {
+    "description": "Image Editor Done flow toast: save leg succeeded; {path} is the file path",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "editorToastSaveFailed": "Save failed",
+  "@editorToastSaveFailed": {
+    "description": "Image Editor Done flow toast: save leg failed"
+  },
+  "editorToastCopyPathFailed": "Copy path failed",
+  "@editorToastCopyPathFailed": {
+    "description": "Image Editor Done flow toast: copy-path leg failed"
+  },
+  "editorToastRevealFailed": "Reveal failed",
+  "@editorToastRevealFailed": {
+    "description": "Image Editor Done flow toast: show-in-Finder leg failed"
+  },
+  "editorToastShareFailed": "Share failed",
+  "@editorToastShareFailed": {
+    "description": "Image Editor Done flow toast: share-sheet leg failed"
+  },
+  "editorToastPinFailed": "Pin failed",
+  "@editorToastPinFailed": {
+    "description": "Image Editor Done flow toast: pin leg failed"
+  },
+  "editorToastPinned": "Pinned",
+  "@editorToastPinned": {
+    "description": "Image Editor Done flow toast: pin leg succeeded"
+  },
+  "editorToastDone": "Done",
+  "@editorToastDone": {
+    "description": "Image Editor Done flow toast: all legs succeeded with no specific message"
+  },
+  "editorDiscardTitle": "Discard changes?",
+  "@editorDiscardTitle": {
+    "description": "Image Editor: title of the discard-unsaved-changes dialog"
+  },
+  "editorDiscardMessage": "You have unsaved annotations. Discard them?",
+  "@editorDiscardMessage": {
+    "description": "Image Editor: body of the discard-unsaved-changes dialog"
+  },
+  "editorDoneButton": "Done",
+  "@editorDoneButton": {
+    "description": "Image Editor toolbar: Done button label (runs the after-editor flow)"
+  },
+  "editorMenuOneOffTooltip": "One-off action (instead of the Done flow)",
+  "@editorMenuOneOffTooltip": {
+    "description": "Image Editor toolbar: tooltip on the chevron button beside Done"
+  },
+  "editorMenuCopyOnly": "Copy only",
+  "@editorMenuCopyOnly": {
+    "description": "Image Editor toolbar chevron menu: copy-only one-off action"
+  },
+  "editorMenuSaveOnly": "Save only",
+  "@editorMenuSaveOnly": {
+    "description": "Image Editor toolbar chevron menu: save-only one-off action"
+  },
+  "editorMenuCopyFilePath": "Copy file path",
+  "@editorMenuCopyFilePath": {
+    "description": "Image Editor toolbar chevron menu: copy file path one-off action"
+  },
+  "editorMenuShowInFinder": "Show in Finder",
+  "@editorMenuShowInFinder": {
+    "description": "Image Editor toolbar chevron menu: show in Finder one-off action"
+  },
+  "editorMenuShare": "Share…",
+  "@editorMenuShare": {
+    "description": "Image Editor toolbar chevron menu: share one-off action"
+  },
+  "editorMenuPinToScreen": "Pin to screen",
+  "@editorMenuPinToScreen": {
+    "description": "Image Editor toolbar chevron menu: pin to screen one-off action"
+  },
+  "editorViewFitToWindow": "Fit to window (⌘1)",
+  "@editorViewFitToWindow": {
+    "description": "Image Editor toolbar: fit-to-window icon button tooltip"
+  },
+  "editorViewActualSize": "Actual size · 100% (⌘2)",
+  "@editorViewActualSize": {
+    "description": "Image Editor toolbar: actual-size (100%) icon button tooltip"
+  },
+  "editorUndoTooltip": "Undo",
+  "@editorUndoTooltip": {
+    "description": "Image Editor toolbar: undo icon button tooltip"
+  },
+  "editorRedoTooltip": "Redo",
+  "@editorRedoTooltip": {
+    "description": "Image Editor toolbar: redo icon button tooltip"
+  },
+  "editorCropConfirm": "Crop (Enter)",
+  "@editorCropConfirm": {
+    "description": "Editor crop confirm bar: confirm/crop button tooltip (Enter key also triggers)"
+  },
+  "editorCropCancel": "Cancel (Esc)",
+  "@editorCropCancel": {
+    "description": "Editor crop confirm bar: cancel button tooltip (Esc key also triggers)"
+  },
+  "maskSettingsOpen": "Settings open",
+  "@maskSettingsOpen": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "maskSettingsOpenHint": "Close the Settings window to continue.",
+  "@maskSettingsOpenHint": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "confirmDiscardTitle": "Discard changes?",
+  "@confirmDiscardTitle": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "confirmDiscardMessage": "You have unsaved annotations. Discard them?",
+  "@confirmDiscardMessage": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "confirmDiscard": "Discard",
+  "@confirmDiscard": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "confirmCancel": "Cancel",
+  "@confirmCancel": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "recorderDisabled": "Disabled",
+  "@recorderDisabled": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "recorderReservedKey": "Reserved key",
+  "@recorderReservedKey": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "recorderNeedsModifier": "Needs a modifier (⌘ ⌥ ⌃ ⇧)",
+  "@recorderNeedsModifier": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "recorderClear": "Clear",
+  "@recorderClear": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "recorderPressKeys": "Press keys…",
+  "@recorderPressKeys": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "recorderEscToCancel": "Press Esc to cancel",
+  "@recorderEscToCancel": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "layersCaption": "Layers: {depth}/{cap}",
+  "@layersCaption": {
+    "description": "3e batch: masks/confirm/recorder/overlay",
+    "placeholders": {
+      "depth": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      }
+    }
+  },
+  "layerReplacedNotice": "Layer replaced ({depth}/{cap})",
+  "@layerReplacedNotice": {
+    "description": "3e batch: masks/confirm/recorder/overlay",
+    "placeholders": {
+      "depth": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      }
+    }
+  },
+  "oldestLayerDroppedNotice": "Oldest layer dropped ({depth}/{cap})",
+  "@oldestLayerDroppedNotice": {
+    "description": "3e batch: masks/confirm/recorder/overlay",
+    "placeholders": {
+      "depth": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      }
+    }
+  },
+  "overlayDiscardLayerTitle": "Discard this layer?",
+  "@overlayDiscardLayerTitle": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayDiscardLayerMessage": "You have unsaved annotations on this layer. Discard them and return to the layer below?",
+  "@overlayDiscardLayerMessage": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayDiscardCaptureTitle": "Discard capture?",
+  "@overlayDiscardCaptureTitle": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayDiscardCaptureMessage": "You have unsaved annotations on this capture. Discard them and exit?",
+  "@overlayDiscardCaptureMessage": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayPinFailed": "Pin failed",
+  "@overlayPinFailed": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayCaptureFailedError": "Capture failed: {error}",
+  "@overlayCaptureFailedError": {
+    "description": "3e batch: masks/confirm/recorder/overlay",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "overlayFailedNotSavedOrCopied": "Capture failed: not saved or copied",
+  "@overlayFailedNotSavedOrCopied": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayFailedSave": "Copied, but file save failed",
+  "@overlayFailedSave": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayFailedClipboard": "Saved, but clipboard failed",
+  "@overlayFailedClipboard": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "overlayCaptureFailedGeneric": "Capture failed",
+  "@overlayCaptureFailedGeneric": {
+    "description": "3e batch: masks/confirm/recorder/overlay"
+  },
+  "keyCapNone": "None",
+  "@keyCapNone": {
+    "description": "Key-cap chips: shown when a binding is unbound"
+  }
+}

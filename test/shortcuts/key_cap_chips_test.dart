@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/shortcuts/widgets/key_cap_chips.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
 import 'package:glimpr/theme/glimpr_theme.dart';
@@ -8,6 +9,8 @@ import 'package:glimpr/theme/glimpr_theme.dart';
 // KeyCap reads GlimprTheme.of(context), so the test widget is wrapped in a
 // GlimprTheme ancestor (mirrors settings_app.dart's GlimprTheme provider).
 Widget _wrap(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GlimprTheme(
         tokens: GlimprTokens.dark,
         child: Scaffold(body: Center(child: child)),

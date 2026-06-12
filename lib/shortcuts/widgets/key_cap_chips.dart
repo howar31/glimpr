@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/gen/app_localizations.dart';
 import '../../theme/glimpr_theme.dart';
 import '../hotkey_binding.dart';
 
@@ -45,9 +46,10 @@ class KeyCap extends StatelessWidget {
 /// Renders a binding as a row of key caps (modifiers in canonical order + key),
 /// or [emptyLabel] when the binding is null/unbound.
 class KeyCapChips extends StatelessWidget {
-  const KeyCapChips(this.binding, {super.key, this.emptyLabel = 'None'});
+  const KeyCapChips(this.binding, {super.key, this.emptyLabel});
   final HotkeyBinding? binding;
-  final String emptyLabel;
+  // Null = the localized default ("None").
+  final String? emptyLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +58,8 @@ class KeyCapChips extends StatelessWidget {
       // No cap when unbound — a bordered chip reads as "press me". Plain muted
       // text reads as "no shortcut" instead.
       final t = GlimprTheme.of(context);
-      return Text(emptyLabel, style: GlimprType.sansStyle(12.5, 600, t.fg4));
+      return Text(emptyLabel ?? AppLocalizations.of(context).keyCapNone,
+          style: GlimprType.sansStyle(12.5, 600, t.fg4));
     }
     final platform = Theme.of(context).platform;
     final caps = <Widget>[

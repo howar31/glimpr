@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 import '../capture/captured_display.dart';
+import '../l10n/gen/app_localizations.dart';
 import '../output/clipboard.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
@@ -2897,6 +2898,7 @@ class _CropConfirmBar extends StatelessWidget {
     // in both modes.
     final dark =
         MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final l = AppLocalizations.of(context);
     return Material(
       type: MaterialType.transparency,
       child: Container(
@@ -2921,14 +2923,14 @@ class _CropConfirmBar extends StatelessWidget {
             _CropBtn(
               icon: Icons.check,
               color: const Color(0xFF34D399),
-              tooltip: 'Crop (Enter)',
+              tooltip: l.editorCropConfirm,
               onTap: onConfirm,
             ),
             const SizedBox(width: 2),
             _CropBtn(
               icon: Icons.close,
               color: const Color(0xFFF87171),
-              tooltip: 'Cancel (Esc)',
+              tooltip: l.editorCropCancel,
               onTap: onCancel,
             ),
           ],

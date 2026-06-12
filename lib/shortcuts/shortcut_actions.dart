@@ -1,6 +1,36 @@
 import 'package:flutter/services.dart';
 import '../editor/editor_controller.dart';
+import '../l10n/gen/app_localizations.dart';
 import 'hotkey_binding.dart';
+
+/// Localized display name / hint for a Tier-1 global action (the Settings >
+/// Shortcuts rows). The [GlobalAction.label]/[GlobalAction.hint] constants
+/// stay as the English reference, but UI must read these lookups.
+String globalActionLabel(AppLocalizations l10n, String actionKey) =>
+    switch (actionKey) {
+      kCaptureAreaKey => l10n.actionCapture,
+      kCaptureWindowKey => l10n.actionCaptureWindow,
+      kCaptureScreenKey => l10n.actionCaptureDisplay,
+      kCaptureLastRegionKey => l10n.actionCaptureLastRegion,
+      kOpenEditorKey => l10n.actionOpenEditor,
+      kOpenEditorClipboardKey => l10n.actionOpenEditorClipboard,
+      kPinAreaKey => l10n.actionPinCapture,
+      kPinClipboardKey => l10n.actionPinClipboard,
+      _ => actionKey,
+    };
+
+String globalActionHint(AppLocalizations l10n, String actionKey) =>
+    switch (actionKey) {
+      kCaptureAreaKey => l10n.actionCaptureHint,
+      kCaptureWindowKey => l10n.actionCaptureWindowHint,
+      kCaptureScreenKey => l10n.actionCaptureDisplayHint,
+      kCaptureLastRegionKey => l10n.actionCaptureLastRegionHint,
+      kOpenEditorKey => l10n.actionOpenEditorHint,
+      kOpenEditorClipboardKey => l10n.actionOpenEditorClipboardHint,
+      kPinAreaKey => l10n.actionPinCaptureHint,
+      kPinClipboardKey => l10n.actionPinClipboardHint,
+      _ => '',
+    };
 
 // Action keys (naming: <scope>.<camelCaseName>).
 const kCaptureAreaKey = 'global.captureArea';

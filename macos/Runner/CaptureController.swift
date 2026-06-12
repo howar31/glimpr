@@ -61,16 +61,18 @@ final class CaptureController {
     // callable from the method-channel handler and the menu action alike.
     Task { @MainActor in
       guard self.capturer.hasPermissionOrRequest() else {
-        Self.alert(
+        Self.alert(L.s(
           "Screen Recording permission is required. Enable it in System Settings "
-            + "> Privacy & Security > Screen Recording, then relaunch.")
+            + "> Privacy & Security > Screen Recording, then relaunch.",
+          "需要「螢幕錄製」權限。請在「系統設定 > 隱私權與安全性 > 螢幕錄製」"
+            + "中啟用後重新啟動 Glimpr。"))
         return
       }
       // Safety net: a warm overlay unit for every CURRENT display before capture.
       self.manager()?.syncUnitsToScreens()
       do {
         guard let manager = self.manager() else {
-          Self.alert("Overlay manager not ready"); return
+          Self.alert(L.s("Overlay manager not ready", "覆疊管理器尚未就緒")); return
         }
         // Seed the presentation bookkeeping (key display + pendingShow) BEFORE
         // the parallel capture so per-display pushes land on clean state.
@@ -86,9 +88,9 @@ final class CaptureController {
         }
         PerfLog.mark("captureAllEnd")
       } catch ScreenCapturer.CaptureError.noDisplays {
-        Self.alert("No displays found")
+        Self.alert(L.s("No displays found", "找不到螢幕"))
       } catch {
-        Self.alert("Capture failed: \(error)")
+        Self.alert(L.s("Capture failed: ", "截圖失敗：") + "\(error)")
       }
     }
   }

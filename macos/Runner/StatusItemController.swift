@@ -60,28 +60,28 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.addItem(.separator())
     // Global actions, dispatched through the SAME Dart path as the hotkeys.
     // Action-key literals mirror lib/shortcuts/shortcut_actions.dart.
-    menu.addItem(globalItem("Capture", "global.captureArea"))
-    menu.addItem(globalItem("Capture Window", "global.captureWindow"))
-    menu.addItem(globalItem("Capture Display", "global.captureScreen"))
-    menu.addItem(globalItem("Capture Last Region", "global.captureLastRegion"))
+    menu.addItem(globalItem(L.s("Capture", "截圖"), "global.captureArea"))
+    menu.addItem(globalItem(L.s("Capture Window", "截取視窗"), "global.captureWindow"))
+    menu.addItem(globalItem(L.s("Capture Display", "截取螢幕"), "global.captureScreen"))
+    menu.addItem(globalItem(L.s("Capture Last Region", "截取上次範圍"), "global.captureLastRegion"))
     menu.addItem(.separator())
-    menu.addItem(globalItem("Pin Capture", "global.pinArea"))
-    menu.addItem(globalItem("Pin Clipboard", "global.pinClipboard"))
+    menu.addItem(globalItem(L.s("Pin Capture", "釘選截圖"), "global.pinArea"))
+    menu.addItem(globalItem(L.s("Pin Clipboard", "釘選剪貼簿"), "global.pinClipboard"))
     menu.addItem(.separator())
     // Open Editor reveals the warm editor natively (same as the hotkey's end
     // state) — keep the direct path, but hint with the hotkey's binding.
-    let open = menuItem(title: "Open Editor…", action: #selector(openImage), key: "")
+    let open = menuItem(title: L.s("Open Editor…", "開啟編輯器…"), action: #selector(openImage), key: "")
     hintedItems.append((open, "global.openEditor"))
     menu.addItem(open)
-    menu.addItem(globalItem("Open Editor with Clipboard", "global.openEditorClipboard"))
-    let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
+    menu.addItem(globalItem(L.s("Open Editor with Clipboard", "以剪貼簿開啟編輯器"), "global.openEditorClipboard"))
+    let recentItem = NSMenuItem(title: L.s("Open Recent", "開啟最近項目"), action: nil, keyEquivalent: "")
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
     rebuildRecent([]) // seed the placeholder until Dart pushes the list
     menu.addItem(.separator())
-    menu.addItem(menuItem(title: "Settings…", action: #selector(settings), key: ","))
+    menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
-    menu.addItem(menuItem(title: "Quit Glimpr", action: #selector(quit), key: "q"))
+    menu.addItem(menuItem(title: L.s("Quit Glimpr", "結束 Glimpr"), action: #selector(quit), key: "q"))
     item.menu = menu
   }
 
@@ -115,7 +115,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     recentMenu.removeAllItems()
     guard !paths.isEmpty else {
       // action == nil + autoenablesItems greys this out (no recent files yet).
-      recentMenu.addItem(NSMenuItem(title: "No Recent Images", action: nil, keyEquivalent: ""))
+      recentMenu.addItem(NSMenuItem(title: L.s("No Recent Images", "沒有最近的圖片"), action: nil, keyEquivalent: ""))
       return
     }
     for path in paths {
@@ -129,7 +129,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
     // macOS convention: a trailing "Clear Menu" item (Dart owns the list).
     recentMenu.addItem(.separator())
-    recentMenu.addItem(menuItem(title: "Clear Menu", action: #selector(clearRecent), key: ""))
+    recentMenu.addItem(menuItem(title: L.s("Clear Menu", "清除選單"), action: #selector(clearRecent), key: ""))
   }
 
   private func menuItem(title: String, action: Selector, key: String) -> NSMenuItem {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/gen/app_localizations.dart';
+
 /// A full-area mask shown over the capture overlay AND the image editor while the
 /// Settings window is open (⌘,). It dims the paused session and ABSORBS all
 /// pointer input so the user can't annotate / crop / interact behind Settings —
@@ -53,7 +55,7 @@ class SettingsMask extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Settings open',
+                            AppLocalizations.of(context).maskSettingsOpen,
                             style: TextStyle(
                               color: fg,
                               fontSize: 14,
@@ -63,7 +65,7 @@ class SettingsMask extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Close the Settings window to continue.',
+                            AppLocalizations.of(context).maskSettingsOpenHint,
                             style: TextStyle(
                               color: fgDim,
                               fontSize: 12.5,

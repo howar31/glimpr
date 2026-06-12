@@ -3,6 +3,7 @@ import '../editor/color_math.dart';
 import '../editor/curve.dart' show drawStyledPath;
 import '../editor/draw_style.dart';
 import '../editor/drawable_painter.dart' show paintHighlighterStroke;
+import '../l10n/gen/app_localizations.dart';
 import '../theme/glimpr_controls.dart' show GlimprSlider, GlassToggle;
 import '../theme/glimpr_theme.dart';
 
@@ -457,9 +458,10 @@ class _EyedropperButtonState extends State<_EyedropperButton> {
   @override
   Widget build(BuildContext context) {
     // Same appearance-resolved palette as the hex field beside it.
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     return Tooltip(
-      message: 'Pick a colour from the screen',
+      message: l10n.popoverPickColourFromScreen,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => _hover.value = true,
@@ -704,6 +706,7 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final filtered = _filtered;
     // Resolve foreground colours from the system appearance, mirroring the
     // toolbar's brightness-aware palette so the list reads on the glass in both
@@ -739,7 +742,7 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: fgDim),
                 ),
-                hintText: 'Search fonts…',
+                hintText: l10n.popoverSearchFonts,
                 hintStyle: TextStyle(color: fgDim, fontSize: 13),
               ),
               cursorColor: fg,
@@ -752,7 +755,7 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
                 // System row — always visible, not affected by search filter
                 _FontRow(
                   key: const ValueKey('font-system'),
-                  name: 'System',
+                  name: l10n.popoverFontSystem,
                   fontFamily: null,
                   selected: widget.selected == null,
                   onTap: () => widget.onSelected(null),
@@ -831,10 +834,10 @@ class _FontRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// Human label for a highlighter [HighlighterTexture].
-String textureLabel(HighlighterTexture t) => switch (t) {
-  HighlighterTexture.clean => 'Clean',
-  HighlighterTexture.streaks => 'Streaks',
-  HighlighterTexture.frayed => 'Frayed',
+String textureLabel(AppLocalizations l10n, HighlighterTexture t) => switch (t) {
+  HighlighterTexture.clean => l10n.popoverTextureClean,
+  HighlighterTexture.streaks => l10n.popoverTextureStreaks,
+  HighlighterTexture.frayed => l10n.popoverTextureFraged,
 };
 
 /// A small menu listing the highlighter brush textures by name, each with a
@@ -853,6 +856,7 @@ class TexturePickerPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF14223B);
     const accent = GlimprTokens.accent;
@@ -894,7 +898,7 @@ class TexturePickerPopover extends StatelessWidget {
                                 child: Align(
                                   alignment: Alignment.center,
                                   child: Text(
-                                    textureLabel(tex),
+                                    textureLabel(l10n, tex),
                                     style: TextStyle(
                                       color: tex == selected ? accent : fg,
                                       fontSize: 14,
@@ -982,13 +986,13 @@ class _Swatch extends StatelessWidget {
 // LineStylePickerPopover  (line / arrow / highlighter)
 // ---------------------------------------------------------------------------
 
-String lineStyleLabel(LineStyle s) => switch (s) {
-      LineStyle.solid => 'Solid',
-      LineStyle.dashed => 'Dashed',
-      LineStyle.dotted => 'Dotted',
-      LineStyle.longDash => 'Long dash',
-      LineStyle.dashDot => 'Dash-dot',
-      LineStyle.dashDotDot => 'Dash-dot-dot',
+String lineStyleLabel(AppLocalizations l10n, LineStyle s) => switch (s) {
+      LineStyle.solid => l10n.lineStyleSolid,
+      LineStyle.dashed => l10n.lineStyleDashed,
+      LineStyle.dotted => l10n.lineStyleDotted,
+      LineStyle.longDash => l10n.lineStyleLongDash,
+      LineStyle.dashDot => l10n.lineStyleDashDot,
+      LineStyle.dashDotDot => l10n.lineStyleDashDotDot,
     };
 
 /// A menu of the six line styles, each with a live preview of the dash pattern.
@@ -1006,6 +1010,7 @@ class LineStylePickerPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF14223B);
     const accent = GlimprTokens.accent;
@@ -1025,7 +1030,7 @@ class LineStylePickerPopover extends StatelessWidget {
                     SizedBox(
                       width: 116,
                       child: Text(
-                        lineStyleLabel(s),
+                        lineStyleLabel(l10n, s),
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.visible,
@@ -1088,10 +1093,10 @@ class _LineStylePreview extends CustomPainter {
 // ArrowHeadsPickerPopover  (arrow only)
 // ---------------------------------------------------------------------------
 
-String arrowHeadsLabel(ArrowHeads h) => switch (h) {
-      ArrowHeads.end => 'End',
-      ArrowHeads.start => 'Start',
-      ArrowHeads.both => 'Both',
+String arrowHeadsLabel(AppLocalizations l10n, ArrowHeads h) => switch (h) {
+      ArrowHeads.end => l10n.popoverArrowHeadEnd,
+      ArrowHeads.start => l10n.popoverArrowHeadStart,
+      ArrowHeads.both => l10n.popoverArrowHeadBoth,
     };
 
 /// A small menu choosing which ends of the arrow carry a head.
@@ -1107,6 +1112,7 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF14223B);
     const accent = GlimprTokens.accent;
@@ -1125,7 +1131,7 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        arrowHeadsLabel(h),
+                        arrowHeadsLabel(l10n, h),
                         style: TextStyle(
                           color: h == selected ? accent : fg,
                           fontSize: 14,
@@ -1154,9 +1160,9 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
 // StepShapePickerPopover  (step tool)
 // ---------------------------------------------------------------------------
 
-String stepShapeLabel(StepShape s) => switch (s) {
-      StepShape.circle => 'Circle',
-      StepShape.square => 'Square',
+String stepShapeLabel(AppLocalizations l10n, StepShape s) => switch (s) {
+      StepShape.circle => l10n.popoverStepShapeCircle,
+      StepShape.square => l10n.popoverStepShapeSquare,
     };
 
 /// A small menu choosing the step badge's outline shape.
@@ -1172,6 +1178,7 @@ class StepShapePickerPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF14223B);
     const accent = GlimprTokens.accent;
@@ -1198,7 +1205,7 @@ class StepShapePickerPopover extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        stepShapeLabel(s),
+                        stepShapeLabel(l10n, s),
                         style: TextStyle(
                           color: s == selected ? accent : fg,
                           fontSize: 14,
@@ -1225,10 +1232,11 @@ class StepShapePickerPopover extends StatelessWidget {
 
 // ---------------------------------------------------------------------------
 
-String spotlightEffectLabel(SpotlightEffect e) => switch (e) {
-      SpotlightEffect.none => 'Dim only',
-      SpotlightEffect.blur => 'Dim + Blur',
-      SpotlightEffect.pixelate => 'Dim + Pixelate',
+String spotlightEffectLabel(AppLocalizations l10n, SpotlightEffect e) =>
+    switch (e) {
+      SpotlightEffect.none => l10n.popoverSpotlightEffectDimOnly,
+      SpotlightEffect.blur => l10n.popoverSpotlightEffectDimBlur,
+      SpotlightEffect.pixelate => l10n.popoverSpotlightEffectDimPixelate,
     };
 
 /// A small menu choosing the spotlight layer's background treatment.
@@ -1244,6 +1252,7 @@ class SpotlightEffectPickerPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF14223B);
     const accent = GlimprTokens.accent;
@@ -1272,7 +1281,7 @@ class SpotlightEffectPickerPopover extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        spotlightEffectLabel(e),
+                        spotlightEffectLabel(l10n, e),
                         style: TextStyle(
                           color: e == selected ? accent : fg,
                           fontSize: 14,
@@ -1303,7 +1312,8 @@ class SpotlightEffectPickerPopover extends StatelessWidget {
 
 /// Pill label for the option bar: "Auto" for the legacy size-relative radius,
 /// else the explicit pixel value.
-String radiusLabel(double r) => r < 0 ? 'Auto' : '${r.round()} px';
+String radiusLabel(AppLocalizations l10n, double r) =>
+    r < 0 ? l10n.popoverRadiusAuto : '${r.round()} px';
 
 /// Corner-radius picker: the design-system [GlimprSlider] for an explicit radius
 /// plus a labeled [GlassToggle] for "Auto" (the legacy size-relative radius, the
@@ -1325,6 +1335,7 @@ class RadiusPickerPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final tokens = dark ? GlimprTokens.dark : GlimprTokens.light;
     final isAuto = value < 0;
@@ -1340,7 +1351,7 @@ class RadiusPickerPopover extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Corner radius',
+              l10n.popoverCornerRadius,
               style: GlimprType.sansStyle(13.5, 600, tokens.fg1),
             ),
             // The explicit slider only shows when Auto is off; Auto's own meaning
@@ -1364,12 +1375,12 @@ class RadiusPickerPopover extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Auto',
+                        l10n.popoverRadiusAuto,
                         style: GlimprType.sansStyle(13.5, 600, tokens.fg2),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        "Radius scales with the rectangle's size",
+                        l10n.popoverRadiusAutoHint,
                         style:
                             GlimprType.sansStyle(12, 400, tokens.fg3, height: 1.3),
                       ),

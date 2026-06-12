@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../l10n/gen/app_localizations.dart';
 import 'glimpr_controls.dart';
 import 'glimpr_theme.dart';
 
@@ -7,13 +8,21 @@ import 'glimpr_theme.dart';
 /// toolbar (blur + tint + border), a Cancel (ghost) + a confirm (accent) button.
 /// Returns true to proceed (discard), false to cancel / dismiss. Used by both the
 /// capture overlay (exit) and the standalone image editor (close / replace).
+/// Null texts resolve to the localized defaults from [context].
 Future<bool> showDiscardConfirm(
   BuildContext context, {
-  String title = 'Discard changes?',
-  String message = 'You have unsaved annotations. Discard them?',
-  String confirmLabel = 'Discard',
-  String cancelLabel = 'Cancel',
+  String? title,
+  String? message,
+  String? confirmLabel,
+  String? cancelLabel,
 }) async {
+  final l10n = AppLocalizations.of(context);
+  // Locals (not the parameters): the dialog builder closure below blocks
+  // parameter type promotion.
+  final rTitle = title ?? l10n.confirmDiscardTitle;
+  final rMessage = message ?? l10n.confirmDiscardMessage;
+  final rConfirm = confirmLabel ?? l10n.confirmDiscard;
+  final rCancel = cancelLabel ?? l10n.confirmCancel;
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   final t = GlimprTokens.forBrightness(brightness);
@@ -50,13 +59,13 @@ Future<bool> showDiscardConfirm(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
+                        rTitle,
                         style: GlimprType.sansStyle(18, 700, t.fg1,
                             letterSpacing: -0.3),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        message,
+                        rMessage,
                         style: GlimprType.sansStyle(13.5, 400, t.fg3,
                             height: 1.45),
                       ),
@@ -64,10 +73,10 @@ Future<bool> showDiscardConfirm(
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          GhostButton(cancelLabel,
+                          GhostButton(rCancel,
                               onTap: () => Navigator.of(c).pop(false)),
                           const SizedBox(width: 10),
-                          AccentButton(confirmLabel,
+                          AccentButton(rConfirm,
                               onTap: () => Navigator.of(c).pop(true)),
                         ],
                       ),
