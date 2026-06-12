@@ -8,6 +8,7 @@ import os
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureChannel: CaptureChannel?
   private var captureController: CaptureController?
+  private var recordingChannel: RecordingChannel?
   private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
   private var loginChannel: FlutterMethodChannel?
@@ -66,6 +67,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     )
     EncodeChannel.register(messenger: flutterViewController.engine.binaryMessenger)
     ClipboardChannel.register(messenger: flutterViewController.engine.binaryMessenger)
+    // Screen recording (macOS 15+): the whole module sits behind this seam;
+    // the channel itself exists everywhere so Dart can probe isAvailable.
+    recordingChannel = RecordingChannel(
+      messenger: flutterViewController.engine.binaryMessenger)
 
     // Native global hotkeys (Carbon RegisterEventHotKey), driven by the control
     // engine's NativeHotkeyRegistrar over `glimpr/hotkeys`.
@@ -176,6 +181,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       onClearRecent: { [weak self] in
         self?.imageEditorChannel?.invokeMethod("clearRecent", arguments: nil)
       })
+    // Recording state drives the menu-bar chrome (red icon, Stop/Abort items);
+    // the menu's Stop/Abort act natively, no Dart round trip.
+    recordingChannel?.onRecordingStateChange = { [weak self] active in
+      self?.statusItem?.setRecording(active)
+    }
+    statusItem?.onRecordStop = { [weak self] in self?.recordingChannel?.stopActive() }
+    statusItem?.onRecordAbort = { [weak self] in self?.recordingChannel?.abortActive() }
     PerfLog.mark("statusItemReady")
 
     // Warm the Image Editor engine + window at launch. A post-launch (on-demand)
@@ -492,6 +504,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// engine to reload it (landing gallery + the menu-bar "Open Recent" submenu).
   func notifyRecentChanged() {
     imageEditorChannel?.invokeMethod("refreshRecent", arguments: nil)
+  }
+
+  /// An overlay engine confirmed (or cancelled) a recording live-select:
+  /// forward to the control engine's record controller.
+  func relayRecordSelection(_ args: [String: Any]) {
+    recordingChannel?.notifySelection(args)
   }
 
   // The live pin windows; a pin removes itself from here when closed.

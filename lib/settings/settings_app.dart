@@ -11,6 +11,7 @@ import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../output/filename.dart';
 import '../output/flow.dart';
+import '../record/record_bridge.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/hotkey_service.dart';
 import '../shortcuts/shortcut_actions.dart';
@@ -58,6 +59,7 @@ const double _kLoupePreviewStage = 200;
 const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
   ('Capture', Icons.photo_camera_outlined),
+  ('Recording', Icons.videocam_outlined),
   ('Output', Icons.image_outlined),
   ('Workflow', Icons.checklist),
   ('Shortcuts', Icons.keyboard),
@@ -102,6 +104,15 @@ class _SettingsAppState extends State<SettingsApp>
   bool _decorateDisplay = false;
   bool _decorateLastRegion = false;
   int _decorationJpegFill = 0xFFFFFFFF;
+  // Screen recording (macOS 15+ module; the card shows an unavailable hint
+  // below 15).
+  bool _recordAvailable = false;
+  bool _recordHevc = false;
+  int _recordFps = 30;
+  bool _recordShowCursor = true;
+  bool _recordSystemAudio = false;
+  bool _recordMicrophone = false;
+  Set<FlowAction> _afterRecording = {};
   int _loupeSpan = kLoupeSpanDefault;
   int _loupeZoom = kLoupeZoomDefault;
   bool _eyedropperKeysCancel = true;
@@ -178,6 +189,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final layerCap = await _s.getCaptureLayerCap();
     final appLanguage = await _s.getAppLanguage();
+    final rec = await _s.loadRecording();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -205,8 +217,18 @@ class _SettingsAppState extends State<SettingsApp>
       _captureLayerCap = layerCap;
       _appLanguage = appLanguage;
       _appLanguageInitial = appLanguage;
+      _recordHevc = rec.hevc;
+      _recordFps = rec.fps;
+      _recordShowCursor = rec.showCursor;
+      _recordSystemAudio = rec.systemAudio;
+      _recordMicrophone = rec.microphone;
+      _afterRecording = rec.flow;
     });
     _filenameController.text = template;
+    // Recording availability is a native (macOS version) fact; guard so an
+    // unmocked channel never breaks the rest of the UI (widget tests).
+    final recordAvailable = await RecordBridge().isAvailable();
+    if (mounted) setState(() => _recordAvailable = recordAvailable);
     // Login state comes from the OS (SMAppService) over a native channel; query
     // it separately so a slow / unavailable channel never blocks the rest of the
     // settings UI (and never stalls widget tests where the channel is unmocked).
@@ -434,10 +456,11 @@ class _SettingsAppState extends State<SettingsApp>
   String _sectionTitle(int i) {
     switch (i) {
       case 1: return _l.settingsPaneCapture;
-      case 2: return _l.settingsPaneOutput;
-      case 3: return _l.settingsPaneWorkflow;
-      case 4: return _l.settingsPaneShortcuts;
-      case 5: return _l.settingsPaneAdvanced;
+      case 2: return _l.settingsPaneRecording;
+      case 3: return _l.settingsPaneOutput;
+      case 4: return _l.settingsPaneWorkflow;
+      case 5: return _l.settingsPaneShortcuts;
+      case 6: return _l.settingsPaneAdvanced;
       default: return _l.settingsPaneGeneral;
     }
   }
@@ -494,7 +517,7 @@ class _SettingsAppState extends State<SettingsApp>
     );
     // The Shortcuts pane is long; pin its Apply/Revert bar to the bottom so it's
     // always reachable without scrolling to the end of the list.
-    if (_section == 4) {
+    if (_section == 5) {
       return Column(
         children: [Expanded(child: list), _shortcutsFooter(t)],
       );
@@ -507,12 +530,14 @@ class _SettingsAppState extends State<SettingsApp>
       case 1:
         return _capturePane(t);
       case 2:
-        return _outputPane(t);
+        return _recordingPane(t);
       case 3:
-        return _workflowPane(t);
+        return _outputPane(t);
       case 4:
-        return _shortcutsPane(t);
+        return _workflowPane(t);
       case 5:
+        return _shortcutsPane(t);
+      case 6:
         return _advancedPane(t);
       default:
         return _generalPane(t);
@@ -689,6 +714,124 @@ class _SettingsAppState extends State<SettingsApp>
       ]),
     ];
   }
+
+  /// Screen recording (macOS 15+ module): its own sidebar pane (owner
+  /// request). Codec/fps under Format; cursor + audio under Behaviour; then
+  /// the after-recording flow subset.
+  List<Widget> _recordingPane(GlimprTokens t) {
+    return [
+      _h1(_l.settingsPaneRecording, t),
+      if (!_recordAvailable)
+        GlassCard.padded(
+          child: Text(
+            _l.settingsRecordingUnavailable,
+            style: GlimprType.sansStyle(12.5, 400, t.fg3),
+          ),
+        )
+      else ...[
+        SectionLabel(_l.settingsSectionFormat, icon: Icons.movie_outlined),
+        GlassCard.rows([
+          SettingRow(
+            title: _l.settingsRecordingCodec,
+            hint: _l.settingsRecordingCodecHint,
+            trailing: Segmented<bool>(
+              value: _recordHevc,
+              options: const [(false, 'H.264'), (true, 'HEVC')],
+              onChanged: (v) async {
+                await _s.setRecordHevc(v);
+                if (mounted) setState(() => _recordHevc = v);
+              },
+            ),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsRecordingFps,
+            hint: _l.settingsRecordingFpsHint,
+            trailing: Segmented<int>(
+              value: _recordFps,
+              options: const [(30, '30 fps'), (60, '60 fps')],
+              onChanged: (v) async {
+                await _s.setRecordFps(v);
+                if (mounted) setState(() => _recordFps = v);
+              },
+            ),
+          ),
+        ]),
+        const SizedBox(height: 15),
+        SectionLabel(_l.settingsSectionBehaviour,
+            icon: Icons.videocam_outlined),
+        GlassCard.rows([
+          SettingRow(
+            title: _l.settingsRecordingCursor,
+            hint: _l.settingsRecordingCursorHint,
+            trailing: GlassToggle(
+              value: _recordShowCursor,
+              onChanged: (v) async {
+                await _s.setRecordShowCursor(v);
+                if (mounted) setState(() => _recordShowCursor = v);
+              },
+            ),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsRecordingSystemAudio,
+            hint: _l.settingsRecordingSystemAudioHint,
+            trailing: GlassToggle(
+              value: _recordSystemAudio,
+              onChanged: (v) async {
+                await _s.setRecordSystemAudio(v);
+                if (mounted) setState(() => _recordSystemAudio = v);
+              },
+            ),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsRecordingMicrophone,
+            hint: _l.settingsRecordingMicrophoneHint,
+            trailing: GlassToggle(
+              value: _recordMicrophone,
+              onChanged: (v) async {
+                await _s.setRecordMicrophone(v);
+                if (mounted) setState(() => _recordMicrophone = v);
+              },
+            ),
+          ),
+        ]),
+        const SizedBox(height: 15),
+        SectionLabel(_l.settingsSectionAfterRecording,
+            icon: Icons.flag_outlined),
+        GlassCard.rows([
+          SettingRow(
+            title: _l.settingsFlowCopyFilePath,
+            hint: _l.settingsFlowCopyFilePathHint,
+            trailing: _recordingFlowToggle(FlowAction.copyPath),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsFlowShowInFinder,
+            hint: _l.settingsFlowShowInFinderHint,
+            trailing: _recordingFlowToggle(FlowAction.showInFinder),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsFlowShareSheet,
+            hint: _l.settingsFlowShareSheetHint,
+            trailing: _recordingFlowToggle(FlowAction.shareSheet),
+          ),
+        ]),
+      ],
+    ];
+  }
+
+  Widget _recordingFlowToggle(FlowAction a) => GlassToggle(
+        value: _afterRecording.contains(a),
+        onChanged: (v) async {
+          final next = {..._afterRecording};
+          v ? next.add(a) : next.remove(a);
+          await _s.setAfterRecordingFlow(next);
+          if (mounted) setState(() => _afterRecording = next);
+        },
+      );
 
   /// Completion flows + the sound feedback around them — what happens AFTER a
   /// capture / the editor's Done.
@@ -1319,17 +1462,35 @@ class _SettingsAppState extends State<SettingsApp>
           note: _l.settingsShortcutsCaptureNote),
       GlassCard.rows([
         for (final a in kGlobalActions)
-          SettingRow(
-            title: globalActionLabel(_l, a.actionKey),
-            hint: globalActionHint(_l, a.actionKey),
-            trailing: _bindingRow(
-              t: t,
-              actionKey: a.actionKey,
-              requireModifier: true,
-              reserved: const {},
-              dupes: dupes,
+          if (!kRecordActionKeys.contains(a.actionKey))
+            SettingRow(
+              title: globalActionLabel(_l, a.actionKey),
+              hint: globalActionHint(_l, a.actionKey),
+              trailing: _bindingRow(
+                t: t,
+                actionKey: a.actionKey,
+                requireModifier: true,
+                reserved: const {},
+                dupes: dupes,
+              ),
             ),
-          ),
+      ]),
+      const SizedBox(height: 24),
+      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
+      GlassCard.rows([
+        for (final a in kGlobalActions)
+          if (kRecordActionKeys.contains(a.actionKey))
+            SettingRow(
+              title: globalActionLabel(_l, a.actionKey),
+              hint: globalActionHint(_l, a.actionKey),
+              trailing: _bindingRow(
+                t: t,
+                actionKey: a.actionKey,
+                requireModifier: true,
+                reserved: const {},
+                dupes: dupes,
+              ),
+            ),
       ]),
       const SizedBox(height: 24),
       // Tools — tool-selection keys (rebindable), in toolbar order.

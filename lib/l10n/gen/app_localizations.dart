@@ -113,8 +113,14 @@ abstract class AppLocalizations {
   /// Settings sidebar: Capture pane label
   ///
   /// In en, this message translates to:
-  /// **'Capture'**
+  /// **'Screenshot'**
   String get settingsPaneCapture;
+
+  /// Settings sidebar: screen recording pane title
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsPaneRecording;
 
   /// Settings sidebar: Output pane label
   ///
@@ -197,7 +203,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Behaviour: mouse pointer toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Include the mouse pointer in captures. This is the default; in the capture overlay a toolbar button shows/hides it per shot without changing this setting.'**
+  /// **'Include the mouse pointer in screenshots. This is the default; in the screenshot overlay a toolbar button shows/hides it per shot without changing this setting.'**
   String get settingsMousePointerHint;
 
   /// Settings > Capture > Behaviour: right-click exits toggle title
@@ -209,7 +215,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Behaviour: right-click exits toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Right-click leaves capture mode (Esc always works)'**
+  /// **'Right-click leaves screenshot mode (Esc always works)'**
   String get settingsRightClickExitsHint;
 
   /// Settings > Capture > Behaviour: confirm on exit toggle title
@@ -221,7 +227,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Behaviour: confirm on exit toggle hint
   ///
   /// In en, this message translates to:
-  /// **'When exiting a capture that still has annotations (right-click or Esc), ask before discarding them.'**
+  /// **'When exiting a screenshot that still has annotations (right-click or Esc), ask before discarding them.'**
   String get settingsConfirmBeforeDiscardingHint;
 
   /// Settings > Capture: Loupe section label
@@ -233,7 +239,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Loupe: introductory description
   ///
   /// In en, this message translates to:
-  /// **'Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.'**
+  /// **'Pixel magnifier for crop / blur / pixelate, in the screenshot overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.'**
   String get settingsLoupeDescription;
 
   /// Settings > Capture > Loupe: size slider title
@@ -329,7 +335,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: After capture section label
   ///
   /// In en, this message translates to:
-  /// **'After capture'**
+  /// **'After screenshot'**
   String get settingsSectionAfterCapture;
 
   /// Settings > Workflow: After editor's Done section label
@@ -431,7 +437,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: pin-to-screen hint for the capture flow
   ///
   /// In en, this message translates to:
-  /// **'Float the capture as an always-on-top window, pinned in place over where it was taken'**
+  /// **'Float the screenshot as an always-on-top window, pinned in place over where it was taken'**
   String get settingsFlowPinToScreenCaptureHint;
 
   /// Settings > Workflow: pin-to-screen hint for the editor flow
@@ -443,7 +449,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: caption below the After capture flow card (non-empty state)
   ///
   /// In en, this message translates to:
-  /// **'Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.'**
+  /// **'Runs when a screenshot is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.'**
   String get settingsFlowCaptureCaption;
 
   /// Settings > Workflow: caption below the After editor's Done flow card (non-empty state)
@@ -455,7 +461,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: caption below the After capture flow card when no actions are selected
   ///
   /// In en, this message translates to:
-  /// **'Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.'**
+  /// **'Runs when a screenshot is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.'**
   String get settingsFlowCaptureCaptionEmpty;
 
   /// Settings > Workflow: caption below the After editor's Done flow card when no actions are selected
@@ -473,7 +479,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow > Sounds: shutter sound toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Plays the instant a capture is taken'**
+  /// **'Plays the instant a screenshot is taken'**
   String get settingsSoundShutterHint;
 
   /// Settings > Workflow > Sounds: completion sound toggle title
@@ -581,19 +587,19 @@ abstract class AppLocalizations {
   /// Settings > Output > Filename: description for the {date} token
   ///
   /// In en, this message translates to:
-  /// **'Capture date, e.g. 2026-06-03'**
+  /// **'Screenshot date, e.g. 2026-06-03'**
   String get settingsFilenameTokenDateDesc;
 
   /// Settings > Output > Filename: description for the {time} token
   ///
   /// In en, this message translates to:
-  /// **'Capture time, e.g. 15-04-09'**
+  /// **'Screenshot time, e.g. 15-04-09'**
   String get settingsFilenameTokenTimeDesc;
 
   /// Settings > Output > Filename: note about window/app token behavior
   ///
   /// In en, this message translates to:
-  /// **'Uses the window under the cursor when the capture ends. On bare desktop, {windowToken} and {appToken} are left out.'**
+  /// **'Uses the window under the cursor when the screenshot ends. On bare desktop, {windowToken} and {appToken} are left out.'**
   String settingsFilenameNote(String windowToken, String appToken);
 
   /// Settings > Output > Decoration: window snap toggle title
@@ -629,7 +635,7 @@ abstract class AppLocalizations {
   /// Settings > Output > Decoration: focused window toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Capture-focused-window mode (⌘⌥2)'**
+  /// **'Screenshot-window mode (⌘⌥2)'**
   String get settingsDecorationFocusedWindowHint;
 
   /// Settings > Output > Decoration: display toggle title
@@ -641,7 +647,7 @@ abstract class AppLocalizations {
   /// Settings > Output > Decoration: display toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Capture-display mode (⌘⌥3)'**
+  /// **'Screenshot-display mode (⌘⌥3)'**
   String get settingsDecorationDisplayHint;
 
   /// Settings > Output > Decoration: last region toggle title
@@ -653,7 +659,7 @@ abstract class AppLocalizations {
   /// Settings > Output > Decoration: last region toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Capture-last-region mode (⌘⌥4)'**
+  /// **'Screenshot-last-region mode (⌘⌥4)'**
   String get settingsDecorationLastRegionHint;
 
   /// Settings > Output > Decoration: JPEG fill swatch row title
@@ -673,6 +679,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.'**
   String get settingsDecorationPinNote;
+
+  /// Settings > Capture: screen recording section label
+  ///
+  /// In en, this message translates to:
+  /// **'Screen recording'**
+  String get settingsSectionRecording;
+
+  /// Settings > Capture > Screen recording: shown on macOS 14
+  ///
+  /// In en, this message translates to:
+  /// **'Screen recording needs macOS 15 or later.'**
+  String get settingsRecordingUnavailable;
+
+  /// Settings > Capture > Screen recording: codec row title
+  ///
+  /// In en, this message translates to:
+  /// **'Codec'**
+  String get settingsRecordingCodec;
+
+  /// Settings > Capture > Screen recording: codec row hint
+  ///
+  /// In en, this message translates to:
+  /// **'H.264 is most compatible; HEVC makes smaller files'**
+  String get settingsRecordingCodecHint;
+
+  /// Settings > Capture > Screen recording: fps row title
+  ///
+  /// In en, this message translates to:
+  /// **'Frame rate'**
+  String get settingsRecordingFps;
+
+  /// Settings > Capture > Screen recording: fps row hint
+  ///
+  /// In en, this message translates to:
+  /// **'60 fps is smoother but roughly doubles the file size'**
+  String get settingsRecordingFpsHint;
+
+  /// Settings > Capture > Screen recording: cursor row title
+  ///
+  /// In en, this message translates to:
+  /// **'Show cursor'**
+  String get settingsRecordingCursor;
+
+  /// Settings > Capture > Screen recording: cursor row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Include the mouse pointer in the recording'**
+  String get settingsRecordingCursorHint;
+
+  /// Settings > Capture > Screen recording: system audio row title
+  ///
+  /// In en, this message translates to:
+  /// **'Record system audio'**
+  String get settingsRecordingSystemAudio;
+
+  /// Settings > Capture > Screen recording: system audio row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Include the sound the system is playing'**
+  String get settingsRecordingSystemAudioHint;
+
+  /// Settings > Capture > Screen recording: microphone row title
+  ///
+  /// In en, this message translates to:
+  /// **'Record microphone'**
+  String get settingsRecordingMicrophone;
+
+  /// Settings > Capture > Screen recording: microphone row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Asks for microphone permission on first use'**
+  String get settingsRecordingMicrophoneHint;
+
+  /// Settings > Capture: after-recording flow section label
+  ///
+  /// In en, this message translates to:
+  /// **'After recording'**
+  String get settingsSectionAfterRecording;
 
   /// Settings > Output > Recent history: card title
   ///
@@ -695,13 +779,13 @@ abstract class AppLocalizations {
   /// Settings > Advanced > Multi-display: warm engines card title
   ///
   /// In en, this message translates to:
-  /// **'Warm capture engines'**
+  /// **'Warm screenshot engines'**
   String get settingsWarmEnginesTitle;
 
   /// Settings > Advanced > Multi-display: warm engines explanatory body (multi-paragraph)
   ///
   /// In en, this message translates to:
-  /// **'How many displays Glimpr keeps instantly capture-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still captures, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).'**
+  /// **'How many displays Glimpr keeps instantly screenshot-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still screenshots, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).'**
   String get settingsWarmEnginesBody;
 
   /// Settings > Advanced > Multi-display: caption shown when warm target equals the initial value
@@ -713,19 +797,19 @@ abstract class AppLocalizations {
   /// Settings > Advanced: Capture layers section label
   ///
   /// In en, this message translates to:
-  /// **'Capture layers'**
+  /// **'Screenshot layers'**
   String get settingsSectionCaptureLayers;
 
   /// Settings > Advanced > Capture layers: card title
   ///
   /// In en, this message translates to:
-  /// **'Capture layers'**
+  /// **'Screenshot layers'**
   String get settingsCaptureLayersTitle;
 
   /// Settings > Advanced > Capture layers: explanatory body (multi-paragraph)
   ///
   /// In en, this message translates to:
-  /// **'Press the capture shortcut while a capture is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the capture. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next capture; no restart needed.'**
+  /// **'Press the screenshot shortcut while a screenshot is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the screenshot. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next screenshot; no restart needed.'**
   String get settingsCaptureLayersBody;
 
   /// Settings > Advanced: Tool styles section label
@@ -743,7 +827,7 @@ abstract class AppLocalizations {
   /// Settings > Advanced > Tool styles: card hint text
   ///
   /// In en, this message translates to:
-  /// **'Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next capture.'**
+  /// **'Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next screenshot.'**
   String get settingsResetAllToolStylesHint;
 
   /// Settings > Advanced > Tool styles: confirm label for the two-step reset button
@@ -1007,49 +1091,49 @@ abstract class AppLocalizations {
   /// Global action label: interactive capture
   ///
   /// In en, this message translates to:
-  /// **'Capture'**
+  /// **'Screenshot Region'**
   String get actionCapture;
 
   /// Global action hint: interactive capture
   ///
   /// In en, this message translates to:
-  /// **'Start a screen capture'**
+  /// **'Select a region and screenshot it; press again to stack'**
   String get actionCaptureHint;
 
   /// Global action label: capture window
   ///
   /// In en, this message translates to:
-  /// **'Capture Window'**
+  /// **'Screenshot Window'**
   String get actionCaptureWindow;
 
   /// Global action hint: capture window
   ///
   /// In en, this message translates to:
-  /// **'Capture the focused window'**
+  /// **'Screenshot the focused window'**
   String get actionCaptureWindowHint;
 
   /// Global action label: capture display
   ///
   /// In en, this message translates to:
-  /// **'Capture Display'**
+  /// **'Screenshot Display'**
   String get actionCaptureDisplay;
 
   /// Global action hint: capture display
   ///
   /// In en, this message translates to:
-  /// **'Capture the display under the cursor'**
+  /// **'Screenshot the display under the cursor'**
   String get actionCaptureDisplayHint;
 
   /// Global action label: capture last region
   ///
   /// In en, this message translates to:
-  /// **'Capture Last Region'**
+  /// **'Screenshot Last Region'**
   String get actionCaptureLastRegion;
 
   /// Global action hint: capture last region
   ///
   /// In en, this message translates to:
-  /// **'Repeat the last capture region'**
+  /// **'Repeat the last screenshot region'**
   String get actionCaptureLastRegionHint;
 
   /// Global action label: open editor
@@ -1079,13 +1163,13 @@ abstract class AppLocalizations {
   /// Global action label: pin capture
   ///
   /// In en, this message translates to:
-  /// **'Pin Capture'**
+  /// **'Pin Screenshot'**
   String get actionPinCapture;
 
   /// Global action hint: pin capture
   ///
   /// In en, this message translates to:
-  /// **'Capture a region straight to a floating pin'**
+  /// **'Screenshot a region straight to a floating pin'**
   String get actionPinCaptureHint;
 
   /// Global action label: pin clipboard
@@ -1099,6 +1183,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Float the clipboard image as a pin'**
   String get actionPinClipboardHint;
+
+  /// Global action label: record a screen region
+  ///
+  /// In en, this message translates to:
+  /// **'Record Region'**
+  String get actionRecordRegion;
+
+  /// Global action hint: record region
+  ///
+  /// In en, this message translates to:
+  /// **'Record a screen region; press again to stop'**
+  String get actionRecordRegionHint;
+
+  /// Global action label: record the focused window
+  ///
+  /// In en, this message translates to:
+  /// **'Record Window'**
+  String get actionRecordWindow;
+
+  /// Global action hint: record window
+  ///
+  /// In en, this message translates to:
+  /// **'Record the focused window; press again to stop'**
+  String get actionRecordWindowHint;
+
+  /// Global action label: record the display under the cursor
+  ///
+  /// In en, this message translates to:
+  /// **'Record Display'**
+  String get actionRecordDisplay;
+
+  /// Global action hint: record display
+  ///
+  /// In en, this message translates to:
+  /// **'Record the display under the cursor; press again to stop'**
+  String get actionRecordDisplayHint;
+
+  /// Global action label: repeat the last recording region
+  ///
+  /// In en, this message translates to:
+  /// **'Record Last Region'**
+  String get actionRecordLastRegion;
+
+  /// Global action hint: record last region
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat the last recording region; press again to stop'**
+  String get actionRecordLastRegionHint;
 
   /// Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)
   ///
@@ -1207,6 +1339,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pin mode: the selection floats as a pin'**
   String get toolbarPinCaption;
+
+  /// Overlay toolbar caption during a recording live-select session
+  ///
+  /// In en, this message translates to:
+  /// **'Record mode: the selection starts a recording'**
+  String get toolbarRecordCaption;
 
   /// Toolbar: cursor-toggle tooltip when the captured cursor layer is visible
   ///
@@ -1577,7 +1715,7 @@ abstract class AppLocalizations {
   /// Image Editor landing card: subtitle copy below the headline
   ///
   /// In en, this message translates to:
-  /// **'Annotate, crop, and re-export any image in the same toolkit you use to capture.'**
+  /// **'Annotate, crop, and re-export any image in the same toolkit you use to screenshot.'**
   String get editorOpenImageSubtitle;
 
   /// Image Editor: Open button label (landing card and open bar)
@@ -1985,13 +2123,13 @@ abstract class AppLocalizations {
   /// 3e batch: masks/confirm/recorder/overlay
   ///
   /// In en, this message translates to:
-  /// **'Discard capture?'**
+  /// **'Discard screenshot?'**
   String get overlayDiscardCaptureTitle;
 
   /// 3e batch: masks/confirm/recorder/overlay
   ///
   /// In en, this message translates to:
-  /// **'You have unsaved annotations on this capture. Discard them and exit?'**
+  /// **'You have unsaved annotations on this screenshot. Discard them and exit?'**
   String get overlayDiscardCaptureMessage;
 
   /// 3e batch: masks/confirm/recorder/overlay
@@ -2003,13 +2141,13 @@ abstract class AppLocalizations {
   /// 3e batch: masks/confirm/recorder/overlay
   ///
   /// In en, this message translates to:
-  /// **'Capture failed: {error}'**
+  /// **'Screenshot failed: {error}'**
   String overlayCaptureFailedError(String error);
 
   /// 3e batch: masks/confirm/recorder/overlay
   ///
   /// In en, this message translates to:
-  /// **'Capture failed: not saved or copied'**
+  /// **'Screenshot failed: not saved or copied'**
   String get overlayFailedNotSavedOrCopied;
 
   /// 3e batch: masks/confirm/recorder/overlay
@@ -2027,7 +2165,7 @@ abstract class AppLocalizations {
   /// 3e batch: masks/confirm/recorder/overlay
   ///
   /// In en, this message translates to:
-  /// **'Capture failed'**
+  /// **'Screenshot failed'**
   String get overlayCaptureFailedGeneric;
 
   /// Key-cap chips: shown when a binding is unbound

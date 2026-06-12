@@ -15,7 +15,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPaneGeneral => 'General';
 
   @override
-  String get settingsPaneCapture => 'Capture';
+  String get settingsPaneCapture => 'Screenshot';
+
+  @override
+  String get settingsPaneRecording => 'Recording';
 
   @override
   String get settingsPaneOutput => 'Output';
@@ -60,28 +63,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsMousePointerHint =>
-      'Include the mouse pointer in captures. This is the default; in the capture overlay a toolbar button shows/hides it per shot without changing this setting.';
+      'Include the mouse pointer in screenshots. This is the default; in the screenshot overlay a toolbar button shows/hides it per shot without changing this setting.';
 
   @override
   String get settingsRightClickExits => 'Right-click exits';
 
   @override
   String get settingsRightClickExitsHint =>
-      'Right-click leaves capture mode (Esc always works)';
+      'Right-click leaves screenshot mode (Esc always works)';
 
   @override
   String get settingsConfirmBeforeDiscarding => 'Confirm before discarding';
 
   @override
   String get settingsConfirmBeforeDiscardingHint =>
-      'When exiting a capture that still has annotations (right-click or Esc), ask before discarding them.';
+      'When exiting a screenshot that still has annotations (right-click or Esc), ask before discarding them.';
 
   @override
   String get settingsSectionLoupe => 'Loupe';
 
   @override
   String get settingsLoupeDescription =>
-      'Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.';
+      'Pixel magnifier for crop / blur / pixelate, in the screenshot overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.';
 
   @override
   String get settingsLoupeSize => 'Size';
@@ -133,7 +136,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Flow the dashed selection / crosshair / window outlines. Turn off for static dashes (less motion, slightly lighter).';
 
   @override
-  String get settingsSectionAfterCapture => 'After capture';
+  String get settingsSectionAfterCapture => 'After screenshot';
 
   @override
   String get settingsSectionAfterEditorDone => 'After editor\'s Done';
@@ -189,7 +192,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFlowPinToScreenCaptureHint =>
-      'Float the capture as an always-on-top window, pinned in place over where it was taken';
+      'Float the screenshot as an always-on-top window, pinned in place over where it was taken';
 
   @override
   String get settingsFlowPinToScreenEditorHint =>
@@ -197,7 +200,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFlowCaptureCaption =>
-      'Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.';
+      'Runs when a screenshot is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.';
 
   @override
   String get settingsFlowEditorCaption =>
@@ -205,7 +208,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFlowCaptureCaptionEmpty =>
-      'Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.';
+      'Runs when a screenshot is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.';
 
   @override
   String get settingsFlowEditorCaptionEmpty =>
@@ -215,7 +218,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSoundShutter => 'Shutter';
 
   @override
-  String get settingsSoundShutterHint => 'Plays the instant a capture is taken';
+  String get settingsSoundShutterHint =>
+      'Plays the instant a screenshot is taken';
 
   @override
   String get settingsSoundCompletion => 'Completion';
@@ -272,14 +276,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'The application name (e.g. Safari)';
 
   @override
-  String get settingsFilenameTokenDateDesc => 'Capture date, e.g. 2026-06-03';
+  String get settingsFilenameTokenDateDesc =>
+      'Screenshot date, e.g. 2026-06-03';
 
   @override
-  String get settingsFilenameTokenTimeDesc => 'Capture time, e.g. 15-04-09';
+  String get settingsFilenameTokenTimeDesc => 'Screenshot time, e.g. 15-04-09';
 
   @override
   String settingsFilenameNote(String windowToken, String appToken) {
-    return 'Uses the window under the cursor when the capture ends. On bare desktop, $windowToken and $appToken are left out.';
+    return 'Uses the window under the cursor when the screenshot ends. On bare desktop, $windowToken and $appToken are left out.';
   }
 
   @override
@@ -301,20 +306,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDecorationFocusedWindowHint =>
-      'Capture-focused-window mode (⌘⌥2)';
+      'Screenshot-window mode (⌘⌥2)';
 
   @override
   String get settingsDecorationDisplay => 'Display';
 
   @override
-  String get settingsDecorationDisplayHint => 'Capture-display mode (⌘⌥3)';
+  String get settingsDecorationDisplayHint => 'Screenshot-display mode (⌘⌥3)';
 
   @override
   String get settingsDecorationLastRegion => 'Last region';
 
   @override
   String get settingsDecorationLastRegionHint =>
-      'Capture-last-region mode (⌘⌥4)';
+      'Screenshot-last-region mode (⌘⌥4)';
 
   @override
   String get settingsDecorationJpegFill => 'JPEG background fill';
@@ -328,6 +333,51 @@ class AppLocalizationsEn extends AppLocalizations {
       'Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.';
 
   @override
+  String get settingsSectionRecording => 'Screen recording';
+
+  @override
+  String get settingsRecordingUnavailable =>
+      'Screen recording needs macOS 15 or later.';
+
+  @override
+  String get settingsRecordingCodec => 'Codec';
+
+  @override
+  String get settingsRecordingCodecHint =>
+      'H.264 is most compatible; HEVC makes smaller files';
+
+  @override
+  String get settingsRecordingFps => 'Frame rate';
+
+  @override
+  String get settingsRecordingFpsHint =>
+      '60 fps is smoother but roughly doubles the file size';
+
+  @override
+  String get settingsRecordingCursor => 'Show cursor';
+
+  @override
+  String get settingsRecordingCursorHint =>
+      'Include the mouse pointer in the recording';
+
+  @override
+  String get settingsRecordingSystemAudio => 'Record system audio';
+
+  @override
+  String get settingsRecordingSystemAudioHint =>
+      'Include the sound the system is playing';
+
+  @override
+  String get settingsRecordingMicrophone => 'Record microphone';
+
+  @override
+  String get settingsRecordingMicrophoneHint =>
+      'Asks for microphone permission on first use';
+
+  @override
+  String get settingsSectionAfterRecording => 'After recording';
+
+  @override
   String get settingsRecentImagesKept => 'Recent images kept';
 
   @override
@@ -338,25 +388,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionMultiDisplay => 'Multi-display';
 
   @override
-  String get settingsWarmEnginesTitle => 'Warm capture engines';
+  String get settingsWarmEnginesTitle => 'Warm screenshot engines';
 
   @override
   String get settingsWarmEnginesBody =>
-      'How many displays Glimpr keeps instantly capture-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still captures, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).';
+      'How many displays Glimpr keeps instantly screenshot-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still screenshots, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).';
 
   @override
   String get settingsWarmEnginesDefault =>
       'Default 2 · applies after restarting Glimpr';
 
   @override
-  String get settingsSectionCaptureLayers => 'Capture layers';
+  String get settingsSectionCaptureLayers => 'Screenshot layers';
 
   @override
-  String get settingsCaptureLayersTitle => 'Capture layers';
+  String get settingsCaptureLayersTitle => 'Screenshot layers';
 
   @override
   String get settingsCaptureLayersBody =>
-      'Press the capture shortcut while a capture is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the capture. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next capture; no restart needed.';
+      'Press the screenshot shortcut while a screenshot is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the screenshot. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next screenshot; no restart needed.';
 
   @override
   String get settingsSectionToolStyles => 'Tool styles';
@@ -366,7 +416,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsResetAllToolStylesHint =>
-      'Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next capture.';
+      'Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next screenshot.';
 
   @override
   String get settingsResetAllToolStylesConfirm =>
@@ -503,28 +553,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsShortcutsReserved => 'Reserved';
 
   @override
-  String get actionCapture => 'Capture';
+  String get actionCapture => 'Screenshot Region';
 
   @override
-  String get actionCaptureHint => 'Start a screen capture';
+  String get actionCaptureHint =>
+      'Select a region and screenshot it; press again to stack';
 
   @override
-  String get actionCaptureWindow => 'Capture Window';
+  String get actionCaptureWindow => 'Screenshot Window';
 
   @override
-  String get actionCaptureWindowHint => 'Capture the focused window';
+  String get actionCaptureWindowHint => 'Screenshot the focused window';
 
   @override
-  String get actionCaptureDisplay => 'Capture Display';
+  String get actionCaptureDisplay => 'Screenshot Display';
 
   @override
-  String get actionCaptureDisplayHint => 'Capture the display under the cursor';
+  String get actionCaptureDisplayHint =>
+      'Screenshot the display under the cursor';
 
   @override
-  String get actionCaptureLastRegion => 'Capture Last Region';
+  String get actionCaptureLastRegion => 'Screenshot Last Region';
 
   @override
-  String get actionCaptureLastRegionHint => 'Repeat the last capture region';
+  String get actionCaptureLastRegionHint => 'Repeat the last screenshot region';
 
   @override
   String get actionOpenEditor => 'Open Editor';
@@ -540,17 +592,45 @@ class AppLocalizationsEn extends AppLocalizations {
       'Open the Image Editor and load the clipboard image';
 
   @override
-  String get actionPinCapture => 'Pin Capture';
+  String get actionPinCapture => 'Pin Screenshot';
 
   @override
   String get actionPinCaptureHint =>
-      'Capture a region straight to a floating pin';
+      'Screenshot a region straight to a floating pin';
 
   @override
   String get actionPinClipboard => 'Pin Clipboard';
 
   @override
   String get actionPinClipboardHint => 'Float the clipboard image as a pin';
+
+  @override
+  String get actionRecordRegion => 'Record Region';
+
+  @override
+  String get actionRecordRegionHint =>
+      'Record a screen region; press again to stop';
+
+  @override
+  String get actionRecordWindow => 'Record Window';
+
+  @override
+  String get actionRecordWindowHint =>
+      'Record the focused window; press again to stop';
+
+  @override
+  String get actionRecordDisplay => 'Record Display';
+
+  @override
+  String get actionRecordDisplayHint =>
+      'Record the display under the cursor; press again to stop';
+
+  @override
+  String get actionRecordLastRegion => 'Record Last Region';
+
+  @override
+  String get actionRecordLastRegionHint =>
+      'Repeat the last recording region; press again to stop';
 
   @override
   String get toolSelect => 'Select';
@@ -605,6 +685,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolbarPinCaption => 'Pin mode: the selection floats as a pin';
+
+  @override
+  String get toolbarRecordCaption =>
+      'Record mode: the selection starts a recording';
 
   @override
   String get toolbarMousePointerShown => 'Mouse pointer: shown';
@@ -793,7 +877,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorOpenImageSubtitle =>
-      'Annotate, crop, and re-export any image in the same toolkit you use to capture.';
+      'Annotate, crop, and re-export any image in the same toolkit you use to screenshot.';
 
   @override
   String get editorOpenImageButton => 'Open Image…';
@@ -1016,23 +1100,23 @@ class AppLocalizationsEn extends AppLocalizations {
       'You have unsaved annotations on this layer. Discard them and return to the layer below?';
 
   @override
-  String get overlayDiscardCaptureTitle => 'Discard capture?';
+  String get overlayDiscardCaptureTitle => 'Discard screenshot?';
 
   @override
   String get overlayDiscardCaptureMessage =>
-      'You have unsaved annotations on this capture. Discard them and exit?';
+      'You have unsaved annotations on this screenshot. Discard them and exit?';
 
   @override
   String get overlayPinFailed => 'Pin failed';
 
   @override
   String overlayCaptureFailedError(String error) {
-    return 'Capture failed: $error';
+    return 'Screenshot failed: $error';
   }
 
   @override
   String get overlayFailedNotSavedOrCopied =>
-      'Capture failed: not saved or copied';
+      'Screenshot failed: not saved or copied';
 
   @override
   String get overlayFailedSave => 'Copied, but file save failed';
@@ -1041,7 +1125,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get overlayFailedClipboard => 'Saved, but clipboard failed';
 
   @override
-  String get overlayCaptureFailedGeneric => 'Capture failed';
+  String get overlayCaptureFailedGeneric => 'Screenshot failed';
 
   @override
   String get keyCapNone => 'None';

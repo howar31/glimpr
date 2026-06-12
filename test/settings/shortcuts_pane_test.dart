@@ -65,24 +65,28 @@ void main() {
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    // Two 'Capture' texts exist now: the sidebar tab + this pane's row title.
-    expect(find.text('Capture'), findsNWidgets(2));
+    // The sidebar tab says Screenshot; the pane's region row says
+    // Screenshot Region (capture = the umbrella term, owner vocabulary).
+    expect(find.text('Screenshot'), findsOneWidget);
+    expect(find.text('Screenshot Region'), findsOneWidget);
     // Default ⌘⌥1 renders three key caps (two modifiers + the digit). The
     // modifier glyphs are platform-dependent; the digit '1' is not, so assert on
     // it for a host-platform-stable check. Scope to the Global card: the Editor
     // section also has a bare '1' (the Rectangle tool).
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    // The global card now has 8 rows (captureArea + 3 Phase-4 modes + 2 open-
-    // editor actions + 2 pin actions), each with 3 caps (⌘⌥ pair + digit) = 24.
+    // The global card has 8 rows (captureArea + 3 Phase-4 modes + 2 open-
+    // editor actions + 2 pin actions), each with 3 caps (⌘⌥ pair + digit)
+    // = 24; the 4 record actions live in their OWN section card below.
     expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(24));
   });
 
   testWidgets('Tools / Commands / Reserved sections render their rows',
       (tester) async {
-    // The three editor cards are taller than the default 600px test viewport
+    // The editor cards are taller than the default 600px test viewport
     // (a lazy ListView would leave the lower sections unbuilt); enlarge the
-    // surface so the whole pane renders for the structural assertions.
-    tester.view.physicalSize = const Size(1000, 3000);
+    // surface so the whole pane renders for the structural assertions
+    // (incl. the Recording shortcuts card above the editor sections).
+    tester.view.physicalSize = const Size(1000, 3600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -251,10 +255,10 @@ void main() {
 
     // Unbound => muted "Disabled" text (NOT a pressable cap); null is valid for a
     // global binding (= disabled), so the draft is dirty + valid and Apply shows.
-    // The other 3 global rows still have their default caps; only the cleared row
-    // (captureArea) shows "Disabled". Find the recorder widget itself and check
-    // that no KeyCap lives inside its parent row.
-    expect(find.text('Disabled'), findsOneWidget);
+    // The other global rows keep their default caps; within the Capture card
+    // only the cleared row (captureArea) shows "Disabled" (the Recording
+    // card's unbound rows live in their own section below).
+    expect(_inGlobal(find.text('Disabled')), findsOneWidget);
     // The cleared recorder field contains no KeyCap (confirmed by no '1' digit cap).
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsNothing);
     // Apply lives in the footer below the Editor section — scroll it into view.
@@ -341,19 +345,19 @@ void main() {
 
   testWidgets('editor tool row records a bare key and resets to default',
       (tester) async {
-    // Editor cards sit below the Capture card; enlarge the surface so the
-    // TOOLS card is built and on-screen for direct interaction.
-    tester.view.physicalSize = const Size(1000, 3000);
+    // Editor cards sit below the Capture + Recording cards; enlarge the
+    // surface so the TOOLS card is built and on-screen for direct interaction.
+    tester.view.physicalSize = const Size(1000, 3600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    // The TOOLS card is the second GlassCard; its rows take a BARE key
-    // (requireModifier: false). Rebind the first tool row to 'X' (unused by
-    // any editor default).
-    final toolsCard = find.byType(GlassCard).at(1);
+    // The TOOLS card is the third GlassCard (Capture, Recording, Tools); its
+    // rows take a BARE key (requireModifier: false). Rebind the first tool
+    // row to 'X' (unused by any editor default).
+    final toolsCard = find.byType(GlassCard).at(2);
     Finder inTools(Finder matching) =>
         find.descendant(of: toolsCard, matching: matching);
     await tester.tap(inTools(find.byType(HotkeyRecorderField)).first);

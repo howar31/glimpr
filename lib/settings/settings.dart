@@ -97,6 +97,12 @@ class Settings {
   static const _decorateLastRegionKey = 'decorate_last_region';
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
+  static const _recordHevcKey = 'record_hevc';
+  static const _recordFpsKey = 'record_fps';
+  static const _recordCursorKey = 'record_show_cursor';
+  static const _recordSystemAudioKey = 'record_system_audio';
+  static const _recordMicKey = 'record_microphone';
+  static const _flowAfterRecordingKey = 'flow_after_recording';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
@@ -228,6 +234,57 @@ class Settings {
   Future<void> setCaptureCursor(bool v) =>
       store.setBool(_captureCursorKey, v);
 
+  // Screen recording (macOS 15+ module) -------------------------------------
+  Future<bool> getRecordHevc() async =>
+      (await store.getBool(_recordHevcKey)) ?? false;
+  Future<void> setRecordHevc(bool v) => store.setBool(_recordHevcKey, v);
+
+  Future<int> getRecordFps() async {
+    final v = (await store.getInt(_recordFpsKey)) ?? 30;
+    return v == 60 ? 60 : 30;
+  }
+
+  Future<void> setRecordFps(int v) =>
+      store.setInt(_recordFpsKey, v == 60 ? 60 : 30);
+
+  Future<bool> getRecordShowCursor() async =>
+      (await store.getBool(_recordCursorKey)) ?? true;
+  Future<void> setRecordShowCursor(bool v) =>
+      store.setBool(_recordCursorKey, v);
+
+  Future<bool> getRecordSystemAudio() async =>
+      (await store.getBool(_recordSystemAudioKey)) ?? false;
+  Future<void> setRecordSystemAudio(bool v) =>
+      store.setBool(_recordSystemAudioKey, v);
+
+  Future<bool> getRecordMicrophone() async =>
+      (await store.getBool(_recordMicKey)) ?? false;
+  Future<void> setRecordMicrophone(bool v) =>
+      store.setBool(_recordMicKey, v);
+
+  /// The after-recording flow: the path-based subset only (copyPath /
+  /// showInFinder / shareSheet). Default = none (silent save, owner decision).
+  Future<Set<FlowAction>> getAfterRecordingFlow() async {
+    final stored = await store.getString(_flowAfterRecordingKey);
+    return stored == null
+        ? const <FlowAction>{}
+        : parseFlow(stored).intersection(kRecordingFlowActions);
+  }
+
+  Future<void> setAfterRecordingFlow(Set<FlowAction> s) => store.setString(
+      _flowAfterRecordingKey,
+      flowToString(s.intersection(kRecordingFlowActions)));
+
+  /// One bundle for the recording controller (mirrors [loadCapture]'s shape).
+  Future<RecordingSettings> loadRecording() async => RecordingSettings(
+        hevc: await getRecordHevc(),
+        fps: await getRecordFps(),
+        showCursor: await getRecordShowCursor(),
+        systemAudio: await getRecordSystemAudio(),
+        microphone: await getRecordMicrophone(),
+        flow: await getAfterRecordingFlow(),
+      );
+
   // Loupe geometry (shared by overlay + image editor) ----------------------
   // Getters clamp on read too, so a corrupt / out-of-range stored value stays
   // safe.
@@ -320,3 +377,24 @@ class Settings {
 /// the delivery path falls back to its built-in default.
 Directory? resolveSaveDir(String? path) =>
     (path != null && path.isNotEmpty) ? Directory(path) : null;
+
+/// Screen-recording settings bundle (macOS 15+ module). Loaded once per
+/// recording start by the record controller; the save folder and filename
+/// template come from [CaptureSettings] (shared output conventions).
+class RecordingSettings {
+  const RecordingSettings({
+    this.hevc = false,
+    this.fps = 30,
+    this.showCursor = true,
+    this.systemAudio = false,
+    this.microphone = false,
+    this.flow = const {},
+  });
+
+  final bool hevc; // false = H.264 (default), true = HEVC
+  final int fps; // 30 | 60
+  final bool showCursor;
+  final bool systemAudio;
+  final bool microphone;
+  final Set<FlowAction> flow; // after-recording, kRecordingFlowActions subset
+}

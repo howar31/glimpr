@@ -7,6 +7,8 @@ import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
 import 'output/filename.dart';
 import 'overlay/overlay_app.dart';
+import 'record/record_bridge.dart';
+import 'record/record_controller.dart';
 import 'settings/app_locale.dart';
 import 'settings/settings.dart';
 import 'settings/settings_app.dart';
@@ -39,6 +41,10 @@ Future<void> main() async {
   final shortcutStore = ShortcutStore(Settings.instance.store);
   final bindings = await shortcutStore.all();
   final direct = DirectCapture();
+  // Screen recording (macOS 15+): the controller registers its event
+  // handlers up front; record actions no-op when the module is unavailable.
+  final record = RecordController();
+  final recordAvailable = await RecordBridge().isAvailable();
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
   const control = MethodChannel('glimpr/role');
@@ -62,6 +68,14 @@ Future<void> main() async {
         CaptureBridge().beginCapture(pinOnly: true);
       case kPinClipboardKey:
         _pinClipboard();
+      case kRecordRegionKey:
+        if (recordAvailable) record.toggle(kRecordModeRegion);
+      case kRecordWindowKey:
+        if (recordAvailable) record.toggle(kRecordModeWindow);
+      case kRecordDisplayKey:
+        if (recordAvailable) record.toggle(kRecordModeDisplay);
+      case kRecordLastRegionKey:
+        if (recordAvailable) record.toggle(kRecordModeLastRegion);
     }
   }
 

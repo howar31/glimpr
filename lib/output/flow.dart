@@ -46,6 +46,15 @@ Set<FlowAction> normalizeFlow(Set<FlowAction> s, {required bool forCapture}) {
   return out;
 }
 
+/// The after-recording flow's applicable subset: a video never loads as
+/// image bytes, so only the path-based legs make sense. save is inherent
+/// (the recording IS the file); copy-image / pin / openEditor are not offered.
+const kRecordingFlowActions = <FlowAction>{
+  FlowAction.copyPath,
+  FlowAction.showInFinder,
+  FlowAction.shareSheet,
+};
+
 /// Decoration is an OUTPUT treatment: the pin leg always consumes the
 /// undecorated capture (a decorated pin is oversized and breaks pin-in-place
 /// alignment). A pin-only flow skips decoration entirely; when pin rides

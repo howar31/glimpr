@@ -16,6 +16,10 @@ String globalActionLabel(AppLocalizations l10n, String actionKey) =>
       kOpenEditorClipboardKey => l10n.actionOpenEditorClipboard,
       kPinAreaKey => l10n.actionPinCapture,
       kPinClipboardKey => l10n.actionPinClipboard,
+      kRecordRegionKey => l10n.actionRecordRegion,
+      kRecordWindowKey => l10n.actionRecordWindow,
+      kRecordDisplayKey => l10n.actionRecordDisplay,
+      kRecordLastRegionKey => l10n.actionRecordLastRegion,
       _ => actionKey,
     };
 
@@ -29,6 +33,10 @@ String globalActionHint(AppLocalizations l10n, String actionKey) =>
       kOpenEditorClipboardKey => l10n.actionOpenEditorClipboardHint,
       kPinAreaKey => l10n.actionPinCaptureHint,
       kPinClipboardKey => l10n.actionPinClipboardHint,
+      kRecordRegionKey => l10n.actionRecordRegionHint,
+      kRecordWindowKey => l10n.actionRecordWindowHint,
+      kRecordDisplayKey => l10n.actionRecordDisplayHint,
+      kRecordLastRegionKey => l10n.actionRecordLastRegionHint,
       _ => '',
     };
 
@@ -41,6 +49,21 @@ const kOpenEditorKey = 'global.openEditor';
 const kOpenEditorClipboardKey = 'global.openEditorClipboard';
 const kPinAreaKey = 'global.pinArea';
 const kPinClipboardKey = 'global.pinClipboard';
+// Screen recording (macOS 15+; the dispatcher no-ops when unavailable). Every
+// record action TOGGLES: starts its mode when idle, stops the active
+// recording otherwise.
+const kRecordRegionKey = 'global.recordRegion';
+const kRecordWindowKey = 'global.recordWindow';
+const kRecordDisplayKey = 'global.recordDisplay';
+const kRecordLastRegionKey = 'global.recordLastRegion';
+
+/// The recording actions, for UI grouping (own Shortcuts section / pane).
+const kRecordActionKeys = <String>{
+  kRecordRegionKey,
+  kRecordWindowKey,
+  kRecordDisplayKey,
+  kRecordLastRegionKey,
+};
 
 // Editor command keys.
 const kEditorUndoKey = 'editor.undo';
@@ -105,6 +128,17 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kPinClipboardKey: _b(PhysicalKeyboardKey.digit8, LogicalKeyboardKey.digit8,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
+  // Screen recording toggles mirror the screenshot keys + SHIFT (owner
+  // design): ⌘⌥⇧1 region, ⌘⌥⇧2 window, ⌘⌥⇧3 display, ⌘⌥⇧4 last region.
+  kRecordRegionKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
+      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+  kRecordWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
+      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+  kRecordDisplayKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
+      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+  kRecordLastRegionKey: _b(
+      PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
+      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
   // Editor commands
   kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
       {HotkeyModifier.meta}),
@@ -196,23 +230,23 @@ class GlobalAction {
 const kGlobalActions = <GlobalAction>[
   GlobalAction(
     actionKey: kCaptureAreaKey,
-    label: 'Capture',
-    hint: 'Start a screen capture',
+    label: 'Screenshot Region',
+    hint: 'Select a region and screenshot it',
   ),
   GlobalAction(
     actionKey: kCaptureWindowKey,
-    label: 'Capture Window',
-    hint: 'Capture the focused window',
+    label: 'Screenshot Window',
+    hint: 'Screenshot the focused window',
   ),
   GlobalAction(
     actionKey: kCaptureScreenKey,
-    label: 'Capture Display',
-    hint: 'Capture the display under the cursor',
+    label: 'Screenshot Display',
+    hint: 'Screenshot the display under the cursor',
   ),
   GlobalAction(
     actionKey: kCaptureLastRegionKey,
-    label: 'Capture Last Region',
-    hint: 'Repeat the last capture region',
+    label: 'Screenshot Last Region',
+    hint: 'Repeat the last screenshot region',
   ),
   GlobalAction(
     actionKey: kOpenEditorKey,
@@ -226,13 +260,33 @@ const kGlobalActions = <GlobalAction>[
   ),
   GlobalAction(
     actionKey: kPinAreaKey,
-    label: 'Pin Capture',
-    hint: 'Capture a region straight to a floating pin',
+    label: 'Pin Screenshot',
+    hint: 'Screenshot a region straight to a floating pin',
   ),
   GlobalAction(
     actionKey: kPinClipboardKey,
     label: 'Pin Clipboard',
     hint: 'Float the clipboard image as a pin',
+  ),
+  GlobalAction(
+    actionKey: kRecordRegionKey,
+    label: 'Record Region',
+    hint: 'Record a screen region; press again to stop',
+  ),
+  GlobalAction(
+    actionKey: kRecordWindowKey,
+    label: 'Record Window',
+    hint: 'Record the focused window; press again to stop',
+  ),
+  GlobalAction(
+    actionKey: kRecordDisplayKey,
+    label: 'Record Display',
+    hint: 'Record the display under the cursor; press again to stop',
+  ),
+  GlobalAction(
+    actionKey: kRecordLastRegionKey,
+    label: 'Record Last Region',
+    hint: 'Repeat the last recording region; press again to stop',
   ),
 ];
 

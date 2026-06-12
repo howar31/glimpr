@@ -48,7 +48,7 @@ void main() {
       String? failReason;
       final bridge = CaptureBridge();
       bridge.registerOverlayHandlers(
-        onCaptureReady: (d, pinOnly) => ready = d,
+        onCaptureReady: (d, pinOnly, liveSelect) => ready = d,
         onCaptureFailed: (reason, msg) => failReason = reason,
       );
 

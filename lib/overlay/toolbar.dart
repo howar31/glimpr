@@ -51,6 +51,10 @@ class EditorToolbar extends StatelessWidget {
   // caption below the bar names the mode, so it cannot be mistaken for a
   // normal capture. The normal ⌘⌥1 overlay never sets this.
   final bool pinMode;
+  // The recording live-select session: region selection ONLY — annotation
+  // tools are hidden (nothing is exported, drawings would be discarded) and
+  // a caption below the bar names the mode.
+  final bool recordMode;
   // Capture layer stack caption below the bar (null = hidden); accent marks
   // the transient "top layer was replaced" notice. Owner design: stacking
   // must always be visible, including the replace-at-cap case.
@@ -66,6 +70,7 @@ class EditorToolbar extends StatelessWidget {
     this.trailing = const [],
     this.showCursorToggle = false,
     this.pinMode = false,
+    this.recordMode = false,
     this.layerCaption,
     this.layerAccent = false,
   });
@@ -123,6 +128,7 @@ class EditorToolbar extends StatelessWidget {
                     ),
                   ),
                 for (final (kind, icon) in kEditorToolMeta)
+                  if (!recordMode || kind == ToolKind.crop)
                   _ToolButton(
                     controller: controller,
                     kind: kind,
@@ -163,7 +169,7 @@ class EditorToolbar extends StatelessWidget {
           // messages merge into a single fixed-height bar; the zero-height
           // overflow paints it downward without occupying layout height, so
           // the bottom-anchored tool row never moves when it appears.
-          if (pinMode || layerCaption != null)
+          if (pinMode || recordMode || layerCaption != null)
             SizedBox(
               height: 0,
               width: 0,
@@ -188,6 +194,20 @@ class EditorToolbar extends StatelessWidget {
                             const SizedBox(width: 6),
                             Text(
                               l10n.toolbarPinCaption,
+                              style: TextStyle(
+                                color: palette.fg,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ],
+                          if (recordMode) ...[
+                            const Icon(Icons.fiber_manual_record,
+                                size: 13, color: Color(0xFFE53935)),
+                            const SizedBox(width: 6),
+                            Text(
+                              l10n.toolbarRecordCaption,
                               style: TextStyle(
                                 color: palette.fg,
                                 fontSize: 11.5,

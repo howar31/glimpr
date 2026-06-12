@@ -9,8 +9,42 @@ class CaptureBridge {
   /// Trigger the overlay capture flow (native captures + pushes + shows).
   /// [pinOnly]: the "capture to pin" mode — the session's confirm runs ONLY
   /// the pin action instead of the configured after-capture flow.
-  Future<void> beginCapture({bool pinOnly = false}) =>
-      _channel.invokeMethod('beginCapture', {'pinOnly': pinOnly});
+  /// [liveSelect]: a RECORDING live-select session — no capture; the overlay
+  /// presents transparent over the live screen and confirm starts a recording.
+  Future<void> beginCapture({bool pinOnly = false, bool liveSelect = false}) =>
+      _channel.invokeMethod(
+          'beginCapture', {'pinOnly': pinOnly, 'liveSelect': liveSelect});
+
+  /// Live-select loupe pixels: a span×span RGBA8888 patch centered on the
+  /// NATIVE pixel (x, y) of THIS engine's display, or null before the live
+  /// stream delivers its first frame.
+  Future<Uint8List?> loupeSample(int x, int y, int span) async {
+    final res = await _channel
+        .invokeMethod('loupeSample', {'x': x, 'y': y, 'span': span});
+    return res as Uint8List?;
+  }
+
+  /// Live-select confirm/cancel: relays the chosen recording target to the
+  /// control engine's record controller. Null [rect] + null [windowId] =
+  /// whole display; [cancelled] aborts without recording.
+  Future<void> recordSelection({
+    required int displayId,
+    Rect? rect,
+    int? windowId,
+    String? title,
+    String? app,
+    bool cancelled = false,
+  }) =>
+      _channel.invokeMethod('recordSelection', {
+        'displayId': displayId,
+        if (rect != null) ...{
+          'x': rect.left, 'y': rect.top, 'w': rect.width, 'h': rect.height,
+        },
+        'windowId': ?windowId,
+        'title': ?title,
+        'app': ?app,
+        'cancelled': cancelled,
+      });
 
   /// Native single-target capture for the direct (non-interactive) modes:
   /// the cursor display when [displayId] is null, cropped to [rect]
@@ -183,7 +217,8 @@ class CaptureBridge {
 
   /// Register native -> Dart overlay callbacks. Call once per engine at startup.
   void registerOverlayHandlers({
-    required void Function(CapturedDisplay display, bool pinOnly)
+    required void Function(
+            CapturedDisplay display, bool pinOnly, bool liveSelect)
         onCaptureReady,
     required void Function(String reason, String message) onCaptureFailed,
     void Function(int activeId, Offset cursor)? onActiveDisplay,
@@ -199,6 +234,7 @@ class CaptureBridge {
           onCaptureReady(
             CapturedDisplay.fromMap(map),
             (args['pinOnly'] as bool?) ?? false,
+            (args['liveSelect'] as bool?) ?? false,
           );
           return null;
         case 'onCaptureFailed':

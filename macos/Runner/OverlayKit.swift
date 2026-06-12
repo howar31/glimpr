@@ -134,6 +134,41 @@ final class ScreenCapturer {
     return dict
   }
 
+  /// Per-display dicts for a LIVE-SELECT overlay session: the same shape as
+  /// captureAll's (geometry + snappable windows + cursor seed) WITHOUT any
+  /// SCK capture — no rawBytes, the overlay presents transparent over the
+  /// live screen. Pure NSScreen/CG geometry, so it is instant.
+  static func liveSelectGeometry() -> [[String: Any]] {
+    let mouse = NSEvent.mouseLocation
+    var out: [[String: Any]] = []
+    for s in NSScreen.screens {
+      guard let id = Self.screenNumber(s) else { continue }
+      let bounds = CGDisplayBounds(id) // CG global top-left (SCDisplay.frame parity)
+      let isCursor = NSMouseInRect(mouse, s.frame, false)
+      var dict: [String: Any] = [
+        "displayId": Int(id),
+        "left": Double(bounds.origin.x), "top": Double(bounds.origin.y),
+        "width": Double(bounds.width), "height": Double(bounds.height),
+        "scaleFactor": Double(s.backingScaleFactor),
+        "isCursorDisplay": isCursor,
+        "windows": Self.snappableWindows(displayID: id),
+      ]
+      if isCursor {
+        // Crosshair seed at the real cursor (display-local, top-left origin) —
+        // the same Cocoa global -> local conversion as captureAll's.
+        dict["cursorX"] = Double(mouse.x - s.frame.minX)
+        dict["cursorY"] = Double(s.frame.maxY - mouse.y)
+      }
+      out.append(dict)
+    }
+    // Cursor display FIRST (presentation bookkeeping parity with captureAll).
+    out.sort {
+      (($0["isCursorDisplay"] as? Bool) ?? false)
+        && !(($1["isCursorDisplay"] as? Bool) ?? false)
+    }
+    return out
+  }
+
   /// Captures every display IN PARALLEL and pushes each display's dict to
   /// [onDisplayReady] (main actor) the moment it is ready — the cursor
   /// display's task starts first, so the display the user is looking at
@@ -811,6 +846,29 @@ final class OverlayManager {
             CGAssociateMouseAndMouseCursorPosition(1)
           }
           result(nil)
+        // Live-select loupe pixels: a span×span RGBA patch around the native
+        // pixel (x, y) from this display's live stream; nil before the first
+        // frame (the loupe just stays empty).
+        case "loupeSample":
+          if let vc = vc, let id = self.displayID(forVC: vc),
+             let a = call.arguments as? [String: Any],
+             let x = a["x"] as? Int, let y = a["y"] as? Int,
+             let span = a["span"] as? Int,
+             let data = self.loupeSample(displayID: id, x: x, y: y, span: span) {
+            result(FlutterStandardTypedData(bytes: data))
+          } else {
+            result(nil)
+          }
+        // Live-select confirm/cancel: relay the chosen target (or the
+        // cancellation) to the CONTROL engine's record channel — the overlay
+        // engine cannot reach it directly.
+        case "recordSelection":
+          if let a = call.arguments as? [String: Any] {
+            DispatchQueue.main.async {
+              MainFlutterWindow.shared?.relayRecordSelection(a)
+            }
+          }
+          result(nil)
         case "captureWindowImage":
           // The overlay snap fetches the window's real alpha here (this engine
           // has its OWN glimpr/capture handler, separate from the control one).
@@ -924,13 +982,50 @@ final class OverlayManager {
   /// Push ONE display's frame to its engine the moment its capture is ready.
   /// Each window is revealed later, in show(displayID:), after its Dart paints
   /// the frame and signals overlayReady — capture-then-show, no blank flash.
-  func presentFrame(_ f: [String: Any], pinOnly: Bool = false) {
+  /// [liveSelect]: a recording live-select session — no frozen pixels in [f];
+  /// the overlay presents transparent over the live screen.
+  func presentFrame(_ f: [String: Any], pinOnly: Bool = false,
+                    liveSelect: Bool = false) {
     guard let raw = f["displayId"] as? Int else { return }
     let id = CGDirectDisplayID(raw)
     guard let unit = units[id] else { return }
     pendingShow.insert(id)
     unit.overlay.invokeMethod(
-      "onCaptureReady", arguments: ["display": f, "pinOnly": pinOnly])
+      "onCaptureReady",
+      arguments: ["display": f, "pinOnly": pinOnly, "liveSelect": liveSelect])
+  }
+
+  // ---- live-select (recording) session ------------------------------------
+
+  /// True while a live-select session is presented; guards re-entrant capture
+  /// triggers (a freeze capture stacking onto a transparent session and vice
+  /// versa would corrupt both).
+  private(set) var liveSelectActive = false
+  private var liveSources: [CGDirectDisplayID: LiveFrameSource] = [:]
+
+  /// Start the per-display live-pixel feeds for the loupe (every overlay
+  /// window excluded so the loupe sees TRUE pixels, not the veil).
+  func beginLiveSelect() {
+    liveSelectActive = true
+    let excluded = units.values.map { $0.window.windowNumber }
+    for (id, _) in units {
+      let src = LiveFrameSource()
+      src.start(displayID: id, excludingWindowNumbers: excluded)
+      liveSources[id] = src
+    }
+  }
+
+  /// A span×span RGBA patch around a native pixel for [displayID]'s loupe,
+  /// or nil while the display's stream has no frame yet.
+  func loupeSample(displayID: CGDirectDisplayID, x: Int, y: Int, span: Int) -> Data? {
+    liveSources[displayID]?.sample(centerX: x, centerY: y, span: span)
+  }
+
+  private func endLiveSelect() {
+    guard liveSelectActive else { return }
+    liveSelectActive = false
+    for (_, s) in liveSources { s.stop() }
+    liveSources.removeAll()
   }
 
   /// Capture-then-show: the window is already on-screen + warm (alpha 0). Once
@@ -1107,6 +1202,7 @@ final class OverlayManager {
     setCursorHidden(false) // always restore the system cursor when the overlay closes
     pendingShow.removeAll()
     isSuspended = false
+    endLiveSelect()
     for (_, u) in units {
       u.window.alphaValue = 0
       u.window.ignoresMouseEvents = true

@@ -18,6 +18,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPaneCapture => '截圖';
 
   @override
+  String get settingsPaneRecording => '錄影';
+
+  @override
   String get settingsPaneOutput => '輸出';
 
   @override
@@ -179,7 +182,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFlowPinToScreen => '釘選到螢幕';
 
   @override
-  String get settingsFlowPinToScreenCaptureHint => '將截圖固定為最上層浮動視窗，釘在原本截取的位置';
+  String get settingsFlowPinToScreenCaptureHint => '將截圖固定為最上層浮動視窗，釘在原本截圖的位置';
 
   @override
   String get settingsFlowPinToScreenEditorHint => '將結果固定為最上層浮動視窗（置中）';
@@ -284,19 +287,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDecorationFocusedWindow => '目前視窗';
 
   @override
-  String get settingsDecorationFocusedWindowHint => '截取目前視窗模式（⌘⌥2）';
+  String get settingsDecorationFocusedWindowHint => '截圖目前視窗模式（⌘⌥2）';
 
   @override
   String get settingsDecorationDisplay => '螢幕';
 
   @override
-  String get settingsDecorationDisplayHint => '截取螢幕模式（⌘⌥3）';
+  String get settingsDecorationDisplayHint => '截圖螢幕模式（⌘⌥3）';
 
   @override
   String get settingsDecorationLastRegion => '上次範圍';
 
   @override
-  String get settingsDecorationLastRegionHint => '截取上次範圍模式（⌘⌥4）';
+  String get settingsDecorationLastRegionHint => '截圖上次範圍模式（⌘⌥4）';
 
   @override
   String get settingsDecorationJpegFill => 'JPEG 背景填色';
@@ -307,6 +310,45 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get settingsDecorationPinNote =>
       '裝飾僅套用於輸出的圖片（檔案、剪貼簿、分享、編輯器）；釘選一律使用未裝飾的原圖。';
+
+  @override
+  String get settingsSectionRecording => '螢幕錄影';
+
+  @override
+  String get settingsRecordingUnavailable => '螢幕錄影需要 macOS 15 或更新版本。';
+
+  @override
+  String get settingsRecordingCodec => '編碼格式';
+
+  @override
+  String get settingsRecordingCodecHint => 'H.264 相容性最佳；HEVC 檔案較小';
+
+  @override
+  String get settingsRecordingFps => '影格率';
+
+  @override
+  String get settingsRecordingFpsHint => '60 fps 較流暢，檔案約為兩倍大';
+
+  @override
+  String get settingsRecordingCursor => '顯示游標';
+
+  @override
+  String get settingsRecordingCursorHint => '錄影內容包含滑鼠游標';
+
+  @override
+  String get settingsRecordingSystemAudio => '錄製系統音訊';
+
+  @override
+  String get settingsRecordingSystemAudioHint => '包含系統播放的聲音';
+
+  @override
+  String get settingsRecordingMicrophone => '錄製麥克風';
+
+  @override
+  String get settingsRecordingMicrophoneHint => '首次使用時會要求麥克風權限';
+
+  @override
+  String get settingsSectionAfterRecording => '錄影完成後';
 
   @override
   String get settingsRecentImagesKept => '保留的最近圖片數';
@@ -375,7 +417,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCmdExport => '輸出';
 
   @override
-  String get settingsCmdExportHint => '截取框選的視窗，或整個螢幕';
+  String get settingsCmdExportHint => '截圖框選的視窗，或整個螢幕';
 
   @override
   String get settingsCmdDuplicateSelected => '再製所選';
@@ -477,25 +519,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsShortcutsReserved => '保留';
 
   @override
-  String get actionCapture => '截圖';
+  String get actionCapture => '截圖框選範圍';
 
   @override
-  String get actionCaptureHint => '開始螢幕截圖';
+  String get actionCaptureHint => '框選範圍並截圖，再按一次可疊加圖層';
 
   @override
-  String get actionCaptureWindow => '截取視窗';
+  String get actionCaptureWindow => '截圖視窗';
 
   @override
-  String get actionCaptureWindowHint => '截取目前的視窗';
+  String get actionCaptureWindowHint => '截圖目前的視窗';
 
   @override
-  String get actionCaptureDisplay => '截取螢幕';
+  String get actionCaptureDisplay => '截圖螢幕';
 
   @override
-  String get actionCaptureDisplayHint => '截取游標所在的螢幕';
+  String get actionCaptureDisplayHint => '截圖游標所在的螢幕';
 
   @override
-  String get actionCaptureLastRegion => '截取上次範圍';
+  String get actionCaptureLastRegion => '截圖上次範圍';
 
   @override
   String get actionCaptureLastRegionHint => '重複上一次的截圖範圍';
@@ -523,6 +565,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get actionPinClipboardHint => '將剪貼簿圖片釘選為浮動視窗';
+
+  @override
+  String get actionRecordRegion => '錄製框選範圍';
+
+  @override
+  String get actionRecordRegionHint => '錄製螢幕區域，再按一次停止';
+
+  @override
+  String get actionRecordWindow => '錄製視窗';
+
+  @override
+  String get actionRecordWindowHint => '錄製目前視窗，再按一次停止';
+
+  @override
+  String get actionRecordDisplay => '錄製螢幕';
+
+  @override
+  String get actionRecordDisplayHint => '錄製游標所在的螢幕，再按一次停止';
+
+  @override
+  String get actionRecordLastRegion => '錄製上次範圍';
+
+  @override
+  String get actionRecordLastRegionHint => '重複上次的錄影範圍，再按一次停止';
 
   @override
   String get toolSelect => '選取';
@@ -577,6 +643,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get toolbarPinCaption => '釘選模式：選取範圍將浮動為釘選';
+
+  @override
+  String get toolbarRecordCaption => '錄影模式：選取範圍後開始錄影';
 
   @override
   String get toolbarMousePointerShown => '滑鼠指標：顯示';

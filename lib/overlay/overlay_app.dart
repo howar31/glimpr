@@ -15,6 +15,7 @@ import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../output/flow.dart';
+import '../record/record_target.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
@@ -79,6 +80,9 @@ class _OverlayAppState extends State<OverlayApp> {
   // The ⌘⌥7 "capture to pin" mode: this session's confirm runs ONLY the pin
   // action instead of the configured after-capture flow.
   bool _pinOnly = false;
+  // Live-select (recording) session: transparent base over the live screen;
+  // confirm starts a recording instead of exporting.
+  bool _liveSelect = false;
   // Capture layer stack: suspended sessions below the live one. Capacity is
   // re-read from Settings on every capture; 1 = no stacking (live layer is
   // replaced, today's behavior). Each layer is an independent run of
@@ -130,7 +134,7 @@ class _OverlayAppState extends State<OverlayApp> {
     super.initState();
     _frames.attach();
     _bridge.registerOverlayHandlers(
-      onCaptureReady: (d, pinOnly) async {
+      onCaptureReady: (d, pinOnly, liveSelect) async {
         // NOTE: _pinOnly is set AFTER the suspend decision below — the
         // suspended layer must keep ITS OWN pin flag.
         // Reseed per-tool styles from disk on EVERY capture so a Settings
@@ -145,16 +149,23 @@ class _OverlayAppState extends State<OverlayApp> {
         // Raw BGRA pixels -> ui.Image (no codec): a pixel upload, not a PNG
         // decode — this is the freeze path's cheap step.
         ui.Image? frozen;
-        try {
-          final completer = Completer<ui.Image>();
-          ui.decodeImageFromPixels(
-            d.rawBytes, d.pixelWidth, d.pixelHeight, ui.PixelFormat.bgra8888,
-            completer.complete, rowBytes: d.rowBytes,
-          );
-          frozen = await completer.future;
-        } catch (_) {
-          // Without a frozen image the overlay presents with no base layer and
-          // the export is skipped — practically unreachable for raw pixels.
+        if (liveSelect) {
+          // Live-select (recording): no pixels were captured — the base layer
+          // is a 1x1 transparent stub (invisible at any scale) so the shared
+          // editor session runs unchanged over the LIVE screen.
+          frozen = await _transparentStub();
+        } else {
+          try {
+            final completer = Completer<ui.Image>();
+            ui.decodeImageFromPixels(
+              d.rawBytes, d.pixelWidth, d.pixelHeight, ui.PixelFormat.bgra8888,
+              completer.complete, rowBytes: d.rowBytes,
+            );
+            frozen = await completer.future;
+          } catch (_) {
+            // Without a frozen image the overlay presents with no base layer and
+            // the export is skipped — practically unreachable for raw pixels.
+          }
         }
         // Decode the OS cursor image (toggleable layer), if any.
         ui.Image? cursorImg;
@@ -175,7 +186,9 @@ class _OverlayAppState extends State<OverlayApp> {
         var replaced = false;
         var evicted = false;
         final live = _display != null && _editor != null && _frozen != null;
-        if (live && _layers.capacity > 1) {
+        // A live-select session never stacks onto (or under) freeze layers —
+        // native already guards cross-kind triggers; replace defensively.
+        if (live && _layers.capacity > 1 && !liveSelect && !_liveSelect) {
           // Stack the live layer under the new one (a trigger never destroys
           // current work at cap >= 2). At the cap the OLDEST suspended layer
           // is evicted instead, so the stack always holds the most recent
@@ -211,6 +224,7 @@ class _OverlayAppState extends State<OverlayApp> {
           _cursorImage?.dispose();
         }
         _pinOnly = pinOnly;
+        _liveSelect = liveSelect;
         // Reseed BEFORE building the controller so the freshly-loaded styles
         // (incl. a reset that emptied the map) seed this capture's initial tool
         // style. The map instance is shared with the controller, so mutate it in
@@ -321,6 +335,18 @@ class _OverlayAppState extends State<OverlayApp> {
     }
   }
 
+  /// A 1x1 fully-transparent image: the live-select session's base layer
+  /// stand-in, so the shared editor (which requires a base image) runs over
+  /// the live screen without painting anything.
+  Future<ui.Image> _transparentStub() async {
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder); // nothing drawn = transparent
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(1, 1);
+    picture.dispose();
+    return img;
+  }
+
   void _resetState() {
     _detachShared();
     _remoteDirty.clear();
@@ -335,6 +361,7 @@ class _OverlayAppState extends State<OverlayApp> {
       l.disposeAll();
     }
     _layerNoticeTimer?.cancel();
+    _liveSelect = false;
     setState(() {
       _display = null;
       _editor = null;
@@ -738,6 +765,23 @@ class _OverlayAppState extends State<OverlayApp> {
   /// cannot see.
   Future<void> _onCancelRequested() async {
     if (_confirmingExit) return;
+    if (_liveSelect) {
+      // Live-select has no annotations to confirm-discard; tell the control
+      // engine's record controller the selection was cancelled, then dismiss.
+      final d = _display;
+      _liveSelect = false;
+      if (d != null) {
+        try {
+          await _bridge.recordSelection(
+              displayId: d.displayId, cancelled: true);
+        } catch (_) {}
+      }
+      // End the whole session on every display (same as _endTopLayer's
+      // no-layers branch; live-select never stacks).
+      _bridge.broadcastEditorState({'sessionEnded': true});
+      _dismiss();
+      return;
+    }
     final editor = _editor;
     final hasAnnotations = (editor != null &&
             editor.document.value.drawables.isNotEmpty) ||
@@ -774,6 +818,28 @@ class _OverlayAppState extends State<OverlayApp> {
     final editor = _editor;
     if (d == null || frozen == null || editor == null) {
       _dismiss();
+      return;
+    }
+    if (_liveSelect) {
+      // Live-select confirm: dismiss FIRST (the overlay must be gone before
+      // the recording stream starts), then relay the chosen target. NOTE the
+      // onExport contract (screenshot parity): [window] is merely the window
+      // under the cursor (it names the file); only a SNAP click — selection
+      // == the window's own rect — records the WINDOW (the stream follows
+      // it). A drag records its region; no selection records the display.
+      _liveSelect = false;
+      _bridge.broadcastEditorState({'sessionEnded': true});
+      _dismiss();
+      try {
+        final target = recordTargetFromSelection(selectionLogical, window);
+        await _bridge.recordSelection(
+          displayId: d.displayId,
+          rect: target.rect,
+          windowId: target.windowId,
+          title: window?.title,
+          app: window?.app,
+        );
+      } catch (_) {}
       return;
     }
     // Snapshot the (immutable) inputs, then HIDE the overlay IMMEDIATELY so the
@@ -922,6 +988,12 @@ class _OverlayAppState extends State<OverlayApp> {
           : Stack(
               fit: StackFit.expand,
               children: [
+                // Live-select: a light veil where the frozen frame would be —
+                // dims the live screen AND keeps every window pixel non-zero
+                // alpha (WindowServer would click-through fully transparent
+                // regions of a borderless window).
+                if (_liveSelect)
+                  const ColoredBox(color: Color(0x33000000)),
                 EditorCanvas(
                   key: ValueKey(_captureSeq),
                   display: d,
@@ -937,6 +1009,8 @@ class _OverlayAppState extends State<OverlayApp> {
                   cursorImage: _cursorImage,
                   cursorTopLeft: _cursorTopLeft,
                   pinMode: _pinOnly,
+                  recordMode: _liveSelect,
+                  liveLoupeSample: _liveSelect ? _bridge.loupeSample : null,
                   layerCaption: _layerCaption,
                   layerAccent: _layerAccent,
                 ),

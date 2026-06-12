@@ -168,12 +168,17 @@ class CapturedDisplay {
     this.cursorTop,
   });
 
+  /// Whether this dict carries frozen pixels. A live-select session (recording)
+  /// presents WITHOUT them — geometry + windows only.
+  bool get hasPixels => rawBytes.isNotEmpty;
+
   factory CapturedDisplay.fromMap(Map<dynamic, dynamic> m) => CapturedDisplay(
     displayId: m['displayId'] as int,
-    rawBytes: m['rawBytes'] as Uint8List,
-    pixelWidth: (m['pixelWidth'] as num).toInt(),
-    pixelHeight: (m['pixelHeight'] as num).toInt(),
-    rowBytes: (m['rowBytes'] as num).toInt(),
+    // Absent on a live-select dict (no capture happened) -> empty.
+    rawBytes: (m['rawBytes'] as Uint8List?) ?? Uint8List(0),
+    pixelWidth: (m['pixelWidth'] as num?)?.toInt() ?? 0,
+    pixelHeight: (m['pixelHeight'] as num?)?.toInt() ?? 0,
+    rowBytes: (m['rowBytes'] as num?)?.toInt() ?? 0,
     left: (m['left'] as num).toDouble(),
     top: (m['top'] as num).toDouble(),
     width: (m['width'] as num).toDouble(),

@@ -30,6 +30,8 @@
 	<string>NSApplication</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Glimpr records the microphone only when you enable it for a screen recording.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

@@ -8,7 +8,11 @@
   "@settingsPaneGeneral": {
     "description": "Settings sidebar: General pane label"
   },
-  "settingsPaneCapture": "Capture",
+  "settingsPaneCapture": "Screenshot",
+  "settingsPaneRecording": "Recording",
+  "@settingsPaneRecording": {
+    "description": "Settings sidebar: screen recording pane title"
+  },
   "@settingsPaneCapture": {
     "description": "Settings sidebar: Capture pane label"
   },
@@ -64,7 +68,7 @@
   "@settingsMousePointer": {
     "description": "Settings > Capture > Behaviour: mouse pointer toggle title"
   },
-  "settingsMousePointerHint": "Include the mouse pointer in captures. This is the default; in the capture overlay a toolbar button shows/hides it per shot without changing this setting.",
+  "settingsMousePointerHint": "Include the mouse pointer in screenshots. This is the default; in the screenshot overlay a toolbar button shows/hides it per shot without changing this setting.",
   "@settingsMousePointerHint": {
     "description": "Settings > Capture > Behaviour: mouse pointer toggle hint"
   },
@@ -72,7 +76,7 @@
   "@settingsRightClickExits": {
     "description": "Settings > Capture > Behaviour: right-click exits toggle title"
   },
-  "settingsRightClickExitsHint": "Right-click leaves capture mode (Esc always works)",
+  "settingsRightClickExitsHint": "Right-click leaves screenshot mode (Esc always works)",
   "@settingsRightClickExitsHint": {
     "description": "Settings > Capture > Behaviour: right-click exits toggle hint"
   },
@@ -80,7 +84,7 @@
   "@settingsConfirmBeforeDiscarding": {
     "description": "Settings > Capture > Behaviour: confirm on exit toggle title"
   },
-  "settingsConfirmBeforeDiscardingHint": "When exiting a capture that still has annotations (right-click or Esc), ask before discarding them.",
+  "settingsConfirmBeforeDiscardingHint": "When exiting a screenshot that still has annotations (right-click or Esc), ask before discarding them.",
   "@settingsConfirmBeforeDiscardingHint": {
     "description": "Settings > Capture > Behaviour: confirm on exit toggle hint"
   },
@@ -88,7 +92,7 @@
   "@settingsSectionLoupe": {
     "description": "Settings > Capture: Loupe section label"
   },
-  "settingsLoupeDescription": "Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.",
+  "settingsLoupeDescription": "Pixel magnifier for crop / blur / pixelate, in the screenshot overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.",
   "@settingsLoupeDescription": {
     "description": "Settings > Capture > Loupe: introductory description"
   },
@@ -152,7 +156,7 @@
   "@settingsAnimateMarchingAntsHint": {
     "description": "Settings > Capture > Overlay HUD: marching ants toggle hint"
   },
-  "settingsSectionAfterCapture": "After capture",
+  "settingsSectionAfterCapture": "After screenshot",
   "@settingsSectionAfterCapture": {
     "description": "Settings > Workflow: After capture section label"
   },
@@ -220,7 +224,7 @@
   "@settingsFlowPinToScreen": {
     "description": "Settings > Workflow: pin-to-screen flow action row title"
   },
-  "settingsFlowPinToScreenCaptureHint": "Float the capture as an always-on-top window, pinned in place over where it was taken",
+  "settingsFlowPinToScreenCaptureHint": "Float the screenshot as an always-on-top window, pinned in place over where it was taken",
   "@settingsFlowPinToScreenCaptureHint": {
     "description": "Settings > Workflow: pin-to-screen hint for the capture flow"
   },
@@ -228,7 +232,7 @@
   "@settingsFlowPinToScreenEditorHint": {
     "description": "Settings > Workflow: pin-to-screen hint for the editor flow"
   },
-  "settingsFlowCaptureCaption": "Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.",
+  "settingsFlowCaptureCaption": "Runs when a screenshot is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes.",
   "@settingsFlowCaptureCaption": {
     "description": "Settings > Workflow: caption below the After capture flow card (non-empty state)"
   },
@@ -236,7 +240,7 @@
   "@settingsFlowEditorCaption": {
     "description": "Settings > Workflow: caption below the After editor's Done flow card (non-empty state)"
   },
-  "settingsFlowCaptureCaptionEmpty": "Runs when a capture is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.",
+  "settingsFlowCaptureCaptionEmpty": "Runs when a screenshot is confirmed: overlay ✓/Enter and the direct ⌘⌥2/3/4 modes. Nothing is selected, so it falls back to Copy to clipboard.",
   "@settingsFlowCaptureCaptionEmpty": {
     "description": "Settings > Workflow: caption below the After capture flow card when no actions are selected"
   },
@@ -248,7 +252,7 @@
   "@settingsSoundShutter": {
     "description": "Settings > Workflow > Sounds: shutter sound toggle title"
   },
-  "settingsSoundShutterHint": "Plays the instant a capture is taken",
+  "settingsSoundShutterHint": "Plays the instant a screenshot is taken",
   "@settingsSoundShutterHint": {
     "description": "Settings > Workflow > Sounds: shutter sound toggle hint"
   },
@@ -320,15 +324,15 @@
   "@settingsFilenameTokenAppDesc": {
     "description": "Settings > Output > Filename: description for the {app} token"
   },
-  "settingsFilenameTokenDateDesc": "Capture date, e.g. 2026-06-03",
+  "settingsFilenameTokenDateDesc": "Screenshot date, e.g. 2026-06-03",
   "@settingsFilenameTokenDateDesc": {
     "description": "Settings > Output > Filename: description for the {date} token"
   },
-  "settingsFilenameTokenTimeDesc": "Capture time, e.g. 15-04-09",
+  "settingsFilenameTokenTimeDesc": "Screenshot time, e.g. 15-04-09",
   "@settingsFilenameTokenTimeDesc": {
     "description": "Settings > Output > Filename: description for the {time} token"
   },
-  "settingsFilenameNote": "Uses the window under the cursor when the capture ends. On bare desktop, {windowToken} and {appToken} are left out.",
+  "settingsFilenameNote": "Uses the window under the cursor when the screenshot ends. On bare desktop, {windowToken} and {appToken} are left out.",
   "@settingsFilenameNote": {
     "description": "Settings > Output > Filename: note about window/app token behavior",
     "placeholders": {
@@ -360,7 +364,7 @@
   "@settingsDecorationFocusedWindow": {
     "description": "Settings > Output > Decoration: focused window toggle title"
   },
-  "settingsDecorationFocusedWindowHint": "Capture-focused-window mode (⌘⌥2)",
+  "settingsDecorationFocusedWindowHint": "Screenshot-window mode (⌘⌥2)",
   "@settingsDecorationFocusedWindowHint": {
     "description": "Settings > Output > Decoration: focused window toggle hint"
   },
@@ -368,7 +372,7 @@
   "@settingsDecorationDisplay": {
     "description": "Settings > Output > Decoration: display toggle title"
   },
-  "settingsDecorationDisplayHint": "Capture-display mode (⌘⌥3)",
+  "settingsDecorationDisplayHint": "Screenshot-display mode (⌘⌥3)",
   "@settingsDecorationDisplayHint": {
     "description": "Settings > Output > Decoration: display toggle hint"
   },
@@ -376,7 +380,7 @@
   "@settingsDecorationLastRegion": {
     "description": "Settings > Output > Decoration: last region toggle title"
   },
-  "settingsDecorationLastRegionHint": "Capture-last-region mode (⌘⌥4)",
+  "settingsDecorationLastRegionHint": "Screenshot-last-region mode (⌘⌥4)",
   "@settingsDecorationLastRegionHint": {
     "description": "Settings > Output > Decoration: last region toggle hint"
   },
@@ -392,6 +396,58 @@
   "@settingsDecorationPinNote": {
     "description": "Settings > Output > Decoration: footnote that pin ignores decoration"
   },
+  "settingsSectionRecording": "Screen recording",
+  "@settingsSectionRecording": {
+    "description": "Settings > Capture: screen recording section label"
+  },
+  "settingsRecordingUnavailable": "Screen recording needs macOS 15 or later.",
+  "@settingsRecordingUnavailable": {
+    "description": "Settings > Capture > Screen recording: shown on macOS 14"
+  },
+  "settingsRecordingCodec": "Codec",
+  "@settingsRecordingCodec": {
+    "description": "Settings > Capture > Screen recording: codec row title"
+  },
+  "settingsRecordingCodecHint": "H.264 is most compatible; HEVC makes smaller files",
+  "@settingsRecordingCodecHint": {
+    "description": "Settings > Capture > Screen recording: codec row hint"
+  },
+  "settingsRecordingFps": "Frame rate",
+  "@settingsRecordingFps": {
+    "description": "Settings > Capture > Screen recording: fps row title"
+  },
+  "settingsRecordingFpsHint": "60 fps is smoother but roughly doubles the file size",
+  "@settingsRecordingFpsHint": {
+    "description": "Settings > Capture > Screen recording: fps row hint"
+  },
+  "settingsRecordingCursor": "Show cursor",
+  "@settingsRecordingCursor": {
+    "description": "Settings > Capture > Screen recording: cursor row title"
+  },
+  "settingsRecordingCursorHint": "Include the mouse pointer in the recording",
+  "@settingsRecordingCursorHint": {
+    "description": "Settings > Capture > Screen recording: cursor row hint"
+  },
+  "settingsRecordingSystemAudio": "Record system audio",
+  "@settingsRecordingSystemAudio": {
+    "description": "Settings > Capture > Screen recording: system audio row title"
+  },
+  "settingsRecordingSystemAudioHint": "Include the sound the system is playing",
+  "@settingsRecordingSystemAudioHint": {
+    "description": "Settings > Capture > Screen recording: system audio row hint"
+  },
+  "settingsRecordingMicrophone": "Record microphone",
+  "@settingsRecordingMicrophone": {
+    "description": "Settings > Capture > Screen recording: microphone row title"
+  },
+  "settingsRecordingMicrophoneHint": "Asks for microphone permission on first use",
+  "@settingsRecordingMicrophoneHint": {
+    "description": "Settings > Capture > Screen recording: microphone row hint"
+  },
+  "settingsSectionAfterRecording": "After recording",
+  "@settingsSectionAfterRecording": {
+    "description": "Settings > Capture: after-recording flow section label"
+  },
   "settingsRecentImagesKept": "Recent images kept",
   "@settingsRecentImagesKept": {
     "description": "Settings > Output > Recent history: card title"
@@ -404,11 +460,11 @@
   "@settingsSectionMultiDisplay": {
     "description": "Settings > Advanced: Multi-display section label"
   },
-  "settingsWarmEnginesTitle": "Warm capture engines",
+  "settingsWarmEnginesTitle": "Warm screenshot engines",
   "@settingsWarmEnginesTitle": {
     "description": "Settings > Advanced > Multi-display: warm engines card title"
   },
-  "settingsWarmEnginesBody": "How many displays Glimpr keeps instantly capture-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still captures, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).",
+  "settingsWarmEnginesBody": "How many displays Glimpr keeps instantly screenshot-ready, including displays connected after the app has launched (e.g. plugging into a dock). Glimpr pre-warms a rendering engine per display so the freeze overlay appears with no delay.\n\nThis is a minimum, not a cap: every display already connected when Glimpr starts gets a warm engine regardless of this number; it only adds spares for displays plugged in later.\n\nCost: each engine uses about 10 MB of memory while Glimpr runs. A display plugged in beyond this number still screenshots, but only shows the frozen frame; its crosshair and toolbar follow correctly after a restart (which makes every connected display warm again).",
   "@settingsWarmEnginesBody": {
     "description": "Settings > Advanced > Multi-display: warm engines explanatory body (multi-paragraph)"
   },
@@ -416,15 +472,15 @@
   "@settingsWarmEnginesDefault": {
     "description": "Settings > Advanced > Multi-display: caption shown when warm target equals the initial value"
   },
-  "settingsSectionCaptureLayers": "Capture layers",
+  "settingsSectionCaptureLayers": "Screenshot layers",
   "@settingsSectionCaptureLayers": {
     "description": "Settings > Advanced: Capture layers section label"
   },
-  "settingsCaptureLayersTitle": "Capture layers",
+  "settingsCaptureLayersTitle": "Screenshot layers",
   "@settingsCaptureLayersTitle": {
     "description": "Settings > Advanced > Capture layers: card title"
   },
-  "settingsCaptureLayersBody": "Press the capture shortcut while a capture is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the capture. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next capture; no restart needed.",
+  "settingsCaptureLayersBody": "Press the screenshot shortcut while a screenshot is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the screenshot. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next screenshot; no restart needed.",
   "@settingsCaptureLayersBody": {
     "description": "Settings > Advanced > Capture layers: explanatory body (multi-paragraph)"
   },
@@ -436,7 +492,7 @@
   "@settingsResetAllToolStyles": {
     "description": "Settings > Advanced > Tool styles: reset button label and card title"
   },
-  "settingsResetAllToolStylesHint": "Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next capture.",
+  "settingsResetAllToolStylesHint": "Restore every annotation tool (colour, stroke, font size, font) to its default. Takes effect on your next screenshot.",
   "@settingsResetAllToolStylesHint": {
     "description": "Settings > Advanced > Tool styles: card hint text"
   },
@@ -612,35 +668,35 @@
   "@settingsShortcutsReserved": {
     "description": "Settings > Shortcuts: Reserved section label"
   },
-  "actionCapture": "Capture",
+  "actionCapture": "Screenshot Region",
   "@actionCapture": {
     "description": "Global action label: interactive capture"
   },
-  "actionCaptureHint": "Start a screen capture",
+  "actionCaptureHint": "Select a region and screenshot it; press again to stack",
   "@actionCaptureHint": {
     "description": "Global action hint: interactive capture"
   },
-  "actionCaptureWindow": "Capture Window",
+  "actionCaptureWindow": "Screenshot Window",
   "@actionCaptureWindow": {
     "description": "Global action label: capture window"
   },
-  "actionCaptureWindowHint": "Capture the focused window",
+  "actionCaptureWindowHint": "Screenshot the focused window",
   "@actionCaptureWindowHint": {
     "description": "Global action hint: capture window"
   },
-  "actionCaptureDisplay": "Capture Display",
+  "actionCaptureDisplay": "Screenshot Display",
   "@actionCaptureDisplay": {
     "description": "Global action label: capture display"
   },
-  "actionCaptureDisplayHint": "Capture the display under the cursor",
+  "actionCaptureDisplayHint": "Screenshot the display under the cursor",
   "@actionCaptureDisplayHint": {
     "description": "Global action hint: capture display"
   },
-  "actionCaptureLastRegion": "Capture Last Region",
+  "actionCaptureLastRegion": "Screenshot Last Region",
   "@actionCaptureLastRegion": {
     "description": "Global action label: capture last region"
   },
-  "actionCaptureLastRegionHint": "Repeat the last capture region",
+  "actionCaptureLastRegionHint": "Repeat the last screenshot region",
   "@actionCaptureLastRegionHint": {
     "description": "Global action hint: capture last region"
   },
@@ -660,11 +716,11 @@
   "@actionOpenEditorClipboardHint": {
     "description": "Global action hint: open editor with clipboard"
   },
-  "actionPinCapture": "Pin Capture",
+  "actionPinCapture": "Pin Screenshot",
   "@actionPinCapture": {
     "description": "Global action label: pin capture"
   },
-  "actionPinCaptureHint": "Capture a region straight to a floating pin",
+  "actionPinCaptureHint": "Screenshot a region straight to a floating pin",
   "@actionPinCaptureHint": {
     "description": "Global action hint: pin capture"
   },
@@ -675,6 +731,38 @@
   "actionPinClipboardHint": "Float the clipboard image as a pin",
   "@actionPinClipboardHint": {
     "description": "Global action hint: pin clipboard"
+  },
+  "actionRecordRegion": "Record Region",
+  "@actionRecordRegion": {
+    "description": "Global action label: record a screen region"
+  },
+  "actionRecordRegionHint": "Record a screen region; press again to stop",
+  "@actionRecordRegionHint": {
+    "description": "Global action hint: record region"
+  },
+  "actionRecordWindow": "Record Window",
+  "@actionRecordWindow": {
+    "description": "Global action label: record the focused window"
+  },
+  "actionRecordWindowHint": "Record the focused window; press again to stop",
+  "@actionRecordWindowHint": {
+    "description": "Global action hint: record window"
+  },
+  "actionRecordDisplay": "Record Display",
+  "@actionRecordDisplay": {
+    "description": "Global action label: record the display under the cursor"
+  },
+  "actionRecordDisplayHint": "Record the display under the cursor; press again to stop",
+  "@actionRecordDisplayHint": {
+    "description": "Global action hint: record display"
+  },
+  "actionRecordLastRegion": "Record Last Region",
+  "@actionRecordLastRegion": {
+    "description": "Global action label: repeat the last recording region"
+  },
+  "actionRecordLastRegionHint": "Repeat the last recording region; press again to stop",
+  "@actionRecordLastRegionHint": {
+    "description": "Global action hint: record last region"
   },
   "toolSelect": "Select",
   "@toolSelect": {
@@ -745,6 +833,10 @@
     "description": "Tool name (toolbar tooltip + Settings > Shortcuts row, shared toolLabel source)"
   },
   "toolbarPinCaption": "Pin mode: the selection floats as a pin",
+  "toolbarRecordCaption": "Record mode: the selection starts a recording",
+  "@toolbarRecordCaption": {
+    "description": "Overlay toolbar caption during a recording live-select session"
+  },
   "@toolbarPinCaption": {
     "description": "Toolbar: caption below the bar when pin mode is active"
   },
@@ -997,7 +1089,7 @@
   "@editorOpenImage": {
     "description": "Image Editor landing card: headline copy"
   },
-  "editorOpenImageSubtitle": "Annotate, crop, and re-export any image in the same toolkit you use to capture.",
+  "editorOpenImageSubtitle": "Annotate, crop, and re-export any image in the same toolkit you use to screenshot.",
   "@editorOpenImageSubtitle": {
     "description": "Image Editor landing card: subtitle copy below the headline"
   },
@@ -1313,11 +1405,11 @@
   "@overlayDiscardLayerMessage": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
-  "overlayDiscardCaptureTitle": "Discard capture?",
+  "overlayDiscardCaptureTitle": "Discard screenshot?",
   "@overlayDiscardCaptureTitle": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
-  "overlayDiscardCaptureMessage": "You have unsaved annotations on this capture. Discard them and exit?",
+  "overlayDiscardCaptureMessage": "You have unsaved annotations on this screenshot. Discard them and exit?",
   "@overlayDiscardCaptureMessage": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
@@ -1325,7 +1417,7 @@
   "@overlayPinFailed": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
-  "overlayCaptureFailedError": "Capture failed: {error}",
+  "overlayCaptureFailedError": "Screenshot failed: {error}",
   "@overlayCaptureFailedError": {
     "description": "3e batch: masks/confirm/recorder/overlay",
     "placeholders": {
@@ -1334,7 +1426,7 @@
       }
     }
   },
-  "overlayFailedNotSavedOrCopied": "Capture failed: not saved or copied",
+  "overlayFailedNotSavedOrCopied": "Screenshot failed: not saved or copied",
   "@overlayFailedNotSavedOrCopied": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
@@ -1346,7 +1438,7 @@
   "@overlayFailedClipboard": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
-  "overlayCaptureFailedGeneric": "Capture failed",
+  "overlayCaptureFailedGeneric": "Screenshot failed",
   "@overlayCaptureFailedGeneric": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },

@@ -23,6 +23,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let recentMenu = NSMenu()
   // Items whose key-equivalent hint follows a rebindable global action.
   private var hintedItems: [(NSMenuItem, String)] = []
+  // Screen recording (macOS 15+): native stop/abort while a recording runs.
+  var onRecordStop: (() -> Void)?
+  var onRecordAbort: (() -> Void)?
+  private var recordStartItems: [NSMenuItem] = []
+  private var recordControlItems: [NSMenuItem] = []
+  private let normalImage: NSImage?
+  private var isRecordingState = false
 
   init(onAction: @escaping (String) -> Void,
        onMenuOpen: @escaping () -> Void,
@@ -41,13 +48,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     self.onOpenRecent = onOpenRecent
     self.onClearRecent = onClearRecent
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    super.init()
     // Brand Viewfinder mark as a template image: macOS tints it to match the
     // menu-bar appearance (white on a dark bar, black on a light one). Falls back
     // to the system viewfinder symbol if the asset is somehow unavailable.
     let mark = NSImage(named: "StatusBarIcon")
       ?? NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Glimpr")
     mark?.isTemplate = true
+    normalImage = mark
+    super.init()
     item.button?.image = mark
 
     let menu = NSMenu()
@@ -60,14 +68,36 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.addItem(.separator())
     // Global actions, dispatched through the SAME Dart path as the hotkeys.
     // Action-key literals mirror lib/shortcuts/shortcut_actions.dart.
-    menu.addItem(globalItem(L.s("Capture", "截圖"), "global.captureArea"))
-    menu.addItem(globalItem(L.s("Capture Window", "截取視窗"), "global.captureWindow"))
-    menu.addItem(globalItem(L.s("Capture Display", "截取螢幕"), "global.captureScreen"))
-    menu.addItem(globalItem(L.s("Capture Last Region", "截取上次範圍"), "global.captureLastRegion"))
+    menu.addItem(globalItem(L.s("Screenshot Region", "截圖框選範圍"), "global.captureArea"))
+    menu.addItem(globalItem(L.s("Screenshot Window", "截圖視窗"), "global.captureWindow"))
+    menu.addItem(globalItem(L.s("Screenshot Display", "截圖螢幕"), "global.captureScreen"))
+    menu.addItem(globalItem(L.s("Screenshot Last Region", "截圖上次範圍"), "global.captureLastRegion"))
     menu.addItem(.separator())
-    menu.addItem(globalItem(L.s("Pin Capture", "釘選截圖"), "global.pinArea"))
+    menu.addItem(globalItem(L.s("Pin Screenshot", "釘選截圖"), "global.pinArea"))
     menu.addItem(globalItem(L.s("Pin Clipboard", "釘選剪貼簿"), "global.pinClipboard"))
     menu.addItem(.separator())
+    // Screen recording (macOS 15+ only; on older systems the section is absent).
+    // The start items fire the SAME Dart toggle dispatch as the hotkeys; the
+    // Stop/Abort pair appears only while a recording runs (see setRecording).
+    if #available(macOS 15.0, *) {
+      let stop = menuItem(
+        title: L.s("Stop Recording", "停止錄影"), action: #selector(recordStop), key: "")
+      let abort = menuItem(
+        title: L.s("Abort Recording", "取消錄影"), action: #selector(recordAbort), key: "")
+      recordControlItems = [stop, abort]
+      recordStartItems = [
+        globalItem(L.s("Record Region", "錄製框選範圍"), "global.recordRegion"),
+        globalItem(L.s("Record Window", "錄製視窗"), "global.recordWindow"),
+        globalItem(L.s("Record Display", "錄製螢幕"), "global.recordDisplay"),
+        globalItem(L.s("Record Last Region", "錄製上次範圍"), "global.recordLastRegion"),
+      ]
+      for mi in recordControlItems {
+        mi.isHidden = true
+        menu.addItem(mi)
+      }
+      for mi in recordStartItems { menu.addItem(mi) }
+      menu.addItem(.separator())
+    }
     // Open Editor reveals the warm editor natively (same as the hotkey's end
     // state) — keep the direct path, but hint with the hotkey's binding.
     let open = menuItem(title: L.s("Open Editor…", "開啟編輯器…"), action: #selector(openImage), key: "")
@@ -150,6 +180,27 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   @objc private func globalAction(_ sender: NSMenuItem) {
     if let key = sender.representedObject as? String { onAction(key) }
   }
+
+  /// Recording state: red record icon + swap the start items for Stop/Abort.
+  func setRecording(_ active: Bool) {
+    guard active != isRecordingState else { return }
+    isRecordingState = active
+    if active {
+      let rec = NSImage(
+        systemSymbolName: "record.circle.fill",
+        accessibilityDescription: "Recording")
+      rec?.isTemplate = false
+      item.button?.image =
+        rec?.withSymbolConfiguration(.init(paletteColors: [.systemRed])) ?? rec
+    } else {
+      item.button?.image = normalImage
+    }
+    for mi in recordControlItems { mi.isHidden = !active }
+    for mi in recordStartItems { mi.isHidden = active }
+  }
+
+  @objc private func recordStop() { onRecordStop?() }
+  @objc private func recordAbort() { onRecordAbort?() }
 
   @objc private func openImage() { onOpenImage() }
   @objc private func openRecent(_ sender: NSMenuItem) {

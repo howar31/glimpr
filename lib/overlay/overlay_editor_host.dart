@@ -32,6 +32,10 @@ class OverlayEditorHost implements EditorHost {
   final ui.Image? cursorImage;
   @override
   final Offset? cursorTopLeft;
+  @override
+  final bool liveSelect;
+  @override
+  final Future<Uint8List?> Function(int x, int y, int span)? liveLoupeSample;
 
   OverlayEditorHost({
     required this.display,
@@ -43,6 +47,8 @@ class OverlayEditorHost implements EditorHost {
     EditorCursorController? cursor,
     this.cursorImage,
     this.cursorTopLeft,
+    this.liveSelect = false,
+    this.liveLoupeSample,
   }) : _cursor = cursor ?? OverlayCursorController();
 
   @override

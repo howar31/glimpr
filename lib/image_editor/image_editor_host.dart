@@ -64,6 +64,11 @@ class ImageEditorHost implements EditorHost {
   @override
   bool get cropTrims => true;
   @override
+  bool get liveSelect => false;
+  @override
+  Future<Uint8List?> Function(int x, int y, int span)? get liveLoupeSample =>
+      null;
+  @override
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window) =>
       onComplete();
   @override

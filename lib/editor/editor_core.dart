@@ -87,6 +87,11 @@ class EditorCore extends StatefulWidget {
   // The ⌘⌥7 capture-to-pin session (overlay only): the toolbar shows the pin
   // icon + a mode caption so it cannot be mistaken for a normal capture.
   final bool pinMode;
+
+  /// Live-select (recording) session: crop-select only (tool switching is
+  /// ignored), the loupe samples live pixels, the toolbar shows the record
+  /// caption.
+  final bool recordMode;
   // Capture layer stack caption below the toolbar (overlay only; null =
   // hidden); accent marks the transient "top layer was replaced" notice.
   final String? layerCaption;
@@ -100,6 +105,7 @@ class EditorCore extends StatefulWidget {
     this.loupe = const LoupeConfig(),
     this.hud = const HudConfig(),
     this.pinMode = false,
+    this.recordMode = false,
     this.layerCaption,
     this.layerAccent = false,
   });
@@ -115,6 +121,15 @@ class _EditorCoreState extends State<EditorCore> {
   late Offset _cursor; // logical cursor (crosshair/loupe/nudge + hover)
   late Offset
   _toolbarPos; // bottom-left anchor (tool row's bottom) of the toolbar
+  // One-shot exact centering: the seed position uses a width ESTIMATE; the
+  // first laid-out frame measures the real bar and snaps it to center ONCE.
+  // Later width changes (mode bars, option rows) deliberately do NOT re-center
+  // (owner: center at start, never chase length changes).
+  final GlobalKey _toolbarKey = GlobalKey();
+  bool _toolbarCentered = false;
+  // Until the first-layout measurement lands, the bar is laid out INVISIBLY
+  // (Opacity 0) so the seed position never paints — no one-frame jump.
+  bool _toolbarPlaced = false;
   // The cursor is over THIS display -> show the interactive HUD/toolbar here.
   // Follows the mouse across displays; the launch (cursor) display starts active.
   late bool _active;
@@ -516,8 +531,10 @@ class _EditorCoreState extends State<EditorCore> {
     final seed = widget.host.cursorSeed;
     _cursor =
         seed ?? Offset(widget.host.size.width / 2, widget.host.size.height / 2);
+    // Center the bar: 160 approximates HALF the full tool row's width; the
+    // record-mode bar holds a single tool, so its half-width is far smaller.
     _toolbarPos = Offset(
-      widget.host.size.width / 2 - 160,
+      widget.host.size.width / 2 - (widget.recordMode ? 40 : 160),
       widget.host.size.height - 60, // dy = toolbar BOTTOM; options grow upward
     );
     _active = widget.host.startsActive; // launch display starts active
@@ -574,6 +591,7 @@ class _EditorCoreState extends State<EditorCore> {
     _textFocus.dispose();
     _marchTimer?.cancel();
     _march.dispose();
+    _liveLoupeImg?.dispose();
     super.dispose();
   }
 
@@ -1104,6 +1122,11 @@ class _EditorCoreState extends State<EditorCore> {
       final tool = kEditorToolActionKey.entries
           .firstWhere((x) => x.value == action)
           .key;
+      // Live-select (recording): the session is crop-select only — annotation
+      // tools would silently discard work (nothing is exported).
+      if (widget.recordMode && tool != ToolKind.crop) {
+        return KeyEventResult.handled;
+      }
       c.selectTool(tool);
       return KeyEventResult.handled;
     }
@@ -2051,6 +2074,33 @@ class _EditorCoreState extends State<EditorCore> {
     return list;
   }
 
+  /// Returns the toolbar's measuring key, and (once) schedules the exact
+  /// horizontal centering after the first layout: the seed position only
+  /// ESTIMATES the bar's width, which drifts with the tool set (e.g. the
+  /// single-tool record bar). One-shot by design: later width changes never
+  /// re-center, and a user drag is never overridden.
+  GlobalKey _centerToolbarOnce() {
+    if (!_toolbarCentered) {
+      _toolbarCentered = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final w = _toolbarKey.currentContext?.size?.width;
+        setState(() {
+          if (w != null && w > 0) {
+            _toolbarPos = Offset(
+              ((widget.host.size.width - w) / 2)
+                  .clamp(0.0, widget.host.size.width - 80),
+              _toolbarPos.dy,
+            );
+          }
+          // Reveal even when measuring failed - never leave it invisible.
+          _toolbarPlaced = true;
+        });
+      });
+    }
+    return _toolbarKey;
+  }
+
   void _moveToolbar(Offset delta) {
     setState(() {
       _toolbarPos = Offset(
@@ -2178,6 +2228,104 @@ class _EditorCoreState extends State<EditorCore> {
   /// exactly on a pixel boundary (integer macOS positions on a 2x display),
   /// where press jitter made floor() flip cells (see LoupePainter).
   int _toPxAimed(double v) => (v * widget.host.pixelScale - 0.5).round();
+
+  // Live-select loupe: the latest span×span live patch around the aim, fetched
+  // from the native per-display stream (the frozen loupe samples its frozen
+  // image; a live session has no pixels without this).
+  ui.Image? _liveLoupeImg;
+  Offset? _liveLoupeAt;
+  bool _liveLoupeFetching = false;
+
+  void _maybeFetchLiveLoupe() {
+    final fetch = widget.host.liveLoupeSample;
+    if (fetch == null || _liveLoupeFetching || _cursor == _liveLoupeAt) return;
+    _liveLoupeFetching = true;
+    final at = _cursor;
+    final span = widget.loupe.span;
+    fetch(_toPxAimed(at.dx), _toPxAimed(at.dy), span).then((bytes) async {
+      ui.Image? img;
+      if (bytes != null && bytes.length == span * span * 4) {
+        final completer = Completer<ui.Image>();
+        ui.decodeImageFromPixels(
+            bytes, span, span, ui.PixelFormat.rgba8888, completer.complete);
+        img = await completer.future;
+      }
+      _liveLoupeFetching = false;
+      if (!mounted) {
+        img?.dispose();
+        return;
+      }
+      if (img != null) {
+        setState(() {
+          _liveLoupeImg?.dispose();
+          _liveLoupeImg = img;
+          _liveLoupeAt = at;
+        });
+      } else {
+        _liveLoupeAt = at; // no frame yet; keep whatever we had
+      }
+      if (_cursor != at) _maybeFetchLiveLoupe(); // chase the moving aim
+    }).catchError((_) {
+      _liveLoupeFetching = false;
+    });
+  }
+
+  /// The overlay's crosshair-bound loupe. Frozen sessions magnify the canvas
+  /// image; a live-select session magnifies the latest live patch from the
+  /// native stream (same painter, so the grid / center marker / frame are
+  /// identical). Hidden until the live stream delivers its first patch.
+  Widget _overlayLoupe(Offset loupeOrigin) {
+    final live = widget.host.liveSelect;
+    if (live) _maybeFetchLiveLoupe();
+    final ui.Image image;
+    final Offset center;
+    if (live) {
+      final patch = _liveLoupeImg;
+      if (patch == null) return const SizedBox.shrink();
+      image = patch;
+      // Aim at the patch's center cell: the fetch centered the patch on the
+      // aimed pixel, so the painter's snapped center must land on cell
+      // span/2 (whose pixel-center coordinate is span/2 + 0.5).
+      center = Offset.zero +
+          Offset(
+            (widget.loupe.span / 2 + 0.5) / widget.host.pixelScale,
+            (widget.loupe.span / 2 + 0.5) / widget.host.pixelScale,
+          );
+    } else {
+      image = _canvasImage;
+      center = _cursor;
+    }
+    return Positioned(
+      left: loupeOrigin.dx,
+      top: loupeOrigin.dy,
+      child: IgnorePointer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CustomPaint(
+              size: Size(widget.loupe.box, widget.loupe.box),
+              painter: LoupePainter(
+                image: image,
+                cursorLogical: center,
+                scaleFactor: widget.host.pixelScale,
+                zoom: widget.loupe.zoom.toDouble(),
+                drawables: live ? const [] : _effectiveDrawables(),
+                effectImage: live ? null : _lookupEffect,
+                logicalSize: live
+                    ? Size.zero
+                    : Size(_canvasSize.width, _canvasSize.height),
+                dark: MediaQuery.platformBrightnessOf(context) ==
+                    Brightness.dark,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _loupeReadout(),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _loupeReadout() => LoupeReadout(
         x: _toPxAimed(_cursor.dx),
@@ -2650,38 +2798,7 @@ class _EditorCoreState extends State<EditorCore> {
                   ),
                 // Loupe is bound to the crosshair — shown/hidden together, so it
                 // never flickers off when hovering over an existing region.
-                if (showHud && !_interactive)
-                  Positioned(
-                    left: loupeOrigin.dx,
-                    top: loupeOrigin.dy,
-                    child: IgnorePointer(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          CustomPaint(
-                            size: Size(widget.loupe.box, widget.loupe.box),
-                            painter: LoupePainter(
-                              image: _canvasImage,
-                              cursorLogical: _cursor,
-                              scaleFactor: widget.host.pixelScale,
-                              zoom: widget.loupe.zoom.toDouble(),
-                              drawables: _effectiveDrawables(),
-                              effectImage: _lookupEffect,
-                              logicalSize: Size(
-                                _canvasSize.width,
-                                _canvasSize.height,
-                              ),
-                              dark: MediaQuery.platformBrightnessOf(context) ==
-                                  Brightness.dark,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          _loupeReadout(),
-                        ],
-                      ),
-                    ),
-                  ),
+                if (showHud && !_interactive) _overlayLoupe(loupeOrigin),
                 // Small reticle for the drawing tools (replaces the system arrow
                 // with a precise inverting cross). Region tools use the crosshair
                 // above. OVERLAY only; the editor renders it in the outer stack.
@@ -2768,26 +2885,33 @@ class _EditorCoreState extends State<EditorCore> {
                     // stays put while the options row above it grows upward.
                     bottom: widget.host.size.height - _toolbarPos.dy,
                     // Material ancestor for the toolbar's TextField (pt) + IconButtons.
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: EditorToolbar(
-                        controller: c,
-                        onMove: _moveToolbar,
-                        onPtEditingDone: () {
-                          // Hand keyboard focus back after a toolbar number field
-                          // commits: to the inline text field if editing text, else
-                          // to the editor so tool shortcuts / Enter-export work again.
-                          if (_editingText) {
-                            _textFocus.requestFocus();
-                          } else {
-                            _focus.requestFocus();
-                          }
-                        },
-                        editorBindings: widget.editorBindings,
-                        showCursorToggle: widget.host.cursorImage != null,
-                        pinMode: widget.pinMode,
-                        layerCaption: widget.layerCaption,
-                        layerAccent: widget.layerAccent,
+                    // Invisible (but laid out) until the one-shot centering
+                    // measured it - the seed position must never paint.
+                    child: Opacity(
+                      opacity: _toolbarPlaced ? 1 : 0,
+                      child: Material(
+                        key: _centerToolbarOnce(),
+                        type: MaterialType.transparency,
+                        child: EditorToolbar(
+                          controller: c,
+                          onMove: _moveToolbar,
+                          onPtEditingDone: () {
+                            // Hand keyboard focus back after a toolbar number field
+                            // commits: to the inline text field if editing text, else
+                            // to the editor so tool shortcuts / Enter-export work again.
+                            if (_editingText) {
+                              _textFocus.requestFocus();
+                            } else {
+                              _focus.requestFocus();
+                            }
+                          },
+                          editorBindings: widget.editorBindings,
+                          showCursorToggle: widget.host.cursorImage != null,
+                          pinMode: widget.pinMode,
+                          recordMode: widget.recordMode,
+                          layerCaption: widget.layerCaption,
+                          layerAccent: widget.layerAccent,
+                        ),
                       ),
                     ),
                   ),

@@ -75,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Advanced'));
     await tester.pumpAndSettle();
-    expect(find.text('Capture layers'), findsOneWidget);
+    expect(find.text('Screenshot layers'), findsOneWidget);
     // Picking 3 persists (the warm-engines Segmented also renders a '3', so
     // target the LAST one: the layers row sits below the engines row).
     await tester.tap(find.text('3').last);

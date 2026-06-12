@@ -15,12 +15,14 @@ class LastRegion {
 /// so the overlay engine (writer) and the control engine (reader) share it and
 /// it survives a restart.
 class LastRegionStore {
-  LastRegionStore(this.store);
+  LastRegionStore(this.store, {this.key = 'last_region'});
   final SettingsStore store;
-  static const _key = 'last_region';
+  // 'last_region' = the capture store (⌘⌥4). Screen recording keeps its OWN
+  // store under a different key — mixing the two would surprise.
+  final String key;
 
   Future<void> save(LastRegion r) => store.setString(
-        _key,
+        key,
         jsonEncode({
           'displayId': r.displayId,
           'x': r.rect.left,
@@ -31,7 +33,7 @@ class LastRegionStore {
       );
 
   Future<LastRegion?> load() async {
-    final s = await store.getString(_key);
+    final s = await store.getString(key);
     if (s == null || s.isEmpty) return null;
     try {
       final m = jsonDecode(s) as Map<String, dynamic>;

@@ -201,7 +201,16 @@ class _NavItemState extends State<NavItem> {
             children: [
               Icon(widget.icon, size: 17, color: fg),
               const SizedBox(width: 11),
-              Text(widget.label, style: GlimprType.sansStyle(14, 600, fg)),
+              // Flexible + ellipsis: a long pane title (or a wide test font)
+              // must never overflow the fixed-width sidebar.
+              Flexible(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GlimprType.sansStyle(14, 600, fg),
+                ),
+              ),
             ],
           ),
         ),

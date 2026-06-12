@@ -38,6 +38,10 @@ void main() {
       kOpenEditorClipboardKey,
       kPinAreaKey,
       kPinClipboardKey,
+      kRecordRegionKey,
+      kRecordWindowKey,
+      kRecordDisplayKey,
+      kRecordLastRegionKey,
     ]);
   });
 

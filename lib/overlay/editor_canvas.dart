@@ -30,6 +30,10 @@ class EditorCanvas extends StatelessWidget {
   final Offset? cursorTopLeft;
   // The ⌘⌥7 capture-to-pin session — toolbar shows the pin icon + caption.
   final bool pinMode;
+  // Live-select (recording) session: transparent base, crop-select only,
+  // confirm starts a recording. [liveLoupeSample] feeds the loupe live pixels.
+  final bool recordMode;
+  final Future<Uint8List?> Function(int x, int y, int span)? liveLoupeSample;
   // Capture layer stack caption below the toolbar (null = hidden); accent
   // marks the transient "top layer was replaced" notice.
   final String? layerCaption;
@@ -50,6 +54,8 @@ class EditorCanvas extends StatelessWidget {
     this.cursorImage,
     this.cursorTopLeft,
     this.pinMode = false,
+    this.recordMode = false,
+    this.liveLoupeSample,
     this.layerCaption,
     this.layerAccent = false,
   });
@@ -62,6 +68,7 @@ class EditorCanvas extends StatelessWidget {
       loupe: loupe,
       hud: hud,
       pinMode: pinMode,
+      recordMode: recordMode,
       layerCaption: layerCaption,
       layerAccent: layerAccent,
       host: OverlayEditorHost(
@@ -73,6 +80,8 @@ class EditorCanvas extends StatelessWidget {
         onCancel: onCancel,
         cursorImage: cursorImage,
         cursorTopLeft: cursorTopLeft,
+        liveSelect: recordMode,
+        liveLoupeSample: liveLoupeSample,
       ),
     );
   }

@@ -55,9 +55,11 @@ final class CaptureController {
 
   /// [pinOnly]: the ⌘⌥7 "capture to pin" mode — the overlay session runs as
   /// usual, but its confirm executes ONLY the pin action instead of the
-  /// configured after-capture flow. Carried to the overlay engines via the
-  /// onCaptureReady payload.
-  func triggerCapture(pinOnly: Bool = false) {
+  /// configured after-capture flow. [liveSelect]: a RECORDING live-select
+  /// session — no capture at all; the overlay presents transparent over the
+  /// live screen and its confirm starts a recording. Both carried to the
+  /// overlay engines via the onCaptureReady payload.
+  func triggerCapture(pinOnly: Bool = false, liveSelect: Bool = false) {
     // Whole body on the main actor: NSAlert + the AppKit overlay work are all
     // MainActor-isolated, and triggerCapture() itself stays nonisolated so it is
     // callable from the method-channel handler and the menu action alike.
@@ -72,10 +74,24 @@ final class CaptureController {
       }
       // Safety net: a warm overlay unit for every CURRENT display before capture.
       self.manager()?.syncUnitsToScreens()
-      do {
-        guard let manager = self.manager() else {
-          Self.alert(L.s("Overlay manager not ready", "覆疊管理器尚未就緒")); return
+      guard let manager = self.manager() else {
+        Self.alert(L.s("Overlay manager not ready", "覆疊管理器尚未就緒")); return
+      }
+      // A live-select session and a freeze session must not stack onto each
+      // other (a transparent layer in a frozen stack corrupts both); ignore
+      // the trigger while the other kind is up.
+      if manager.liveSelectActive { return }
+      if liveSelect {
+        // No capture: geometry-only dicts, presented instantly.
+        manager.presentBegin(cursorDisplayID: self.capturer.cursorDisplayID())
+        for dict in ScreenCapturer.liveSelectGeometry() {
+          manager.presentFrame(dict, liveSelect: true)
         }
+        manager.beginLiveSelect()
+        PerfLog.mark("liveSelectPresented")
+        return
+      }
+      do {
         // Seed the presentation bookkeeping (key display + pendingShow) BEFORE
         // the parallel capture so per-display pushes land on clean state.
         manager.presentBegin(cursorDisplayID: self.capturer.cursorDisplayID())

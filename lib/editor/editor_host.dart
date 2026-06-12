@@ -85,6 +85,17 @@ abstract class EditorHost {
   /// leaves a pending selection that Enter / on-canvas ✔ confirms.
   bool get cropTrims;
 
+  /// Live-select (recording) mode: the base image is a transparent stub over
+  /// the LIVE screen, the loupe samples live pixels via [liveLoupeSample],
+  /// and only the region-selection (crop) tool applies.
+  bool get liveSelect => false;
+
+  /// Live loupe pixels: a span×span RGBA8888 patch centered on the NATIVE
+  /// pixel (x, y), or null before the live stream delivers a frame. Non-null
+  /// only in [liveSelect] mode.
+  Future<Uint8List?> Function(int x, int y, int span)? get liveLoupeSample =>
+      null;
+
   /// Commit the current selection/region (overlay: export screenshot; editor:
   /// trim/complete — supplied in later plans).
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window);

@@ -20,9 +20,10 @@ final class CaptureChannel {
     channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
       case "beginCapture":
-        let pinOnly =
-          ((call.arguments as? [String: Any])?["pinOnly"] as? Bool) ?? false
-        self?.capture.triggerCapture(pinOnly: pinOnly)
+        let a = call.arguments as? [String: Any]
+        self?.capture.triggerCapture(
+          pinOnly: (a?["pinOnly"] as? Bool) ?? false,
+          liveSelect: (a?["liveSelect"] as? Bool) ?? false)
         result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
       // After-capture flow: open the just-exported file in the image editor.
