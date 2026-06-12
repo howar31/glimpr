@@ -424,17 +424,20 @@ final class ScreenCapturer {
           let infos = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
-    // When GLIMPR is the frontmost app (clicking the menu-bar menu briefly
-    // activates this LSUIElement agent), the user's real target is the window
-    // that was focused before the click — the frontmost layer-0 window of any
-    // OTHER app. Glimpr's own warm windows are alpha-0 and never match anyway.
+    // When GLIMPR is the frontmost app, take the topmost visible layer-0
+    // window of ANY owner: the z-order itself is the right discriminator. A
+    // genuinely focused Glimpr window (Settings, editor) is topmost and gets
+    // captured; the menu-bar click case (clicking the menu briefly activates
+    // this LSUIElement agent) leaves the user's real target topmost — Glimpr's
+    // own windows sit behind it or are alpha-0 warm windows — so the
+    // previously focused window still wins.
     let myPid = ProcessInfo.processInfo.processIdentifier
     let matchFrontApp = frontPid != myPid
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             layer == 0,
             let owner = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
-            matchFrontApp ? owner == frontPid : owner != myPid,
+            !matchFrontApp || owner == frontPid,
             let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05,
             let b = w[kCGWindowBounds as String] as? [String: Any],
