@@ -86,6 +86,10 @@ class EditorCore extends StatefulWidget {
   // The ⌘⌥7 capture-to-pin session (overlay only): the toolbar shows the pin
   // icon + a mode caption so it cannot be mistaken for a normal capture.
   final bool pinMode;
+  // Capture layer stack caption below the toolbar (overlay only; null =
+  // hidden); accent marks the transient "top layer was replaced" notice.
+  final String? layerCaption;
+  final bool layerAccent;
   const EditorCore({
     super.key,
     required this.controller,
@@ -95,6 +99,8 @@ class EditorCore extends StatefulWidget {
     this.loupe = const LoupeConfig(),
     this.hud = const HudConfig(),
     this.pinMode = false,
+    this.layerCaption,
+    this.layerAccent = false,
   });
 
   @override
@@ -2779,6 +2785,8 @@ class _EditorCoreState extends State<EditorCore> {
                         editorBindings: widget.editorBindings,
                         showCursorToggle: widget.host.cursorImage != null,
                         pinMode: widget.pinMode,
+                        layerCaption: widget.layerCaption,
+                        layerAccent: widget.layerAccent,
                       ),
                     ),
                   ),

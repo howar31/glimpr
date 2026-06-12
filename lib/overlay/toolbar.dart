@@ -50,6 +50,11 @@ class EditorToolbar extends StatelessWidget {
   // caption below the bar names the mode, so it cannot be mistaken for a
   // normal capture. The normal ⌘⌥1 overlay never sets this.
   final bool pinMode;
+  // Capture layer stack caption below the bar (null = hidden); accent marks
+  // the transient "top layer was replaced" notice. Owner design: stacking
+  // must always be visible, including the replace-at-cap case.
+  final String? layerCaption;
+  final bool layerAccent;
   const EditorToolbar({
     super.key,
     required this.controller,
@@ -60,6 +65,8 @@ class EditorToolbar extends StatelessWidget {
     this.trailing = const [],
     this.showCursorToggle = false,
     this.pinMode = false,
+    this.layerCaption,
+    this.layerAccent = false,
   });
 
   @override
@@ -149,32 +156,85 @@ class EditorToolbar extends StatelessWidget {
               ],
             ),
           ),
-          if (pinMode) ...[
-            const SizedBox(height: 6),
-            // Mode caption BELOW the bar: names the pin session explicitly.
-            _Bar(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.push_pin, size: 13, color: GlimprTokens.accent),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Pin mode: the selection floats as a pin',
-                      style: TextStyle(
-                        color: palette.fg,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.none,
+          // Mode caption BELOW the bar, in the ONE line of space available
+          // there (owner: exactly one line, never more). Pin and layer
+          // messages merge into a single fixed-height bar; the zero-height
+          // overflow paints it downward without occupying layout height, so
+          // the bottom-anchored tool row never moves when it appears.
+          if (pinMode || layerCaption != null)
+            SizedBox(
+              height: 0,
+              width: 0,
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                minWidth: 0,
+                maxWidth: double.infinity,
+                minHeight: 0,
+                maxHeight: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: _Bar(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (pinMode) ...[
+                            Icon(Icons.push_pin,
+                                size: 13, color: GlimprTokens.accent),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Pin mode: the selection floats as a pin',
+                              style: TextStyle(
+                                color: palette.fg,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ],
+                          if (pinMode && layerCaption != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '·',
+                              style: TextStyle(
+                                color: palette.fgDim,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          if (layerCaption != null) ...[
+                            Icon(
+                              Icons.layers,
+                              size: 13,
+                              color: layerAccent
+                                  ? GlimprTokens.accent
+                                  : palette.fg,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              layerCaption!,
+                              style: TextStyle(
+                                color: layerAccent
+                                    ? GlimprTokens.accent
+                                    : palette.fg,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ],
         ],
         ),
       ),

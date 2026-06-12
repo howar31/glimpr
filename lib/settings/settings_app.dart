@@ -79,6 +79,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _launchAtLogin = false;
   int _warmTarget = 2;
   int _recentCap = kRecentImagesCap;
+  int _captureLayerCap = 1;
   // The warm target active SINCE launch (what OverlayManager actually built with).
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
@@ -164,6 +165,7 @@ class _SettingsAppState extends State<SettingsApp>
     final eyedropperKeys = await _s.getEyedropperToolKeysCancel();
     final hudCrosshair = await _s.getHudCrosshair();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
+    final layerCap = await _s.getCaptureLayerCap();
     if (!mounted) return;
     setState(() {
       _saveDir = dir;
@@ -188,6 +190,7 @@ class _SettingsAppState extends State<SettingsApp>
       _eyedropperKeysCancel = eyedropperKeys;
       _hudCrosshair = hudCrosshair;
       _hudMarchingAnts = hudMarchingAnts;
+      _captureLayerCap = layerCap;
     });
     _filenameController.text = template;
     // Login state comes from the OS (SMAppService) over a native channel; query
@@ -346,6 +349,11 @@ class _SettingsAppState extends State<SettingsApp>
       await _roleChannel.invokeMethod('setOverlayWarmTarget', v);
     } catch (_) {}
     if (mounted) setState(() => _warmTarget = v);
+  }
+
+  void _setCaptureLayerCap(int v) {
+    _s.setCaptureLayerCap(v);
+    setState(() => _captureLayerCap = v);
   }
 
   @override
@@ -1140,6 +1148,42 @@ class _SettingsAppState extends State<SettingsApp>
                 'Default 2 · applies after restarting Glimpr',
                 style: GlimprType.sansStyle(12, 500, t.fg4),
               ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 15),
+      const SectionLabel('Capture layers', icon: Icons.layers_outlined),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Capture layers',
+              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Press the capture shortcut while a capture is already open to '
+              'stack a new freeze on top (the previous layer stays in the '
+              'screenshot, annotations and all); finishing or cancelling a '
+              'layer returns to the one below.\n\n'
+              'With 1 (the default) nothing stacks: a new trigger restarts '
+              'the capture. With 2 to 5, the OLDEST layer is dropped once '
+              'the cap is reached, keeping the most recent ones; the toolbar '
+              'announces both cases.\n\n'
+              'Cost: each stacked layer holds a full-resolution frozen image '
+              'per display (roughly 30 to 60 MB at 4K or 5K) while the '
+              'session is open. Applies on the next capture; no restart '
+              'needed.',
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 16),
+            Segmented<int>(
+              full: true,
+              value: _captureLayerCap.clamp(1, 5),
+              options: const [(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
+              onChanged: _setCaptureLayerCap,
+            ),
           ],
         ),
       ),

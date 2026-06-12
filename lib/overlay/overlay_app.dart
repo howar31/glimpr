@@ -22,6 +22,7 @@ import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
 import 'editor_canvas.dart';
 import 'export.dart';
+import 'session_layers.dart';
 import 'session_op_log.dart';
 
 /// The per-display overlay engine's app. Idle = transparent; on capture it hosts
@@ -76,6 +77,16 @@ class _OverlayAppState extends State<OverlayApp> {
   // The ⌘⌥7 "capture to pin" mode: this session's confirm runs ONLY the pin
   // action instead of the configured after-capture flow.
   bool _pinOnly = false;
+  // Capture layer stack: suspended sessions below the live one. Capacity is
+  // re-read from Settings on every capture; 1 = no stacking (live layer is
+  // replaced, today's behavior). Each layer is an independent run of
+  // freeze -> annotate -> output; the frozen image of layer N deliberately
+  // CONTAINS layer N-1's rendering (capture-faithful, owner design).
+  final LayerStack<_SessionLayer> _layers = LayerStack(1);
+  // Toolbar caption state: null = hidden; accent marks a 3s replace notice.
+  String? _layerCaption;
+  bool _layerAccent = false;
+  Timer? _layerNoticeTimer;
   // Debounce timer for persisting _toolStyles to the store.
   Timer? _persistTimer;
   // Perf instrumentation: per-interaction frame summaries + the cross-display
@@ -100,8 +111,9 @@ class _OverlayAppState extends State<OverlayApp> {
   // to the owning display (see SessionOpLog). _lastDepth detects local
   // commits (unguarded history-depth +1); _applyingProtocol marks document
   // changes driven by the protocol itself (remote undo/redo, redo-tail
-  // clears) so they are not re-broadcast as new ops.
-  final SessionOpLog _opLog = SessionOpLog();
+  // clears) so they are not re-broadcast as new ops. Non-final: each capture
+  // LAYER owns its own op log instance (swapped on suspend/resume).
+  SessionOpLog _opLog = SessionOpLog();
   int _lastDepth = 1;
   bool _applyingProtocol = false;
   // Session-global single selection: a claim on one display clears the others.
@@ -117,13 +129,17 @@ class _OverlayAppState extends State<OverlayApp> {
     _frames.attach();
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d, pinOnly) async {
-        _pinOnly = pinOnly;
+        // NOTE: _pinOnly is set AFTER the suspend decision below — the
+        // suspended layer must keep ITS OWN pin flag.
         // Reseed per-tool styles from disk on EVERY capture so a Settings
         // "Reset all tool styles" (or an edit made on another engine) takes
         // effect on THIS capture — not only after a restart. Kicked off now and
         // awaited just before the controller is built, so its latency hides
         // behind the image decode below (no added reveal delay).
         final stylesFuture = _loadToolStyles();
+        // Layer cap for the suspend-vs-replace decision; read per capture so
+        // a Settings change applies without a restart.
+        final layerCapFuture = Settings.instance.getCaptureLayerCap();
         // Raw BGRA pixels -> ui.Image (no codec): a pixel upload, not a PNG
         // decode — this is the freeze path's cheap step.
         ui.Image? frozen;
@@ -153,10 +169,46 @@ class _OverlayAppState extends State<OverlayApp> {
             : null;
         final loadedStyles = await stylesFuture;
         if (!mounted) return;
-        _detachShared();
-        _editor?.dispose();
-        _frozen?.dispose();
-        _cursorImage?.dispose();
+        _layers.capacity = await layerCapFuture;
+        var replaced = false;
+        var evicted = false;
+        final live = _display != null && _editor != null && _frozen != null;
+        if (live && _layers.capacity > 1) {
+          // Stack the live layer under the new one (a trigger never destroys
+          // current work at cap >= 2). At the cap the OLDEST suspended layer
+          // is evicted instead, so the stack always holds the most recent
+          // layers (owner decision; the while covers a cap lowered between
+          // captures). Detach first: a suspended controller must not
+          // broadcast or persist.
+          while (!_layers.canSuspend) {
+            final dropped = _layers.dropOldest();
+            if (dropped == null) break;
+            dropped.disposeAll();
+            evicted = true;
+          }
+          _detachShared();
+          _layers.suspend(_SessionLayer(
+            display: _display!,
+            frozen: _frozen!,
+            cursorImage: _cursorImage,
+            cursorTopLeft: _cursorTopLeft,
+            editor: _editor!,
+            opLog: _opLog,
+            remoteDirty: Set.of(_remoteDirty),
+            localDirty: _localDirty,
+            lastDepth: _lastDepth,
+            pinOnly: _pinOnly,
+          ));
+        } else {
+          // No live session, or cap 1: the live layer is replaced (cap 1 has
+          // no suspended layer to evict, the pre-stack behavior exactly).
+          replaced = live;
+          _detachShared();
+          _editor?.dispose();
+          _frozen?.dispose();
+          _cursorImage?.dispose();
+        }
+        _pinOnly = pinOnly;
         // Reseed BEFORE building the controller so the freshly-loaded styles
         // (incl. a reset that emptied the map) seed this capture's initial tool
         // style. The map instance is shared with the controller, so mutate it in
@@ -166,11 +218,11 @@ class _OverlayAppState extends State<OverlayApp> {
             ..clear()
             ..addAll(loadedStyles);
         }
-        // New capture session: forget the previous session's dirty bits and
-        // op log (fresh document = depth 1).
+        // New capture LAYER: fresh dirty bits and a fresh op log instance
+        // (the suspended layer keeps its own; fresh document = depth 1).
         _remoteDirty.clear();
         _localDirty = false;
-        _opLog.clear();
+        _opLog = SessionOpLog();
         _lastDepth = 1;
         setState(() {
           _frozen = frozen;
@@ -184,6 +236,7 @@ class _OverlayAppState extends State<OverlayApp> {
           // that dismissed keeps its stale State -> stale _active -> no HUD until
           // the cursor crosses.
           _captureSeq++;
+          _updateLayerCaption(replaced: replaced, evicted: evicted);
         });
         _attachShared(_editor!); // sync tool/style with the other displays
         // Frozen frame is built; reveal this display's window (no blank flash).
@@ -216,7 +269,9 @@ class _OverlayAppState extends State<OverlayApp> {
         });
       },
       onCaptureFailed: (reason, msg) {
-        if (mounted) _resetState();
+        // A failed RE-trigger mid-session keeps the live session untouched;
+        // only reset when nothing was on screen anyway.
+        if (mounted && _editor == null) _resetState();
       },
       onActiveDisplay: (activeId, cursor) {
         if (mounted) _activeSignal.value = (id: activeId, cursor: cursor);
@@ -273,11 +328,18 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.dispose();
     _frozen?.dispose();
     _cursorImage?.dispose();
+    // Whole-session teardown: every suspended layer goes too.
+    for (final l in _layers.drain()) {
+      l.disposeAll();
+    }
+    _layerNoticeTimer?.cancel();
     setState(() {
       _display = null;
       _editor = null;
       _frozen = null;
       _cursorImage = null;
+      _layerCaption = null;
+      _layerAccent = false;
     });
   }
 
@@ -401,10 +463,14 @@ class _OverlayAppState extends State<OverlayApp> {
     _broadcastRateTimer?.cancel();
     _broadcastTimer?.cancel();
     _persistTimer?.cancel();
+    _layerNoticeTimer?.cancel();
     _detachShared();
     _editor?.dispose();
     _frozen?.dispose();
     _cursorImage?.dispose();
+    for (final l in _layers.drain()) {
+      l.disposeAll();
+    }
     _activeSignal.dispose();
     super.dispose();
   }
@@ -490,6 +556,16 @@ class _OverlayAppState extends State<OverlayApp> {
 
   /// Mirror a tool/style change received from another display onto this editor.
   void _applyRemoteEditorState(Map<String, dynamic> state) {
+    // Layer protocol first: these must work even with a null editor (e.g. an
+    // engine that already hid its window for a layer it has no frame for).
+    if (state['layerPop'] == true) {
+      _restoreSuspended();
+      return;
+    }
+    if (state['sessionEnded'] == true) {
+      _resetState();
+      return;
+    }
     final e = _editor;
     if (e == null) return;
     // A dirty broadcast carries only the sender's unsaved-annotations bit (no
@@ -564,6 +640,93 @@ class _OverlayAppState extends State<OverlayApp> {
     _bridge.dismissOverlay();
   }
 
+  /// Recompute the toolbar layer caption (the single-line bar below the tool
+  /// row). Depth >= 2 shows "Layers: N/cap". The accent notices (3 s) keep
+  /// the full-stack policy visible: [replaced] = cap 1 restarted the capture;
+  /// [evicted] = the OLDEST suspended layer was dropped to keep the most
+  /// recent ones (cap >= 2).
+  void _updateLayerCaption({bool replaced = false, bool evicted = false}) {
+    _layerNoticeTimer?.cancel();
+    final depth = _layers.suspendedCount + 1;
+    if (replaced || evicted) {
+      _layerCaption = replaced
+          ? 'Layer replaced ($depth/${_layers.capacity})'
+          : 'Oldest layer dropped ($depth/${_layers.capacity})';
+      _layerAccent = true;
+      _layerNoticeTimer = Timer(const Duration(seconds: 3), () {
+        if (!mounted) return;
+        setState(() {
+          _layerAccent = false;
+          _layerCaption = _layers.suspendedCount > 0
+              ? 'Layers: ${_layers.suspendedCount + 1}/${_layers.capacity}'
+              : null;
+        });
+      });
+    } else {
+      _layerCaption = _layers.suspendedCount > 0
+          ? 'Layers: $depth/${_layers.capacity}'
+          : null;
+      _layerAccent = false;
+    }
+  }
+
+  /// End the CURRENT layer: pop back to the suspended layer below when one
+  /// exists (broadcasting so every engine pops in step), else end the whole
+  /// session (broadcast + native dismiss, the pre-stack behavior).
+  void _endTopLayer() {
+    if (_layers.suspendedCount > 0) {
+      _bridge.broadcastEditorState({'layerPop': true});
+      _restoreSuspended();
+    } else {
+      _bridge.broadcastEditorState({'sessionEnded': true});
+      _dismiss();
+    }
+  }
+
+  /// Discard the live layer's state and resume the top suspended layer. When
+  /// this engine has nothing suspended (its display joined mid-session), hide
+  /// just this window and go idle; the session continues elsewhere.
+  void _restoreSuspended() {
+    final l = _layers.resume();
+    _detachShared();
+    _editor?.dispose();
+    _frozen?.dispose();
+    _cursorImage?.dispose();
+    if (l == null) {
+      _remoteDirty.clear();
+      _localDirty = false;
+      _opLog = SessionOpLog();
+      _lastDepth = 1;
+      setState(() {
+        _display = null;
+        _editor = null;
+        _frozen = null;
+        _cursorImage = null;
+        _layerCaption = null;
+        _layerAccent = false;
+      });
+      _bridge.hideOverlayWindow();
+      return;
+    }
+    _opLog = l.opLog;
+    _lastDepth = l.lastDepth;
+    _localDirty = l.localDirty;
+    _remoteDirty
+      ..clear()
+      ..addAll(l.remoteDirty);
+    _pinOnly = l.pinOnly;
+    setState(() {
+      _display = l.display;
+      _frozen = l.frozen;
+      _cursorImage = l.cursorImage;
+      _cursorTopLeft = l.cursorTopLeft;
+      _editor = l.editor;
+      _captureSeq++; // remount EditorCanvas on the restored controller
+      _updateLayerCaption();
+    });
+    _attachShared(l.editor);
+  }
+
   /// Cancel path (Esc / right-click on empty space). Confirms first when there are
   /// unsaved annotations and the setting is on, so an accidental exit can't waste
   /// them; export (success) never routes here. Covers BOTH this display's
@@ -580,11 +743,15 @@ class _OverlayAppState extends State<OverlayApp> {
       final ctx = _navigatorKey.currentContext;
       if (ctx != null && ctx.mounted) {
         _confirmingExit = true;
+        final layered = _layers.suspendedCount > 0;
         final ok = await showDiscardConfirm(
           ctx,
-          title: 'Discard capture?',
-          message: 'You have unsaved annotations on this capture. '
-              'Discard them and exit?',
+          title: layered ? 'Discard this layer?' : 'Discard capture?',
+          message: layered
+              ? 'You have unsaved annotations on this layer. Discard them '
+                  'and return to the layer below?'
+              : 'You have unsaved annotations on this capture. '
+                  'Discard them and exit?',
         );
         _confirmingExit = false;
         if (!ok) {
@@ -595,7 +762,7 @@ class _OverlayAppState extends State<OverlayApp> {
         }
       }
     }
-    _dismiss();
+    _endTopLayer();
   }
 
   Future<void> _onExport(Rect? selectionLogical, SnapWindow? window) async {
@@ -642,8 +809,14 @@ class _OverlayAppState extends State<OverlayApp> {
     final cursorTopLeftNative = (cursorOn && _cursorTopLeft != null)
         ? _cursorTopLeft! * d.scaleFactor
         : null;
+    // Snapshot THIS layer's pin flag: the pop below restores the layer
+    // underneath, which overwrites _pinOnly before the export reads it.
+    final pinOnly = _pinOnly;
     _frozen = null;
-    _dismiss();
+    // Pop back to the layer below (or end the session when this was the only
+    // one) IMMEDIATELY; the export composites in the background on its own
+    // snapshots (frozen/cursor ownership was transferred above).
+    _endTopLayer();
     // For a window snap, capture the window's real alpha so the export takes the
     // window's rounded-corner silhouette (frozen pixels + live alpha mask). The
     // window can't move during the freeze, so the mask aligns with the crop.
@@ -681,13 +854,14 @@ class _OverlayAppState extends State<OverlayApp> {
         cursorTopLeftNative: cursorTopLeftNative,
         windowTitle: window?.title,
         appName: window?.app,
-        // ⌘⌥7 capture-to-pin: this session runs ONLY the pin action.
-        flowOverride: _pinOnly ? const {FlowAction.pin} : null,
+        // ⌘⌥7 capture-to-pin: this LAYER runs ONLY the pin action (snapshot
+        // taken before the pop, see above).
+        flowOverride: pinOnly ? const {FlowAction.pin} : null,
       );
       // Success = every ENABLED leg succeeded (a disabled leg is not a failure).
       // On success play the completion chime (if enabled); on a real failure the
       // overlay is already gone, so surface it via a native alert.
-      final eff = _pinOnly ? const {FlowAction.pin} : cap.flow;
+      final eff = pinOnly ? const {FlowAction.pin} : cap.flow;
       final ok =
           (!eff.contains(FlowAction.save) || result.savedOk) &&
           (!eff.contains(FlowAction.copy) || result.copiedToClipboard) &&
@@ -695,7 +869,7 @@ class _OverlayAppState extends State<OverlayApp> {
       if (ok) {
         if (cap.completionSound) playComplete();
       } else {
-        _bridge.showError(_pinOnly ? 'Pin failed' : _summary(result, cap));
+        _bridge.showError(pinOnly ? 'Pin failed' : _summary(result, cap));
       }
     } catch (e) {
       _bridge.showError('Capture failed: $e');
@@ -755,11 +929,48 @@ class _OverlayAppState extends State<OverlayApp> {
                   cursorImage: _cursorImage,
                   cursorTopLeft: _cursorTopLeft,
                   pinMode: _pinOnly,
+                  layerCaption: _layerCaption,
+                  layerAccent: _layerAccent,
                 ),
                 // Dim + lock the freeze while a ⌘, Settings detour is open.
                 if (_settingsOpen) const SettingsMask(),
               ],
             ),
     );
+  }
+}
+
+/// One suspended capture layer: everything needed to resume the session
+/// exactly as it was. The controller is detached from the cross-display
+/// listeners while suspended; images are owned by this frame until resumed
+/// or disposed.
+class _SessionLayer {
+  _SessionLayer({
+    required this.display,
+    required this.frozen,
+    required this.cursorImage,
+    required this.cursorTopLeft,
+    required this.editor,
+    required this.opLog,
+    required this.remoteDirty,
+    required this.localDirty,
+    required this.lastDepth,
+    required this.pinOnly,
+  });
+  final CapturedDisplay display;
+  final ui.Image frozen;
+  final ui.Image? cursorImage;
+  final Offset? cursorTopLeft;
+  final EditorController editor;
+  final SessionOpLog opLog;
+  final Set<int> remoteDirty;
+  final bool localDirty;
+  final int lastDepth;
+  final bool pinOnly;
+
+  void disposeAll() {
+    editor.dispose();
+    frozen.dispose();
+    cursorImage?.dispose();
   }
 }

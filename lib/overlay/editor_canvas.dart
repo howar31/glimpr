@@ -30,6 +30,10 @@ class EditorCanvas extends StatelessWidget {
   final Offset? cursorTopLeft;
   // The ⌘⌥7 capture-to-pin session — toolbar shows the pin icon + caption.
   final bool pinMode;
+  // Capture layer stack caption below the toolbar (null = hidden); accent
+  // marks the transient "top layer was replaced" notice.
+  final String? layerCaption;
+  final bool layerAccent;
 
   const EditorCanvas({
     super.key,
@@ -46,6 +50,8 @@ class EditorCanvas extends StatelessWidget {
     this.cursorImage,
     this.cursorTopLeft,
     this.pinMode = false,
+    this.layerCaption,
+    this.layerAccent = false,
   });
 
   @override
@@ -56,6 +62,8 @@ class EditorCanvas extends StatelessWidget {
       loupe: loupe,
       hud: hud,
       pinMode: pinMode,
+      layerCaption: layerCaption,
+      layerAccent: layerAccent,
       host: OverlayEditorHost(
         display: display,
         frozen: frozenImage,

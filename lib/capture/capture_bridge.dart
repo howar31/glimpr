@@ -85,6 +85,10 @@ class CaptureBridge {
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
+  /// Hide ONLY this engine's overlay window (a layer pop restored a layer this
+  /// display has no frame for). The session itself keeps running.
+  Future<void> hideOverlayWindow() => _channel.invokeMethod('hideOverlay');
+
   /// Open [path] in the standalone image editor — the after-capture flow's
   /// "open in editor" leg. Static because the flow runner calls it without a
   /// bridge instance; both the control and overlay engines' native `glimpr/

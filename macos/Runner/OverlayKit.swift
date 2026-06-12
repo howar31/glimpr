@@ -709,6 +709,13 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self.dismiss(); result(nil)
+        // Hide ONLY the calling engine's window (a layer pop reached an
+        // engine with no frame for the restored layer).
+        case "hideOverlay":
+          if let vc = vc, let id = self.displayID(forVC: vc) {
+            self.hide(displayID: id)
+          }
+          result(nil)
         // Dart-side perf marks from the overlay engines (frame stats,
         // broadcast counters) land in the same unified-log perf category.
         case "perfMark":
@@ -1086,6 +1093,16 @@ final class OverlayManager {
       u.window.alphaValue = 0
       u.window.ignoresMouseEvents = true
     }
+  }
+
+  /// Hide ONE display's overlay window (a layer pop restored a layer this
+  /// display has no frame for, e.g. it was hot-plugged mid-session). Same
+  /// resident-warm treatment as dismiss(): alpha 0 + click-through; the
+  /// session (cursor poll, other windows) keeps running.
+  func hide(displayID id: CGDirectDisplayID) {
+    guard let unit = units[id] else { return }
+    unit.window.alphaValue = 0
+    unit.window.ignoresMouseEvents = true
   }
 
   /// ⌘, from the overlay: PAUSE the freeze for the Settings detour. The windows

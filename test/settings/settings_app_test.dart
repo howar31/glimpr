@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
@@ -45,5 +47,25 @@ void main() {
     // Assert on the visible trailing folder; the full path lives in the Tooltip.
     expect(find.textContaining('shots'), findsOneWidget);
     expect(find.byTooltip('/tmp/shots'), findsOneWidget);
+  });
+
+  testWidgets('Advanced pane has the capture layers setting', (tester) async {
+    // Tall surface so the whole Advanced pane builds (the layers card sits
+    // below the multi-display card, off-screen at the default test size).
+    tester.view.physicalSize = const Size(1400, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final settings = Settings(FakeStore());
+    await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(find.text('Capture layers'), findsOneWidget);
+    // Picking 3 persists (the warm-engines Segmented also renders a '3', so
+    // target the LAST one: the layers row sits below the engines row).
+    await tester.tap(find.text('3').last);
+    await tester.pumpAndSettle();
+    expect(await settings.getCaptureLayerCap(), 3);
   });
 }

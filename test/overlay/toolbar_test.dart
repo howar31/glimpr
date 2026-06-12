@@ -114,6 +114,12 @@ void main() {
   });
 
   testWidgets('pin mode renames the crop slot tooltip to Pin', (tester) async {
+    // Wide surface: pin mode adds the in-bar Pin chip and the full bar
+    // exceeds the 800px default test width.
+    tester.view.physicalSize = const Size(1600, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final c = EditorController();
     addTearDown(c.dispose);
     await tester.pumpWidget(
@@ -135,6 +141,75 @@ void main() {
     expect(find.byTooltip('Crop'), findsNothing);
     // Every other tool keeps its normal label.
     expect(find.byTooltip('Rectangle'), findsOneWidget);
+  });
+
+  testWidgets(
+      'one caption line below the bar; the bottom-anchored bar never moves',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final c = EditorController();
+    addTearDown(c.dispose);
+    // Bottom-anchor like the overlay host. The caption space below the bar is
+    // exactly ONE line: pin + layer messages merge into a single bar there,
+    // painted via zero-height overflow so the tool row never moves.
+    Future<void> pump(
+            {String? caption, bool accent = false, bool pin = false}) =>
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Stack(
+                children: [
+                  Positioned(
+                    left: 0,
+                    bottom: 120,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: EditorToolbar(
+                        controller: c,
+                        onMove: (_) {},
+                        onPtEditingDone: () {},
+                        editorBindings: const {},
+                        pinMode: pin,
+                        layerCaption: caption,
+                        layerAccent: accent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+    await pump();
+    expect(find.byIcon(Icons.layers), findsNothing);
+    final barAt = tester.getTopLeft(find.byType(IconButton).first);
+    final barBottom = tester.getBottomLeft(find.byType(IconButton).first).dy;
+
+    await pump(caption: 'Layers: 2/3');
+    expect(find.text('Layers: 2/3'), findsOneWidget);
+    expect(find.byIcon(Icons.layers), findsOneWidget);
+    // The bar did not move; the caption sits BELOW the bar's bottom edge.
+    expect(tester.getTopLeft(find.byType(IconButton).first), barAt);
+    expect(tester.getTopLeft(find.text('Layers: 2/3')).dy,
+        greaterThan(barBottom));
+
+    await pump(caption: 'Layer replaced (1/1)', accent: true);
+    expect(find.text('Layer replaced (1/1)'), findsOneWidget);
+    expect(tester.getTopLeft(find.byType(IconButton).first), barAt);
+
+    // Pin + layer captions merge into the SAME single line (one bar).
+    await pump(pin: true, caption: 'Layers: 2/3');
+    expect(tester.getTopLeft(find.byType(IconButton).first), barAt);
+    final pinDy = tester
+        .getCenter(find.text('Pin mode: the selection floats as a pin'))
+        .dy;
+    final layerDy = tester.getCenter(find.text('Layers: 2/3')).dy;
+    expect(pinDy, layerDy);
+    expect(pinDy, greaterThan(barBottom));
   });
 
   test('the Settings row label combines both crop-slot contexts', () {

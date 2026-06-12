@@ -102,6 +102,7 @@ class Settings {
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
   static const _hudCrosshairKey = 'hud_crosshair';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
+  static const _captureLayerCapKey = 'capture_layer_cap';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -229,6 +230,14 @@ class Settings {
   // Loupe geometry (shared by overlay + image editor) ----------------------
   // Getters clamp on read too, so a corrupt / out-of-range stored value stays
   // safe.
+  // Capture layer stack ------------------------------------------------------
+  // How many freeze layers one overlay session may hold (1-5, default 1).
+  // 1 = no stacking: a capture hotkey during a live session replaces it.
+  Future<int> getCaptureLayerCap() async =>
+      ((await store.getInt(_captureLayerCapKey)) ?? 1).clamp(1, 5);
+  Future<void> setCaptureLayerCap(int v) =>
+      store.setInt(_captureLayerCapKey, v.clamp(1, 5));
+
   Future<int> getLoupeSpan() async =>
       ((await store.getInt(_loupeSpanKey)) ?? kLoupeSpanDefault)
           .clamp(kLoupeSpanMin, kLoupeSpanMax);
