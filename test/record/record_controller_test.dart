@@ -52,6 +52,7 @@ class _FakeBridge extends RecordBridge {
     bool showsCursor = true,
     bool systemAudio = false,
     bool microphone = false,
+    int maxDuration = 0,
   }) async {
     starts.add({
       'mode': mode,
@@ -64,6 +65,7 @@ class _FakeBridge extends RecordBridge {
       'showsCursor': showsCursor,
       'systemAudio': systemAudio,
       'microphone': microphone,
+      'maxDuration': maxDuration,
     });
   }
 
@@ -348,6 +350,25 @@ void main() {
       expect(await Settings(store).getRecordSystemAudio(), isFalse);
     });
 
+    test('maxDuration flows from settings to the bridge', () async {
+      final rc = build();
+      await Settings(store).setRecordMaxDuration(30);
+      await rc.toggle(kRecordModeDisplay);
+      expect(bridge.starts.single['maxDuration'], 30);
+    });
+
+    test('per-take maxDuration override wins over the setting', () async {
+      final rc = build();
+      await Settings(store).setRecordMaxDuration(30);
+      await rc.toggle(kRecordModeRegion);
+      bridge.selection({
+        'displayId': 1, 'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
+        'maxDuration': 5,
+      });
+      await pumpEventQueue(times: 40);
+      expect(bridge.starts.single['maxDuration'], 5);
+    });
+
     test('finishing plays the completion sound honouring the Sounds setting',
         () async {
       final rc = build();
@@ -459,6 +480,16 @@ void main() {
       expect(r.fps, 60);
       expect(r.hevc, isTrue);
       expect(r.showCursor, isTrue); // default on
+    });
+
+    test('record_max_duration round-trips, defaults 0, clamps off-steps',
+        () async {
+      final s = Settings(_FakeStore());
+      expect((await s.loadRecording()).maxDuration, 0);
+      await s.setRecordMaxDuration(15);
+      expect((await s.loadRecording()).maxDuration, 15);
+      await s.setRecordMaxDuration(7); // not a supported step -> 0 (off)
+      expect((await s.loadRecording()).maxDuration, 0);
     });
   });
 }

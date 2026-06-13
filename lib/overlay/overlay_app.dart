@@ -239,7 +239,8 @@ class _OverlayAppState extends State<OverlayApp> {
               systemAudio: false,
               microphone: false,
               hevc: false,
-              fps: 30);
+              fps: 30,
+              maxDuration: 0);
           _recordOverrides = overrides;
           Settings.instance.loadRecording().then((r) {
             if (!mounted || _recordOverrides != overrides) return;
@@ -248,6 +249,7 @@ class _OverlayAppState extends State<OverlayApp> {
             overrides.microphone.value = r.microphone;
             overrides.hevc.value = r.hevc;
             overrides.fps.value = r.fps;
+            overrides.maxDuration.value = r.maxDuration;
           });
         }
         // Reseed BEFORE building the controller so the freshly-loaded styles
@@ -869,6 +871,7 @@ class _OverlayAppState extends State<OverlayApp> {
           microphone: o?.microphone.value,
           hevc: o?.hevc.value,
           fps: o?.fps.value,
+          maxDuration: o?.maxDuration.value,
         );
       } catch (_) {}
       return;

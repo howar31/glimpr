@@ -40,6 +40,7 @@ class CaptureBridge {
     bool? microphone,
     bool? hevc,
     int? fps,
+    int? maxDuration,
     bool cancelled = false,
   }) =>
       _channel.invokeMethod('recordSelection', {
@@ -55,6 +56,7 @@ class CaptureBridge {
         'microphone': ?microphone,
         'hevc': ?hevc,
         'fps': ?fps,
+        'maxDuration': ?maxDuration,
         'cancelled': cancelled,
       });
 

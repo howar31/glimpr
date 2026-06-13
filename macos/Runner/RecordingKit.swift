@@ -821,6 +821,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let showsCursor: Bool
     let systemAudio: Bool
     let microphone: Bool
+    let maxDuration: Int // seconds; 0 = off
     let outputPath: String
   }
 
@@ -833,6 +834,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private var outputPath: String?
   private var abortRequested = false
   private var paused = false
+  private var maxDuration = 0 // seconds; 0 = off (auto-stop disabled)
   private let sampleQueue = DispatchQueue(label: "glimpr.record.samples")
   private var events: (String, Any?) -> Void
   /// (active, graceful) — graceful=false on abort/failure so the menu-bar
@@ -956,6 +958,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
       sink = sk
       writer = w
       outputPath = spec.outputPath
+      maxDuration = spec.maxDuration
       abortRequested = false
       paused = false
       isRecording = true
@@ -1072,9 +1075,16 @@ final class RecordingController: NSObject, SCStreamDelegate {
       [weak self] _ in
       Task { @MainActor in
         guard let self, let sink = self.sink else { return }
+        let elapsed = sink.elapsedSeconds
         self.chrome?.update(
-          duration: CMTime(seconds: sink.elapsedSeconds, preferredTimescale: 600),
+          duration: CMTime(seconds: elapsed, preferredTimescale: 600),
           fileSize: self.currentFileSize())
+        // Fixed-duration auto-stop: recorded media time excludes paused time,
+        // so a paused take never trips this.
+        if self.maxDuration > 0, self.isRecording, !self.paused,
+           elapsed >= Double(self.maxDuration) {
+          await self.stop()
+        }
       }
     }
   }
@@ -1229,6 +1239,7 @@ final class RecordingChannel {
     let showsCursor = (args["showsCursor"] as? Bool) ?? true
     let systemAudio = (args["systemAudio"] as? Bool) ?? false
     let microphone = (args["microphone"] as? Bool) ?? false
+    let maxDuration = (args["maxDuration"] as? Int) ?? 0
     let outputPath = (args["outputPath"] as? String) ?? ""
     guard !outputPath.isEmpty else {
       channel.invokeMethod(
@@ -1254,7 +1265,7 @@ final class RecordingChannel {
         mode: mode, displayID: display, rect: rect, windowID: windowID,
         fps: fps, hevc: hevc, showsCursor: showsCursor,
         systemAudio: systemAudio, microphone: microphone,
-        outputPath: outputPath)
+        maxDuration: maxDuration, outputPath: outputPath)
       Task { await controller.start(spec) }
     }
 

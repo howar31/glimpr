@@ -103,6 +103,7 @@ class Settings {
   static const _recordSystemAudioKey = 'record_system_audio';
   static const _recordMicKey = 'record_microphone';
   static const _flowAfterRecordingKey = 'flow_after_recording';
+  static const _recordMaxDurationKey = 'record_max_duration';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
@@ -262,6 +263,16 @@ class Settings {
   Future<void> setRecordMicrophone(bool v) =>
       store.setBool(_recordMicKey, v);
 
+  /// Fixed recording duration in seconds; 0 = off. Off-step values clamp to 0.
+  static const kRecordMaxDurations = <int>[0, 5, 10, 15, 30, 60];
+  Future<int> getRecordMaxDuration() async {
+    final v = (await store.getInt(_recordMaxDurationKey)) ?? 0;
+    return kRecordMaxDurations.contains(v) ? v : 0;
+  }
+
+  Future<void> setRecordMaxDuration(int v) => store.setInt(
+      _recordMaxDurationKey, kRecordMaxDurations.contains(v) ? v : 0);
+
   /// The after-recording flow: the path-based subset only (copyPath /
   /// showInFinder / shareSheet). Default = none (silent save, owner decision).
   Future<Set<FlowAction>> getAfterRecordingFlow() async {
@@ -282,6 +293,7 @@ class Settings {
         showCursor: await getRecordShowCursor(),
         systemAudio: await getRecordSystemAudio(),
         microphone: await getRecordMicrophone(),
+        maxDuration: await getRecordMaxDuration(),
         flow: await getAfterRecordingFlow(),
       );
 
@@ -388,6 +400,7 @@ class RecordingSettings {
     this.showCursor = true,
     this.systemAudio = false,
     this.microphone = false,
+    this.maxDuration = 0,
     this.flow = const {},
   });
 
@@ -396,5 +409,6 @@ class RecordingSettings {
   final bool showCursor;
   final bool systemAudio;
   final bool microphone;
+  final int maxDuration; // seconds; 0 = off (auto-stop disabled)
   final Set<FlowAction> flow; // after-recording, kRecordingFlowActions subset
 }

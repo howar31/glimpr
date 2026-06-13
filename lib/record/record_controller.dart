@@ -202,6 +202,7 @@ class RecordController {
       showsCursor: rec.showCursor,
       systemAudio: rec.systemAudio,
       microphone: rec.microphone,
+      maxDuration: rec.maxDuration,
     );
   }
 
@@ -256,6 +257,7 @@ class RecordController {
         showsCursor: (a['showsCursor'] as bool?) ?? rec.showCursor,
         systemAudio: (a['systemAudio'] as bool?) ?? rec.systemAudio,
         microphone: (a['microphone'] as bool?) ?? rec.microphone,
+        maxDuration: (a['maxDuration'] as num?)?.toInt() ?? rec.maxDuration,
       );
     } catch (e) {
       _phase = RecordPhase.idle;
