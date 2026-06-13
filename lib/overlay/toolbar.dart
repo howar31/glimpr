@@ -1007,16 +1007,18 @@ class _OptionsRowState extends State<_OptionsRow> {
     }
     _closePopover();
     final o = widget.recordOverrides!;
+    final sel = o.gif.value ? 'gif' : (o.hevc.value ? 'hevc' : 'h264');
     _showPopover(
       _OpenPopover.recordCodec,
       _barLink,
       width: 170,
-      child: ChoiceListPopover<bool>(
-        selected: o.hevc.value,
-        options: const [(false, 'H.264'), (true, 'HEVC')],
+      child: ChoiceListPopover<String>(
+        selected: sel,
+        options: const [('h264', 'H.264'), ('hevc', 'HEVC'), ('gif', 'GIF')],
         accent: GlimprTokens.recordingAccent,
         onSelected: (v) {
-          o.hevc.value = v;
+          o.hevc.value = v == 'hevc';
+          o.gif.value = v == 'gif';
           _closePopover();
           setState(() {});
         },
@@ -1192,22 +1194,34 @@ class _OptionsRowState extends State<_OptionsRow> {
         child: _Bar(
           height: _Bar.heightSub,
           child: ListenableBuilder(
-            listenable: Listenable.merge([overrides.hevc, overrides.fps]),
+            listenable:
+                Listenable.merge([overrides.hevc, overrides.gif, overrides.fps]),
             builder: (_, _) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _TextureButton(
-                  key: const ValueKey('record-codec-picker'),
-                  label: overrides.hevc.value ? 'HEVC' : 'H.264',
+                  key: const ValueKey('record-format-picker'),
+                  label: overrides.gif.value
+                      ? 'GIF'
+                      : (overrides.hevc.value ? 'HEVC' : 'H.264'),
                   tooltip: l10n.toolbarRecordCodec,
                   onTap: _openRecordCodecPopover,
                 ),
                 const SizedBox(width: 8),
-                _TextureButton(
-                  key: const ValueKey('record-fps-picker'),
-                  label: '${overrides.fps.value} fps',
-                  tooltip: l10n.toolbarRecordFps,
-                  onTap: _openRecordFpsPopover,
+                // Frame rate does not apply to GIF (fixed 15 fps) -> disabled.
+                Opacity(
+                  opacity: overrides.gif.value ? 0.35 : 1,
+                  child: IgnorePointer(
+                    ignoring: overrides.gif.value,
+                    child: _TextureButton(
+                      key: const ValueKey('record-fps-picker'),
+                      label: overrides.gif.value
+                          ? '15 fps'
+                          : '${overrides.fps.value} fps',
+                      tooltip: l10n.toolbarRecordFps,
+                      onTap: _openRecordFpsPopover,
+                    ),
+                  ),
                 ),
               ],
             ),
