@@ -593,12 +593,196 @@ final class RecordingChrome {
 
 // MARK: - RecordingController
 
-/// Owns one recording session: SCStream + SCRecordingOutput straight to the
-/// final .mp4 (no FFmpeg, no temp/remux). All recording native code lives
-/// behind the `glimpr/record` seam — the existing capture path is untouched.
+/// AVAssetWriter wrapper (engine B): one VFR video track + up to two audio
+/// tracks (system / mic), fed by RecordingSink off the capture queue. We own
+/// the presentation timeline so pause is simply a gap we never write — no
+/// SCRecordingOutput, no FFmpeg, no temp/remux. Replaces the v1 black-box
+/// recorder to enable pause/resume, fixed-duration and direct GIF.
+@available(macOS 15.0, *)
+final class RecordingWriter {
+  private let writer: AVAssetWriter
+  private let videoInput: AVAssetWriterInput
+  private let adaptor: AVAssetWriterInputPixelBufferAdaptor
+  private var systemInput: AVAssetWriterInput?
+  private var micInput: AVAssetWriterInput?
+  private(set) var started = false
+
+  init(url: URL, width: Int, height: Int, hevc: Bool,
+       systemAudio: Bool, microphone: Bool) throws {
+    try? FileManager.default.removeItem(at: url)
+    writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+    let videoSettings: [String: Any] = [
+      AVVideoCodecKey: hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
+      AVVideoWidthKey: width,
+      AVVideoHeightKey: height,
+    ]
+    videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+    videoInput.expectsMediaDataInRealTime = true
+    adaptor = AVAssetWriterInputPixelBufferAdaptor(
+      assetWriterInput: videoInput,
+      sourcePixelBufferAttributes: [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferWidthKey as String: width,
+        kCVPixelBufferHeightKey as String: height,
+      ])
+    guard writer.canAdd(videoInput) else {
+      throw RecordingController.RecordingError.message("cannot add video input")
+    }
+    writer.add(videoInput)
+
+    let audioSettings: [String: Any] = [
+      AVFormatIDKey: kAudioFormatMPEG4AAC,
+      AVNumberOfChannelsKey: 2,
+      AVSampleRateKey: 48_000,
+      AVEncoderBitRateKey: 128_000,
+    ]
+    func addAudio() -> AVAssetWriterInput? {
+      let a = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+      a.expectsMediaDataInRealTime = true
+      guard writer.canAdd(a) else { return nil }
+      writer.add(a)
+      return a
+    }
+    if systemAudio { systemInput = addAudio() }
+    if microphone { micInput = addAudio() }
+  }
+
+  func start() {
+    writer.startWriting()
+    writer.startSession(atSourceTime: .zero)
+    started = true
+  }
+
+  func appendVideo(_ pb: CVPixelBuffer, at pts: CMTime) {
+    guard started, videoInput.isReadyForMoreMediaData else { return }
+    adaptor.append(pb, withPresentationTime: pts)
+  }
+
+  func appendSystem(_ sb: CMSampleBuffer) {
+    guard started, let a = systemInput, a.isReadyForMoreMediaData else { return }
+    a.append(sb)
+  }
+
+  func appendMic(_ sb: CMSampleBuffer) {
+    guard started, let a = micInput, a.isReadyForMoreMediaData else { return }
+    a.append(sb)
+  }
+
+  func finish() async -> Bool {
+    guard started else { return false }
+    videoInput.markAsFinished()
+    systemInput?.markAsFinished()
+    micInput?.markAsFinished()
+    await writer.finishWriting()
+    return writer.status == .completed
+  }
+
+  func cancel() {
+    if started { writer.cancelWriting() }
+    try? FileManager.default.removeItem(at: writer.outputURL)
+  }
+}
+
+/// Off-main capture sink: receives SCStream video + audio sample buffers on a
+/// single serial queue and appends them to the RecordingWriter on a 0-based,
+/// pause-aware timeline (VFR video — each frame appended once with its rebased
+/// PTS; a static screen simply holds the last frame). The first .screen frame
+/// establishes the session.
+@available(macOS 15.0, *)
+final class RecordingSink: NSObject, SCStreamOutput {
+  private let writer: RecordingWriter
+  private let lock = NSLock()
+  private var sessionStart: CMTime?
+  private var pausedAccum = CMTime.zero
+  private var pauseStart: CMTime?
+  private var paused = false
+  private var lastElapsed = CMTime.zero
+  /// Fired once on the first frame (session established).
+  var onStarted: (() -> Void)?
+
+  init(writer: RecordingWriter) { self.writer = writer }
+
+  /// Recorded media time so far (un-paused), seconds — strip + auto-stop.
+  var elapsedSeconds: Double {
+    lock.lock(); defer { lock.unlock() }
+    return max(0, lastElapsed.seconds)
+  }
+
+  func setPaused(_ p: Bool) {
+    lock.lock(); paused = p; lock.unlock()
+  }
+
+  func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer,
+              of type: SCStreamOutputType) {
+    guard CMSampleBufferDataIsReady(sb) else { return }
+    let pts = CMSampleBufferGetPresentationTimeStamp(sb)
+
+    lock.lock()
+    if sessionStart == nil {
+      guard type == .screen, CMSampleBufferGetImageBuffer(sb) != nil else {
+        lock.unlock(); return
+      }
+      sessionStart = pts
+      writer.start()
+      let cb = onStarted
+      lock.unlock()
+      cb?()
+      lock.lock()
+    }
+    let start = sessionStart ?? pts
+    if paused {
+      if pauseStart == nil { pauseStart = pts }
+      lock.unlock(); return
+    } else if let ps = pauseStart {
+      pausedAccum = pausedAccum + (pts - ps)
+      pauseStart = nil
+    }
+    let rebased = pts - start - pausedAccum
+    if type == .screen { lastElapsed = rebased }
+    lock.unlock()
+
+    switch type {
+    case .screen:
+      if let pb = CMSampleBufferGetImageBuffer(sb) {
+        writer.appendVideo(pb, at: rebased)
+      }
+    case .audio:
+      if let r = Self.retimed(sb, to: rebased) { writer.appendSystem(r) }
+    case .microphone:
+      if let r = Self.retimed(sb, to: rebased) { writer.appendMic(r) }
+    @unknown default:
+      break
+    }
+  }
+
+  /// Copy an audio sample buffer with its PTS rebased to [to] (constant offset).
+  private static func retimed(_ sb: CMSampleBuffer, to target: CMTime) -> CMSampleBuffer? {
+    var count: CMItemCount = 0
+    CMSampleBufferGetSampleTimingInfoArray(
+      sb, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count)
+    guard count > 0 else { return nil }
+    var timings = [CMSampleTimingInfo](repeating: CMSampleTimingInfo(), count: count)
+    CMSampleBufferGetSampleTimingInfoArray(
+      sb, entryCount: count, arrayToFill: &timings, entriesNeededOut: &count)
+    let offset = CMSampleBufferGetPresentationTimeStamp(sb) - target
+    for i in 0..<timings.count where timings[i].presentationTimeStamp.isValid {
+      timings[i].presentationTimeStamp = timings[i].presentationTimeStamp - offset
+    }
+    var out: CMSampleBuffer?
+    CMSampleBufferCreateCopyWithNewTiming(
+      allocator: kCFAllocatorDefault, sampleBuffer: sb,
+      sampleTimingEntryCount: count, sampleTimingArray: &timings,
+      sampleBufferOut: &out)
+    return out
+  }
+}
+
+/// Owns one recording session (engine B): an SCStream feeding RecordingSink ->
+/// RecordingWriter (AVAssetWriter). All recording native code lives behind the
+/// `glimpr/record` seam — the existing capture path is untouched.
 @available(macOS 15.0, *)
 @MainActor
-final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDelegate {
+final class RecordingController: NSObject, SCStreamDelegate {
   struct Spec {
     let mode: String // region | window | display | lastRegion
     let displayID: CGDirectDisplayID?
@@ -614,11 +798,14 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
 
   private(set) var isRecording = false
   private var stream: SCStream?
-  private var output: SCRecordingOutput?
+  private var sink: RecordingSink?
+  private var writer: RecordingWriter?
   private var chrome: RecordingChrome?
   private var tick: Timer?
   private var outputPath: String?
   private var abortRequested = false
+  private var paused = false
+  private let sampleQueue = DispatchQueue(label: "glimpr.record.samples")
   private var events: (String, Any?) -> Void
   /// (active, graceful) — graceful=false on abort/failure so the menu-bar
   /// icon snaps back instead of easing (design: the dropped color confirms
@@ -708,14 +895,21 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
         cfg.captureMicrophone = true
       }
 
-      let outConfig = SCRecordingOutputConfiguration()
-      outConfig.outputURL = URL(fileURLWithPath: spec.outputPath)
-      outConfig.videoCodecType = spec.hevc ? .hevc : .h264
-      outConfig.outputFileType = .mp4
-      let out = SCRecordingOutput(configuration: outConfig, delegate: self)
+      let w = try RecordingWriter(
+        url: URL(fileURLWithPath: spec.outputPath),
+        width: cfg.width, height: cfg.height, hevc: spec.hevc,
+        systemAudio: spec.systemAudio, microphone: spec.microphone)
+      let sk = RecordingSink(writer: w)
+      sk.onStarted = { PerfLog.mark("recordFirstFrame") }
 
       let s = SCStream(filter: filter, configuration: cfg, delegate: self)
-      try s.addRecordingOutput(out)
+      try s.addStreamOutput(sk, type: .screen, sampleHandlerQueue: sampleQueue)
+      if spec.systemAudio {
+        try s.addStreamOutput(sk, type: .audio, sampleHandlerQueue: sampleQueue)
+      }
+      if spec.microphone {
+        try s.addStreamOutput(sk, type: .microphone, sampleHandlerQueue: sampleQueue)
+      }
       try await s.startCapture()
 
       // Window mode shows its strip only now (no exclusion needed: the
@@ -729,9 +923,11 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
       chrome?.onAbort = { [weak self] in Task { await self?.abort() } }
 
       stream = s
-      output = out
+      sink = sk
+      writer = w
       outputPath = spec.outputPath
       abortRequested = false
+      paused = false
       isRecording = true
       onStateChange?(true, true)
       startTick()
@@ -748,15 +944,17 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
   }
 
   func stop() async {
-    guard isRecording, let s = stream else { return }
-    isRecording = false // block double-stops; delegate finishes the teardown
-    do {
-      try await s.stopCapture()
-    } catch {
-      // The file may still have finalized; the delegate decides. A hard
-      // failure with no delegate callback still cleans up below.
-      finishedRecording(error: error)
-      return
+    guard isRecording else { return }
+    isRecording = false // block double-stops
+    let s = stream
+    stream = nil
+    try? await s?.stopCapture()
+    if abortRequested {
+      writer?.cancel()
+      finalize(result: .aborted)
+    } else {
+      let ok = await (writer?.finish() ?? false)
+      finalize(result: ok ? .finished : .failed("writer did not complete"))
     }
   }
 
@@ -765,40 +963,37 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
     await stop()
   }
 
-  // MARK: SCRecordingOutputDelegate
-
-  nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
-    Task { @MainActor in self.finishedRecording(error: nil) }
-  }
-
-  nonisolated func recordingOutput(
-    _ recordingOutput: SCRecordingOutput, didFailWithError error: Error
-  ) {
-    Task { @MainActor in self.finishedRecording(error: error) }
-  }
-
   nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
-    Task { @MainActor in self.finishedRecording(error: error) }
+    Task { @MainActor in
+      guard self.isRecording else { return } // our own stop already handled it
+      self.isRecording = false
+      self.stream = nil
+      self.writer?.cancel()
+      self.finalize(result: .failed("\(error)"))
+    }
   }
 
-  private func finishedRecording(error: Error?) {
-    guard stream != nil else { return } // already torn down
+  private enum Outcome { case finished, aborted, failed(String) }
+
+  private func finalize(result: Outcome) {
     let path = outputPath
-    let duration = output?.recordedDuration.seconds ?? 0
-    let size = output?.recordedFileSize ?? 0
-    let aborted = abortRequested
-    cleanupSession(graceful: !aborted && error == nil)
-    PerfLog.mark("recordEnd aborted=\(aborted) error=\(error != nil)")
-    if aborted {
+    let dur = sink?.elapsedSeconds ?? 0
+    let size = currentFileSize()
+    let graceful: Bool = { if case .finished = result { return true }; return false }()
+    cleanupSession(graceful: graceful)
+    switch result {
+    case .finished:
+      PerfLog.mark("recordEnd ok")
+      events("onRecordFinished",
+             ["path": path ?? "", "duration": dur, "fileSize": size])
+    case .aborted:
       if let p = path { try? FileManager.default.removeItem(atPath: p) }
+      PerfLog.mark("recordEnd aborted")
       events("onRecordAborted", nil)
-    } else if let e = error {
+    case .failed(let m):
       if let p = path { try? FileManager.default.removeItem(atPath: p) }
-      events("onRecordFailed", ["message": "\(e)"])
-    } else {
-      events("onRecordFinished", [
-        "path": path ?? "", "duration": duration, "fileSize": size,
-      ])
+      PerfLog.mark("recordEnd failed")
+      events("onRecordFailed", ["message": m])
     }
   }
 
@@ -808,19 +1003,30 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
     chrome?.dismiss()
     chrome = nil
     stream = nil
-    output = nil
+    sink = nil
+    writer = nil
     outputPath = nil
     isRecording = false
+    paused = false
     onStateChange?(false, graceful)
+  }
+
+  private func currentFileSize() -> Int {
+    guard let p = outputPath,
+          let attrs = try? FileManager.default.attributesOfItem(atPath: p),
+          let size = attrs[.size] as? Int
+    else { return 0 }
+    return size
   }
 
   private func startTick() {
     tick = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
       [weak self] _ in
       Task { @MainActor in
-        guard let self, let out = self.output else { return }
+        guard let self, let sink = self.sink else { return }
         self.chrome?.update(
-          duration: out.recordedDuration, fileSize: out.recordedFileSize)
+          duration: CMTime(seconds: sink.elapsedSeconds, preferredTimescale: 600),
+          fileSize: self.currentFileSize())
       }
     }
   }
