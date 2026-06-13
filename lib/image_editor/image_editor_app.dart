@@ -712,6 +712,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         brightness: brightness,
         scaffoldBackgroundColor: Colors.transparent,
         fontFamily: GlimprType.sans,
+        tooltipTheme: glimprTooltipTheme(brightness),
       ),
       home: GlimprTheme(
         tokens: tokens,

@@ -417,6 +417,7 @@ class _SettingsAppState extends State<SettingsApp>
         brightness: brightness,
         scaffoldBackgroundColor: Colors.transparent,
         fontFamily: GlimprType.sans,
+        tooltipTheme: glimprTooltipTheme(brightness),
       ),
       home: GlimprTheme(
         tokens: tokens,

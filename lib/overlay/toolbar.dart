@@ -86,31 +86,13 @@ class EditorToolbar extends StatelessWidget {
       dark ? Brightness.dark : Brightness.light,
     );
     final l10n = AppLocalizations.of(context);
-    // Tooltips styled to the bar's colour scheme (near-solid fill + border +
-    // fg), not Material's default dark grey. preferBelow:false so they grow
-    // UPWARD (the bar is at the bottom). The tool row is the TALL bar (52), so
-    // its tooltips need a bigger vertical offset to clear it (see below); the
-    // option/caption rows keep the default offset.
-    final tooltipData = TooltipThemeData(
-      preferBelow: false,
-      waitDuration: const Duration(milliseconds: 500),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: dark ? GlimprTokens.barBgDark : GlimprTokens.barBgLight,
-        borderRadius: BorderRadius.circular(GlimprTokens.radiusPill),
-        border: Border.all(
-          color: dark
-              ? GlimprTokens.barBorderDark
-              : GlimprTokens.barBorderLight,
-          width: 0.5,
-        ),
-      ),
-      textStyle: TextStyle(
-        color: palette.fg,
-        fontSize: 12,
-        decoration: TextDecoration.none,
-      ),
-    );
+    // The shared app-wide tooltip style (bar colour scheme), plus the toolbar's
+    // own positioning: preferBelow:false so they grow UPWARD (the bar is at the
+    // bottom). The tool row is the TALL bar (52), so its tooltips need a bigger
+    // vertical offset to clear it (see below); option/caption keep the default.
+    final tooltipData = glimprTooltipTheme(
+      dark ? Brightness.dark : Brightness.light,
+    ).copyWith(preferBelow: false);
     return _ToolbarTheme(
       palette: palette,
       accent: recordMode

@@ -8,6 +8,7 @@ import '../perf/frame_stats.dart';
 import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../l10n/gen/app_localizations.dart';
+import '../theme/glimpr_theme.dart';
 import '../settings/app_locale.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
@@ -1003,10 +1004,14 @@ class _OverlayAppState extends State<OverlayApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       // Both themes so Material defaults (e.g. toolbar tooltips) follow the
       // system appearance; our chrome resolves its own palettes regardless.
-      theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),
+      theme: ThemeData(
+        scaffoldBackgroundColor: Colors.transparent,
+        tooltipTheme: glimprTooltipTheme(Brightness.light),
+      ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.transparent,
+        tooltipTheme: glimprTooltipTheme(Brightness.dark),
       ),
       home: (d == null || frozen == null || editor == null)
           // Idle: fully transparent until a capture sets the frozen frame.

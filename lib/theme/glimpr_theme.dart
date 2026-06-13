@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 /// Glimpr design-system tokens, ported verbatim from the design handoff's
 /// `glimpr.css` (the "Aurora" settings theme). Two token sets — [dark] (the
@@ -189,6 +189,33 @@ class GlimprTokens {
 
   static GlimprTokens forBrightness(Brightness b) =>
       b == Brightness.dark ? dark : light;
+}
+
+/// App-wide tooltip style — the bar colour scheme (near-solid [barBg] fill +
+/// border + fg) instead of Material's default dark grey. Applied through each
+/// shell's `ThemeData.tooltipTheme` so every tooltip matches; the overlay
+/// toolbar layers its own `preferBelow` / `verticalOffset` on top of this.
+TooltipThemeData glimprTooltipTheme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  return TooltipThemeData(
+    waitDuration: const Duration(milliseconds: 500),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: dark ? GlimprTokens.barBgDark : GlimprTokens.barBgLight,
+      borderRadius: BorderRadius.circular(GlimprTokens.radiusPill),
+      border: Border.all(
+        color: dark
+            ? GlimprTokens.barBorderDark
+            : GlimprTokens.barBorderLight,
+        width: 0.5,
+      ),
+    ),
+    textStyle: TextStyle(
+      color: dark ? Colors.white : GlimprTokens.light.fg1,
+      fontSize: 12,
+      decoration: TextDecoration.none,
+    ),
+  );
 }
 
 /// Typography for the Aurora theme. [sans] is the body face (Noto Sans TC,
