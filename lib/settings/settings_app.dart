@@ -107,8 +107,10 @@ class _SettingsAppState extends State<SettingsApp>
   // Screen recording (macOS 15+ module; the card shows an unavailable hint
   // below 15).
   bool _recordAvailable = false;
-  bool _recordHevc = false;
+  RecordFormat _recordFormat = RecordFormat.h264;
   int _recordFps = 30;
+  int _recordCountdown = 0;
+  int _recordMaxDuration = 0;
   bool _recordShowCursor = true;
   bool _recordSystemAudio = false;
   bool _recordMicrophone = false;
@@ -222,8 +224,10 @@ class _SettingsAppState extends State<SettingsApp>
       _captureLayerCap = layerCap;
       _appLanguage = appLanguage;
       _appLanguageInitial = appLanguage;
-      _recordHevc = rec.hevc;
+      _recordFormat = rec.format;
       _recordFps = rec.fps;
+      _recordCountdown = rec.countdown;
+      _recordMaxDuration = rec.maxDuration;
       _recordShowCursor = rec.showCursor;
       _recordSystemAudio = rec.systemAudio;
       _recordMicrophone = rec.microphone;
@@ -736,14 +740,18 @@ class _SettingsAppState extends State<SettingsApp>
         SectionLabel(_l.settingsSectionFormat, icon: Icons.movie_outlined),
         GlassCard.rows([
           SettingRow(
-            title: _l.settingsRecordingCodec,
-            hint: _l.settingsRecordingCodecHint,
-            trailing: Segmented<bool>(
-              value: _recordHevc,
-              options: const [(false, 'H.264'), (true, 'HEVC')],
+            title: _l.settingsRecordingFormat,
+            hint: _l.settingsRecordingFormatHint,
+            trailing: Segmented<RecordFormat>(
+              value: _recordFormat,
+              options: const [
+                (RecordFormat.h264, 'H.264'),
+                (RecordFormat.hevc, 'HEVC'),
+                (RecordFormat.gif, 'GIF'),
+              ],
               onChanged: (v) async {
-                await _s.setRecordHevc(v);
-                if (mounted) setState(() => _recordHevc = v);
+                await _s.setRecordFormat(v);
+                if (mounted) setState(() => _recordFormat = v);
               },
             ),
           ),
@@ -757,6 +765,40 @@ class _SettingsAppState extends State<SettingsApp>
               onChanged: (v) async {
                 await _s.setRecordFps(v);
                 if (mounted) setState(() => _recordFps = v);
+              },
+            ),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsRecordingCountdown,
+            hint: _l.settingsRecordingCountdownHint,
+            trailing: Segmented<int>(
+              value: _recordCountdown,
+              options: [
+                (0, _l.settingsRecordingDurationOff),
+                for (final n in const [3, 5, 10])
+                  (n, '$n${_l.settingsRecordingSecondsSuffix}'),
+              ],
+              onChanged: (v) async {
+                await _s.setRecordCountdown(v);
+                if (mounted) setState(() => _recordCountdown = v);
+              },
+            ),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsRecordingMaxDuration,
+            hint: _l.settingsRecordingMaxDurationHint,
+            trailing: Segmented<int>(
+              value: _recordMaxDuration,
+              options: [
+                (0, _l.settingsRecordingDurationOff),
+                for (final n in const [5, 10, 15, 30, 60])
+                  (n, '$n${_l.settingsRecordingSecondsSuffix}'),
+              ],
+              onChanged: (v) async {
+                await _s.setRecordMaxDuration(v);
+                if (mounted) setState(() => _recordMaxDuration = v);
               },
             ),
           ),

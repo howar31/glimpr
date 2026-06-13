@@ -716,6 +716,54 @@ abstract class AppLocalizations {
   /// **'60 fps is smoother but roughly doubles the file size'**
   String get settingsRecordingFpsHint;
 
+  /// Settings > Capture > Screen recording: output format row title
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get settingsRecordingFormat;
+
+  /// Settings > Capture > Screen recording: format row hint
+  ///
+  /// In en, this message translates to:
+  /// **'H.264 and HEVC are mp4 video; GIF is a silent animated image'**
+  String get settingsRecordingFormatHint;
+
+  /// Settings > Capture > Screen recording: countdown row title
+  ///
+  /// In en, this message translates to:
+  /// **'Countdown'**
+  String get settingsRecordingCountdown;
+
+  /// Settings > Capture > Screen recording: countdown row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Wait before recording starts'**
+  String get settingsRecordingCountdownHint;
+
+  /// Settings > Capture > Screen recording: fixed-duration row title
+  ///
+  /// In en, this message translates to:
+  /// **'Stop after'**
+  String get settingsRecordingMaxDuration;
+
+  /// Settings > Capture > Screen recording: fixed-duration row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically stop the recording after this long'**
+  String get settingsRecordingMaxDurationHint;
+
+  /// Screen recording: countdown / stop-after option meaning disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settingsRecordingDurationOff;
+
+  /// Screen recording: compact seconds unit suffix (e.g. 5s)
+  ///
+  /// In en, this message translates to:
+  /// **'s'**
+  String get settingsRecordingSecondsSuffix;
+
   /// Settings > Capture > Screen recording: cursor row title
   ///
   /// In en, this message translates to:

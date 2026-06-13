@@ -420,6 +420,38 @@
   "@settingsRecordingFpsHint": {
     "description": "Settings > Capture > Screen recording: fps row hint"
   },
+  "settingsRecordingFormat": "Format",
+  "@settingsRecordingFormat": {
+    "description": "Settings > Capture > Screen recording: output format row title"
+  },
+  "settingsRecordingFormatHint": "H.264 and HEVC are mp4 video; GIF is a silent animated image",
+  "@settingsRecordingFormatHint": {
+    "description": "Settings > Capture > Screen recording: format row hint"
+  },
+  "settingsRecordingCountdown": "Countdown",
+  "@settingsRecordingCountdown": {
+    "description": "Settings > Capture > Screen recording: countdown row title"
+  },
+  "settingsRecordingCountdownHint": "Wait before recording starts",
+  "@settingsRecordingCountdownHint": {
+    "description": "Settings > Capture > Screen recording: countdown row hint"
+  },
+  "settingsRecordingMaxDuration": "Stop after",
+  "@settingsRecordingMaxDuration": {
+    "description": "Settings > Capture > Screen recording: fixed-duration row title"
+  },
+  "settingsRecordingMaxDurationHint": "Automatically stop the recording after this long",
+  "@settingsRecordingMaxDurationHint": {
+    "description": "Settings > Capture > Screen recording: fixed-duration row hint"
+  },
+  "settingsRecordingDurationOff": "Off",
+  "@settingsRecordingDurationOff": {
+    "description": "Screen recording: countdown / stop-after option meaning disabled"
+  },
+  "settingsRecordingSecondsSuffix": "s",
+  "@settingsRecordingSecondsSuffix": {
+    "description": "Screen recording: compact seconds unit suffix (e.g. 5s)"
+  },
   "settingsRecordingCursor": "Show cursor",
   "@settingsRecordingCursor": {
     "description": "Settings > Capture > Screen recording: cursor row title"

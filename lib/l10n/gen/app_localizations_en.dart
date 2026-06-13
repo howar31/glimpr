@@ -354,6 +354,32 @@ class AppLocalizationsEn extends AppLocalizations {
       '60 fps is smoother but roughly doubles the file size';
 
   @override
+  String get settingsRecordingFormat => 'Format';
+
+  @override
+  String get settingsRecordingFormatHint =>
+      'H.264 and HEVC are mp4 video; GIF is a silent animated image';
+
+  @override
+  String get settingsRecordingCountdown => 'Countdown';
+
+  @override
+  String get settingsRecordingCountdownHint => 'Wait before recording starts';
+
+  @override
+  String get settingsRecordingMaxDuration => 'Stop after';
+
+  @override
+  String get settingsRecordingMaxDurationHint =>
+      'Automatically stop the recording after this long';
+
+  @override
+  String get settingsRecordingDurationOff => 'Off';
+
+  @override
+  String get settingsRecordingSecondsSuffix => 's';
+
+  @override
   String get settingsRecordingCursor => 'Show cursor';
 
   @override

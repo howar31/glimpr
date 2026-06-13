@@ -330,6 +330,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingFpsHint => '60 fps 較流暢，檔案約為兩倍大';
 
   @override
+  String get settingsRecordingFormat => '格式';
+
+  @override
+  String get settingsRecordingFormatHint => 'H.264 與 HEVC 是 mp4 影片，GIF 是無聲動畫圖片';
+
+  @override
+  String get settingsRecordingCountdown => '倒數';
+
+  @override
+  String get settingsRecordingCountdownHint => '錄影開始前先等待';
+
+  @override
+  String get settingsRecordingMaxDuration => '自動停止';
+
+  @override
+  String get settingsRecordingMaxDurationHint => '錄影達到此長度後自動停止';
+
+  @override
+  String get settingsRecordingDurationOff => '關閉';
+
+  @override
+  String get settingsRecordingSecondsSuffix => '秒';
+
+  @override
   String get settingsRecordingCursor => '顯示游標';
 
   @override
