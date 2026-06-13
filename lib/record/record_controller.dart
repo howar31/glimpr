@@ -182,12 +182,13 @@ class RecordController {
         app = kRecordingCaptureLabel;
     }
 
+    final isGif = rec.isGif;
     final fileName = buildScreenshotName(
       template: cap.filenameTemplate,
       t: _now(),
       windowTitle: title,
       appName: app,
-      ext: 'mp4',
+      ext: isGif ? 'gif' : 'mp4',
     );
     final dir = effectiveSaveDir(cap.saveDir);
     await dir.create(recursive: true);
@@ -199,9 +200,11 @@ class RecordController {
       windowId: windowId,
       fps: rec.fps,
       hevc: rec.hevc,
+      gif: isGif,
       showsCursor: rec.showCursor,
-      systemAudio: rec.systemAudio,
-      microphone: rec.microphone,
+      // GIF has no audio track.
+      systemAudio: isGif ? false : rec.systemAudio,
+      microphone: isGif ? false : rec.microphone,
       maxDuration: rec.maxDuration,
     );
   }
@@ -236,12 +239,13 @@ class RecordController {
       final title = (a['title'] as String?) ??
           (rect != null ? kRecordingCaptureLabel : kDisplayCaptureLabel);
       final app = (a['app'] as String?) ?? title;
+      final isGif = (a['gif'] as bool?) ?? rec.isGif;
       final fileName = buildScreenshotName(
         template: cap.filenameTemplate,
         t: _now(),
         windowTitle: title.isEmpty ? null : title,
         appName: app.isEmpty ? null : app,
-        ext: 'mp4',
+        ext: isGif ? 'gif' : 'mp4',
       );
       final dir = effectiveSaveDir(cap.saveDir);
       await dir.create(recursive: true);
@@ -254,9 +258,11 @@ class RecordController {
         // The live-select toolbar's one-shot overrides win over the settings.
         fps: (a['fps'] as num?)?.toInt() ?? rec.fps,
         hevc: (a['hevc'] as bool?) ?? rec.hevc,
+        gif: isGif,
         showsCursor: (a['showsCursor'] as bool?) ?? rec.showCursor,
-        systemAudio: (a['systemAudio'] as bool?) ?? rec.systemAudio,
-        microphone: (a['microphone'] as bool?) ?? rec.microphone,
+        // GIF has no audio track.
+        systemAudio: isGif ? false : (a['systemAudio'] as bool?) ?? rec.systemAudio,
+        microphone: isGif ? false : (a['microphone'] as bool?) ?? rec.microphone,
         maxDuration: (a['maxDuration'] as num?)?.toInt() ?? rec.maxDuration,
       );
     } catch (e) {

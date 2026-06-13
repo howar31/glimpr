@@ -1,7 +1,10 @@
 import AVFoundation
 import Cocoa
+import CoreImage
 import FlutterMacOS
+import ImageIO
 import ScreenCaptureKit
+import UniformTypeIdentifiers
 
 // MARK: - LiveFrameSource
 
@@ -711,13 +714,23 @@ final class RecordingWriter {
   }
 }
 
+/// A capture sink the controller can drive uniformly whether the output is an
+/// mp4 (RecordingSink + AVAssetWriter) or a GIF (GifSink + ImageIO).
+@available(macOS 15.0, *)
+protocol RecordingSinkBase: SCStreamOutput {
+  func setPaused(_ p: Bool)
+  var elapsedSeconds: Double { get } // recorded media time, un-paused
+  func finish() async -> Bool        // finalize the output file
+  func cancel()                      // discard a partial output
+}
+
 /// Off-main capture sink: receives SCStream video + audio sample buffers on a
 /// single serial queue and appends them to the RecordingWriter on a 0-based,
 /// pause-aware timeline (VFR video — each frame appended once with its rebased
 /// PTS; a static screen simply holds the last frame). The first .screen frame
 /// establishes the session.
 @available(macOS 15.0, *)
-final class RecordingSink: NSObject, SCStreamOutput {
+final class RecordingSink: NSObject, RecordingSinkBase {
   private let writer: RecordingWriter
   private let lock = NSLock()
   private var sessionStart: CMTime?
@@ -739,6 +752,9 @@ final class RecordingSink: NSObject, SCStreamOutput {
   func setPaused(_ p: Bool) {
     lock.lock(); paused = p; lock.unlock()
   }
+
+  func finish() async -> Bool { await writer.finish() }
+  func cancel() { writer.cancel() }
 
   func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer,
               of type: SCStreamOutputType) {
@@ -805,6 +821,123 @@ final class RecordingSink: NSObject, SCStreamOutput {
   }
 }
 
+/// ImageIO animated-GIF encoder (engine B direct-GIF path): frames are added
+/// incrementally as they arrive and finalized on stop. 256-color quantization
+/// is ImageIO's; loop count 0 = infinite. No mp4, no FFmpeg.
+final class GifWriter {
+  private let url: URL
+  private let dest: CGImageDestination?
+  private var frames = 0
+
+  init(url: URL, loop: Int = 0) {
+    self.url = url
+    try? FileManager.default.removeItem(at: url)
+    dest = CGImageDestinationCreateWithURL(
+      url as CFURL, UTType.gif.identifier as CFString, 0, nil)
+    if let dest {
+      CGImageDestinationSetProperties(dest, [
+        kCGImagePropertyGIFDictionary: [
+          kCGImagePropertyGIFLoopCount: loop,
+        ],
+      ] as CFDictionary)
+    }
+  }
+
+  func add(_ image: CGImage, delay: Double) {
+    guard let dest else { return }
+    CGImageDestinationAddImage(dest, image, [
+      kCGImagePropertyGIFDictionary: [
+        kCGImagePropertyGIFDelayTime: delay,
+        kCGImagePropertyGIFUnclampedDelayTime: delay,
+      ],
+    ] as CFDictionary)
+    frames += 1
+  }
+
+  func finish() -> Bool {
+    guard let dest, frames > 0 else { return false }
+    return CGImageDestinationFinalize(dest)
+  }
+
+  func cancel() {
+    try? FileManager.default.removeItem(at: url)
+  }
+}
+
+/// GIF capture sink: samples the live screen at the GIF frame rate, downscales
+/// each frame to the GIF max dimension, and feeds GifWriter. Pause-aware and
+/// reports recorded media time like RecordingSink, so the controller drives it
+/// the same way. GIF has no audio, so only the .screen output is attached.
+@available(macOS 15.0, *)
+final class GifSink: NSObject, RecordingSinkBase {
+  private let gif: GifWriter
+  private let frameInterval: Double
+  private let maxLongSide: CGFloat
+  private let ciContext = CIContext()
+  private let lock = NSLock()
+  private var sessionStart: CMTime?
+  private var pausedAccum = CMTime.zero
+  private var pauseStart: CMTime?
+  private var paused = false
+  private var lastElapsed = CMTime.zero
+  private var lastAddSeconds = -1.0
+  var onStarted: (() -> Void)?
+
+  init(gif: GifWriter, gifFps: Int, maxLongSide: Int) {
+    self.gif = gif
+    self.frameInterval = 1.0 / Double(max(1, gifFps))
+    self.maxLongSide = CGFloat(maxLongSide)
+  }
+
+  var elapsedSeconds: Double {
+    lock.lock(); defer { lock.unlock() }
+    return max(0, lastElapsed.seconds)
+  }
+
+  func setPaused(_ p: Bool) { lock.lock(); paused = p; lock.unlock() }
+  func finish() async -> Bool { gif.finish() }
+  func cancel() { gif.cancel() }
+
+  func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer,
+              of type: SCStreamOutputType) {
+    guard type == .screen, CMSampleBufferDataIsReady(sb),
+          let pb = CMSampleBufferGetImageBuffer(sb) else { return }
+    let pts = CMSampleBufferGetPresentationTimeStamp(sb)
+
+    lock.lock()
+    if sessionStart == nil {
+      sessionStart = pts
+      let cb = onStarted
+      lock.unlock(); cb?(); lock.lock()
+    }
+    let start = sessionStart ?? pts
+    if paused {
+      if pauseStart == nil { pauseStart = pts }
+      lock.unlock(); return
+    } else if let ps = pauseStart {
+      pausedAccum = pausedAccum + (pts - ps); pauseStart = nil
+    }
+    let elapsed = (pts - start - pausedAccum).seconds
+    lastElapsed = CMTime(seconds: elapsed, preferredTimescale: 600)
+    if lastAddSeconds >= 0, elapsed - lastAddSeconds < frameInterval {
+      lock.unlock(); return
+    }
+    lastAddSeconds = elapsed
+    lock.unlock()
+
+    if let cg = downscaled(pb) { gif.add(cg, delay: frameInterval) }
+  }
+
+  private func downscaled(_ pb: CVPixelBuffer) -> CGImage? {
+    let ci = CIImage(cvPixelBuffer: pb)
+    let longSide = max(ci.extent.width, ci.extent.height)
+    let scale = longSide > maxLongSide ? maxLongSide / longSide : 1
+    let out = scale < 1
+      ? ci.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) : ci
+    return ciContext.createCGImage(out, from: out.extent)
+  }
+}
+
 /// Owns one recording session (engine B): an SCStream feeding RecordingSink ->
 /// RecordingWriter (AVAssetWriter). All recording native code lives behind the
 /// `glimpr/record` seam — the existing capture path is untouched.
@@ -818,6 +951,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let windowID: CGWindowID?
     let fps: Int
     let hevc: Bool
+    let gif: Bool // true = direct GIF (no mp4, no audio)
     let showsCursor: Bool
     let systemAudio: Bool
     let microphone: Bool
@@ -827,13 +961,13 @@ final class RecordingController: NSObject, SCStreamDelegate {
 
   private(set) var isRecording = false
   private var stream: SCStream?
-  private var sink: RecordingSink?
-  private var writer: RecordingWriter?
+  private var sink: RecordingSinkBase?
   private var chrome: RecordingChrome?
   private var tick: Timer?
   private var outputPath: String?
   private var abortRequested = false
   private var paused = false
+  private var isGif = false
   private var maxDuration = 0 // seconds; 0 = off (auto-stop disabled)
   private let sampleQueue = DispatchQueue(label: "glimpr.record.samples")
   private var events: (String, Any?) -> Void
@@ -927,20 +1061,33 @@ final class RecordingController: NSObject, SCStreamDelegate {
         cfg.captureMicrophone = true
       }
 
-      let w = try RecordingWriter(
-        url: URL(fileURLWithPath: spec.outputPath),
-        width: cfg.width, height: cfg.height, hevc: spec.hevc,
-        systemAudio: spec.systemAudio, microphone: spec.microphone)
-      let sk = RecordingSink(writer: w)
-      sk.onStarted = { PerfLog.mark("recordFirstFrame") }
+      let sk: RecordingSinkBase
+      if spec.gif {
+        // GIF: no AVAssetWriter, no audio; sample at the GIF frame rate.
+        cfg.minimumFrameInterval = CMTime(value: 1, timescale: 15)
+        let g = GifWriter(url: URL(fileURLWithPath: spec.outputPath))
+        let gs = GifSink(gif: g, gifFps: 15, maxLongSide: 800)
+        gs.onStarted = { PerfLog.mark("recordFirstFrame") }
+        sk = gs
+      } else {
+        let w = try RecordingWriter(
+          url: URL(fileURLWithPath: spec.outputPath),
+          width: cfg.width, height: cfg.height, hevc: spec.hevc,
+          systemAudio: spec.systemAudio, microphone: spec.microphone)
+        let rs = RecordingSink(writer: w)
+        rs.onStarted = { PerfLog.mark("recordFirstFrame") }
+        sk = rs
+      }
 
       let s = SCStream(filter: filter, configuration: cfg, delegate: self)
       try s.addStreamOutput(sk, type: .screen, sampleHandlerQueue: sampleQueue)
-      if spec.systemAudio {
-        try s.addStreamOutput(sk, type: .audio, sampleHandlerQueue: sampleQueue)
-      }
-      if spec.microphone {
-        try s.addStreamOutput(sk, type: .microphone, sampleHandlerQueue: sampleQueue)
+      if !spec.gif {
+        if spec.systemAudio {
+          try s.addStreamOutput(sk, type: .audio, sampleHandlerQueue: sampleQueue)
+        }
+        if spec.microphone {
+          try s.addStreamOutput(sk, type: .microphone, sampleHandlerQueue: sampleQueue)
+        }
       }
       try await s.startCapture()
 
@@ -956,9 +1103,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
 
       stream = s
       sink = sk
-      writer = w
       outputPath = spec.outputPath
       maxDuration = spec.maxDuration
+      isGif = spec.gif
       abortRequested = false
       paused = false
       isRecording = true
@@ -983,11 +1130,15 @@ final class RecordingController: NSObject, SCStreamDelegate {
     stream = nil
     try? await s?.stopCapture()
     if abortRequested {
-      writer?.cancel()
+      sink?.cancel()
       finalize(result: .aborted)
     } else {
-      let ok = await (writer?.finish() ?? false)
-      finalize(result: ok ? .finished : .failed("writer did not complete"))
+      // GIF finalize encodes every accumulated frame, so flag a processing
+      // phase first; the completion sound + after-record flow fire only after
+      // onRecordFinished (i.e. after the GIF is fully written).
+      if isGif { events("onRecordProcessing", nil) }
+      let ok = await (sink?.finish() ?? false)
+      finalize(result: ok ? .finished : .failed("encoder did not complete"))
     }
   }
 
@@ -1019,7 +1170,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
       guard self.isRecording else { return } // our own stop already handled it
       self.isRecording = false
       self.stream = nil
-      self.writer?.cancel()
+      self.sink?.cancel()
       self.finalize(result: .failed("\(error)"))
     }
   }
@@ -1055,10 +1206,10 @@ final class RecordingController: NSObject, SCStreamDelegate {
     chrome = nil
     stream = nil
     sink = nil
-    writer = nil
     outputPath = nil
     isRecording = false
     paused = false
+    isGif = false
     onStateChange?(false, graceful)
   }
 
@@ -1236,6 +1387,7 @@ final class RecordingChannel {
     let mode = (args["mode"] as? String) ?? "display"
     let fps = (args["fps"] as? Int) ?? 30
     let hevc = (args["hevc"] as? Bool) ?? false
+    let gif = (args["gif"] as? Bool) ?? false
     let showsCursor = (args["showsCursor"] as? Bool) ?? true
     let systemAudio = (args["systemAudio"] as? Bool) ?? false
     let microphone = (args["microphone"] as? Bool) ?? false
@@ -1263,7 +1415,7 @@ final class RecordingChannel {
     func begin(rect: CGRect?, display: CGDirectDisplayID?) {
       let spec = RecordingController.Spec(
         mode: mode, displayID: display, rect: rect, windowID: windowID,
-        fps: fps, hevc: hevc, showsCursor: showsCursor,
+        fps: fps, hevc: hevc, gif: gif, showsCursor: showsCursor,
         systemAudio: systemAudio, microphone: microphone,
         maxDuration: maxDuration, outputPath: outputPath)
       Task { await controller.start(spec) }

@@ -49,6 +49,7 @@ class _FakeBridge extends RecordBridge {
     int? windowId,
     int fps = 30,
     bool hevc = false,
+    bool gif = false,
     bool showsCursor = true,
     bool systemAudio = false,
     bool microphone = false,
@@ -62,6 +63,7 @@ class _FakeBridge extends RecordBridge {
       'windowId': windowId,
       'fps': fps,
       'hevc': hevc,
+      'gif': gif,
       'showsCursor': showsCursor,
       'systemAudio': systemAudio,
       'microphone': microphone,
@@ -350,6 +352,31 @@ void main() {
       expect(await Settings(store).getRecordSystemAudio(), isFalse);
     });
 
+    test('gif format forces audio off and a .gif output', () async {
+      final rc = build();
+      await Settings(store).setRecordFormat(RecordFormat.gif);
+      await Settings(store).setRecordSystemAudio(true);
+      await Settings(store).setRecordMicrophone(true);
+      await rc.toggle(kRecordModeDisplay);
+      final s = bridge.starts.single;
+      expect(s['gif'], isTrue);
+      expect(s['systemAudio'], isFalse);
+      expect(s['microphone'], isFalse);
+      expect(s['outputPath'], endsWith('.gif'));
+    });
+
+    test('non-gif formats keep the mp4 output and audio settings', () async {
+      final rc = build();
+      await Settings(store).setRecordFormat(RecordFormat.hevc);
+      await Settings(store).setRecordSystemAudio(true);
+      await rc.toggle(kRecordModeDisplay);
+      final s = bridge.starts.single;
+      expect(s['gif'], isFalse);
+      expect(s['hevc'], isTrue);
+      expect(s['systemAudio'], isTrue);
+      expect(s['outputPath'], endsWith('.mp4'));
+    });
+
     test('maxDuration flows from settings to the bridge', () async {
       final rc = build();
       await Settings(store).setRecordMaxDuration(30);
@@ -480,6 +507,18 @@ void main() {
       expect(r.fps, 60);
       expect(r.hevc, isTrue);
       expect(r.showCursor, isTrue); // default on
+    });
+
+    test('record_format round-trips and migrates from the legacy hevc bool',
+        () async {
+      final s = Settings(_FakeStore());
+      expect((await s.loadRecording()).format, RecordFormat.h264);
+      await s.setRecordFormat(RecordFormat.gif);
+      expect((await s.loadRecording()).format, RecordFormat.gif);
+      // Migration: a store with only the old record_hevc=true reads as HEVC.
+      final legacy = Settings(_FakeStore({'record_hevc': true}));
+      expect((await legacy.loadRecording()).format, RecordFormat.hevc);
+      expect((await legacy.loadRecording()).hevc, isTrue);
     });
 
     test('record_max_duration round-trips, defaults 0, clamps off-steps',

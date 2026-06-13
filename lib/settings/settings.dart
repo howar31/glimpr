@@ -98,6 +98,7 @@ class Settings {
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
   static const _recordHevcKey = 'record_hevc';
+  static const _recordFormatKey = 'record_format';
   static const _recordFpsKey = 'record_fps';
   static const _recordCursorKey = 'record_show_cursor';
   static const _recordSystemAudioKey = 'record_system_audio';
@@ -236,9 +237,32 @@ class Settings {
       store.setBool(_captureCursorKey, v);
 
   // Screen recording (macOS 15+ module) -------------------------------------
+  /// The recording output format (SSOT). [RecordFormat.gif] selects the direct
+  /// ImageIO GIF path (no mp4, no audio); h264/hevc are the mp4 codecs.
+  Future<RecordFormat> getRecordFormat() async {
+    switch (await store.getString(_recordFormatKey)) {
+      case 'gif':
+        return RecordFormat.gif;
+      case 'hevc':
+        return RecordFormat.hevc;
+      case 'h264':
+        return RecordFormat.h264;
+    }
+    // Migration: no format stored -> fall back to the legacy record_hevc bool.
+    return (await store.getBool(_recordHevcKey)) == true
+        ? RecordFormat.hevc
+        : RecordFormat.h264;
+  }
+
+  Future<void> setRecordFormat(RecordFormat f) =>
+      store.setString(_recordFormatKey, f.name);
+
+  // Legacy codec helpers, kept for the existing Settings codec toggle; they map
+  // onto the format SSOT (gif is reachable only via the format picker).
   Future<bool> getRecordHevc() async =>
-      (await store.getBool(_recordHevcKey)) ?? false;
-  Future<void> setRecordHevc(bool v) => store.setBool(_recordHevcKey, v);
+      (await getRecordFormat()) == RecordFormat.hevc;
+  Future<void> setRecordHevc(bool v) =>
+      setRecordFormat(v ? RecordFormat.hevc : RecordFormat.h264);
 
   Future<int> getRecordFps() async {
     final v = (await store.getInt(_recordFpsKey)) ?? 30;
@@ -288,7 +312,7 @@ class Settings {
 
   /// One bundle for the recording controller (mirrors [loadCapture]'s shape).
   Future<RecordingSettings> loadRecording() async => RecordingSettings(
-        hevc: await getRecordHevc(),
+        format: await getRecordFormat(),
         fps: await getRecordFps(),
         showCursor: await getRecordShowCursor(),
         systemAudio: await getRecordSystemAudio(),
@@ -393,9 +417,13 @@ Directory? resolveSaveDir(String? path) =>
 /// Screen-recording settings bundle (macOS 15+ module). Loaded once per
 /// recording start by the record controller; the save folder and filename
 /// template come from [CaptureSettings] (shared output conventions).
+/// The recording output format. h264/hevc are mp4 codecs; gif is the direct
+/// ImageIO animated-GIF path (no mp4, no audio).
+enum RecordFormat { h264, hevc, gif }
+
 class RecordingSettings {
   const RecordingSettings({
-    this.hevc = false,
+    this.format = RecordFormat.h264,
     this.fps = 30,
     this.showCursor = true,
     this.systemAudio = false,
@@ -404,7 +432,9 @@ class RecordingSettings {
     this.flow = const {},
   });
 
-  final bool hevc; // false = H.264 (default), true = HEVC
+  final RecordFormat format;
+  bool get hevc => format == RecordFormat.hevc; // legacy convenience
+  bool get isGif => format == RecordFormat.gif;
   final int fps; // 30 | 60
   final bool showCursor;
   final bool systemAudio;

@@ -239,6 +239,7 @@ class _OverlayAppState extends State<OverlayApp> {
               systemAudio: false,
               microphone: false,
               hevc: false,
+              gif: false,
               fps: 30,
               maxDuration: 0);
           _recordOverrides = overrides;
@@ -248,6 +249,7 @@ class _OverlayAppState extends State<OverlayApp> {
             overrides.systemAudio.value = r.systemAudio;
             overrides.microphone.value = r.microphone;
             overrides.hevc.value = r.hevc;
+            overrides.gif.value = r.isGif;
             overrides.fps.value = r.fps;
             overrides.maxDuration.value = r.maxDuration;
           });
@@ -870,6 +872,7 @@ class _OverlayAppState extends State<OverlayApp> {
           systemAudio: o?.systemAudio.value,
           microphone: o?.microphone.value,
           hevc: o?.hevc.value,
+          gif: o?.gif.value,
           fps: o?.fps.value,
           maxDuration: o?.maxDuration.value,
         );

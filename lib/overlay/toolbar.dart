@@ -479,12 +479,14 @@ class RecordOverrides {
     required bool systemAudio,
     required bool microphone,
     required bool hevc,
+    required bool gif,
     required int fps,
     required int maxDuration,
   })  : showCursor = ValueNotifier(showCursor),
         systemAudio = ValueNotifier(systemAudio),
         microphone = ValueNotifier(microphone),
         hevc = ValueNotifier(hevc),
+        gif = ValueNotifier(gif),
         fps = ValueNotifier(fps),
         maxDuration = ValueNotifier(maxDuration);
 
@@ -492,6 +494,7 @@ class RecordOverrides {
   final ValueNotifier<bool> systemAudio;
   final ValueNotifier<bool> microphone;
   final ValueNotifier<bool> hevc; // false = H.264
+  final ValueNotifier<bool> gif; // true = direct GIF (no mp4, no audio)
   final ValueNotifier<int> fps; // 30 | 60
   final ValueNotifier<int> maxDuration; // seconds; 0 = off (one-shot)
 
@@ -500,6 +503,7 @@ class RecordOverrides {
     systemAudio.dispose();
     microphone.dispose();
     hevc.dispose();
+    gif.dispose();
     fps.dispose();
     maxDuration.dispose();
   }
