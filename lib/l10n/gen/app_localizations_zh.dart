@@ -339,7 +339,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingCountdown => '倒數';
 
   @override
-  String get settingsRecordingCountdownHint => '錄影開始前先等待';
+  String get settingsRecordingCountdownHint => '錄影開始前先等待；按任意錄影快捷鍵可取消倒數';
 
   @override
   String get settingsRecordingMaxDuration => '自動停止';
@@ -418,6 +418,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsShortcutsCaptureNote => '全域生效，因此需要修飾鍵（⌘ ⌥ ⌃ ⇧）';
+
+  @override
+  String get settingsShortcutsRecordingNote =>
+      '錄影期間按任意錄影快捷鍵會停止錄影（不是取消）；截圖快捷鍵仍可使用，可在錄影中截圖';
 
   @override
   String get settingsCmdUndo => '復原';

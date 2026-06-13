@@ -737,7 +737,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Screen recording: countdown row hint
   ///
   /// In en, this message translates to:
-  /// **'Wait before recording starts'**
+  /// **'Wait before recording starts; any recording hotkey cancels the countdown'**
   String get settingsRecordingCountdownHint;
 
   /// Settings > Capture > Screen recording: fixed-duration row title
@@ -889,6 +889,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)'**
   String get settingsShortcutsCaptureNote;
+
+  /// Settings > Shortcuts: Recording section note on recording-vs-screenshot hotkey behaviour
+  ///
+  /// In en, this message translates to:
+  /// **'While recording, any recording hotkey stops it (not cancel); screenshot hotkeys still work, so you can capture a still while recording'**
+  String get settingsShortcutsRecordingNote;
 
   /// Settings > Shortcuts > Commands: Undo row title
   ///

@@ -364,7 +364,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRecordingCountdown => 'Countdown';
 
   @override
-  String get settingsRecordingCountdownHint => 'Wait before recording starts';
+  String get settingsRecordingCountdownHint =>
+      'Wait before recording starts; any recording hotkey cancels the countdown';
 
   @override
   String get settingsRecordingMaxDuration => 'Stop after';
@@ -451,6 +452,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsShortcutsCaptureNote =>
       'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)';
+
+  @override
+  String get settingsShortcutsRecordingNote =>
+      'While recording, any recording hotkey stops it (not cancel); screenshot hotkeys still work, so you can capture a still while recording';
 
   @override
   String get settingsCmdUndo => 'Undo';

@@ -432,7 +432,7 @@
   "@settingsRecordingCountdown": {
     "description": "Settings > Capture > Screen recording: countdown row title"
   },
-  "settingsRecordingCountdownHint": "Wait before recording starts",
+  "settingsRecordingCountdownHint": "Wait before recording starts; any recording hotkey cancels the countdown",
   "@settingsRecordingCountdownHint": {
     "description": "Settings > Capture > Screen recording: countdown row hint"
   },
@@ -535,6 +535,10 @@
   "settingsShortcutsCaptureNote": "Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)",
   "@settingsShortcutsCaptureNote": {
     "description": "Settings > Shortcuts: Capture section note"
+  },
+  "settingsShortcutsRecordingNote": "While recording, any recording hotkey stops it (not cancel); screenshot hotkeys still work, so you can capture a still while recording",
+  "@settingsShortcutsRecordingNote": {
+    "description": "Settings > Shortcuts: Recording section note on recording-vs-screenshot hotkey behaviour"
   },
   "settingsCmdUndo": "Undo",
   "@settingsCmdUndo": {

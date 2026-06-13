@@ -1532,7 +1532,8 @@ class _SettingsAppState extends State<SettingsApp>
             ),
       ]),
       const SizedBox(height: 24),
-      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
+      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined,
+          note: _l.settingsShortcutsRecordingNote),
       GlassCard.rows([
         for (final a in kGlobalActions)
           if (kRecordActionKeys.contains(a.actionKey))
