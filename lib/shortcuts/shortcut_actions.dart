@@ -128,17 +128,20 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kPinClipboardKey: _b(PhysicalKeyboardKey.digit8, LogicalKeyboardKey.digit8,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
-  // Screen recording toggles mirror the screenshot keys + SHIFT (owner
-  // design): ⌘⌥⇧1 region, ⌘⌥⇧2 window, ⌘⌥⇧3 display, ⌘⌥⇧4 last region.
+  // Screen recording toggles: ⌃⌘1 region, ⌃⌘2 window, ⌃⌘3 display, ⌃⌘4 last
+  // region. NOT ⌘⌥⇧ + digit: ⌘⇧3/4/5 are macOS system screenshot shortcuts and
+  // the OS matches that ⌘⇧+digit core even with an extra ⌥ (it grabs the event
+  // before the app), so the old ⌘⌥⇧3/4 were swallowed by the screenshot tool.
+  // Control+Command avoids ⇧ entirely, so it never collides with screenshots.
   kRecordRegionKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
-      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+      {HotkeyModifier.meta, HotkeyModifier.control}),
   kRecordWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
-      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+      {HotkeyModifier.meta, HotkeyModifier.control}),
   kRecordDisplayKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
-      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+      {HotkeyModifier.meta, HotkeyModifier.control}),
   kRecordLastRegionKey: _b(
       PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
-      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+      {HotkeyModifier.meta, HotkeyModifier.control}),
   // Editor commands
   kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
       {HotkeyModifier.meta}),
