@@ -10,6 +10,45 @@ import '../theme/glimpr_theme.dart';
 // ignore_for_file: use_super_parameters
 
 // ---------------------------------------------------------------------------
+// Shared picker-row style — ONE source of truth for the selectable popover
+// menus (design guide: shared style is tokenized, never re-hardcoded). The
+// LAYOUTS differ per picker (a leading icon, an inline preview, a texture
+// band), but every row uses these same values: 14pt label, 12/8 padding, the
+// fg1 colour pair, and a 16px trailing check in a fixed 22px column. The
+// selected row turns [accent] + bold — brand blue by default, recording red
+// when a recording picker passes GlimprTokens.recordingAccent.
+// ---------------------------------------------------------------------------
+
+const EdgeInsets kPickerRowPadding =
+    EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+const double kPickerCheckSize = 16;
+
+/// Primary label/icon colour for a picker row (the fg1 pair).
+Color pickerRowFg(bool dark) => dark ? Colors.white : const Color(0xFF14223B);
+
+/// The label text style: turns [accent] + bold when selected.
+TextStyle pickerRowTextStyle({
+  required bool selected,
+  required Color fg,
+  required Color accent,
+}) =>
+    TextStyle(
+      color: selected ? accent : fg,
+      fontSize: 13,
+      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+    );
+
+/// The trailing check column (empty but present when unselected, so the rows'
+/// content stays aligned).
+Widget pickerRowCheck({required bool selected, required Color accent}) =>
+    SizedBox(
+      width: 22,
+      child: selected
+          ? Icon(Icons.check, size: kPickerCheckSize, color: accent)
+          : null,
+    );
+
+// ---------------------------------------------------------------------------
 // ColorPickerPopover
 // ---------------------------------------------------------------------------
 
@@ -712,7 +751,7 @@ class _FontPickerPopoverState extends State<FontPickerPopover> {
     // toolbar's brightness-aware palette so the list reads on the glass in both
     // themes (the popover lives in an overlay, outside the toolbar's theme).
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fg = pickerRowFg(dark);
     final fgDim = dark ? Colors.white54 : const Color(0xFF64748B);
     final border = dark ? Colors.white24 : Colors.black26;
     const accent = GlimprTokens.accent;
@@ -821,7 +860,8 @@ class _FontRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (selected) Icon(Icons.check, size: 16, color: accent),
+            if (selected)
+              Icon(Icons.check, size: kPickerCheckSize, color: accent),
           ],
         ),
       ),
@@ -858,7 +898,7 @@ class TexturePickerPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fg = pickerRowFg(dark);
     const accent = GlimprTokens.accent;
     // Fixed width so the rows' Expanded resolves and the check stays INSIDE the
     // panel (an unbounded width let the check overflow past the rounded border).
@@ -899,13 +939,10 @@ class TexturePickerPopover extends StatelessWidget {
                                   alignment: Alignment.center,
                                   child: Text(
                                     textureLabel(l10n, tex),
-                                    style: TextStyle(
-                                      color: tex == selected ? accent : fg,
-                                      fontSize: 14,
-                                      fontWeight: tex == selected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                    ),
+                                    style: pickerRowTextStyle(
+                                        selected: tex == selected,
+                                        fg: fg,
+                                        accent: accent),
                                   ),
                                 ),
                               ),
@@ -916,12 +953,7 @@ class TexturePickerPopover extends StatelessWidget {
                     ),
                     // Fixed check column so bands align and the check stays
                     // inside the panel.
-                    SizedBox(
-                      width: 22,
-                      child: tex == selected
-                          ? const Icon(Icons.check, size: 16, color: accent)
-                          : null,
-                    ),
+                    pickerRowCheck(selected: tex == selected, accent: accent),
                   ],
                 ),
               ),
@@ -1012,7 +1044,7 @@ class LineStylePickerPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fg = pickerRowFg(dark);
     const accent = GlimprTokens.accent;
     return SizedBox(
       width: double.infinity,
@@ -1024,22 +1056,20 @@ class LineStylePickerPopover extends StatelessWidget {
             InkWell(
               onTap: () => onSelected(s),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: kPickerRowPadding,
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 116,
+                      // Fits the widest label at 14pt (matches the standard
+                      // picker rows); the line preview takes the rest.
+                      width: 124,
                       child: Text(
                         lineStyleLabel(l10n, s),
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.visible,
-                        style: TextStyle(
-                          color: s == selected ? accent : fg,
-                          fontSize: 13,
-                          fontWeight:
-                              s == selected ? FontWeight.w700 : FontWeight.w500,
-                        ),
+                        style: pickerRowTextStyle(
+                            selected: s == selected, fg: fg, accent: accent),
                       ),
                     ),
                     Expanded(
@@ -1048,12 +1078,7 @@ class LineStylePickerPopover extends StatelessWidget {
                         child: CustomPaint(painter: _LineStylePreview(s, fg)),
                       ),
                     ),
-                    SizedBox(
-                      width: 22,
-                      child: s == selected
-                          ? const Icon(Icons.check, size: 16, color: accent)
-                          : null,
-                    ),
+                    pickerRowCheck(selected: s == selected, accent: accent),
                   ],
                 ),
               ),
@@ -1114,7 +1139,7 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fg = pickerRowFg(dark);
     const accent = GlimprTokens.accent;
     return SizedBox(
       width: double.infinity,
@@ -1126,26 +1151,17 @@ class ArrowHeadsPickerPopover extends StatelessWidget {
             InkWell(
               onTap: () => onSelected(h),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: kPickerRowPadding,
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         arrowHeadsLabel(l10n, h),
-                        style: TextStyle(
-                          color: h == selected ? accent : fg,
-                          fontSize: 14,
-                          fontWeight:
-                              h == selected ? FontWeight.w700 : FontWeight.w500,
-                        ),
+                        style: pickerRowTextStyle(
+                            selected: h == selected, fg: fg, accent: accent),
                       ),
                     ),
-                    SizedBox(
-                      width: 22,
-                      child: h == selected
-                          ? const Icon(Icons.check, size: 16, color: accent)
-                          : null,
-                    ),
+                    pickerRowCheck(selected: h == selected, accent: accent),
                   ],
                 ),
               ),
@@ -1180,7 +1196,7 @@ class StepShapePickerPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fg = pickerRowFg(dark);
     const accent = GlimprTokens.accent;
     return SizedBox(
       width: double.infinity,
@@ -1192,34 +1208,25 @@ class StepShapePickerPopover extends StatelessWidget {
             InkWell(
               onTap: () => onSelected(s),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: kPickerRowPadding,
                 child: Row(
                   children: [
                     Icon(
                       s == StepShape.circle
                           ? Icons.circle_outlined
                           : Icons.square_outlined,
-                      size: 16,
+                      size: kPickerCheckSize,
                       color: s == selected ? accent : fg,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         stepShapeLabel(l10n, s),
-                        style: TextStyle(
-                          color: s == selected ? accent : fg,
-                          fontSize: 14,
-                          fontWeight:
-                              s == selected ? FontWeight.w700 : FontWeight.w500,
-                        ),
+                        style: pickerRowTextStyle(
+                            selected: s == selected, fg: fg, accent: accent),
                       ),
                     ),
-                    SizedBox(
-                      width: 22,
-                      child: s == selected
-                          ? const Icon(Icons.check, size: 16, color: accent)
-                          : null,
-                    ),
+                    pickerRowCheck(selected: s == selected, accent: accent),
                   ],
                 ),
               ),
@@ -1254,7 +1261,7 @@ class SpotlightEffectPickerPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
+    final fg = pickerRowFg(dark);
     const accent = GlimprTokens.accent;
     return SizedBox(
       width: double.infinity,
@@ -1266,7 +1273,7 @@ class SpotlightEffectPickerPopover extends StatelessWidget {
             InkWell(
               onTap: () => onSelected(e),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: kPickerRowPadding,
                 child: Row(
                   children: [
                     Icon(
@@ -1275,27 +1282,18 @@ class SpotlightEffectPickerPopover extends StatelessWidget {
                         SpotlightEffect.blur => Icons.blur_on,
                         SpotlightEffect.pixelate => Icons.grid_on,
                       },
-                      size: 16,
+                      size: kPickerCheckSize,
                       color: e == selected ? accent : fg,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         spotlightEffectLabel(l10n, e),
-                        style: TextStyle(
-                          color: e == selected ? accent : fg,
-                          fontSize: 14,
-                          fontWeight:
-                              e == selected ? FontWeight.w700 : FontWeight.w500,
-                        ),
+                        style: pickerRowTextStyle(
+                            selected: e == selected, fg: fg, accent: accent),
                       ),
                     ),
-                    SizedBox(
-                      width: 22,
-                      child: e == selected
-                          ? const Icon(Icons.check, size: 16, color: accent)
-                          : null,
-                    ),
+                    pickerRowCheck(selected: e == selected, accent: accent),
                   ],
                 ),
               ),
@@ -1413,17 +1411,22 @@ class ChoiceListPopover<T> extends StatelessWidget {
     required this.selected,
     required this.options,
     required this.onSelected,
+    this.accent = GlimprTokens.accent,
   });
 
   final T selected;
   final List<(T, String)> options;
   final ValueChanged<T> onSelected;
 
+  /// Selected-row highlight; the recording codec/fps pickers pass
+  /// [GlimprTokens.recordingAccent] so the menu stays red in the recording
+  /// flow instead of the brand blue.
+  final Color accent;
+
   @override
   Widget build(BuildContext context) {
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF14223B);
-    const accent = GlimprTokens.accent;
+    final fg = pickerRowFg(dark);
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -1434,8 +1437,7 @@ class ChoiceListPopover<T> extends StatelessWidget {
             InkWell(
               onTap: () => onSelected(value),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: kPickerRowPadding,
                 child: Row(
                   children: [
                     Expanded(
@@ -1443,21 +1445,11 @@ class ChoiceListPopover<T> extends StatelessWidget {
                         label,
                         maxLines: 1,
                         softWrap: false,
-                        style: TextStyle(
-                          color: value == selected ? accent : fg,
-                          fontSize: 13,
-                          fontWeight: value == selected
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                        ),
+                        style: pickerRowTextStyle(
+                            selected: value == selected, fg: fg, accent: accent),
                       ),
                     ),
-                    SizedBox(
-                      width: 22,
-                      child: value == selected
-                          ? const Icon(Icons.check, size: 16, color: accent)
-                          : null,
-                    ),
+                    pickerRowCheck(selected: value == selected, accent: accent),
                   ],
                 ),
               ),

@@ -138,6 +138,20 @@ private enum RecordingDesign {
     NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.46),
     NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0, blue: 0x8B / 255.0,
             alpha: 1))
+
+  // Near-solid bar background (design guide bar system = GlimprTokens.barBg*):
+  // a near-opaque fill laid OVER the vibrancy so the strip is legible like the
+  // Flutter bars, with the `.hudWindow` material showing through the ~8%
+  // translucency for a frosted texture.
+  static let barBg = dyn(
+    NSColor(srgbRed: 0x1A / 255.0, green: 0x1E / 255.0, blue: 0x28 / 255.0,
+            alpha: 0xB3 / 255.0),
+    NSColor(srgbRed: 0xF7 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0,
+            alpha: 0xB3 / 255.0))
+  static let barBorder = dyn(
+    NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0x26 / 255.0),
+    NSColor(srgbRed: 0x0F / 255.0, green: 0x17 / 255.0, blue: 0x2A / 255.0,
+            alpha: 0x1A / 255.0))
 }
 
 /// The region frame: a dim scrim over everything OUTSIDE the recorded region,
@@ -372,14 +386,15 @@ private final class StripButton: NSView {
   }
 }
 
-/// The strip's Aurora glass: native behind-window vibrancy (the design
-/// guide's preferred material) under SOLID content — labels sit BESIDE the
-/// effect view, not inside it, which is what fixes the washed-out (vibrant)
-/// text of the first version — with the winBorder bright hairline. No brand
-/// tint in this version (owner evaluating the bare material first; adding
-/// GlimprTokens.winBg back is a one-line tintLayer).
+/// The strip's NEAR-SOLID surface (design guide bar system, owner 2026-06-13):
+/// bars are not liquid glass — a near-opaque themed fill (RecordingDesign.barBg)
+/// is laid OVER a `.hudWindow` vibrancy view so the timer / labels read on any
+/// backdrop, with the material showing through the ~8% translucency for a
+/// frosted texture. Matches the Flutter bars' near-solid fill so the
+/// select-toolbar -> strip transition is consistent.
 private final class StripGlassView: NSView {
   private let glass = NSVisualEffectView()
+  private let fill = CALayer() // near-opaque tint over the vibrancy
   /// Views recolored to the divider tone on every appearance change.
   var hairlineViews: [NSView] = [] { didSet { applyPalette() } }
 
@@ -393,7 +408,12 @@ private final class StripGlassView: NSView {
     glass.wantsLayer = true
     glass.layer?.cornerRadius = 12
     glass.layer?.masksToBounds = true
-    glass.layer?.borderWidth = 1
+    glass.layer?.borderWidth = 0.5 // match the Flutter bars' hairline
+    // The fill sits ABOVE the vibrancy material (a sublayer of the glass
+    // layer) and BELOW the content subviews, which are added later.
+    fill.frame = glass.bounds
+    fill.cornerRadius = 12
+    glass.layer?.addSublayer(fill)
     addSubview(glass)
     applyPalette()
   }
@@ -406,16 +426,21 @@ private final class StripGlassView: NSView {
   }
 
   private func applyPalette() {
-    let dark = effectiveAppearance
-      .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-    // GlimprTokens.winBorder: bright white edge in BOTH themes.
-    glass.layer?.borderColor =
-      NSColor.white.withAlphaComponent(dark ? 0.22 : 0.70).cgColor
-    // GlimprTokens.divider.
+    let appearance = effectiveAppearance
+    let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    // Dynamic colors resolve against the CURRENT drawing appearance, so set it
+    // before reading .cgColor. No implicit layer animation on a theme flip.
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    appearance.performAsCurrentDrawingAppearance {
+      fill.backgroundColor = RecordingDesign.barBg.cgColor
+      glass.layer?.borderColor = RecordingDesign.barBorder.cgColor
+    }
     let divider = dark
       ? NSColor.white.withAlphaComponent(0.08)
       : RecordingDesign.slate.withAlphaComponent(0.08)
     for v in hairlineViews { v.layer?.backgroundColor = divider.cgColor }
+    CATransaction.commit()
   }
 }
 

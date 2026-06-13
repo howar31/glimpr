@@ -92,6 +92,23 @@ class GlimprTokens {
   /// apply). Same lightness family as the blue accent so it reads in light+dark.
   static const Color danger = Color(0xFFF87171); // red-400
 
+  /// Recording subsystem accent (Apple dark-mode system red). The recording
+  /// counterpart to [accent]: used by the menu-bar icon breath, the region
+  /// frame + brackets, the recording strip, the caption record dot, and the
+  /// record-select toolbar's highlights — the whole recording flow is red.
+  static const Color recordingAccent = Color(0xFFFF453A);
+
+  /// Near-solid bar background (the design guide's bar system, owner ruling
+  /// 2026-06-13): bars (toolbar / option / caption / popover / native strip)
+  /// are NOT liquid glass — small text + complex imagery behind would be
+  /// unreadable. A near-opaque fill following dark/light keeps marks legible
+  /// on ANY backdrop (white, black, busy); a faint blur may sit under it for a
+  /// frosted texture (static backdrops only). Windows stay pure vibrancy.
+  static const Color barBgDark = Color(0xB31A1E28); // neutral dark ~70%
+  static const Color barBgLight = Color(0xB3F7F8FB); // near-white ~70%
+  static const Color barBorderDark = Color(0x26FFFFFF); // ~15% white hairline
+  static const Color barBorderLight = Color(0x1A0F172A); // ~10% slate hairline
+
   /// 135deg cyan→blue gradient used by the active controls, nav fill, wordmark.
   static const LinearGradient accentGrad = LinearGradient(
     begin: Alignment.topLeft,

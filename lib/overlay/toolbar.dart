@@ -81,20 +81,44 @@ class EditorToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final palette = _ToolbarPalette.forBrightness(
-      MediaQuery.platformBrightnessOf(context),
+      dark ? Brightness.dark : Brightness.light,
     );
     final l10n = AppLocalizations.of(context);
+    // Tooltips styled to the bar's colour scheme (near-solid fill + border +
+    // fg), not Material's default dark grey. preferBelow:false so they grow
+    // UPWARD (the bar is at the bottom). The tool row is the TALL bar (52), so
+    // its tooltips need a bigger vertical offset to clear it (see below); the
+    // option/caption rows keep the default offset.
+    final tooltipData = TooltipThemeData(
+      preferBelow: false,
+      waitDuration: const Duration(milliseconds: 500),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: dark ? GlimprTokens.barBgDark : GlimprTokens.barBgLight,
+        borderRadius: BorderRadius.circular(GlimprTokens.radiusPill),
+        border: Border.all(
+          color: dark
+              ? GlimprTokens.barBorderDark
+              : GlimprTokens.barBorderLight,
+          width: 0.5,
+        ),
+      ),
+      textStyle: TextStyle(
+        color: palette.fg,
+        fontSize: 12,
+        decoration: TextDecoration.none,
+      ),
+    );
     return _ToolbarTheme(
       palette: palette,
-      // The toolbar floats at the bottom and every panel/popover grows UPWARD;
-      // tooltips must too, or they cover the bar they describe. The wait
-      // keeps a sweep across the bar from popping a tooltip per button.
+      accent: recordMode
+          ? GlimprTokens.recordingAccent
+          : GlimprTokens.accent,
+      liveBackdrop: recordMode,
       child: TooltipTheme(
-        data: const TooltipThemeData(
-          preferBelow: false,
-          waitDuration: Duration(milliseconds: 500),
-        ),
+        data: tooltipData,
         child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -109,8 +133,14 @@ class EditorToolbar extends StatelessWidget {
             recordOverrides: recordMode ? recordOverrides : null,
           ),
           const SizedBox(height: 6),
-          // Main tool row LAST = the fixed bottom anchor.
-          _Bar(
+          // Main tool row LAST = the fixed bottom anchor. Its tooltips need a
+          // bigger vertical offset than the shorter option/caption rows, or
+          // they overlap this taller (52pt) bar — the offset is measured from
+          // the control's centre, so a tall control sits its tooltip too low.
+          TooltipTheme(
+            data: tooltipData.copyWith(verticalOffset: 32),
+            child: _Bar(
+            height: _Bar.heightMain,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -191,6 +221,7 @@ class EditorToolbar extends StatelessWidget {
               ],
             ),
           ),
+          ),
           // Mode caption BELOW the bar, in the ONE line of space available
           // there (owner: exactly one line, never more). Pin and layer
           // messages merge into a single fixed-height bar; the zero-height
@@ -209,9 +240,9 @@ class EditorToolbar extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: _Bar(
+                    height: _Bar.heightSub,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -231,7 +262,7 @@ class EditorToolbar extends StatelessWidget {
                           ],
                           if (recordMode) ...[
                             const Icon(Icons.fiber_manual_record,
-                                size: 13, color: Color(0xFFE53935)),
+                                size: 13, color: GlimprTokens.recordingAccent),
                             const SizedBox(width: 6),
                             Text(
                               l10n.toolbarRecordCaption,
@@ -295,9 +326,7 @@ class EditorToolbar extends StatelessWidget {
 /// blue in both themes; everything else flips with the system appearance.
 class _ToolbarPalette {
   const _ToolbarPalette({
-    required this.glassTint,
     required this.glassBorder,
-    required this.shadows,
     required this.fg,
     required this.fgDim,
     required this.fgFaint,
@@ -305,37 +334,20 @@ class _ToolbarPalette {
     required this.swatchUnselectedBorder,
   });
 
-  final Color glassTint;
+  // A bright edge reused as the hover wash on the bar's toggle controls.
   final Color glassBorder;
-  final List<Shadow> shadows; // legibility halo behind icons/text
   final Color fg; // primary icon / text
   final Color fgDim; // tertiary (drag handle, "pt")
   final Color fgFaint; // secondary (−/+ buttons, unselected width)
   final Color badgeOutline; // crisp 1px outline behind the shortcut badge
   final Color swatchUnselectedBorder;
 
-  // Dark halo behind white marks; light halo behind dark marks — so the toolbar
-  // stays legible over any screenshot region in either theme.
-  static const _darkShadows = <Shadow>[
-    Shadow(color: Color(0xB3000000), blurRadius: 1.5),
-    Shadow(color: Color(0x4D000000), blurRadius: 2.5),
-  ];
-  static const _lightShadows = <Shadow>[
-    Shadow(color: Color(0xCCFFFFFF), blurRadius: 1.5),
-    Shadow(color: Color(0x66FFFFFF), blurRadius: 2.5),
-  ];
-
-  // No tint: this tier blurs the frozen screenshot via Flutter and carries NO
-  // fill (design guide — tint removed app-wide 2026-06-13; the bar is pure
-  // frosted blur, the same tint-free read as the native-vibrancy windows).
-  // glassBorder IS winBorder, the bright edge that defines the bar; per-icon
-  // halo shadows (p.shadows) keep it legible over any screenshot. The light
-  // fg ramp maps to the token fg family; the dark ramp stays deliberately
-  // brighter (full white + halo) for legibility.
+  // No per-mark halo: bars are NEAR-SOLID now (design guide 2026-06-13), so
+  // the fill IS the contrast — the glass-era legibility shadows were removed.
+  // The light fg ramp maps to the token fg family; the dark ramp uses full
+  // white for crispness on the dark bar fill.
   static final dark = _ToolbarPalette(
-    glassTint: const Color(0x00000000),
     glassBorder: GlimprTokens.dark.winBorder,
-    shadows: _darkShadows,
     fg: Colors.white,
     fgDim: Colors.white54,
     fgFaint: Colors.white70,
@@ -344,9 +356,7 @@ class _ToolbarPalette {
   );
 
   static final light = _ToolbarPalette(
-    glassTint: const Color(0x00000000),
     glassBorder: GlimprTokens.light.winBorder,
-    shadows: _lightShadows,
     fg: GlimprTokens.light.fg1,
     fgDim: GlimprTokens.light.fg3,
     fgFaint: GlimprTokens.light.fg2,
@@ -360,15 +370,31 @@ class _ToolbarPalette {
 
 /// Makes the active [_ToolbarPalette] available to the toolbar's descendants.
 class _ToolbarTheme extends InheritedWidget {
-  const _ToolbarTheme({required this.palette, required super.child});
+  const _ToolbarTheme({
+    required this.palette,
+    required this.accent,
+    required this.liveBackdrop,
+    required super.child,
+  });
   final _ToolbarPalette palette;
+  // Subsystem accent for active/selected states: recording red in record mode,
+  // brand blue otherwise (design guide: recording flow is red end-to-end).
+  final Color accent;
+  // Dynamic backdrop = the record live-select overlay floats over the LIVE
+  // desktop, which Flutter can't frost — bars wear a tint (no blur) instead.
+  final bool liveBackdrop;
 
-  static _ToolbarPalette of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_ToolbarTheme>()!.palette;
+  static _ToolbarTheme _of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ToolbarTheme>()!;
+  static _ToolbarPalette of(BuildContext context) => _of(context).palette;
+  static Color accentOf(BuildContext context) => _of(context).accent;
+  static bool liveBackdropOf(BuildContext context) => _of(context).liveBackdrop;
 
   @override
   bool updateShouldNotify(_ToolbarTheme oldWidget) =>
-      palette != oldWidget.palette;
+      palette != oldWidget.palette ||
+      accent != oldWidget.accent ||
+      liveBackdrop != oldWidget.liveBackdrop;
 }
 
 /// A tool icon with a bottom-right shortcut-number badge.
@@ -398,7 +424,7 @@ class _ToolButton extends StatelessWidget {
           children: [
             IconButton(
               icon: Icon(icon),
-              color: on ? GlimprTokens.accent : p.fg,
+              color: on ? _ToolbarTheme.accentOf(context) : p.fg,
               tooltip: tooltip,
               onPressed: () => controller.selectTool(kind),
             ),
@@ -412,7 +438,7 @@ class _ToolButton extends StatelessWidget {
                     fontSize: 10,
                     height: 1,
                     fontWeight: FontWeight.w700,
-                    color: on ? GlimprTokens.accent : p.fg,
+                    color: on ? _ToolbarTheme.accentOf(context) : p.fg,
                     // Crisp 1px outline (8 zero-blur offsets), overriding the
                     // inherited soft glass shadow which smears at this tiny size.
                     shadows: [
@@ -510,7 +536,7 @@ class _RecordToggle extends StatelessWidget {
       valueListenable: value,
       builder: (_, on, _) => IconButton(
         icon: Icon(icon),
-        color: on ? GlimprTokens.accent : p.fg,
+        color: on ? _ToolbarTheme.accentOf(context) : p.fg,
         tooltip: tooltip,
         onPressed: () => value.value = !on,
       ),
@@ -529,7 +555,7 @@ class _CursorToggle extends StatelessWidget {
       valueListenable: controller.showCursor,
       builder: (_, on, _) => IconButton(
         icon: const Icon(Icons.mouse),
-        color: on ? GlimprTokens.accent : p.fg,
+        color: on ? _ToolbarTheme.accentOf(context) : p.fg,
         tooltip: on ? l10n.toolbarMousePointerShown : l10n.toolbarMousePointerHidden,
         onPressed: () => controller.showCursor.value = !on,
       ),
@@ -561,7 +587,7 @@ class _ActionIconButton extends StatelessWidget {
           cursor: SystemMouseCursors.click,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            child: Icon(icon, size: 18, color: p.fg, shadows: p.shadows),
+            child: Icon(icon, size: 18, color: p.fg),
           ),
         ),
       ),
@@ -571,38 +597,80 @@ class _ActionIconButton extends StatelessWidget {
 
 class _Bar extends StatelessWidget {
   final Widget child;
-  const _Bar({required this.child});
+  const _Bar({required this.child, required this.height});
+  final double height;
+
+  /// Category 1 (main tool bar; matches the native recording strip).
+  static const double heightMain = 52;
+  /// Category 2 (option bar + caption bar) — shorter, shared.
+  static const double heightSub = 34;
+
   @override
   Widget build(BuildContext context) {
-    final p = _ToolbarTheme.of(context);
-    // Frosted glass: blur the frozen screenshot behind the bar, a translucent
-    // theme-tinted fill over it, plus a faint border. Pure Flutter so it looks
-    // identical on macOS + Windows (not native Liquid Glass, which is mac-only).
-    // Legibility comes from the per-icon/text shadows (p.shadows), which hold up
-    // on any backdrop in either theme.
+    final live = _ToolbarTheme.liveBackdropOf(context);
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    // NEAR-SOLID bar, not liquid glass (design guide, owner 2026-06-13): a
+    // near-opaque themed fill keeps small text / icons legible over ANY
+    // backdrop (white, black, busy) — frosting a uniform colour gave no
+    // contrast. A faint blur stays UNDER the fill for a frosted texture on
+    // static backdrops; on the live record backdrop the blur frosts nothing,
+    // so it's dropped. No per-mark halo needed — the solid fill IS the
+    // contrast (the old glass-era shadows were removed).
     const radius = 12.0;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: p.glassTint,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: p.glassBorder, width: 0.5),
-          ),
-          child: IconTheme.merge(
-            data: IconThemeData(shadows: p.shadows),
-            child: DefaultTextStyle.merge(
-              style: TextStyle(shadows: p.shadows),
-              child: child,
-            ),
-          ),
+    final inner = Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: dark ? GlimprTokens.barBgDark : GlimprTokens.barBgLight,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: dark
+              ? GlimprTokens.barBorderDark
+              : GlimprTokens.barBorderLight,
+          width: 0.5,
         ),
       ),
+      // widthFactor 1.0 = hug the content's width (the bar must NOT stretch to
+      // full width); the fixed height + Center handle vertical centering.
+      child: Center(widthFactor: 1.0, child: child),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: live
+          ? inner
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: inner,
+            ),
     );
   }
+}
+
+/// The popover's surface, matching [_Bar]: a near-solid themed fill (legible
+/// over any backdrop) + subtle border; a faint blur stays under it on a static
+/// backdrop and is dropped on the live record backdrop (nothing to frost).
+Widget _popoverGlass({
+  required bool live,
+  required bool dark,
+  required Widget child,
+}) {
+  final inner = DecoratedBox(
+    decoration: BoxDecoration(
+      color: dark ? GlimprTokens.barBgDark : GlimprTokens.barBgLight,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: dark ? GlimprTokens.barBorderDark : GlimprTokens.barBorderLight,
+        width: 0.5,
+      ),
+    ),
+    child: child,
+  );
+  return live
+      ? inner
+      : BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: inner,
+        );
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
@@ -937,6 +1005,7 @@ class _OptionsRowState extends State<_OptionsRow> {
       child: ChoiceListPopover<bool>(
         selected: o.hevc.value,
         options: const [(false, 'H.264'), (true, 'HEVC')],
+        accent: GlimprTokens.recordingAccent,
         onSelected: (v) {
           o.hevc.value = v;
           _closePopover();
@@ -960,6 +1029,7 @@ class _OptionsRowState extends State<_OptionsRow> {
       child: ChoiceListPopover<int>(
         selected: o.fps.value,
         options: const [(30, '30 fps'), (60, '60 fps')],
+        accent: GlimprTokens.recordingAccent,
         onSelected: (v) {
           o.fps.value = v;
           _closePopover();
@@ -1040,7 +1110,10 @@ class _OptionsRowState extends State<_OptionsRow> {
     required double width,
     required Widget child,
   }) {
-    final palette = _ToolbarTheme.of(context);
+    // Same rule as _Bar: on the live record backdrop the blur frosts nothing,
+    // so it's dropped (the near-solid fill carries the surface either way).
+    final live = _ToolbarTheme.liveBackdropOf(context);
+    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final overlay = Overlay.of(context);
     _entry = OverlayEntry(
       builder: (ctx) => Stack(
@@ -1065,9 +1138,9 @@ class _OptionsRowState extends State<_OptionsRow> {
               type: MaterialType.transparency,
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: width),
-                // Match the toolbar's frosted glass exactly: a backdrop blur
-                // under the same tint + border, so the screenshot behind isn't
-                // legible through the panel (the bare tint alone was near-clear).
+                // Match the toolbar bar exactly: STATIC backdrop = blur (frosts
+                // the frozen screenshot); DYNAMIC backdrop (record live-select)
+                // = tint, no blur.
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
@@ -1077,19 +1150,10 @@ class _OptionsRowState extends State<_OptionsRow> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: palette.glassTint,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: palette.glassBorder,
-                            width: 0.5,
-                          ),
-                        ),
-                        child: child,
-                      ),
+                    child: _popoverGlass(
+                      live: live,
+                      dark: dark,
+                      child: child,
                     ),
                   ),
                 ),
@@ -1117,6 +1181,7 @@ class _OptionsRowState extends State<_OptionsRow> {
       return CompositedTransformTarget(
         link: _barLink,
         child: _Bar(
+          height: _Bar.heightSub,
           child: ListenableBuilder(
             listenable: Listenable.merge([overrides.hevc, overrides.fps]),
             builder: (_, _) => Row(
@@ -1235,6 +1300,7 @@ class _OptionsRowState extends State<_OptionsRow> {
         return CompositedTransformTarget(
           link: _barLink,
           child: _Bar(
+            height: _Bar.heightSub,
             child: ValueListenableBuilder<DrawStyle>(
               valueListenable: _c.style,
               builder: (_, style, _) => Row(
@@ -1761,7 +1827,7 @@ class _ShadowToggleState extends State<_ShadowToggle> {
     final p = _ToolbarTheme.of(context);
     final l10n = AppLocalizations.of(context);
     final on = widget.on;
-    final base = on ? GlimprTokens.accent : p.fg;
+    final base = on ? _ToolbarTheme.accentOf(context) : p.fg;
     Widget square(Color c) => DecoratedBox(
       decoration: BoxDecoration(
         color: c,
@@ -1841,7 +1907,7 @@ class _ConnectorToggleState extends State<_ConnectorToggle> {
               color: (on || _hover) ? p.glassBorder : Colors.transparent,
             ),
             child: Icon(Icons.polyline,
-                size: 18, color: on ? GlimprTokens.accent : p.fg),
+                size: 18, color: on ? _ToolbarTheme.accentOf(context) : p.fg),
           ),
         ),
       ),
