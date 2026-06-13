@@ -206,6 +206,7 @@ class RecordController {
       systemAudio: isGif ? false : rec.systemAudio,
       microphone: isGif ? false : rec.microphone,
       maxDuration: rec.maxDuration,
+      countdown: rec.countdown,
     );
   }
 
@@ -264,6 +265,7 @@ class RecordController {
         systemAudio: isGif ? false : (a['systemAudio'] as bool?) ?? rec.systemAudio,
         microphone: isGif ? false : (a['microphone'] as bool?) ?? rec.microphone,
         maxDuration: (a['maxDuration'] as num?)?.toInt() ?? rec.maxDuration,
+        countdown: rec.countdown,
       );
     } catch (e) {
       _phase = RecordPhase.idle;

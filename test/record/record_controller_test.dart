@@ -54,6 +54,7 @@ class _FakeBridge extends RecordBridge {
     bool systemAudio = false,
     bool microphone = false,
     int maxDuration = 0,
+    int countdown = 0,
   }) async {
     starts.add({
       'mode': mode,
@@ -68,6 +69,7 @@ class _FakeBridge extends RecordBridge {
       'systemAudio': systemAudio,
       'microphone': microphone,
       'maxDuration': maxDuration,
+      'countdown': countdown,
     });
   }
 
@@ -384,6 +386,13 @@ void main() {
       expect(bridge.starts.single['maxDuration'], 30);
     });
 
+    test('countdown flows from settings to the bridge', () async {
+      final rc = build();
+      await Settings(store).setRecordCountdown(5);
+      await rc.toggle(kRecordModeDisplay);
+      expect(bridge.starts.single['countdown'], 5);
+    });
+
     test('per-take maxDuration override wins over the setting', () async {
       final rc = build();
       await Settings(store).setRecordMaxDuration(30);
@@ -529,6 +538,16 @@ void main() {
       expect((await s.loadRecording()).maxDuration, 15);
       await s.setRecordMaxDuration(7); // not a supported step -> 0 (off)
       expect((await s.loadRecording()).maxDuration, 0);
+    });
+
+    test('record_countdown round-trips, defaults 0, clamps off-steps',
+        () async {
+      final s = Settings(_FakeStore());
+      expect((await s.loadRecording()).countdown, 0);
+      await s.setRecordCountdown(3);
+      expect((await s.loadRecording()).countdown, 3);
+      await s.setRecordCountdown(7); // not a supported step -> 0 (off)
+      expect((await s.loadRecording()).countdown, 0);
     });
   });
 }

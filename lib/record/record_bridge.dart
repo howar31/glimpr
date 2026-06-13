@@ -34,6 +34,7 @@ class RecordBridge {
     bool systemAudio = false,
     bool microphone = false,
     int maxDuration = 0,
+    int countdown = 0,
   }) =>
       _channel.invokeMethod('start', {
         'mode': mode,
@@ -50,6 +51,7 @@ class RecordBridge {
         'systemAudio': systemAudio,
         'microphone': microphone,
         'maxDuration': maxDuration,
+        'countdown': countdown,
       });
 
   /// Stop the active recording (file finalizes -> onRecordFinished).

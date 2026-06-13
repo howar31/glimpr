@@ -105,6 +105,7 @@ class Settings {
   static const _recordMicKey = 'record_microphone';
   static const _flowAfterRecordingKey = 'flow_after_recording';
   static const _recordMaxDurationKey = 'record_max_duration';
+  static const _recordCountdownKey = 'record_countdown';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
@@ -297,6 +298,16 @@ class Settings {
   Future<void> setRecordMaxDuration(int v) => store.setInt(
       _recordMaxDurationKey, kRecordMaxDurations.contains(v) ? v : 0);
 
+  /// Countdown start delay in seconds; 0 = off. Off-step values clamp to 0.
+  static const kRecordCountdowns = <int>[0, 3, 5, 10];
+  Future<int> getRecordCountdown() async {
+    final v = (await store.getInt(_recordCountdownKey)) ?? 0;
+    return kRecordCountdowns.contains(v) ? v : 0;
+  }
+
+  Future<void> setRecordCountdown(int v) => store.setInt(
+      _recordCountdownKey, kRecordCountdowns.contains(v) ? v : 0);
+
   /// The after-recording flow: the path-based subset only (copyPath /
   /// showInFinder / shareSheet). Default = none (silent save, owner decision).
   Future<Set<FlowAction>> getAfterRecordingFlow() async {
@@ -318,6 +329,7 @@ class Settings {
         systemAudio: await getRecordSystemAudio(),
         microphone: await getRecordMicrophone(),
         maxDuration: await getRecordMaxDuration(),
+        countdown: await getRecordCountdown(),
         flow: await getAfterRecordingFlow(),
       );
 
@@ -429,6 +441,7 @@ class RecordingSettings {
     this.systemAudio = false,
     this.microphone = false,
     this.maxDuration = 0,
+    this.countdown = 0,
     this.flow = const {},
   });
 
@@ -440,5 +453,6 @@ class RecordingSettings {
   final bool systemAudio;
   final bool microphone;
   final int maxDuration; // seconds; 0 = off (auto-stop disabled)
+  final int countdown; // seconds; 0 = off (start delay)
   final Set<FlowAction> flow; // after-recording, kRecordingFlowActions subset
 }

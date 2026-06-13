@@ -938,6 +938,85 @@ final class GifSink: NSObject, RecordingSinkBase {
   }
 }
 
+/// A pre-recording countdown overlay (engine B start delay): a big number
+/// centered on the target (region center, else display center) counting down
+/// to 0 before capture starts. Clicking it — or Stop/Abort — cancels (no file).
+/// Styling is unified in a later pass; this is functional.
+@available(macOS 15.0, *)
+@MainActor
+final class CountdownHUD {
+  private var window: NSWindow?
+  private var timer: Timer?
+  private var remaining = 0
+  private var continuation: CheckedContinuation<Bool, Never>?
+  private let label = NSTextField(labelWithString: "")
+
+  /// Returns true to proceed with recording, false if cancelled.
+  func run(seconds: Int, on screen: NSScreen, center: NSPoint) async -> Bool {
+    await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+      continuation = cont
+      remaining = seconds
+      present(on: screen, center: center)
+      update()
+      let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) {
+        [weak self] _ in
+        Task { @MainActor in
+          guard let self else { return }
+          self.remaining -= 1
+          if self.remaining <= 0 { self.finish(true) } else { self.update() }
+        }
+      }
+      RunLoop.main.add(t, forMode: .common)
+      timer = t
+    }
+  }
+
+  func cancel() { finish(false) }
+
+  private func finish(_ proceed: Bool) {
+    timer?.invalidate(); timer = nil
+    window?.orderOut(nil); window = nil
+    let c = continuation; continuation = nil
+    c?.resume(returning: proceed)
+  }
+
+  private func update() { label.stringValue = "\(max(0, remaining))" }
+
+  private func present(on screen: NSScreen, center: NSPoint) {
+    let size: CGFloat = 132
+    let frame = NSRect(x: center.x - size / 2, y: center.y - size / 2,
+                       width: size, height: size)
+    let w = NSWindow(contentRect: frame, styleMask: .borderless,
+                     backing: .buffered, defer: false)
+    w.isOpaque = false
+    w.backgroundColor = .clear
+    w.level = .statusBar
+    w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    w.hasShadow = false
+    w.isReleasedWhenClosed = false
+    let view = CountdownView(frame: NSRect(origin: .zero, size: frame.size))
+    view.onClick = { [weak self] in self?.cancel() }
+    label.frame = NSRect(x: 0, y: (size - 92) / 2, width: size, height: 92)
+    label.alignment = .center
+    label.font = .monospacedDigitSystemFont(ofSize: 76, weight: .bold)
+    label.textColor = .white
+    view.addSubview(label)
+    w.contentView = view
+    w.orderFrontRegardless()
+    window = w
+  }
+}
+
+private final class CountdownView: NSView {
+  var onClick: (() -> Void)?
+  override func draw(_ dirtyRect: NSRect) {
+    let r = bounds.insetBy(dx: 4, dy: 4)
+    NSColor(srgbRed: 0.07, green: 0.07, blue: 0.08, alpha: 0.92).setFill()
+    NSBezierPath(roundedRect: r, xRadius: 26, yRadius: 26).fill()
+  }
+  override func mouseDown(with event: NSEvent) { onClick?() }
+}
+
 /// Owns one recording session (engine B): an SCStream feeding RecordingSink ->
 /// RecordingWriter (AVAssetWriter). All recording native code lives behind the
 /// `glimpr/record` seam — the existing capture path is untouched.
@@ -956,6 +1035,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let systemAudio: Bool
     let microphone: Bool
     let maxDuration: Int // seconds; 0 = off
+    let countdown: Int // seconds; 0 = off (start delay)
     let outputPath: String
   }
 
@@ -969,6 +1049,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private var paused = false
   private var isGif = false
   private var maxDuration = 0 // seconds; 0 = off (auto-stop disabled)
+  private var countdownHUD: CountdownHUD?
   private let sampleQueue = DispatchQueue(label: "glimpr.record.samples")
   private var events: (String, Any?) -> Void
   /// (active, graceful) — graceful=false on abort/failure so the menu-bar
@@ -1034,6 +1115,25 @@ final class RecordingController: NSObject, SCStreamDelegate {
           excludedNumbers.contains(Int($0.windowID))
         }
         filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
+      }
+
+      // Countdown start delay: show it on the target (region center, else
+      // display center) BEFORE capture begins; recording never overlaps the
+      // HUD so no exclusion is needed. Click / Stop / Abort cancels.
+      if spec.countdown > 0 {
+        let center = chromeRegionGlobal.map { NSPoint(x: $0.midX, y: $0.midY) }
+          ?? NSPoint(x: screen.frame.midX, y: screen.frame.midY)
+        let hud = CountdownHUD()
+        countdownHUD = hud
+        let proceed = await hud.run(
+          seconds: spec.countdown, on: screen, center: center)
+        countdownHUD = nil
+        if !proceed {
+          chrome?.dismiss()
+          chrome = nil
+          events("onRecordAborted", nil)
+          return
+        }
       }
 
       let cfg = SCStreamConfiguration()
@@ -1124,6 +1224,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   }
 
   func stop() async {
+    if let hud = countdownHUD { hud.cancel(); return } // cancel a pending start
     guard isRecording else { return }
     isRecording = false // block double-stops
     let s = stream
@@ -1143,6 +1244,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   }
 
   func abort() async {
+    if let hud = countdownHUD { hud.cancel(); return }
     abortRequested = true
     await stop()
   }
@@ -1392,6 +1494,7 @@ final class RecordingChannel {
     let systemAudio = (args["systemAudio"] as? Bool) ?? false
     let microphone = (args["microphone"] as? Bool) ?? false
     let maxDuration = (args["maxDuration"] as? Int) ?? 0
+    let countdown = (args["countdown"] as? Int) ?? 0
     let outputPath = (args["outputPath"] as? String) ?? ""
     guard !outputPath.isEmpty else {
       channel.invokeMethod(
@@ -1417,7 +1520,7 @@ final class RecordingChannel {
         mode: mode, displayID: display, rect: rect, windowID: windowID,
         fps: fps, hevc: hevc, gif: gif, showsCursor: showsCursor,
         systemAudio: systemAudio, microphone: microphone,
-        maxDuration: maxDuration, outputPath: outputPath)
+        maxDuration: maxDuration, countdown: countdown, outputPath: outputPath)
       Task { await controller.start(spec) }
     }
 
