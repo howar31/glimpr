@@ -336,6 +336,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.';
 
   @override
+  String get settingsSectionPin => 'Pin';
+
+  @override
+  String get settingsPinHoverGlow => 'Hover glow';
+
+  @override
+  String get settingsPinHoverGlowHint =>
+      'Show the glowing halo around a pinned window on hover; the controls still appear when off';
+
+  @override
   String get settingsSectionRecording => 'Screen recording';
 
   @override

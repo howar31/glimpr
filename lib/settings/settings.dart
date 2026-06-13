@@ -95,6 +95,7 @@ class Settings {
   static const _decorateLastRegionKey = 'decorate_last_region';
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
+  static const _pinHoverGlowKey = 'pin_hover_glow';
   static const _recordFormatKey = 'record_format';
   static const _recordFpsKey = 'record_fps';
   static const _recordCursorKey = 'record_show_cursor';
@@ -218,6 +219,13 @@ class Settings {
       (await store.getBool(_captureCursorKey)) ?? false;
   Future<void> setCaptureCursor(bool v) =>
       store.setBool(_captureCursorKey, v);
+
+  // Pinned-window hover glow (Aurora corona). Default ON; read live by the
+  // native PinPanel on each hover.
+  Future<bool> getPinHoverGlow() async =>
+      (await store.getBool(_pinHoverGlowKey)) ?? true;
+  Future<void> setPinHoverGlow(bool v) =>
+      store.setBool(_pinHoverGlowKey, v);
 
   // Screen recording (macOS 15+ module) -------------------------------------
   /// The recording output format (SSOT). [RecordFormat.gif] selects the direct

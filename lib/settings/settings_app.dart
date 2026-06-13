@@ -86,6 +86,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _rightClickExits = true;
   bool _confirmOnExit = true;
   bool _captureCursor = false;
+  bool _pinHoverGlow = true;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
   int _recentCap = kRecentImagesCap;
@@ -197,6 +198,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final layerCap = await _s.getCaptureLayerCap();
     final appLanguage = await _s.getAppLanguage();
+    final pinHoverGlow = await _s.getPinHoverGlow();
     final rec = await _s.loadRecording();
     if (!mounted) return;
     setState(() {
@@ -210,6 +212,7 @@ class _SettingsAppState extends State<SettingsApp>
       _rightClickExits = rightClick;
       _confirmOnExit = confirmOnExit;
       _captureCursor = captureCursor;
+      _pinHoverGlow = pinHoverGlow;
       _filenameTemplate = template;
       _decorateSnap = decSnap;
       _decorateCrop = decCrop;
@@ -860,6 +863,21 @@ class _SettingsAppState extends State<SettingsApp>
           style: GlimprType.sansStyle(12, 400, t.fg4),
         ),
       ),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionPin, icon: Icons.push_pin_outlined),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsPinHoverGlow,
+          hint: _l.settingsPinHoverGlowHint,
+          trailing: GlassToggle(
+            value: _pinHoverGlow,
+            onChanged: (v) async {
+              await _s.setPinHoverGlow(v);
+              if (mounted) setState(() => _pinHoverGlow = v);
+            },
+          ),
+        ),
+      ]),
       const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionAfterCapture, icon: Icons.layers_outlined),
       GlassCard.rows(_flowRows(capture: true)),

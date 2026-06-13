@@ -315,6 +315,15 @@ class AppLocalizationsZh extends AppLocalizations {
       '裝飾僅套用於輸出的圖片（檔案、剪貼簿、分享、圖片編輯器）；釘選一律使用未裝飾的原圖。';
 
   @override
+  String get settingsSectionPin => '釘選';
+
+  @override
+  String get settingsPinHoverGlow => '周邊光暈';
+
+  @override
+  String get settingsPinHoverGlowHint => '滑鼠停在釘選浮動窗上時顯示周邊光暈；關閉後仍會出現控制項';
+
+  @override
   String get settingsSectionRecording => '螢幕錄影';
 
   @override

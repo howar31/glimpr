@@ -1186,6 +1186,13 @@ final class PinPanel: NSPanel {
     (on ? NSCursor.pointingHand : NSCursor.arrow).set()
   }
 
+  /// Owner setting: the hover corona/glow. Read live so a toggle applies on the
+  /// next hover, even for already-open pins. Default ON. When off, only the
+  /// controls reveal and the window keeps its normal shadow.
+  private var glowEnabled: Bool {
+    UserDefaults.standard.object(forKey: "pin_hover_glow") as? Bool ?? true
+  }
+
   private var revealed = false
 
   private func reveal(_ on: Bool) {
@@ -1196,7 +1203,7 @@ final class PinPanel: NSPanel {
     // shadow element, which is also why SCK-based captures don't see it).
     // On reveal it goes off IMMEDIATELY; on hide it comes back only AFTER the
     // vapor has fully faded (restoring it mid-fade flashes the dark rim).
-    if on { hasShadow = false }
+    if glowEnabled, on { hasShadow = false }
     // isHidden gates hit-testing AND the button's hover tracking — an
     // invisible ✕ must not be clickable.
     if on { closeWrap.isHidden = false }
@@ -1211,9 +1218,9 @@ final class PinPanel: NSPanel {
     })
     CATransaction.begin()
     CATransaction.setAnimationDuration(0.25)
-    vaporContainer.opacity = on ? 1 : 0
+    vaporContainer.opacity = glowEnabled && on ? 1 : 0
     CATransaction.commit()
-    if on {
+    if glowEnabled && on {
       // Per-layer organic motion: a slow Lissajous drift (different x/y
       // periods per colour) + a breathing blur radius. The mismatched periods
       // keep the three colours weaving — vapor, not a rigid ring.

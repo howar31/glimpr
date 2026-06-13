@@ -686,6 +686,24 @@ abstract class AppLocalizations {
   /// **'Decoration applies to the exported image (file, clipboard, share, editor). Pinned images always use the undecorated original.'**
   String get settingsDecorationPinNote;
 
+  /// Settings > Screenshot: pinned-window section label
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get settingsSectionPin;
+
+  /// Settings > Screenshot > Pin: toggle title for the pinned-window hover halo
+  ///
+  /// In en, this message translates to:
+  /// **'Hover glow'**
+  String get settingsPinHoverGlow;
+
+  /// Settings > Screenshot > Pin: hover-glow toggle hint
+  ///
+  /// In en, this message translates to:
+  /// **'Show the glowing halo around a pinned window on hover; the controls still appear when off'**
+  String get settingsPinHoverGlowHint;
+
   /// Settings > Capture: screen recording section label
   ///
   /// In en, this message translates to:

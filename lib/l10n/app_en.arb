@@ -400,6 +400,18 @@
   "@settingsDecorationPinNote": {
     "description": "Settings > Output > Decoration: footnote that pin ignores decoration"
   },
+  "settingsSectionPin": "Pin",
+  "@settingsSectionPin": {
+    "description": "Settings > Screenshot: pinned-window section label"
+  },
+  "settingsPinHoverGlow": "Hover glow",
+  "@settingsPinHoverGlow": {
+    "description": "Settings > Screenshot > Pin: toggle title for the pinned-window hover halo"
+  },
+  "settingsPinHoverGlowHint": "Show the glowing halo around a pinned window on hover; the controls still appear when off",
+  "@settingsPinHoverGlowHint": {
+    "description": "Settings > Screenshot > Pin: hover-glow toggle hint"
+  },
   "settingsSectionRecording": "Screen recording",
   "@settingsSectionRecording": {
     "description": "Settings > Capture: screen recording section label"
