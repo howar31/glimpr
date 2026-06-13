@@ -700,6 +700,11 @@ class _AccentButtonState extends State<AccentButton> {
 
 /// Quiet text button (ghost). Dims when [onTap] is null; on hover it picks up a
 /// soft fill and a brighter label.
+/// How long a two-step destructive confirm stays armed before it disarms
+/// itself. SSOT for the app-wide confirm timeout; the native recording strip
+/// mirrors this in RecordingDesign.confirmDisarmSeconds — keep the two in sync.
+const kConfirmDisarmDuration = Duration(seconds: 3);
+
 /// A [GhostButton] for destructive actions: the first click ARMS it (the label
 /// flips to a danger-coloured [confirmLabel]), a second click within the window
 /// fires [onConfirmed]; left untouched it disarms itself after a few seconds.
@@ -732,7 +737,7 @@ class _ConfirmGhostButtonState extends State<ConfirmGhostButton> {
     if (!_armed) {
       setState(() => _armed = true);
       _disarm?.cancel();
-      _disarm = Timer(const Duration(seconds: 4), () {
+      _disarm = Timer(kConfirmDisarmDuration, () {
         if (mounted) setState(() => _armed = false);
       });
       return;

@@ -124,6 +124,10 @@ private enum RecordingDesign {
   static let slate = NSColor( // light-theme ink family base (slate-900)
     srgbRed: 0x0F / 255.0, green: 0x17 / 255.0, blue: 0x2A / 255.0, alpha: 1)
 
+  /// Two-step destructive-confirm disarm window. Mirrors the Flutter
+  /// kConfirmDisarmDuration (glimpr_controls.dart) — keep the two in sync.
+  static let confirmDisarmSeconds: TimeInterval = 3
+
   /// Appearance-resolving color (NSTextField etc. re-resolve automatically).
   private static func dyn(_ dark: NSColor, _ light: NSColor) -> NSColor {
     NSColor(name: nil) { appearance in
@@ -292,7 +296,8 @@ private final class StripButton: NSView {
   private let action: () -> Void
   // Destructive control: nil = fires immediately; non-nil = two-step confirm
   // (first click arms + shows this danger-coloured label, second click within
-  // ~4s fires, otherwise it disarms) — mirrors Settings' ConfirmGhostButton.
+  // the confirm window fires, otherwise it disarms) — mirrors Settings'
+  // ConfirmGhostButton (timeout = RecordingDesign.confirmDisarmSeconds).
   private let confirmLabel: String?
   private var armed = false {
     didSet {
@@ -354,7 +359,8 @@ private final class StripButton: NSView {
       if !armed {
         armed = true
         disarmTimer = Timer.scheduledTimer(
-          withTimeInterval: 4, repeats: false) { [weak self] _ in
+          withTimeInterval: RecordingDesign.confirmDisarmSeconds,
+          repeats: false) { [weak self] _ in
           self?.armed = false
         }
         return
@@ -705,7 +711,7 @@ final class RecordingChrome {
       pause.frame = f
     }
     // Abort is destructive -> two-step confirm (first click arms a danger
-    // "Confirm?" label, a second click within ~4s aborts).
+    // "Confirm?" label, a second click within the confirm window aborts).
     let abort = StripButton(
       kind: .ghost, title: L.s("Abort", "中止"),
       confirmLabel: L.s("Confirm?", "確認？")
