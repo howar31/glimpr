@@ -104,12 +104,328 @@ final class LiveFrameSource: NSObject, SCStreamOutput, SCStreamDelegate {
 
 // MARK: - RecordingChrome
 
-/// The on-screen recording chrome: a border window outlining the recorded
-/// region (region/window modes) and a control strip (timer + file size + Stop
-/// / Abort). Display mode shows only the strip as a draggable HUD. Every
-/// window here is listed in the capture filter's exclusions — chrome never
-/// appears in the output (chrome vs content: Glimpr's Settings/editor windows
-/// DO record).
+/// Recording chrome design tokens. ONE recording red (#FF453A — the menu-bar
+/// design's locked peak; the RECORDING subsystem's accent, the screenshot
+/// side keeps the blue accent) and the scrim tone are fixed sRGB; the scrim
+/// deliberately stays dark in both appearances (the app's dim-veil
+/// convention). Everything else mirrors GlimprTokens
+/// (lib/theme/glimpr_theme.dart, the design-system SSOT) as light/dark pairs
+/// so the strip reads as the same Aurora chrome as the settings window.
+private enum RecordingDesign {
+  static let red = NSColor(
+    srgbRed: 0xFF / 255.0, green: 0x45 / 255.0, blue: 0x3A / 255.0, alpha: 1)
+  static let redHi = NSColor( // gradient highlight (the mark's spark tone)
+    srgbRed: 0xFF / 255.0, green: 0x6A / 255.0, blue: 0x60 / 255.0, alpha: 1)
+  static let scrim = NSColor(
+    srgbRed: 2 / 255.0, green: 6 / 255.0, blue: 23 / 255.0, alpha: 0.62)
+  static let slate = NSColor( // light-theme ink family base (slate-900)
+    srgbRed: 0x0F / 255.0, green: 0x17 / 255.0, blue: 0x2A / 255.0, alpha: 1)
+
+  /// Appearance-resolving color (NSTextField etc. re-resolve automatically).
+  private static func dyn(_ dark: NSColor, _ light: NSColor) -> NSColor {
+    NSColor(name: nil) { appearance in
+      appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? dark : light
+    }
+  }
+
+  // GlimprTokens mirrors (keep in sync with glimpr_theme.dart).
+  static let fg1 = dyn(
+    NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.96),
+    NSColor(srgbRed: 0x14 / 255.0, green: 0x22 / 255.0, blue: 0x3B / 255.0,
+            alpha: 1))
+  static let fg3 = dyn(
+    NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.46),
+    NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0, blue: 0x8B / 255.0,
+            alpha: 1))
+}
+
+/// The region frame: a dim scrim over everything OUTSIDE the recorded region,
+/// a 1 px low-opacity red edge with a faint glow, and four viewfinder corner
+/// brackets echoing the brand mark. Pure chrome: click-through (the dimmed
+/// desktop stays operable) and excluded from the capture filter. The window
+/// sits below the menu-bar level and the scrim band stops at the menu-bar
+/// line, so the breathing status icon never dims.
+private final class RecordingFrameView: NSView {
+  private let region: NSRect // view-local
+  private let scrimTop: CGFloat // view-local y where the scrim band ends
+
+  init(frame: NSRect, region: NSRect, scrimTop: CGFloat) {
+    self.region = region
+    self.scrimTop = scrimTop
+    super.init(frame: frame)
+  }
+
+  required init?(coder: NSCoder) { fatalError("not used") }
+
+  override func draw(_ dirtyRect: NSRect) {
+    guard let ctx = NSGraphicsContext.current else { return }
+    // Scrim with the region punched out. Clipped to the band so a region
+    // touching the screen top never gets scrim painted INSIDE itself.
+    ctx.saveGraphicsState()
+    NSBezierPath(rect: NSRect(
+      x: 0, y: 0, width: bounds.width, height: scrimTop)).addClip()
+    let scrim = NSBezierPath(rect: bounds)
+    scrim.append(NSBezierPath(roundedRect: region, xRadius: 3, yRadius: 3))
+    scrim.windingRule = .evenOdd
+    RecordingDesign.scrim.setFill()
+    scrim.fill()
+    ctx.restoreGraphicsState()
+
+    // 1 px region edge with a faint red glow.
+    ctx.saveGraphicsState()
+    let glow = NSShadow()
+    glow.shadowColor = RecordingDesign.red.withAlphaComponent(0.18)
+    glow.shadowBlurRadius = 13
+    glow.set()
+    let edge = NSBezierPath(roundedRect: region, xRadius: 3, yRadius: 3)
+    edge.lineWidth = 1
+    RecordingDesign.red.withAlphaComponent(0.55).setStroke()
+    edge.stroke()
+    ctx.restoreGraphicsState()
+
+    // Viewfinder corner brackets (the brand mark's corners): 3 pt arms,
+    // 22 pt long, rounded outer corner, outer edge 2 pt outside the region.
+    let c = region.insetBy(dx: -0.5, dy: -0.5) // bracket stroke centerline
+    let arm: CGFloat = 22
+    let r: CGFloat = 4.5
+    let p = NSBezierPath()
+    p.move(to: NSPoint(x: c.minX + arm, y: c.maxY)) // top-left
+    p.line(to: NSPoint(x: c.minX + r, y: c.maxY))
+    p.appendArc(withCenter: NSPoint(x: c.minX + r, y: c.maxY - r), radius: r,
+                startAngle: 90, endAngle: 180, clockwise: false)
+    p.line(to: NSPoint(x: c.minX, y: c.maxY - arm))
+    p.move(to: NSPoint(x: c.maxX - arm, y: c.maxY)) // top-right
+    p.line(to: NSPoint(x: c.maxX - r, y: c.maxY))
+    p.appendArc(withCenter: NSPoint(x: c.maxX - r, y: c.maxY - r), radius: r,
+                startAngle: 90, endAngle: 0, clockwise: true)
+    p.line(to: NSPoint(x: c.maxX, y: c.maxY - arm))
+    p.move(to: NSPoint(x: c.maxX, y: c.minY + arm)) // bottom-right
+    p.line(to: NSPoint(x: c.maxX, y: c.minY + r))
+    p.appendArc(withCenter: NSPoint(x: c.maxX - r, y: c.minY + r), radius: r,
+                startAngle: 0, endAngle: 270, clockwise: true)
+    p.line(to: NSPoint(x: c.maxX - arm, y: c.minY))
+    p.move(to: NSPoint(x: c.minX + arm, y: c.minY)) // bottom-left
+    p.line(to: NSPoint(x: c.minX + r, y: c.minY))
+    p.appendArc(withCenter: NSPoint(x: c.minX + r, y: c.minY + r), radius: r,
+                startAngle: 270, endAngle: 180, clockwise: true)
+    p.line(to: NSPoint(x: c.minX, y: c.minY + arm))
+    p.lineWidth = 3
+    RecordingDesign.red.setStroke()
+    p.stroke()
+  }
+}
+
+/// The strip's 11 pt recording dot: a calm breathing glow (1.7 s round trip,
+/// in step with the menu-bar breath); a steady glow under reduced motion.
+private final class RecordingDotView: NSView {
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    wantsLayer = true
+    layer?.backgroundColor = RecordingDesign.red.cgColor
+    layer?.cornerRadius = frameRect.height / 2
+    layer?.shadowColor = RecordingDesign.red.cgColor
+    layer?.shadowOffset = .zero
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      layer?.shadowOpacity = 0.5
+      layer?.shadowRadius = 4
+    } else {
+      layer?.shadowOpacity = 0.55
+      layer?.shadowRadius = 6
+      let glowOpacity = CABasicAnimation(keyPath: "shadowOpacity")
+      glowOpacity.fromValue = 0.0
+      glowOpacity.toValue = 0.55
+      let glowRadius = CABasicAnimation(keyPath: "shadowRadius")
+      glowRadius.fromValue = 1.5
+      glowRadius.toValue = 6.0
+      let dotOpacity = CABasicAnimation(keyPath: "opacity")
+      dotOpacity.fromValue = 0.9
+      dotOpacity.toValue = 1.0
+      let group = CAAnimationGroup()
+      group.animations = [glowOpacity, glowRadius, dotOpacity]
+      group.duration = 0.85
+      group.autoreverses = true
+      group.repeatCount = .infinity
+      group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      layer?.add(group, forKey: "pulse")
+    }
+  }
+
+  required init?(coder: NSCoder) { fatalError("not used") }
+}
+
+/// Strip buttons follow the app's dialog-pair idiom (GhostButton /
+/// AccentButton in lib/theme/glimpr_controls.dart): hover changes surface
+/// brightness only — NO movement. Stop wears the recording-red accent
+/// gradient (the recording subsystem's accent; screenshot keeps blue) with
+/// the accent button's white hover wash; Abort is the borderless ghost.
+/// 13.5 pt semibold, radius 9, both following the system appearance.
+private final class StripButton: NSView {
+  enum Kind { case redAccent, ghost }
+
+  private let kind: Kind
+  private let title: String
+  private let action: () -> Void
+  private let font = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
+  private var hovered = false { didSet { needsDisplay = true } }
+  private var pressed = false { didSet { needsDisplay = true } }
+
+  init(kind: Kind, title: String, action: @escaping () -> Void) {
+    self.kind = kind
+    self.title = title
+    self.action = action
+    let text = title.size(withAttributes: [.font: font])
+    let hPad: CGFloat = kind == .redAccent ? 16 : 14
+    let iconSpan: CGFloat = kind == .redAccent ? 12 + 7 : 0 // ■ glyph + gap
+    super.init(frame: NSRect(
+      x: 0, y: 0, width: hPad * 2 + iconSpan + ceil(text.width),
+      height: ceil(text.height) + 18))
+    wantsLayer = true
+  }
+
+  required init?(coder: NSCoder) { fatalError("not used") }
+
+  // Buttons act, they never drag the (display-mode movable) strip window.
+  override var mouseDownCanMoveWindow: Bool { false }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach(removeTrackingArea)
+    addTrackingArea(NSTrackingArea(
+      rect: bounds, options: [.mouseEnteredAndExited, .activeAlways],
+      owner: self, userInfo: nil))
+  }
+
+  override func mouseEntered(with event: NSEvent) { hovered = true }
+  override func mouseExited(with event: NSEvent) {
+    hovered = false
+    pressed = false
+  }
+  override func mouseDown(with event: NSEvent) { pressed = true }
+  override func mouseUp(with event: NSEvent) {
+    let inside = bounds.contains(convert(event.locationInWindow, from: nil))
+    pressed = false
+    if inside { action() }
+  }
+
+  override func viewDidChangeEffectiveAppearance() {
+    super.viewDidChangeEffectiveAppearance()
+    needsDisplay = true
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    let dark = effectiveAppearance
+      .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    let shape = NSBezierPath(
+      roundedRect: bounds, xRadius: 9, yRadius: 9)
+    let fg: NSColor
+    var textX: CGFloat
+    switch kind {
+    case .redAccent:
+      // AccentButton, recording-red: 135° gradient fill + a faint white wash
+      // on hover (reads brighter); pressing dims instead. Text is onAccent.
+      NSGradient(colors: [RecordingDesign.red, RecordingDesign.redHi])?
+        .draw(in: shape, angle: -45)
+      if pressed {
+        NSColor.black.withAlphaComponent(0.10).setFill()
+        shape.fill()
+      } else if hovered {
+        NSColor.white.withAlphaComponent(0.12).setFill()
+        shape.fill()
+      }
+      fg = .white
+      // ■ stop glyph (12 pt box, the 24-grid icon scaled), then the label.
+      let s: CGFloat = 12.0 / 24.0
+      let iconY = ((bounds.height - 12) / 2).rounded()
+      let square = NSRect(
+        x: 16 + 5 * s, y: iconY + 5 * s, width: 14 * s, height: 14 * s)
+      fg.setFill()
+      NSBezierPath(
+        roundedRect: square, xRadius: 2.5 * s, yRadius: 2.5 * s).fill()
+      textX = 16 + 12 + 7
+    case .ghost:
+      // GhostButton: borderless; hover paints the nav-hover wash and lifts
+      // the label one foreground step (fg3 -> fg2).
+      if hovered || pressed {
+        let wash = dark
+          ? NSColor.white.withAlphaComponent(pressed ? 0.08 : 0.05)
+          : RecordingDesign.slate.withAlphaComponent(pressed ? 0.08 : 0.05)
+        wash.setFill()
+        shape.fill()
+      }
+      fg = dark
+        ? NSColor.white.withAlphaComponent(hovered ? 0.66 : 0.46)
+        : (hovered
+            ? NSColor(srgbRed: 0x47 / 255.0, green: 0x55 / 255.0,
+                      blue: 0x69 / 255.0, alpha: 1) // fg2 light
+            : NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0,
+                      blue: 0x8B / 255.0, alpha: 1)) // fg3 light
+      textX = 14
+    }
+    let attrs: [NSAttributedString.Key: Any] = [
+      .font: font, .foregroundColor: fg,
+    ]
+    let size = title.size(withAttributes: attrs)
+    title.draw(
+      at: NSPoint(x: textX, y: (bounds.height - size.height) / 2),
+      withAttributes: attrs)
+  }
+}
+
+/// The strip's Aurora glass: native behind-window vibrancy (the design
+/// guide's preferred material) under SOLID content — labels sit BESIDE the
+/// effect view, not inside it, which is what fixes the washed-out (vibrant)
+/// text of the first version — with the winBorder bright hairline. No brand
+/// tint in this version (owner evaluating the bare material first; adding
+/// GlimprTokens.winBg back is a one-line tintLayer).
+private final class StripGlassView: NSView {
+  private let glass = NSVisualEffectView()
+  /// Views recolored to the divider tone on every appearance change.
+  var hairlineViews: [NSView] = [] { didSet { applyPalette() } }
+
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    wantsLayer = true
+    glass.frame = NSRect(origin: .zero, size: frameRect.size)
+    glass.material = .hudWindow
+    glass.blendingMode = .behindWindow
+    glass.state = .active
+    glass.wantsLayer = true
+    glass.layer?.cornerRadius = 12
+    glass.layer?.masksToBounds = true
+    glass.layer?.borderWidth = 1
+    addSubview(glass)
+    applyPalette()
+  }
+
+  required init?(coder: NSCoder) { fatalError("not used") }
+
+  override func viewDidChangeEffectiveAppearance() {
+    super.viewDidChangeEffectiveAppearance()
+    applyPalette()
+  }
+
+  private func applyPalette() {
+    let dark = effectiveAppearance
+      .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    // GlimprTokens.winBorder: bright white edge in BOTH themes.
+    glass.layer?.borderColor =
+      NSColor.white.withAlphaComponent(dark ? 0.22 : 0.70).cgColor
+    // GlimprTokens.divider.
+    let divider = dark
+      ? NSColor.white.withAlphaComponent(0.08)
+      : RecordingDesign.slate.withAlphaComponent(0.08)
+    for v in hairlineViews { v.layer?.backgroundColor = divider.cgColor }
+  }
+}
+
+/// The on-screen recording chrome: a frame window (scrim + red edge +
+/// viewfinder brackets) around the recorded region (region mode) and a
+/// liquid-glass control strip (pulsing dot, timer, file size, Abort/Stop).
+/// Display/window modes show only the strip as a draggable HUD. Every window
+/// here is listed in the capture filter's exclusions — chrome never appears
+/// in the output (chrome vs content: Glimpr's Settings/editor windows DO
+/// record).
 @MainActor
 final class RecordingChrome {
   private var borderWindow: NSWindow?
@@ -125,19 +441,23 @@ final class RecordingChrome {
   }
 
   /// [regionGlobalBottomLeft] is in Cocoa GLOBAL (bottom-left) coords; nil =
-  /// display mode (no border; strip parks at the screen's top-right).
+  /// display/window mode (no frame; strip parks bottom-center, draggable).
   func show(regionGlobalBottomLeft: NSRect?, on screen: NSScreen) {
     if let region = regionGlobalBottomLeft {
-      let b = borderlessWindow(
-        frame: region.insetBy(dx: -2, dy: -2), level: .statusBar)
-      b.ignoresMouseEvents = true
-      let v = NSView(frame: NSRect(origin: .zero, size: b.frame.size))
-      v.wantsLayer = true
-      v.layer?.borderColor = NSColor.systemRed.cgColor
-      v.layer?.borderWidth = 2
-      b.contentView = v
-      b.orderFrontRegardless()
-      borderWindow = b
+      let f = borderlessWindow(
+        frame: screen.frame,
+        level: NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue - 1))
+      f.ignoresMouseEvents = true
+      let local = NSRect(
+        x: region.minX - screen.frame.minX,
+        y: region.minY - screen.frame.minY,
+        width: region.width, height: region.height)
+      f.contentView = RecordingFrameView(
+        frame: NSRect(origin: .zero, size: screen.frame.size),
+        region: local,
+        scrimTop: screen.visibleFrame.maxY - screen.frame.minY)
+      f.orderFrontRegardless()
+      borderWindow = f
     }
     let strip = buildStrip()
     let stripSize = strip.frame.size
@@ -190,67 +510,60 @@ final class RecordingChrome {
   }
 
   private func buildStrip() -> NSWindow {
-    let height: CGFloat = 36
-    let dot = NSView(frame: NSRect(x: 12, y: (height - 8) / 2, width: 8, height: 8))
-    dot.wantsLayer = true
-    dot.layer?.backgroundColor = NSColor.systemRed.cgColor
-    dot.layer?.cornerRadius = 4
+    // Aurora glass bar (height matches the editor's crop confirm bar):
+    // pulsing record dot · mono timer (fg1) · file size (fg3) · divider ·
+    // ghost Abort · recording-red accent Stop.
+    let height: CGFloat = 52
 
-    // System label colors follow the effective appearance (design rule: all
-    // chrome respects light/dark; the red dot is semantic and stays).
-    timerLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-    timerLabel.textColor = .labelColor
-    sizeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-    sizeLabel.textColor = .secondaryLabelColor
+    let dot = RecordingDotView(
+      frame: NSRect(x: 0, y: 0, width: 11, height: 11))
+
+    timerLabel.font = .monospacedDigitSystemFont(ofSize: 15, weight: .semibold)
+    timerLabel.textColor = RecordingDesign.fg1
+    sizeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+    sizeLabel.textColor = RecordingDesign.fg3
     timerLabel.stringValue = "00:00"
     sizeLabel.stringValue = "0.0 MB"
     timerLabel.sizeToFit()
     sizeLabel.sizeToFit()
 
-    let stop = NSButton(
-      title: L.s("Stop", "停止"), target: self, action: #selector(stopTapped))
-    let abort = NSButton(
-      title: L.s("Abort", "取消"), target: self, action: #selector(abortTapped))
-    for b in [stop, abort] {
-      b.bezelStyle = .accessoryBarAction
-      b.controlSize = .small
-      b.sizeToFit()
-    }
+    let sep = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 22))
+    sep.wantsLayer = true
 
-    // Manual row layout: dot · timer · size · stop · abort.
-    var x: CGFloat = 28
-    func place(_ v: NSView) {
+    let abort = StripButton(
+      kind: .ghost, title: L.s("Abort", "中止")
+    ) { [weak self] in self?.onAbort?() }
+    let stop = StripButton(
+      kind: .redAccent, title: L.s("Stop", "停止")
+    ) { [weak self] in self?.onStop?() }
+
+    // Sequential row layout; widths land before the container exists so the
+    // window is sized to fit.
+    var x: CGFloat = 16
+    func place(_ v: NSView, gapAfter: CGFloat) {
       var f = v.frame
-      f.origin = NSPoint(x: x, y: (height - f.height) / 2)
+      f.origin = NSPoint(x: x, y: ((height - f.height) / 2).rounded())
       v.frame = f
-      x = f.maxX + 10
+      x = f.maxX + gapAfter
     }
-    place(timerLabel)
-    place(sizeLabel)
-    place(stop)
-    place(abort)
+    place(dot, gapAfter: 14)
+    place(timerLabel, gapAfter: 14)
+    place(sizeLabel, gapAfter: 16)
+    place(sep, gapAfter: 16)
+    place(abort, gapAfter: 10) // dialog-pair spacing (confirm_dialog.dart)
+    place(stop, gapAfter: 12)
 
-    let w = borderlessWindow(
-      frame: NSRect(x: 0, y: 0, width: x + 2, height: height), level: .statusBar)
-    // Glass chrome (the app's Aurora design language, same recipe as the
-    // settings window's vibrancy): a behind-window NSVisualEffectView that
-    // follows the SYSTEM light/dark appearance automatically.
-    let glass = NSVisualEffectView(frame: w.frame)
-    glass.material = .hudWindow
-    glass.blendingMode = .behindWindow
-    glass.state = .active
-    glass.wantsLayer = true
-    glass.layer?.cornerRadius = 9
-    glass.layer?.masksToBounds = true
-    glass.layer?.borderWidth = 1
-    glass.layer?.borderColor = NSColor.separatorColor.cgColor
-    for v in [dot, timerLabel, sizeLabel, stop, abort] { glass.addSubview(v) }
-    w.contentView = glass
+    let container = StripGlassView(
+      frame: NSRect(x: 0, y: 0, width: x, height: height))
+    for v in [dot, timerLabel, sizeLabel, sep, abort, stop] {
+      container.addSubview(v)
+    }
+    container.hairlineViews = [sep]
+
+    let w = borderlessWindow(frame: container.frame, level: .statusBar)
+    w.contentView = container
     return w
   }
-
-  @objc private func stopTapped() { onStop?() }
-  @objc private func abortTapped() { onAbort?() }
 }
 
 // MARK: - RecordingController
@@ -282,7 +595,10 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
   private var outputPath: String?
   private var abortRequested = false
   private var events: (String, Any?) -> Void
-  var onStateChange: ((Bool) -> Void)?
+  /// (active, graceful) — graceful=false on abort/failure so the menu-bar
+  /// icon snaps back instead of easing (design: the dropped color confirms
+  /// nothing was kept).
+  var onStateChange: ((Bool, Bool) -> Void)?
 
   init(events: @escaping (String, Any?) -> Void) {
     self.events = events
@@ -307,8 +623,8 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
         filter = SCContentFilter(desktopIndependentWindow: scWindow)
         scale = CGFloat(filter.pointPixelScale)
         screen = NSScreen.main ?? NSScreen.screens[0]
-        // The window stream follows the window; no border chrome (it would
-        // not track moves) — strip only, parked top-right like display mode.
+        // The window stream follows the window; no frame chrome (it would
+        // not track moves) — strip only, parked like display mode.
         chromeRegionGlobal = nil
       } else {
         let displayID = spec.displayID ?? Self.cursorDisplayID()
@@ -392,7 +708,7 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
       outputPath = spec.outputPath
       abortRequested = false
       isRecording = true
-      onStateChange?(true)
+      onStateChange?(true, true)
       startTick()
       PerfLog.mark("recordStart mode=\(spec.mode)")
       events("onRecordStarted", [
@@ -401,7 +717,7 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
         "w": Double(spec.rect?.width ?? 0), "h": Double(spec.rect?.height ?? 0),
       ])
     } catch {
-      cleanupSession()
+      cleanupSession(graceful: false)
       events("onRecordFailed", ["message": "\(error)"])
     }
   }
@@ -446,7 +762,7 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
     let duration = output?.recordedDuration.seconds ?? 0
     let size = output?.recordedFileSize ?? 0
     let aborted = abortRequested
-    cleanupSession()
+    cleanupSession(graceful: !aborted && error == nil)
     PerfLog.mark("recordEnd aborted=\(aborted) error=\(error != nil)")
     if aborted {
       if let p = path { try? FileManager.default.removeItem(atPath: p) }
@@ -461,7 +777,7 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
     }
   }
 
-  private func cleanupSession() {
+  private func cleanupSession(graceful: Bool = true) {
     tick?.invalidate()
     tick = nil
     chrome?.dismiss()
@@ -470,7 +786,7 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
     output = nil
     outputPath = nil
     isRecording = false
-    onStateChange?(false)
+    onStateChange?(false, graceful)
   }
 
   private func startTick() {
@@ -510,8 +826,9 @@ final class RecordingController: NSObject, SCStreamDelegate, SCRecordingOutputDe
 final class RecordingChannel {
   private let channel: FlutterMethodChannel
   private var controller: Any? // RecordingController, macOS 15+ only
-  /// Menu-bar state hook (red icon + Stop/Abort items while recording).
-  var onRecordingStateChange: ((Bool) -> Void)?
+  /// Menu-bar state hook (breathing icon + Stop/Abort items while recording);
+  /// the second flag is graceful (false = abort/failure, icon snaps back).
+  var onRecordingStateChange: ((Bool, Bool) -> Void)?
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: "glimpr/record", binaryMessenger: messenger)
@@ -594,8 +911,8 @@ final class RecordingChannel {
     let c = RecordingController(events: { [weak self] method, args in
       self?.channel.invokeMethod(method, arguments: args)
     })
-    c.onStateChange = { [weak self] active in
-      self?.onRecordingStateChange?(active)
+    c.onStateChange = { [weak self] active, graceful in
+      self?.onRecordingStateChange?(active, graceful)
     }
     controller = c
     return c

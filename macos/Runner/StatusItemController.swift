@@ -83,7 +83,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       let stop = menuItem(
         title: L.s("Stop Recording", "停止錄影"), action: #selector(recordStop), key: "")
       let abort = menuItem(
-        title: L.s("Abort Recording", "取消錄影"), action: #selector(recordAbort), key: "")
+        title: L.s("Abort Recording", "中止錄影"), action: #selector(recordAbort), key: "")
       recordControlItems = [stop, abort]
       recordStartItems = [
         globalItem(L.s("Record Region", "錄製框選範圍"), "global.recordRegion"),
@@ -181,32 +181,67 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     if let key = sender.representedObject as? String { onAction(key) }
   }
 
-  /// Recording state: red record icon + swap the start items for Stop/Abort.
-  /// Recording state: the BRAND icon stays (owner: a bare red dot reads as
-  /// "which app is this?") inside a fixed red rounded frame, while the glyph
-  /// itself breathes red <-> the bar's label tone (white on a dark menu bar,
-  /// near-black on a light one - a pure white phase would vanish there).
-  /// Animated by swapping the button image at 10 Hz (negligible cost, runs
-  /// only while recording). Also swaps the start items for Stop/Abort.
-  func setRecording(_ active: Bool) {
+  /// Recording state: the brand mark's GEOMETRY never changes — no frame, no
+  /// dot, no badge — only its COLOR animates: a 1.7 s ease-in-out "breath"
+  /// between the bar's idle tone (white on a dark menu bar, #0F172A on a
+  /// light one) and recording red #FF453A. Under reduced motion the mark
+  /// holds solid red instead. On a graceful stop the breath eases back to
+  /// the idle tone (the capture was kept); on abort/failure it snaps back
+  /// instantly. Animated by swapping the button image at 20 Hz (negligible
+  /// cost, runs only while recording). Also swaps the start items for
+  /// Stop/Abort.
+  func setRecording(_ active: Bool, graceful: Bool = true) {
     guard active != isRecordingState else { return }
     isRecordingState = active
+    recordingTimer?.invalidate() // also cancels an in-flight ease-back
+    recordingTimer = nil
     if active {
       recordingPhase = 0
-      let timer = Timer.scheduledTimer(
-        withTimeInterval: 0.1, repeats: true
-      ) { [weak self] _ in
-        guard let self else { return }
-        self.recordingPhase += 0.1
-        self.item.button?.image = self.recordingIcon(phase: self.recordingPhase)
+      if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        recordingMix = 1 // solid red, no movement — state stays legible
+        item.button?.image = recordingIcon(mix: 1)
+      } else {
+        recordingMix = 0
+        let timer = Timer.scheduledTimer(
+          withTimeInterval: 0.05, repeats: true
+        ) { [weak self] _ in
+          guard let self else { return }
+          self.recordingPhase += 0.05
+          self.recordingMix = 0.5 - 0.5 * cos(self.recordingPhase * 2 * .pi / 1.7)
+          self.item.button?.image = self.recordingIcon(mix: self.recordingMix)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        recordingTimer = timer
+        item.button?.image = recordingIcon(mix: 0)
       }
-      RunLoop.main.add(timer, forMode: .common)
-      recordingTimer = timer
-      item.button?.image = recordingIcon(phase: 0)
+      item.button?.setAccessibilityLabel(L.s("Glimpr, recording", "Glimpr，錄影中"))
     } else {
-      recordingTimer?.invalidate()
-      recordingTimer = nil
-      item.button?.image = normalImage
+      item.button?.setAccessibilityLabel("Glimpr")
+      let from = recordingMix
+      recordingMix = 0
+      if graceful, from > 0.02,
+         !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        var t: Double = 0
+        let timer = Timer.scheduledTimer(
+          withTimeInterval: 0.05, repeats: true
+        ) { [weak self] tm in
+          guard let self else { tm.invalidate(); return }
+          t += 0.05
+          let k = min(1, t / 0.45)
+          if k >= 1 {
+            tm.invalidate()
+            if self.recordingTimer === tm { self.recordingTimer = nil }
+            self.item.button?.image = self.normalImage
+          } else {
+            let eased = 0.5 - 0.5 * cos(k * .pi)
+            self.item.button?.image = self.recordingIcon(mix: from * (1 - eased))
+          }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        recordingTimer = timer
+      } else {
+        item.button?.image = normalImage
+      }
     }
     for mi in recordControlItems { mi.isHidden = !active }
     for mi in recordStartItems { mi.isHidden = active }
@@ -214,38 +249,35 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
   private var recordingTimer: Timer?
   private var recordingPhase: Double = 0
+  private var recordingMix: Double = 0 // 0 = idle tone, 1 = recording red
 
-  /// Fixed red rounded frame + the brand glyph tinted along a ~1.6 s
-  /// red <-> label-tone breathing curve.
-  private func recordingIcon(phase: Double) -> NSImage {
+  /// The brand mark tinted [mix] of the way from the bar's idle tone to
+  /// recording red. Idle tones and the red are the design-locked values;
+  /// the appearance is re-read every frame so a bar-tint change mid-recording
+  /// keeps the correct idle endpoint.
+  private func recordingIcon(mix: Double) -> NSImage {
     let size = normalImage?.size ?? NSSize(width: 18, height: 18)
-    let t = 0.5 - 0.5 * cos(phase * 2 * .pi / 1.6) // 0..1..0, 1.6 s period
     let dark = item.button?.effectiveAppearance
       .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-    let tone: CGFloat = dark ? 1.0 : 0.15
-    let red = NSColor.systemRed.usingColorSpace(.sRGB) ?? NSColor.systemRed
+    let idle: (r: CGFloat, g: CGFloat, b: CGFloat) =
+      dark ? (1, 1, 1) : (0x0F / 255.0, 0x17 / 255.0, 0x2A / 255.0)
+    let red: (r: CGFloat, g: CGFloat, b: CGFloat) =
+      (0xFF / 255.0, 0x45 / 255.0, 0x3A / 255.0)
+    let t = CGFloat(mix)
     let glyphTint = NSColor(
-      srgbRed: red.redComponent + (tone - red.redComponent) * t,
-      green: red.greenComponent + (tone - red.greenComponent) * t,
-      blue: red.blueComponent + (tone - red.blueComponent) * t,
+      srgbRed: idle.r + (red.r - idle.r) * t,
+      green: idle.g + (red.g - idle.g) * t,
+      blue: idle.b + (red.b - idle.b) * t,
       alpha: 1)
     let mark = normalImage
     let img = NSImage(size: size, flipped: false) { rect in
-      // Fixed red frame around the icon.
-      let frame = NSBezierPath(
-        roundedRect: rect.insetBy(dx: 0.75, dy: 0.75), xRadius: 4, yRadius: 4)
-      frame.lineWidth = 1.5
-      NSColor.systemRed.setStroke()
-      frame.stroke()
-      // The brand glyph, breathing, inset inside the frame.
       if let mark, let tinted = mark.copy() as? NSImage {
         tinted.lockFocus()
         glyphTint.set()
         NSRect(origin: .zero, size: tinted.size).fill(using: .sourceAtop)
         tinted.unlockFocus()
         tinted.isTemplate = false
-        tinted.draw(in: rect.insetBy(dx: 3, dy: 3), from: .zero,
-                    operation: .sourceOver, fraction: 1)
+        tinted.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
       }
       return true
     }

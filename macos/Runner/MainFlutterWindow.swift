@@ -189,10 +189,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       onClearRecent: { [weak self] in
         self?.imageEditorChannel?.invokeMethod("clearRecent", arguments: nil)
       })
-    // Recording state drives the menu-bar chrome (red icon, Stop/Abort items);
-    // the menu's Stop/Abort act natively, no Dart round trip.
-    recordingChannel?.onRecordingStateChange = { [weak self] active in
-      self?.statusItem?.setRecording(active)
+    // Recording state drives the menu-bar chrome (breathing icon, Stop/Abort
+    // items); the menu's Stop/Abort act natively, no Dart round trip.
+    recordingChannel?.onRecordingStateChange = { [weak self] active, graceful in
+      self?.statusItem?.setRecording(active, graceful: graceful)
     }
     statusItem?.onRecordStop = { [weak self] in self?.recordingChannel?.stopActive() }
     statusItem?.onRecordAbort = { [weak self] in self?.recordingChannel?.abortActive() }
