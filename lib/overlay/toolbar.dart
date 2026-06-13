@@ -177,11 +177,13 @@ class EditorToolbar extends StatelessWidget {
                     value: recordOverrides!.systemAudio,
                     icon: Icons.volume_up,
                     tooltip: l10n.toolbarRecordSystemAudio,
+                    disabledWhen: recordOverrides!.gif, // GIF has no audio
                   ),
                   _RecordToggle(
                     value: recordOverrides!.microphone,
                     icon: Icons.mic,
                     tooltip: l10n.toolbarRecordMicrophone,
+                    disabledWhen: recordOverrides!.gif,
                   ),
                 ],
                 // Mouse-pointer toggle (overlay, when the capture carried a
@@ -514,21 +516,38 @@ class _RecordToggle extends StatelessWidget {
   final ValueNotifier<bool> value;
   final IconData icon;
   final String tooltip;
+  // When this is true the toggle is greyed out and non-interactive (e.g. audio
+  // toggles while the format is GIF, which has no audio track).
+  final ValueNotifier<bool>? disabledWhen;
   const _RecordToggle({
     required this.value,
     required this.icon,
     required this.tooltip,
+    this.disabledWhen,
   });
+
   @override
   Widget build(BuildContext context) {
+    final dw = disabledWhen;
+    if (dw == null) return _button(context, false);
+    return ValueListenableBuilder<bool>(
+      valueListenable: dw,
+      builder: (_, disabled, _) => _button(context, disabled),
+    );
+  }
+
+  Widget _button(BuildContext context, bool disabled) {
     final p = _ToolbarTheme.of(context);
     return ValueListenableBuilder<bool>(
       valueListenable: value,
-      builder: (_, on, _) => IconButton(
-        icon: Icon(icon),
-        color: on ? _ToolbarTheme.accentOf(context) : p.fg,
-        tooltip: tooltip,
-        onPressed: () => value.value = !on,
+      builder: (_, on, _) => Opacity(
+        opacity: disabled ? 0.35 : 1,
+        child: IconButton(
+          icon: Icon(icon),
+          color: on && !disabled ? _ToolbarTheme.accentOf(context) : p.fg,
+          tooltip: tooltip,
+          onPressed: disabled ? null : () => value.value = !on,
+        ),
       ),
     );
   }

@@ -290,13 +290,16 @@ private final class StripButton: NSView {
   private let kind: Kind
   var title: String { didSet { needsDisplay = true } }
   private let action: () -> Void
+  private let confirmDouble: Bool // risky control: only fire on a double-click
   private let font = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
   private var hovered = false { didSet { needsDisplay = true } }
   private var pressed = false { didSet { needsDisplay = true } }
 
-  init(kind: Kind, title: String, action: @escaping () -> Void) {
+  init(kind: Kind, title: String, confirmDouble: Bool = false,
+       action: @escaping () -> Void) {
     self.kind = kind
     self.title = title
+    self.confirmDouble = confirmDouble
     self.action = action
     let text = title.size(withAttributes: [.font: font])
     let hPad: CGFloat = kind == .redAccent ? 16 : 14
@@ -329,7 +332,8 @@ private final class StripButton: NSView {
   override func mouseUp(with event: NSEvent) {
     let inside = bounds.contains(convert(event.locationInWindow, from: nil))
     pressed = false
-    if inside { action() }
+    // A risky control (Abort) only fires on a double-click.
+    if inside, !confirmDouble || event.clickCount >= 2 { action() }
   }
 
   override func viewDidChangeEffectiveAppearance() {
@@ -342,6 +346,9 @@ private final class StripButton: NSView {
       .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     let shape = NSBezierPath(
       roundedRect: bounds, xRadius: 9, yRadius: 9)
+    // Content is CENTERED in the (possibly uniform-wider) box so the three
+    // controls can share one width and still look balanced.
+    let textW = ceil(title.size(withAttributes: [.font: font]).width)
     let fg: NSColor
     var textX: CGFloat
     switch kind {
@@ -358,15 +365,18 @@ private final class StripButton: NSView {
         shape.fill()
       }
       fg = .white
-      // ■ stop glyph (12 pt box, the 24-grid icon scaled), then the label.
+      // ■ stop glyph (12 pt box, the 24-grid icon scaled) + the label, as one
+      // centered group.
       let s: CGFloat = 12.0 / 24.0
       let iconY = ((bounds.height - 12) / 2).rounded()
+      let contentW = 12 + 7 + textW
+      let startX = ((bounds.width - contentW) / 2).rounded()
       let square = NSRect(
-        x: 16 + 5 * s, y: iconY + 5 * s, width: 14 * s, height: 14 * s)
+        x: startX + 5 * s, y: iconY + 5 * s, width: 14 * s, height: 14 * s)
       fg.setFill()
       NSBezierPath(
         roundedRect: square, xRadius: 2.5 * s, yRadius: 2.5 * s).fill()
-      textX = 16 + 12 + 7
+      textX = startX + 12 + 7
     case .ghost:
       // GhostButton: borderless; hover paints the nav-hover wash and lifts
       // the label one foreground step (fg3 -> fg2).
@@ -384,7 +394,7 @@ private final class StripButton: NSView {
                       blue: 0x69 / 255.0, alpha: 1) // fg2 light
             : NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0,
                       blue: 0x8B / 255.0, alpha: 1)) // fg3 light
-      textX = 14
+      textX = ((bounds.width - textW) / 2).rounded()
     }
     let attrs: [NSAttributedString.Key: Any] = [
       .font: font, .foregroundColor: fg,
@@ -632,6 +642,14 @@ final class RecordingChrome {
     sizeLabel.stringValue = "0.0 MB"
     timerLabel.sizeToFit()
     sizeLabel.sizeToFit()
+    // Reserve a fixed readout width so a growing value (large MB, or a 5-digit
+    // GIF frame count) never overflows into the divider.
+    let readoutFont = sizeLabel.font
+      ?? .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+    sizeLabel.frame.size.width = ceil(max(
+      ("9999.9 MB" as NSString).size(withAttributes: [.font: readoutFont]).width,
+      ("99999 幀" as NSString).size(withAttributes: [.font: readoutFont]).width))
+    sizeLabel.alignment = .right // value hugs the divider as it grows
 
     let sep = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 22))
     sep.wantsLayer = true
@@ -642,19 +660,24 @@ final class RecordingChrome {
       guard let self else { return }
       if self.paused { self.onResume?() } else { self.onPause?() }
     }
-    // Size the box to the wider of Pause/Resume so the title swap never clips.
-    let pf = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
-    let pauseW = L.s("Pause", "暫停").size(withAttributes: [.font: pf]).width
-    let resumeW = L.s("Resume", "繼續").size(withAttributes: [.font: pf]).width
-    if resumeW > pauseW {
+    pauseButton = pause
+    // Widen ONLY the pause button to fit the wider Resume label so the title
+    // swap never clips; abort/finish keep their natural width (owner: do not
+    // pad abort/pause out to Finish's width).
+    let bf = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
+    let resumeExtra = max(0, ceil(
+      L.s("Resume", "繼續").size(withAttributes: [.font: bf]).width
+        - L.s("Pause", "暫停").size(withAttributes: [.font: bf]).width))
+    if resumeExtra > 0 {
       var f = pause.frame
-      f.size.width += ceil(resumeW - pauseW)
+      f.size.width += resumeExtra
       pause.frame = f
     }
-    pauseButton = pause
+    // Abort is destructive -> double-click to confirm.
     let abort = StripButton(
-      kind: .ghost, title: L.s("Abort", "中止")
+      kind: .ghost, title: L.s("Abort", "中止"), confirmDouble: true
     ) { [weak self] in self?.onAbort?() }
+    abort.toolTip = L.s("Double-click to abort", "雙擊以中止")
     let stop = StripButton(
       kind: .redAccent, title: L.s("Finish", "完成")
     ) { [weak self] in self?.onStop?() }
