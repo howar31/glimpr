@@ -216,7 +216,7 @@ void main() {
     test('recording settings flow through to the bridge', () async {
       final rc = build();
       final s = Settings(store);
-      await s.setRecordHevc(true);
+      await s.setRecordFormat(RecordFormat.hevc);
       await s.setRecordFps(60);
       await s.setRecordShowCursor(false);
       await s.setRecordSystemAudio(true);
@@ -523,23 +523,18 @@ void main() {
       var r = await s.loadRecording();
       expect(r.fps, 30);
       await s.setRecordFps(60);
-      await s.setRecordHevc(true);
+      await s.setRecordFormat(RecordFormat.hevc);
       r = await s.loadRecording();
       expect(r.fps, 60);
       expect(r.hevc, isTrue);
       expect(r.showCursor, isTrue); // default on
     });
 
-    test('record_format round-trips and migrates from the legacy hevc bool',
-        () async {
+    test('record_format round-trips and defaults to h264', () async {
       final s = Settings(_FakeStore());
       expect((await s.loadRecording()).format, RecordFormat.h264);
       await s.setRecordFormat(RecordFormat.gif);
       expect((await s.loadRecording()).format, RecordFormat.gif);
-      // Migration: a store with only the old record_hevc=true reads as HEVC.
-      final legacy = Settings(_FakeStore({'record_hevc': true}));
-      expect((await legacy.loadRecording()).format, RecordFormat.hevc);
-      expect((await legacy.loadRecording()).hevc, isTrue);
     });
 
     test('record_max_duration round-trips, defaults 0, clamps off-steps',

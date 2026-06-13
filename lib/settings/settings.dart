@@ -83,8 +83,6 @@ class Settings {
   static const _jpegQualityKey = 'jpeg_quality';
   static const _shutterSoundKey = 'shutter_sound';
   static const _completionSoundKey = 'completion_sound';
-  static const _saveToFileKey = 'save_to_file'; // legacy (pre-flow) toggle
-  static const _copyToClipboardKey = 'copy_to_clipboard'; // legacy (pre-flow)
   static const _flowAfterCaptureKey = 'flow_after_capture';
   static const _flowAfterEditorDoneKey = 'flow_after_editor_done';
   static const _rightClickExitsKey = 'right_click_exits';
@@ -97,7 +95,6 @@ class Settings {
   static const _decorateLastRegionKey = 'decorate_last_region';
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
-  static const _recordHevcKey = 'record_hevc';
   static const _recordFormatKey = 'record_format';
   static const _recordFpsKey = 'record_fps';
   static const _recordCursorKey = 'record_show_cursor';
@@ -143,26 +140,13 @@ class Settings {
   Future<void> setCompletionSound(bool v) =>
       store.setBool(_completionSoundKey, v);
 
-  // Delivery legs ----------------------------------------------------------
-  Future<bool> getSaveToFile() async =>
-      (await store.getBool(_saveToFileKey)) ?? true;
-  Future<void> setSaveToFile(bool v) => store.setBool(_saveToFileKey, v);
-
-  Future<bool> getCopyToClipboard() async =>
-      (await store.getBool(_copyToClipboardKey)) ?? true;
-
   // Completion flows ---------------------------------------------------------
 
-  /// The after-capture flow. Falls back to the legacy save/copy toggles when
-  /// the new key has never been written (their defaults true/true reproduce
-  /// the original copy+save behaviour for existing users).
+  /// The after-capture flow. Defaults to copy+save when never configured.
   Future<Set<FlowAction>> getAfterCaptureFlow() async {
     final stored = await store.getString(_flowAfterCaptureKey);
     if (stored != null) return parseFlow(stored);
-    return {
-      if (await getCopyToClipboard()) FlowAction.copy,
-      if (await getSaveToFile()) FlowAction.save,
-    };
+    return {FlowAction.copy, FlowAction.save};
   }
 
   Future<void> setAfterCaptureFlow(Set<FlowAction> s) =>
@@ -177,8 +161,6 @@ class Settings {
 
   Future<void> setAfterEditorDoneFlow(Set<FlowAction> s) =>
       store.setString(_flowAfterEditorDoneKey, flowToString(s));
-  Future<void> setCopyToClipboard(bool v) =>
-      store.setBool(_copyToClipboardKey, v);
 
   // Capture interaction --------------------------------------------------
   Future<bool> getRightClickExits() async =>
@@ -249,21 +231,11 @@ class Settings {
       case 'h264':
         return RecordFormat.h264;
     }
-    // Migration: no format stored -> fall back to the legacy record_hevc bool.
-    return (await store.getBool(_recordHevcKey)) == true
-        ? RecordFormat.hevc
-        : RecordFormat.h264;
+    return RecordFormat.h264; // default codec
   }
 
   Future<void> setRecordFormat(RecordFormat f) =>
       store.setString(_recordFormatKey, f.name);
-
-  // Legacy codec helpers, kept for the existing Settings codec toggle; they map
-  // onto the format SSOT (gif is reachable only via the format picker).
-  Future<bool> getRecordHevc() async =>
-      (await getRecordFormat()) == RecordFormat.hevc;
-  Future<void> setRecordHevc(bool v) =>
-      setRecordFormat(v ? RecordFormat.hevc : RecordFormat.h264);
 
   Future<int> getRecordFps() async {
     final v = (await store.getInt(_recordFpsKey)) ?? 30;

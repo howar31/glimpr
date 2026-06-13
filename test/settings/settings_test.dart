@@ -68,22 +68,18 @@ void main() {
     final s = Settings(FakeStore());
     await s.setShutterSound(false);
     await s.setCompletionSound(false);
-    await s.setSaveToFile(false);
-    await s.setCopyToClipboard(false);
+    await s.setAfterCaptureFlow(const <FlowAction>{});
     await s.setRightClickExits(false);
     final cap = await s.loadCapture();
     expect(cap.shutterSound, isFalse);
     expect(cap.completionSound, isFalse);
-    expect(cap.flow, isEmpty); // legacy toggles off -> empty (normalized at run)
+    expect(cap.flow, isEmpty);
     expect(cap.rightClickExits, isFalse);
   });
 
-  test('after-capture flow migrates from the legacy save/copy toggles',
-      () async {
+  test('after-capture flow defaults to copy+save and round-trips', () async {
     final s = Settings(FakeStore());
-    await s.setSaveToFile(false); // legacy: copy only
-    expect(await s.getAfterCaptureFlow(), {FlowAction.copy});
-    // Once the new key is written it wins over the legacy toggles.
+    expect(await s.getAfterCaptureFlow(), {FlowAction.copy, FlowAction.save});
     await s.setAfterCaptureFlow({FlowAction.save, FlowAction.showInFinder});
     expect(await s.getAfterCaptureFlow(),
         {FlowAction.save, FlowAction.showInFinder});
