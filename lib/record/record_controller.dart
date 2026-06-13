@@ -98,6 +98,12 @@ class RecordController {
       try {
         await _cancelLiveSelect();
       } catch (_) {}
+      // A record action during the start phase cancels a pending native
+      // countdown (stop -> the controller cancels the countdown HUD); it never
+      // starts another recording.
+      try {
+        await _bridge.stop();
+      } catch (_) {}
       return;
     }
     if (isActive) {

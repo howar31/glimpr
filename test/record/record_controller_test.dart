@@ -284,6 +284,18 @@ void main() {
       expect(rc.phase, RecordPhase.starting);
     });
 
+    test('a record action during the starting phase cancels, not restarts',
+        () async {
+      final rc = build();
+      await rc.toggle(kRecordModeRegion); // -> starting (live-select/countdown)
+      expect(rc.phase, RecordPhase.starting);
+      await rc.toggle(kRecordModeRegion); // hotkey again during starting
+      expect(rc.phase, RecordPhase.idle);
+      expect(bridge.stops, 1); // cancels the pending session/countdown
+      expect(liveSelects, 1); // did NOT begin a second selection
+      expect(bridge.starts, isEmpty);
+    });
+
     test('a relayed region selection starts the recording with its rect',
         () async {
       final rc = build();

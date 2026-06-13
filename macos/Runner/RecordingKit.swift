@@ -481,7 +481,8 @@ final class RecordingChrome {
 
   /// [regionGlobalBottomLeft] is in Cocoa GLOBAL (bottom-left) coords; nil =
   /// display/window mode (no frame; strip parks bottom-center, draggable).
-  func show(regionGlobalBottomLeft: NSRect?, on screen: NSScreen) {
+  func show(regionGlobalBottomLeft: NSRect?, on screen: NSScreen,
+            stripHidden: Bool = false) {
     if let region = regionGlobalBottomLeft {
       let f = borderlessWindow(
         frame: screen.frame,
@@ -519,8 +520,15 @@ final class RecordingChrome {
       strip.isMovableByWindowBackground = true
     }
     strip.setFrameOrigin(origin)
+    strip.alphaValue = stripHidden ? 0 : 1
     strip.orderFrontRegardless()
     stripWindow = strip
+  }
+
+  /// Reveal/hide just the control strip; the frame + scrim stay put. Used so
+  /// the strip appears only when recording begins (after a countdown).
+  func setStripHidden(_ hidden: Bool) {
+    stripWindow?.alphaValue = hidden ? 0 : 1
   }
 
   func update(duration: CMTime, fileSize: Int) {
@@ -996,11 +1004,18 @@ final class CountdownHUD {
     w.isReleasedWhenClosed = false
     let view = CountdownView(frame: NSRect(origin: .zero, size: frame.size))
     view.onClick = { [weak self] in self?.cancel() }
-    label.frame = NSRect(x: 0, y: (size - 92) / 2, width: size, height: 92)
+    label.frame = NSRect(x: 0, y: (size - 92) / 2 + 12, width: size, height: 92)
     label.alignment = .center
-    label.font = .monospacedDigitSystemFont(ofSize: 76, weight: .bold)
+    label.font = .monospacedDigitSystemFont(ofSize: 72, weight: .bold)
     label.textColor = .white
     view.addSubview(label)
+    // Hint: the HUD itself is the only cancel target.
+    let hint = NSTextField(labelWithString: L.s("Click to cancel", "點此取消"))
+    hint.frame = NSRect(x: 0, y: 16, width: size, height: 16)
+    hint.alignment = .center
+    hint.font = .systemFont(ofSize: 11, weight: .medium)
+    hint.textColor = NSColor.white.withAlphaComponent(0.65)
+    view.addSubview(hint)
     w.contentView = view
     w.orderFrontRegardless()
     window = w
@@ -1107,7 +1122,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
             width: r.width, height: r.height)
           chromeRegionGlobal = global
         }
-        c.show(regionGlobalBottomLeft: chromeRegionGlobal, on: nsScreen)
+        c.show(regionGlobalBottomLeft: chromeRegionGlobal, on: nsScreen,
+               stripHidden: spec.countdown > 0)
         chrome = c
         let excludedNumbers = c.windowNumbers
         let fresh = try await SCShareableContent.current
@@ -1117,9 +1133,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
         filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
       }
 
-      // Countdown start delay: show it on the target (region center, else
-      // display center) BEFORE capture begins; recording never overlaps the
-      // HUD so no exclusion is needed. Click / Stop / Abort cancels.
+      // Countdown start delay: the frame + scrim stay visible (region) but the
+      // control strip is hidden until recording begins. Only the HUD cancels —
+      // the frame/scrim ignores mouse, so clicking the mask does nothing.
       if spec.countdown > 0 {
         let center = chromeRegionGlobal.map { NSPoint(x: $0.midX, y: $0.midY) }
           ?? NSPoint(x: screen.frame.midX, y: screen.frame.midY)
@@ -1134,6 +1150,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
           events("onRecordAborted", nil)
           return
         }
+        chrome?.setStripHidden(false)
       }
 
       let cfg = SCStreamConfiguration()
@@ -1200,6 +1217,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
       }
       chrome?.onStop = { [weak self] in Task { await self?.stop() } }
       chrome?.onAbort = { [weak self] in Task { await self?.abort() } }
+      chrome?.onPause = { [weak self] in Task { @MainActor in self?.pause() } }
+      chrome?.onResume = { [weak self] in Task { @MainActor in self?.resume() } }
 
       stream = s
       sink = sk
