@@ -22,7 +22,7 @@ const kRecordModeLastRegion = 'lastRegion';
 /// Filename label for recordings with no window context (region/display).
 const kRecordingCaptureLabel = 'RECORDING';
 
-enum RecordPhase { idle, starting, recording }
+enum RecordPhase { idle, starting, recording, paused }
 
 /// Control-engine recording orchestrator: TOGGLE semantics (a record action
 /// starts when idle and stops the active recording otherwise — owner ruling),
@@ -66,6 +66,8 @@ class RecordController {
       onFailed: _onFailed,
       onAborted: _onAborted,
       onSelection: _onSelection,
+      onPaused: _onPaused,
+      onResumed: _onResumed,
     );
   }
 
@@ -109,6 +111,29 @@ class RecordController {
       _phase = RecordPhase.idle;
       _showError('Recording failed: $e');
     }
+  }
+
+  /// Pause the active recording (no-op unless actively recording). The native
+  /// side freezes the timeline so the result stays one continuous file.
+  Future<void> pause() async {
+    if (_phase != RecordPhase.recording) return;
+    _phase = RecordPhase.paused;
+    await _bridge.pause();
+  }
+
+  /// Resume a paused recording.
+  Future<void> resume() async {
+    if (_phase != RecordPhase.paused) return;
+    _phase = RecordPhase.recording;
+    await _bridge.resume();
+  }
+
+  void _onPaused() {
+    if (_phase == RecordPhase.recording) _phase = RecordPhase.paused;
+  }
+
+  void _onResumed() {
+    if (_phase == RecordPhase.paused) _phase = RecordPhase.recording;
   }
 
   Future<void> _start(String mode) async {

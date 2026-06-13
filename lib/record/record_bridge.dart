@@ -54,6 +54,12 @@ class RecordBridge {
   /// Abort the active recording (file deleted -> onRecordAborted).
   Future<void> abort() => _channel.invokeMethod('abort');
 
+  /// Pause the active recording (the timeline freezes; one continuous file).
+  Future<void> pause() => _channel.invokeMethod('pause');
+
+  /// Resume a paused recording.
+  Future<void> resume() => _channel.invokeMethod('resume');
+
   /// Register native -> Dart recording lifecycle events. Call once in the
   /// control engine. [onSelection] delivers a live-select confirm/cancel
   /// relayed from an overlay engine (displayId + rect | windowId, or
@@ -64,12 +70,18 @@ class RecordBridge {
     required void Function(String message) onFailed,
     required void Function() onAborted,
     void Function(Map<String, dynamic> args)? onSelection,
+    void Function()? onPaused,
+    void Function()? onResumed,
   }) {
     _channel.setMethodCallHandler((call) async {
       final args = call.arguments;
       switch (call.method) {
         case 'onRecordSelection':
           onSelection?.call((args as Map).cast<String, dynamic>());
+        case 'onRecordPaused':
+          onPaused?.call();
+        case 'onRecordResumed':
+          onResumed?.call();
         case 'onRecordStarted':
           final a = (args as Map).cast<String, dynamic>();
           onStarted(

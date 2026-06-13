@@ -278,7 +278,7 @@ private final class StripButton: NSView {
   enum Kind { case redAccent, ghost }
 
   private let kind: Kind
-  private let title: String
+  var title: String { didSet { needsDisplay = true } }
   private let action: () -> Void
   private let font = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
   private var hovered = false { didSet { needsDisplay = true } }
@@ -459,6 +459,17 @@ final class RecordingChrome {
   private let sizeLabel = NSTextField(labelWithString: "0 MB")
   var onStop: (() -> Void)?
   var onAbort: (() -> Void)?
+  var onPause: (() -> Void)?
+  var onResume: (() -> Void)?
+  private weak var pauseButton: StripButton?
+  private var paused = false
+
+  /// Toggle the strip Pause/Resume button label (styling unified in a later
+  /// pass; functional only here).
+  func setPaused(_ p: Bool) {
+    paused = p
+    pauseButton?.title = p ? L.s("Resume", "繼續") : L.s("Pause", "暫停")
+  }
 
   /// All chrome windows, for the SCContentFilter exclusion list.
   var windowNumbers: [Int] {
@@ -555,6 +566,22 @@ final class RecordingChrome {
     let sep = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 22))
     sep.wantsLayer = true
 
+    let pause = StripButton(
+      kind: .ghost, title: L.s("Pause", "暫停")
+    ) { [weak self] in
+      guard let self else { return }
+      if self.paused { self.onResume?() } else { self.onPause?() }
+    }
+    // Size the box to the wider of Pause/Resume so the title swap never clips.
+    let pf = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
+    let pauseW = L.s("Pause", "暫停").size(withAttributes: [.font: pf]).width
+    let resumeW = L.s("Resume", "繼續").size(withAttributes: [.font: pf]).width
+    if resumeW > pauseW {
+      var f = pause.frame
+      f.size.width += ceil(resumeW - pauseW)
+      pause.frame = f
+    }
+    pauseButton = pause
     let abort = StripButton(
       kind: .ghost, title: L.s("Abort", "中止")
     ) { [weak self] in self?.onAbort?() }
@@ -575,12 +602,13 @@ final class RecordingChrome {
     place(timerLabel, gapAfter: 14)
     place(sizeLabel, gapAfter: 16)
     place(sep, gapAfter: 16)
+    place(pause, gapAfter: 10)
     place(abort, gapAfter: 10) // dialog-pair spacing (confirm_dialog.dart)
     place(stop, gapAfter: 12)
 
     let container = StripGlassView(
       frame: NSRect(x: 0, y: 0, width: x, height: height))
-    for v in [dot, timerLabel, sizeLabel, sep, abort, stop] {
+    for v in [dot, timerLabel, sizeLabel, sep, pause, abort, stop] {
       container.addSubview(v)
     }
     container.hairlineViews = [sep]
@@ -811,6 +839,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
   /// icon snaps back instead of easing (design: the dropped color confirms
   /// nothing was kept).
   var onStateChange: ((Bool, Bool) -> Void)?
+  /// Paused-state hook for the menu-bar Pause/Resume item.
+  var onPauseChange: ((Bool) -> Void)?
 
   init(events: @escaping (String, Any?) -> Void) {
     self.events = events
@@ -963,6 +993,24 @@ final class RecordingController: NSObject, SCStreamDelegate {
     await stop()
   }
 
+  func pause() {
+    guard isRecording, !paused else { return }
+    paused = true
+    sink?.setPaused(true)
+    chrome?.setPaused(true)
+    onPauseChange?(true)
+    events("onRecordPaused", nil)
+  }
+
+  func resume() {
+    guard isRecording, paused else { return }
+    paused = false
+    sink?.setPaused(false)
+    chrome?.setPaused(false)
+    onPauseChange?(false)
+    events("onRecordResumed", nil)
+  }
+
   nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
     Task { @MainActor in
       guard self.isRecording else { return } // our own stop already handled it
@@ -1060,6 +1108,8 @@ final class RecordingChannel {
   /// Menu-bar state hook (breathing icon + Stop/Abort items while recording);
   /// the second flag is graceful (false = abort/failure, icon snaps back).
   var onRecordingStateChange: ((Bool, Bool) -> Void)?
+  /// Paused-state hook for the menu-bar Pause/Resume item.
+  var onRecordingPauseChange: ((Bool) -> Void)?
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: "glimpr/record", binaryMessenger: messenger)
@@ -1109,6 +1159,12 @@ final class RecordingChannel {
         guard #available(macOS 15.0, *) else { return result(nil) }
         Task { await self.current()?.abort() }
         result(nil)
+      case "pause":
+        if #available(macOS 15.0, *) { self.current()?.pause() }
+        result(nil)
+      case "resume":
+        if #available(macOS 15.0, *) { self.current()?.resume() }
+        result(nil)
       case "isRecording":
         if #available(macOS 15.0, *) {
           result(self.current()?.isRecording ?? false)
@@ -1127,13 +1183,21 @@ final class RecordingChannel {
     channel.invokeMethod("onRecordSelection", arguments: args)
   }
 
-  /// Native entries for the menu-bar Stop/Abort items.
+  /// Native entries for the menu-bar Stop/Abort/Pause items.
   func stopActive() {
     if #available(macOS 15.0, *) { Task { await current()?.stop() } }
   }
 
   func abortActive() {
     if #available(macOS 15.0, *) { Task { await current()?.abort() } }
+  }
+
+  func pauseActive() {
+    if #available(macOS 15.0, *) { current()?.pause() }
+  }
+
+  func resumeActive() {
+    if #available(macOS 15.0, *) { current()?.resume() }
   }
 
   @available(macOS 15.0, *)
@@ -1144,6 +1208,9 @@ final class RecordingChannel {
     })
     c.onStateChange = { [weak self] active, graceful in
       self?.onRecordingStateChange?(active, graceful)
+    }
+    c.onPauseChange = { [weak self] paused in
+      self?.onRecordingPauseChange?(paused)
     }
     controller = c
     return c

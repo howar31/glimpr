@@ -70,7 +70,16 @@ class _FakeBridge extends RecordBridge {
   @override
   Future<void> stop() async => stops++;
 
+  var pauses = 0;
+  var resumes = 0;
+  @override
+  Future<void> pause() async => pauses++;
+  @override
+  Future<void> resume() async => resumes++;
+
   late void Function(Map<String, dynamic>) selection;
+  late void Function() paused;
+  late void Function() resumed;
 
   @override
   void registerHandlers({
@@ -79,12 +88,16 @@ class _FakeBridge extends RecordBridge {
     required void Function(String message) onFailed,
     required void Function() onAborted,
     void Function(Map<String, dynamic> args)? onSelection,
+    void Function()? onPaused,
+    void Function()? onResumed,
   }) {
     started = onStarted;
     finished = onFinished;
     failed = onFailed;
     aborted = onAborted;
     if (onSelection != null) selection = onSelection;
+    if (onPaused != null) paused = onPaused;
+    if (onResumed != null) resumed = onResumed;
   }
 }
 
@@ -152,6 +165,46 @@ void main() {
       await rc.toggle(kRecordModeRegion); // ANY record action stops
       expect(bridge.stops, 1);
       expect(bridge.starts, hasLength(1));
+    });
+
+    test('pause moves to paused and calls the bridge; resume returns', () async {
+      final rc = build();
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      expect(rc.phase, RecordPhase.recording);
+      await rc.pause();
+      expect(rc.phase, RecordPhase.paused);
+      expect(bridge.pauses, 1);
+      await rc.resume();
+      expect(rc.phase, RecordPhase.recording);
+      expect(bridge.resumes, 1);
+    });
+
+    test('toggle while paused stops the session', () async {
+      final rc = build();
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      await rc.pause();
+      await rc.toggle(kRecordModeDisplay);
+      expect(bridge.stops, 1);
+      expect(bridge.starts, hasLength(1));
+    });
+
+    test('native pause/resume events drive the phase', () async {
+      final rc = build();
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.paused();
+      expect(rc.phase, RecordPhase.paused);
+      bridge.resumed();
+      expect(rc.phase, RecordPhase.recording);
+    });
+
+    test('pause is a no-op unless recording', () async {
+      final rc = build();
+      await rc.pause(); // idle
+      expect(bridge.pauses, 0);
+      expect(rc.phase, RecordPhase.idle);
     });
 
     test('recording settings flow through to the bridge', () async {

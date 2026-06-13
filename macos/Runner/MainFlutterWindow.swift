@@ -196,6 +196,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     statusItem?.onRecordStop = { [weak self] in self?.recordingChannel?.stopActive() }
     statusItem?.onRecordAbort = { [weak self] in self?.recordingChannel?.abortActive() }
+    recordingChannel?.onRecordingPauseChange = { [weak self] paused in
+      self?.statusItem?.setRecordingPaused(paused)
+    }
+    statusItem?.onRecordPause = { [weak self] in self?.recordingChannel?.pauseActive() }
+    statusItem?.onRecordResume = { [weak self] in self?.recordingChannel?.resumeActive() }
     PerfLog.mark("statusItemReady")
 
     // Warm the Image Editor engine + window at launch. A post-launch (on-demand)

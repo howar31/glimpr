@@ -26,6 +26,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   // Screen recording (macOS 15+): native stop/abort while a recording runs.
   var onRecordStop: (() -> Void)?
   var onRecordAbort: (() -> Void)?
+  var onRecordPause: (() -> Void)?
+  var onRecordResume: (() -> Void)?
+  private var recordPauseItem: NSMenuItem?
+  private var recordPausedState = false
   private var recordStartItems: [NSMenuItem] = []
   private var recordControlItems: [NSMenuItem] = []
   private let normalImage: NSImage?
@@ -80,11 +84,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // The start items fire the SAME Dart toggle dispatch as the hotkeys; the
     // Stop/Abort pair appears only while a recording runs (see setRecording).
     if #available(macOS 15.0, *) {
+      let pause = menuItem(
+        title: L.s("Pause Recording", "暫停錄影"), action: #selector(recordPauseToggle), key: "")
       let stop = menuItem(
         title: L.s("Stop Recording", "停止錄影"), action: #selector(recordStop), key: "")
       let abort = menuItem(
         title: L.s("Abort Recording", "中止錄影"), action: #selector(recordAbort), key: "")
-      recordControlItems = [stop, abort]
+      recordPauseItem = pause
+      recordControlItems = [pause, stop, abort]
       recordStartItems = [
         globalItem(L.s("Record Region", "錄製框選範圍"), "global.recordRegion"),
         globalItem(L.s("Record Window", "錄製視窗"), "global.recordWindow"),
@@ -245,6 +252,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
     for mi in recordControlItems { mi.isHidden = !active }
     for mi in recordStartItems { mi.isHidden = active }
+    if !active { setRecordingPaused(false) }
+  }
+
+  /// Toggle the Pause/Resume menu item's label to match the session state.
+  func setRecordingPaused(_ paused: Bool) {
+    recordPausedState = paused
+    recordPauseItem?.title = paused
+      ? L.s("Resume Recording", "繼續錄影")
+      : L.s("Pause Recording", "暫停錄影")
   }
 
   private var recordingTimer: Timer?
@@ -287,6 +303,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
   @objc private func recordStop() { onRecordStop?() }
   @objc private func recordAbort() { onRecordAbort?() }
+  @objc private func recordPauseToggle() {
+    if recordPausedState { onRecordResume?() } else { onRecordPause?() }
+  }
 
   @objc private func openImage() { onOpenImage() }
   @objc private func openRecent(_ sender: NSMenuItem) {
