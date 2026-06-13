@@ -515,6 +515,9 @@ final class RecordingChrome {
   private var scrimWindows: [NSWindow] = [] // dim the OTHER screens (display mode)
   private weak var frameView: RecordingFrameView?
   private var chromeScreen: NSScreen?
+  private var stripDetached = false // a manual drag detaches the strip from follow
+  private var lastStripOrigin: NSPoint? // the last origin WE set (vs a user drag)
+  private var stripMoveObserver: NSObjectProtocol?
   private let timerLabel = NSTextField(labelWithString: "00:00")
   private let sizeLabel = NSTextField(labelWithString: "0 MB")
   var onStop: (() -> Void)?
@@ -582,33 +585,52 @@ final class RecordingChrome {
                                 stripSize: strip.frame.size)
     } else {
       // Display mode: bottom-center, where the selection toolbar lives
-      // (owner: same neighborhood as the overlay toolbar), still draggable.
+      // (owner: same neighborhood as the overlay toolbar).
       origin = NSPoint(
         x: screen.frame.midX - strip.frame.size.width / 2,
         y: screen.frame.minY + 60)
-      strip.isMovableByWindowBackground = true
     }
+    strip.isMovableByWindowBackground = true // draggable in EVERY mode (owner)
+    lastStripOrigin = origin
     strip.setFrameOrigin(origin)
     strip.alphaValue = stripHidden ? 0 : 1
     strip.orderFrontRegardless()
     stripWindow = strip
+    // The strip follows the recording frame by default; the FIRST manual drag
+    // (a move whose origin we did not set) detaches it so it stays put after.
+    stripMoveObserver = NotificationCenter.default.addObserver(
+      forName: NSWindow.didMoveNotification, object: strip, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { // queue: .main -> always on the main actor
+        guard let self, let sw = self.stripWindow, let last = self.lastStripOrigin
+        else { return }
+        if abs(sw.frame.origin.x - last.x) > 0.5
+            || abs(sw.frame.origin.y - last.y) > 0.5 {
+          self.stripDetached = true
+        }
+      }
+    }
   }
 
   /// Strip origin for the region/window case: below the region, flipped above
   /// when there is no room, clamped inside the screen.
   private static func stripOrigin(forRegion region: NSRect, on screen: NSScreen,
                                   stripSize: NSSize) -> NSPoint {
+    let vf = screen.visibleFrame
     var x = region.minX
     var y = region.minY - stripSize.height - 8
-    if y < screen.visibleFrame.minY { y = region.maxY + 8 }
-    x = min(max(screen.visibleFrame.minX + 4, x),
-            screen.visibleFrame.maxX - stripSize.width - 4)
+    if y < vf.minY { y = region.maxY + 8 } // no room below -> flip above
+    // Clamp INSIDE the visible frame so a full-screen / maximized-window region
+    // never pushes the strip off-screen (it just lands inside, draggable).
+    x = min(max(vf.minX + 4, x), vf.maxX - stripSize.width - 4)
+    y = min(max(vf.minY + 4, y), vf.maxY - stripSize.height - 4)
     return NSPoint(x: x, y: y)
   }
 
-  /// Window-follow: move the frame + scrim + strip to track a moving window
-  /// (same Cocoa-global region coords as show). Single-display follow; if the
-  /// window crosses to another display the frame stays on its original screen.
+  /// Window-follow: move the frame + scrim to track a moving window (same
+  /// Cocoa-global region coords as show). The strip follows too BY DEFAULT, but
+  /// stops once the user has dragged it (stripDetached). Single-display follow;
+  /// if the window crosses to another display the frame stays on its screen.
   func reframe(regionGlobalBottomLeft region: NSRect, on screen: NSScreen) {
     if let bw = borderWindow, let fv = frameView {
       if screen != chromeScreen {
@@ -623,9 +645,13 @@ final class RecordingChrome {
       fv.update(region: local,
                 scrimTop: screen.visibleFrame.maxY - screen.frame.minY)
     }
-    if let sw = stripWindow {
-      sw.setFrameOrigin(Self.stripOrigin(forRegion: region, on: screen,
-                                         stripSize: sw.frame.size))
+    // The strip trails the frame until the user grabs it (the first manual drag
+    // sets stripDetached, after which it stays where they left it).
+    if !stripDetached, let sw = stripWindow {
+      let origin = Self.stripOrigin(forRegion: region, on: screen,
+                                    stripSize: sw.frame.size)
+      lastStripOrigin = origin
+      sw.setFrameOrigin(origin)
     }
   }
 
@@ -642,6 +668,10 @@ final class RecordingChrome {
   }
 
   func dismiss() {
+    if let o = stripMoveObserver { NotificationCenter.default.removeObserver(o) }
+    stripMoveObserver = nil
+    stripDetached = false
+    lastStripOrigin = nil
     borderWindow?.orderOut(nil)
     stripWindow?.orderOut(nil)
     scrimWindows.forEach { $0.orderOut(nil) }
