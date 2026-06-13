@@ -164,8 +164,8 @@ private enum RecordingDesign {
 /// sits below the menu-bar level and the scrim band stops at the menu-bar
 /// line, so the breathing status icon never dims.
 private final class RecordingFrameView: NSView {
-  private let region: NSRect // view-local
-  private let scrimTop: CGFloat // view-local y where the scrim band ends
+  private var region: NSRect // view-local
+  private var scrimTop: CGFloat // view-local y where the scrim band ends
 
   init(frame: NSRect, region: NSRect, scrimTop: CGFloat) {
     self.region = region
@@ -174,6 +174,13 @@ private final class RecordingFrameView: NSView {
   }
 
   required init?(coder: NSCoder) { fatalError("not used") }
+
+  /// Re-punch the region (window-follow): the frame tracks a moving window.
+  func update(region: NSRect, scrimTop: CGFloat) {
+    self.region = region
+    self.scrimTop = scrimTop
+    needsDisplay = true
+  }
 
   override func draw(_ dirtyRect: NSRect) {
     guard let ctx = NSGraphicsContext.current else { return }
@@ -458,6 +465,9 @@ private final class StripGlassView: NSView {
 final class RecordingChrome {
   private var borderWindow: NSWindow?
   private var stripWindow: NSWindow?
+  private var scrimWindows: [NSWindow] = [] // dim the OTHER screens (display mode)
+  private weak var frameView: RecordingFrameView?
+  private var chromeScreen: NSScreen?
   private let timerLabel = NSTextField(labelWithString: "00:00")
   private let sizeLabel = NSTextField(labelWithString: "0 MB")
   var onStop: (() -> Void)?
@@ -477,12 +487,29 @@ final class RecordingChrome {
   /// All chrome windows, for the SCContentFilter exclusion list.
   var windowNumbers: [Int] {
     [borderWindow, stripWindow].compactMap { $0?.windowNumber }
+      + scrimWindows.map { $0.windowNumber }
+  }
+
+  /// Dim every screen except [target] (full-display record) so it is clear
+  /// which display is being recorded. Static, full-screen veils on the other
+  /// displays; shown for the countdown and the recording alike.
+  func showOtherScreenScrims(excluding target: NSScreen) {
+    for screen in NSScreen.screens where screen != target {
+      let w = borderlessWindow(
+        frame: screen.frame,
+        level: NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue - 1))
+      w.ignoresMouseEvents = true
+      w.backgroundColor = RecordingDesign.scrim
+      w.orderFrontRegardless()
+      scrimWindows.append(w)
+    }
   }
 
   /// [regionGlobalBottomLeft] is in Cocoa GLOBAL (bottom-left) coords; nil =
   /// display/window mode (no frame; strip parks bottom-center, draggable).
   func show(regionGlobalBottomLeft: NSRect?, on screen: NSScreen,
             stripHidden: Bool = false) {
+    chromeScreen = screen
     if let region = regionGlobalBottomLeft {
       let f = borderlessWindow(
         frame: screen.frame,
@@ -492,30 +519,25 @@ final class RecordingChrome {
         x: region.minX - screen.frame.minX,
         y: region.minY - screen.frame.minY,
         width: region.width, height: region.height)
-      f.contentView = RecordingFrameView(
+      let fv = RecordingFrameView(
         frame: NSRect(origin: .zero, size: screen.frame.size),
         region: local,
         scrimTop: screen.visibleFrame.maxY - screen.frame.minY)
+      f.contentView = fv
+      frameView = fv
       f.orderFrontRegardless()
       borderWindow = f
     }
     let strip = buildStrip()
-    let stripSize = strip.frame.size
     let origin: NSPoint
     if let region = regionGlobalBottomLeft {
-      // Prefer below the region (visually under it = lower y), flip above
-      // when there is no room, clamp inside the screen.
-      var x = region.minX
-      var y = region.minY - stripSize.height - 8
-      if y < screen.visibleFrame.minY { y = region.maxY + 8 }
-      x = min(max(screen.visibleFrame.minX + 4, x),
-              screen.visibleFrame.maxX - stripSize.width - 4)
-      origin = NSPoint(x: x, y: y)
+      origin = Self.stripOrigin(forRegion: region, on: screen,
+                                stripSize: strip.frame.size)
     } else {
       // Display mode: bottom-center, where the selection toolbar lives
       // (owner: same neighborhood as the overlay toolbar), still draggable.
       origin = NSPoint(
-        x: screen.frame.midX - stripSize.width / 2,
+        x: screen.frame.midX - strip.frame.size.width / 2,
         y: screen.frame.minY + 60)
       strip.isMovableByWindowBackground = true
     }
@@ -523,6 +545,41 @@ final class RecordingChrome {
     strip.alphaValue = stripHidden ? 0 : 1
     strip.orderFrontRegardless()
     stripWindow = strip
+  }
+
+  /// Strip origin for the region/window case: below the region, flipped above
+  /// when there is no room, clamped inside the screen.
+  private static func stripOrigin(forRegion region: NSRect, on screen: NSScreen,
+                                  stripSize: NSSize) -> NSPoint {
+    var x = region.minX
+    var y = region.minY - stripSize.height - 8
+    if y < screen.visibleFrame.minY { y = region.maxY + 8 }
+    x = min(max(screen.visibleFrame.minX + 4, x),
+            screen.visibleFrame.maxX - stripSize.width - 4)
+    return NSPoint(x: x, y: y)
+  }
+
+  /// Window-follow: move the frame + scrim + strip to track a moving window
+  /// (same Cocoa-global region coords as show). Single-display follow; if the
+  /// window crosses to another display the frame stays on its original screen.
+  func reframe(regionGlobalBottomLeft region: NSRect, on screen: NSScreen) {
+    if let bw = borderWindow, let fv = frameView {
+      if screen != chromeScreen {
+        bw.setFrame(screen.frame, display: false)
+        fv.frame = NSRect(origin: .zero, size: screen.frame.size)
+        chromeScreen = screen
+      }
+      let local = NSRect(
+        x: region.minX - screen.frame.minX,
+        y: region.minY - screen.frame.minY,
+        width: region.width, height: region.height)
+      fv.update(region: local,
+                scrimTop: screen.visibleFrame.maxY - screen.frame.minY)
+    }
+    if let sw = stripWindow {
+      sw.setFrameOrigin(Self.stripOrigin(forRegion: region, on: screen,
+                                         stripSize: sw.frame.size))
+    }
   }
 
   /// Reveal/hide just the control strip; the frame + scrim stay put. Used so
@@ -540,8 +597,10 @@ final class RecordingChrome {
   func dismiss() {
     borderWindow?.orderOut(nil)
     stripWindow?.orderOut(nil)
+    scrimWindows.forEach { $0.orderOut(nil) }
     borderWindow = nil
     stripWindow = nil
+    scrimWindows = []
   }
 
   private func borderlessWindow(frame: NSRect, level: NSWindow.Level) -> NSWindow {
@@ -981,6 +1040,14 @@ final class CountdownHUD {
 
   func cancel() { finish(false) }
 
+  /// Recenter on a (moving window's) center — used by the window-follow timer
+  /// so the countdown stays centered in the frame as the window moves.
+  func recenter(center: NSPoint) {
+    guard let w = window else { return }
+    w.setFrameOrigin(NSPoint(x: center.x - w.frame.width / 2,
+                             y: center.y - w.frame.height / 2))
+  }
+
   private func finish(_ proceed: Bool) {
     timer?.invalidate(); timer = nil
     window?.orderOut(nil); window = nil
@@ -1059,6 +1126,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private var sink: RecordingSinkBase?
   private var chrome: RecordingChrome?
   private var tick: Timer?
+  private var followTimer: Timer? // window-mode frame follow (~30 Hz)
   private var outputPath: String?
   private var abortRequested = false
   private var paused = false
@@ -1096,10 +1164,22 @@ final class RecordingController: NSObject, SCStreamDelegate {
         else { throw RecordingError.message("window not found") }
         filter = SCContentFilter(desktopIndependentWindow: scWindow)
         scale = CGFloat(filter.pointPixelScale)
-        screen = NSScreen.main ?? NSScreen.screens[0]
-        // The window stream follows the window; no frame chrome (it would
-        // not track moves) — strip only, parked like display mode.
-        chromeRegionGlobal = nil
+        // Frame + scrim around the window (owner: show the recording range like
+        // region mode); it follows the window during recording. No exclusion
+        // needed — the desktopIndependentWindow filter records only the window,
+        // so chrome on the desktop can never appear in the output.
+        let wrect = Self.windowCocoaRect(wid)
+          ?? NSRect(x: 0, y: 0, width: 200, height: 200)
+        chromeRegionGlobal = wrect
+        screen = NSScreen.screens.first(where: { $0.frame.intersects(wrect) })
+          ?? NSScreen.main ?? NSScreen.screens[0]
+        let c = RecordingChrome()
+        c.show(regionGlobalBottomLeft: wrect, on: screen,
+               stripHidden: spec.countdown > 0)
+        chrome = c
+        // Follow from now so the frame (and the countdown HUD) tracks the
+        // window during the countdown too, not only once recording begins.
+        startWindowFollow(windowID: wid)
       } else {
         let displayID = spec.displayID ?? Self.cursorDisplayID()
         guard let scDisplay = content.displays.first(where: { $0.displayID == displayID }),
@@ -1125,6 +1205,12 @@ final class RecordingController: NSObject, SCStreamDelegate {
         c.show(regionGlobalBottomLeft: chromeRegionGlobal, on: nsScreen,
                stripHidden: spec.countdown > 0)
         chrome = c
+        if spec.rect == nil {
+          // Full-display record: dim every OTHER screen (owner) so it is clear
+          // which display is being recorded. They sit on other displays, so
+          // they are never part of this display's capture.
+          c.showOtherScreenScrims(excluding: nsScreen)
+        }
         let excludedNumbers = c.windowNumbers
         let fresh = try await SCShareableContent.current
         let excluded = fresh.windows.filter {
@@ -1145,6 +1231,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
           seconds: spec.countdown, on: screen, center: center)
         countdownHUD = nil
         if !proceed {
+          followTimer?.invalidate()
+          followTimer = nil
           chrome?.dismiss()
           chrome = nil
           events("onRecordAborted", nil)
@@ -1208,13 +1296,6 @@ final class RecordingController: NSObject, SCStreamDelegate {
       }
       try await s.startCapture()
 
-      // Window mode shows its strip only now (no exclusion needed: the
-      // window filter records that window alone, the strip can't appear).
-      if spec.mode == "window", chrome == nil {
-        let c = RecordingChrome()
-        c.show(regionGlobalBottomLeft: nil, on: screen)
-        chrome = c
-      }
       chrome?.onStop = { [weak self] in Task { await self?.stop() } }
       chrome?.onAbort = { [weak self] in Task { await self?.abort() } }
       chrome?.onPause = { [weak self] in Task { @MainActor in self?.pause() } }
@@ -1323,6 +1404,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private func cleanupSession(graceful: Bool = true) {
     tick?.invalidate()
     tick = nil
+    followTimer?.invalidate()
+    followTimer = nil
     chrome?.dismiss()
     chrome = nil
     stream = nil
@@ -1362,6 +1445,40 @@ final class RecordingController: NSObject, SCStreamDelegate {
   }
 
   private static func even(_ v: Int) -> Int { max(2, v - (v % 2)) }
+
+  /// Poll the recorded window's position ~30 Hz and move the frame + strip to
+  /// track it (the owner accepts the cost for an accurate recording-range
+  /// frame). Stops with the session.
+  private func startWindowFollow(windowID: CGWindowID) {
+    let t = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) {
+      [weak self] _ in
+      Task { @MainActor in
+        // Runs during the countdown AND recording (guard on the chrome, not
+        // isRecording), so the frame + HUD track the window the whole time.
+        guard let self, let chrome = self.chrome,
+              let rect = Self.windowCocoaRect(windowID) else { return }
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(rect) })
+          ?? NSScreen.main ?? NSScreen.screens[0]
+        chrome.reframe(regionGlobalBottomLeft: rect, on: screen)
+        self.countdownHUD?.recenter(center: NSPoint(x: rect.midX, y: rect.midY))
+      }
+    }
+    RunLoop.main.add(t, forMode: .common)
+    followTimer = t
+  }
+
+  /// A window's on-screen bounds in Cocoa GLOBAL (bottom-left) coords, from the
+  /// window server (CG top-left bounds flipped about the main display).
+  private static func windowCocoaRect(_ windowID: CGWindowID) -> NSRect? {
+    guard let infos = CGWindowListCopyWindowInfo(
+            [.optionIncludingWindow], windowID) as? [[String: Any]],
+          let bounds = infos.first?[kCGWindowBounds as String] as? [String: Any],
+          let cg = CGRect(dictionaryRepresentation: bounds as CFDictionary)
+    else { return nil }
+    let mainH = CGDisplayBounds(CGMainDisplayID()).height
+    return NSRect(x: cg.minX, y: mainH - cg.maxY,
+                  width: cg.width, height: cg.height)
+  }
 
   private static func cursorDisplayID() -> CGDirectDisplayID {
     let mouse = NSEvent.mouseLocation
