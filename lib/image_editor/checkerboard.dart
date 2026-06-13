@@ -31,10 +31,11 @@ class _CheckerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // Two-tone grid: a flat base fill, then the faint checker squares painted
-    // over it on alternating cells. The dark board matches the finalized design
-    // (a near-black base #0A0E1C with a barely-there white wash); the light pair
-    // stays appearance-matched so the board recedes in either theme.
-    final base = dark ? const Color(0xFF0A0E1C) : const Color(0xFFE9ECF1);
+    // over it on alternating cells. NEUTRAL near-black base (no navy tint —
+    // design guide 2026-06-13; a neutral backdrop avoids biasing the user's
+    // colour judgement, which matters given the eyedropper/colour readout)
+    // with a barely-there white wash; the light pair is already near-neutral.
+    final base = dark ? const Color(0xFF111114) : const Color(0xFFE9ECF1);
     final alt = dark ? const Color(0x06FFFFFF) : const Color(0xFFD7DCE4);
     canvas.drawRect(Offset.zero & size, Paint()..color = base);
     final altPaint = Paint()..color = alt;

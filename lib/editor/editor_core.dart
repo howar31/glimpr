@@ -16,6 +16,7 @@ import '../overlay/selection_controller.dart';
 import '../overlay/selection_scrim.dart';
 import '../overlay/toolbar.dart';
 import '../overlay/window_snap.dart';
+import '../theme/glimpr_theme.dart';
 import 'color_info.dart';
 import 'curve.dart';
 import 'draw_style.dart';
@@ -3059,22 +3060,22 @@ class _CropConfirmBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Chrome: follow the system appearance (the confirm dialog's card pair);
-    // the ✔/✖ colors stay, same lightness family as the accent so they read
-    // in both modes.
+    // Chrome: the shared HUD tier (GlimprTokens.hudBg/hudBorder); the ✔/✖
+    // colors stay, same lightness family as the accent so they read in both
+    // modes.
     final dark =
         MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final t = GlimprTokens.forBrightness(
+        dark ? Brightness.dark : Brightness.light);
     final l = AppLocalizations.of(context);
     return Material(
       type: MaterialType.transparency,
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: dark ? const Color(0xF21A2236) : const Color(0xF2EEF2F7),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: dark ? const Color(0x33FFFFFF) : const Color(0x66FFFFFF),
-          ),
+          color: t.hudBg,
+          borderRadius: BorderRadius.circular(GlimprTokens.radiusMenu),
+          border: Border.all(color: t.hudBorder),
           boxShadow: [
             BoxShadow(
               color: dark ? const Color(0x66000000) : const Color(0x2E0F172A),

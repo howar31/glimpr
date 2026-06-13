@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/gen/app_localizations.dart';
+import '../theme/glimpr_theme.dart';
 
 /// A full-area mask shown over the capture overlay AND the image editor while the
 /// Settings window is open (⌘,). It dims the paused session and ABSORBS all
@@ -10,22 +11,19 @@ import '../l10n/gen/app_localizations.dart';
 /// low-level pausing, but share THIS widget so they look identical.
 ///
 /// The hint sits near the top so it stays visible above the centered Settings
-/// window. Self-contained palette pair (no GlimprTheme dependency) selected by
-/// the system appearance via MediaQuery, like the toolbar — so it renders
-/// correctly in the overlay, which has no GlimprTheme/Scaffold ancestor. The
-/// dim veil stays dark in both modes (matching the confirm-dialog barrier).
+/// window. Tokens resolved directly from the system appearance via MediaQuery
+/// (no GlimprTheme ancestor in the overlay); the card sits on the shared HUD
+/// tier (GlimprTokens.hudBg/hudBorder). The dim veil stays dark in both modes
+/// (matching the confirm-dialog barrier).
 class SettingsMask extends StatelessWidget {
   const SettingsMask({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final dark =
-        MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final cardBg = dark ? const Color(0xF21A2138) : const Color(0xF2EEF2F7);
-    final cardBorder =
-        dark ? const Color(0x33FFFFFF) : const Color(0x66FFFFFF);
-    final fg = dark ? const Color(0xFFFFFFFF) : const Color(0xFF14223B);
-    final fgDim = dark ? const Color(0xCCFFFFFF) : const Color(0xFF475569);
+    final t = GlimprTokens.forBrightness(
+        MediaQuery.platformBrightnessOf(context));
+    final fg = t.fg1;
+    final fgDim = t.fg2;
     return Positioned.fill(
       child: AbsorbPointer(
         child: ColoredBox(
@@ -41,9 +39,10 @@ class SettingsMask extends StatelessWidget {
                     vertical: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: cardBorder),
+                    color: t.hudBg,
+                    borderRadius:
+                        BorderRadius.circular(GlimprTokens.radiusCard),
+                    border: Border.all(color: t.hudBorder),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

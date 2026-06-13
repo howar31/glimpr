@@ -254,26 +254,21 @@ class LoupePainter extends CustomPainter {
       old.dark != dark;
 }
 
-// Shared HUD pill (loupe readout + box-size label): chrome, so it follows the
-// system appearance — dark body + thin light frame in dark mode, a near-white
-// body + slate frame in light mode (the editor toast's pair; the ~95% opaque
-// body keeps it legible over any screenshot in both). Wrapped in a transparent
+// Shared HUD pill (loupe readout + box-size label): chrome on the app-wide
+// HUD tier (GlimprTokens.hudBg/hudBorder — the ~95% opaque body keeps it
+// legible over any screenshot in both appearances). Wrapped in a transparent
 // Material so its text always gets a real default style — identically in the
 // overlay (no Scaffold ancestor) and the image editor — instead of Flutter's
 // "missing DefaultTextStyle" yellow underline.
-const Color _kHudPillColorDark = Color(0xF2202020);
-const Color _kHudPillBorderDark = Color(0x55FFFFFF);
-const Color _kHudPillColorLight = Color(0xFAFFFFFF);
-const Color _kHudPillBorderLight = Color(0x1F0F172A);
 const TextStyle _kHudTextDark = TextStyle(
-  color: Color(0xFFFFFFFF),
+  color: Color(0xF5FFFFFF), // GlimprTokens.dark.fg1
   fontSize: 11,
   height: 1.3,
   decoration: TextDecoration.none, // kill the stray fallback underline
   fontFeatures: [FontFeature.tabularFigures()], // steady digit columns
 );
 const TextStyle _kHudTextLight = TextStyle(
-  color: Color(0xFF14223B),
+  color: Color(0xFF14223B), // GlimprTokens.light.fg1
   fontSize: 11,
   height: 1.3,
   decoration: TextDecoration.none,
@@ -283,6 +278,9 @@ const TextStyle _kHudTextLight = TextStyle(
 bool _isDark(BuildContext context) =>
     MediaQuery.platformBrightnessOf(context) == Brightness.dark;
 
+GlimprTokens _hudTokens(bool dark) =>
+    GlimprTokens.forBrightness(dark ? Brightness.dark : Brightness.light);
+
 TextStyle _hudText(bool dark) => dark ? _kHudTextDark : _kHudTextLight;
 
 Widget _hudPill(bool dark, Widget child) => IgnorePointer(
@@ -291,12 +289,9 @@ Widget _hudPill(bool dark, Widget child) => IgnorePointer(
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: dark ? _kHudPillColorDark : _kHudPillColorLight,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: dark ? _kHudPillBorderDark : _kHudPillBorderLight,
-          width: 1,
-        ),
+        color: _hudTokens(dark).hudBg,
+        borderRadius: BorderRadius.circular(GlimprTokens.radiusPill),
+        border: Border.all(color: _hudTokens(dark).hudBorder, width: 1),
       ),
       child: child,
     ),
@@ -357,11 +352,7 @@ class LoupeReadout extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: c,
                       borderRadius: BorderRadius.circular(3),
-                      border: Border.all(
-                        color: dark
-                            ? _kHudPillBorderDark
-                            : _kHudPillBorderLight,
-                      ),
+                      border: Border.all(color: _hudTokens(dark).hudBorder),
                     ),
                   ),
                   const SizedBox(width: 6),

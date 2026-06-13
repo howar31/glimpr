@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart';
 class GlimprTokens {
   const GlimprTokens({
     required this.brightness,
-    required this.winBg,
     required this.winBorder,
     required this.sidebarBg,
     required this.divider,
@@ -21,6 +20,8 @@ class GlimprTokens {
     required this.cardBgHover,
     required this.cardBorder,
     required this.insetBg,
+    required this.hudBg,
+    required this.hudBorder,
     required this.fg1,
     required this.fg2,
     required this.fg3,
@@ -39,8 +40,10 @@ class GlimprTokens {
 
   final Brightness brightness;
 
-  // Window / structure
-  final Color winBg;
+  // Window / structure. No window tint: the window glass is pure native
+  // vibrancy (design guide — Apple liquid glass; the Aurora navy/near-white
+  // tint was removed app-wide 2026-06-13). winBorder is the bright edge that
+  // defines the glass over any backdrop.
   final Color winBorder;
   final Color sidebarBg;
   final Color divider;
@@ -50,6 +53,12 @@ class GlimprTokens {
   final Color cardBgHover;
   final Color cardBorder;
   final Color insetBg;
+
+  // HUD tier: near-opaque chrome floating over ARBITRARY content (toasts,
+  // menus, readout pills, confirm cards). ~95% opacity keeps it legible on
+  // any screenshot; one pair app-wide (design guide: one glass language).
+  final Color hudBg;
+  final Color hudBorder;
 
   // Foreground ramp
   final Color fg1;
@@ -93,14 +102,21 @@ class GlimprTokens {
   /// Text/icon color that sits on top of the accent gradient (always white).
   static const Color onAccent = Color(0xFFFFFFFF);
 
+  /// Corner-radius ramp (design guide: one radius family app-wide).
+  /// card = window-level cards/dialogs; bar = toolbars/toasts/strips;
+  /// menu = popup menus + compact chrome bars; pill = mini HUD readouts;
+  /// button = the ghost/accent control pair.
+  static const double radiusCard = 16;
+  static const double radiusBar = 12;
+  static const double radiusMenu = 10;
+  static const double radiusPill = 8;
+  static const double radiusButton = 9;
+
   bool get isDark => brightness == Brightness.dark;
 
   // ========================== DARK (canonical) ===========================
   static const GlimprTokens dark = GlimprTokens(
     brightness: Brightness.dark,
-    // Liquid material: a thin brand tint over the native desktop vibrancy (low
-    // alpha = the blurred desktop reads strongly through the window).
-    winBg: Color.fromRGBO(15, 21, 38, 0.10),
     winBorder: Color.fromRGBO(255, 255, 255, 0.22),
     sidebarBg: Color.fromRGBO(255, 255, 255, 0.04),
     divider: Color.fromRGBO(255, 255, 255, 0.08),
@@ -108,6 +124,8 @@ class GlimprTokens {
     cardBgHover: Color.fromRGBO(255, 255, 255, 0.07),
     cardBorder: Color.fromRGBO(255, 255, 255, 0.09),
     insetBg: Color.fromRGBO(0, 0, 0, 0.22),
+    hudBg: Color(0xF21A2236),
+    hudBorder: Color(0x33FFFFFF),
     fg1: Color.fromRGBO(255, 255, 255, 0.96),
     fg2: Color.fromRGBO(255, 255, 255, 0.66),
     fg3: Color.fromRGBO(255, 255, 255, 0.46),
@@ -127,9 +145,6 @@ class GlimprTokens {
   // ============================== LIGHT ==================================
   static const GlimprTokens light = GlimprTokens(
     brightness: Brightness.light,
-    // Liquid material: a thin brand tint over the native desktop vibrancy (low
-    // alpha = the blurred desktop reads strongly through the window).
-    winBg: Color.fromRGBO(249, 251, 253, 0.12),
     winBorder: Color.fromRGBO(255, 255, 255, 0.70),
     sidebarBg: Color.fromRGBO(255, 255, 255, 0.14),
     divider: Color.fromRGBO(15, 23, 42, 0.08),
@@ -137,6 +152,8 @@ class GlimprTokens {
     cardBgHover: Color.fromRGBO(255, 255, 255, 0.82),
     cardBorder: Color.fromRGBO(15, 23, 42, 0.08),
     insetBg: Color.fromRGBO(15, 23, 42, 0.04),
+    hudBg: Color(0xFAFFFFFF),
+    hudBorder: Color(0x1F0F172A),
     fg1: Color(0xFF14223B),
     fg2: Color(0xFF475569),
     fg3: Color(0xFF64748B),

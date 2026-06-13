@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/settings/settings_mask.dart';
+import 'package:glimpr/theme/glimpr_theme.dart';
 
 // The mask must follow the system appearance like the rest of the chrome
 // (toolbar/popovers/confirm dialog): a navy card + light text in dark mode,
@@ -42,13 +43,14 @@ void main() {
     );
     expect(scrim.color, const Color(0x99000000));
 
+    // Card = the shared HUD tier; text = the token fg ramp.
     final deco = cardDecoration(tester);
-    expect(deco.color, const Color(0xF21A2138));
-    expect(deco.border!.top.color, const Color(0x33FFFFFF));
-    expect(textColor(tester, 'Settings open'), const Color(0xFFFFFFFF));
+    expect(deco.color, GlimprTokens.dark.hudBg);
+    expect(deco.border!.top.color, GlimprTokens.dark.hudBorder);
+    expect(textColor(tester, 'Settings open'), GlimprTokens.dark.fg1);
     expect(
       textColor(tester, 'Close the Settings window to continue.'),
-      const Color(0xCCFFFFFF),
+      GlimprTokens.dark.fg2,
     );
   });
 
@@ -65,12 +67,12 @@ void main() {
     expect(scrim.color, const Color(0x99000000)); // veil stays dark
 
     final deco = cardDecoration(tester);
-    expect(deco.color, const Color(0xF2EEF2F7));
-    expect(deco.border!.top.color, const Color(0x66FFFFFF));
-    expect(textColor(tester, 'Settings open'), const Color(0xFF14223B));
+    expect(deco.color, GlimprTokens.light.hudBg);
+    expect(deco.border!.top.color, GlimprTokens.light.hudBorder);
+    expect(textColor(tester, 'Settings open'), GlimprTokens.light.fg1);
     expect(
       textColor(tester, 'Close the Settings window to continue.'),
-      const Color(0xFF475569),
+      GlimprTokens.light.fg2,
     );
   });
 }

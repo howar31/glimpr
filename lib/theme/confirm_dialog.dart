@@ -26,7 +26,6 @@ Future<bool> showDiscardConfirm(
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   final t = GlimprTokens.forBrightness(brightness);
-  final dark = brightness == Brightness.dark;
   final result = await showDialog<bool>(
     context: context,
     barrierColor: const Color(0x99000000),
@@ -38,21 +37,16 @@ Future<bool> showDiscardConfirm(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 380),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(GlimprTokens.radiusCard),
               child: BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                 child: Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: dark
-                        ? const Color(0xF2161A24)
-                        : const Color(0xF2EEF2F7),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: dark
-                          ? const Color(0x33FFFFFF)
-                          : const Color(0x66FFFFFF),
-                    ),
+                    color: t.hudBg,
+                    borderRadius:
+                        BorderRadius.circular(GlimprTokens.radiusCard),
+                    border: Border.all(color: t.hudBorder),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

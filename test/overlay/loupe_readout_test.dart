@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/overlay/crop_hud.dart';
+import 'package:glimpr/theme/glimpr_theme.dart';
 
 void main() {
   testWidgets('LoupeReadout shows the current XY only', (tester) async {
@@ -60,15 +61,16 @@ void main() {
       return pill.decoration! as BoxDecoration;
     }
 
+    // The pill sits on the shared HUD tier (GlimprTokens.hudBg); text = fg1.
     await pump(Brightness.dark);
-    expect(pillDecoration().color, const Color(0xF2202020));
+    expect(pillDecoration().color, GlimprTokens.dark.hudBg);
     expect(
       tester.widget<Text>(find.text('10, 20')).style!.color,
-      const Color(0xFFFFFFFF),
+      const Color(0xF5FFFFFF),
     );
 
     await pump(Brightness.light);
-    expect(pillDecoration().color, const Color(0xFAFFFFFF));
+    expect(pillDecoration().color, GlimprTokens.light.hudBg);
     expect(
       tester.widget<Text>(find.text('10, 20')).style!.color,
       const Color(0xFF14223B),

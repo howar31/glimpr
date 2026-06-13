@@ -715,10 +715,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       ),
       home: GlimprTheme(
         tokens: tokens,
+        // Transparent scaffold = the window is pure native vibrancy (design
+        // guide — Apple liquid glass). The editor CANVAS supplies its own
+        // opaque checkerboard worktable; the title bar + landing read as
+        // glass chrome over the vibrancy, matching the Settings window.
         child: Scaffold(
-          backgroundColor: tokens.isDark
-              ? const Color(0xFF0F1526)
-              : const Color(0xFFEFF2F7),
+          backgroundColor: Colors.transparent,
           // A 44px Flutter title bar runs across the top in BOTH states (the OS
           // title is hidden + transparent), with the state content filling below.
           body: Builder(
@@ -764,14 +766,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 16, vertical: 9),
                                     decoration: BoxDecoration(
-                                      color: tokens.isDark
-                                          ? const Color(0xF21A2236)
-                                          : const Color(0xFAFFFFFF),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: tokens.isDark
-                                              ? const Color(0x3360A5FA)
-                                              : const Color(0x1F0F172A)),
+                                      color: tokens.hudBg,
+                                      borderRadius: BorderRadius.circular(
+                                          GlimprTokens.radiusBar),
+                                      border:
+                                          Border.all(color: tokens.hudBorder),
                                       boxShadow: [
                                         BoxShadow(
                                           color: tokens.isDark
@@ -826,17 +825,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         // content centres at height/2, so 32px puts it at 16px. (44px was too
         // low, 28px slightly too high.)
         height: 32,
+        // Glass chrome: no fill, so the window vibrancy shows through (design
+        // guide — no tint). A hairline divider separates it from the canvas /
+        // landing below; logo + title read over the frosted vibrancy like the
+        // Settings sidebar header.
         decoration: BoxDecoration(
-          color: t.isDark
-              ? const Color(0x99020617) // rgba(2,6,23,0.6)-ish translucent slab
-              : const Color(0xCCFFFFFF),
-          border: Border(
-            bottom: BorderSide(
-              color: t.isDark
-                  ? const Color(0x1AFFFFFF) // rgba(255,255,255,0.1)
-                  : const Color(0x140F172A),
-            ),
-          ),
+          border: Border(bottom: BorderSide(color: t.divider)),
         ),
         child: Row(
           children: [
@@ -1143,10 +1137,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             position: PopupMenuPosition.over,
             offset: const Offset(0, -8),
             popUpAnimationStyle: AnimationStyle.noAnimation,
-            color: t.isDark ? const Color(0xF2202830) : const Color(0xFAFFFFFF),
+            color: t.hudBg,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: BorderSide(color: t.divider),
+              borderRadius: BorderRadius.circular(GlimprTokens.radiusMenu),
+              side: BorderSide(color: t.hudBorder),
             ),
             onSelected: _runActions,
             // The menu route lives in the app overlay, ABOVE the GlimprTheme
@@ -1636,10 +1630,10 @@ class _RecentTileState extends State<_RecentTile> {
       // the route still clamps it inside the window near the edges.
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, at.dy + 1),
       popUpAnimationStyle: AnimationStyle.noAnimation,
-      color: t.isDark ? const Color(0xF2202830) : const Color(0xFAFFFFFF),
+      color: t.hudBg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: t.divider),
+        borderRadius: BorderRadius.circular(GlimprTokens.radiusMenu),
+        side: BorderSide(color: t.hudBorder),
       ),
       items: [
         _menuItem(t, l.editorContextEdit, Icons.edit_outlined, widget.onTap),

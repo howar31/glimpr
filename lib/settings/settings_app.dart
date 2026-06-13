@@ -426,7 +426,8 @@ class _SettingsAppState extends State<SettingsApp>
           },
           child: Focus(
             autofocus: true,
-            // The base glass tint that layers over the native vibrancy blur.
+            // No tint layer: the window is pure native vibrancy (design guide
+            // — Apple liquid glass, tint removed app-wide 2026-06-13).
             child: Material(
               type: MaterialType.transparency,
               child: Builder(
@@ -434,16 +435,13 @@ class _SettingsAppState extends State<SettingsApp>
                   // Resolve localizations from a context that is inside the
                   // MaterialApp's Localizations scope (not the outer context).
                   _l = AppLocalizations.of(ctx);
-                  return ColoredBox(
-                    color: tokens.winBg,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _sidebar(tokens),
-                        Container(width: 1, color: tokens.divider),
-                        Expanded(child: _content(tokens)),
-                      ],
-                    ),
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _sidebar(tokens),
+                      Container(width: 1, color: tokens.divider),
+                      Expanded(child: _content(tokens)),
+                    ],
                   );
                 },
               ),

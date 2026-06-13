@@ -325,14 +325,16 @@ class _ToolbarPalette {
     Shadow(color: Color(0x66FFFFFF), blurRadius: 2.5),
   ];
 
-  static const dark = _ToolbarPalette(
-    // Match the settings window's Aurora glass — the same navy tint + bright
-    // white border — but at a higher alpha than its winBg (0.10): the settings
-    // window gets its translucency from NATIVE desktop vibrancy, whereas the
-    // toolbar/popovers only blur the screenshot via Flutter, so a thin tint
-    // washes out over light captures. ~0.55 stays frosted yet readable.
-    glassTint: Color.fromRGBO(15, 21, 38, 0.55),
-    glassBorder: Color.fromRGBO(255, 255, 255, 0.22),
+  // No tint: this tier blurs the frozen screenshot via Flutter and carries NO
+  // fill (design guide — tint removed app-wide 2026-06-13; the bar is pure
+  // frosted blur, the same tint-free read as the native-vibrancy windows).
+  // glassBorder IS winBorder, the bright edge that defines the bar; per-icon
+  // halo shadows (p.shadows) keep it legible over any screenshot. The light
+  // fg ramp maps to the token fg family; the dark ramp stays deliberately
+  // brighter (full white + halo) for legibility.
+  static final dark = _ToolbarPalette(
+    glassTint: const Color(0x00000000),
+    glassBorder: GlimprTokens.dark.winBorder,
     shadows: _darkShadows,
     fg: Colors.white,
     fgDim: Colors.white54,
@@ -341,16 +343,13 @@ class _ToolbarPalette {
     swatchUnselectedBorder: Colors.black26,
   );
 
-  static const light = _ToolbarPalette(
-    // Match the settings window's light Aurora glass (near-white tint + bright
-    // border) at a higher alpha than its winBg (0.12) — same reason as dark: no
-    // native vibrancy here, so a thin tint washes out over a screenshot.
-    glassTint: Color.fromRGBO(249, 251, 253, 0.66),
-    glassBorder: Color.fromRGBO(255, 255, 255, 0.70),
+  static final light = _ToolbarPalette(
+    glassTint: const Color(0x00000000),
+    glassBorder: GlimprTokens.light.winBorder,
     shadows: _lightShadows,
-    fg: Color(0xFF14223B),
-    fgDim: Color(0xFF64748B),
-    fgFaint: Color(0xFF475569),
+    fg: GlimprTokens.light.fg1,
+    fgDim: GlimprTokens.light.fg3,
+    fgFaint: GlimprTokens.light.fg2,
     badgeOutline: Color(0xFFFFFFFF),
     swatchUnselectedBorder: Color(0x33000000),
   );
