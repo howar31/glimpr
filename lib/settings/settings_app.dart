@@ -58,10 +58,11 @@ const double _kLoupePreviewStage = 200;
 // app-level items, Advanced the expert/danger zone.
 const _kSections = <(String, IconData)>[
   ('General', Icons.tune),
-  ('Capture', Icons.photo_camera_outlined),
+  ('Screenshot', Icons.photo_camera_outlined),
   ('Recording', Icons.videocam_outlined),
-  ('Output', Icons.image_outlined),
-  ('Workflow', Icons.checklist),
+  ('Image Editor', Icons.brush_outlined),
+  ('Selection & HUD', Icons.center_focus_strong_outlined),
+  ('Output', Icons.folder_outlined),
   ('Shortcuts', Icons.keyboard),
   ('Advanced', Icons.memory),
 ];
@@ -471,12 +472,13 @@ class _SettingsAppState extends State<SettingsApp>
   // _kSections order and _pane()'s switch.
   String _sectionTitle(int i) {
     switch (i) {
-      case 1: return _l.settingsPaneCapture;
+      case 1: return _l.settingsPaneCapture; // Screenshot
       case 2: return _l.settingsPaneRecording;
-      case 3: return _l.settingsPaneOutput;
-      case 4: return _l.settingsPaneWorkflow;
-      case 5: return _l.settingsPaneShortcuts;
-      case 6: return _l.settingsPaneAdvanced;
+      case 3: return _l.settingsPaneImageEditor;
+      case 4: return _l.settingsPaneSelectionHud;
+      case 5: return _l.settingsPaneOutput;
+      case 6: return _l.settingsPaneShortcuts;
+      case 7: return _l.settingsPaneAdvanced;
       default: return _l.settingsPaneGeneral;
     }
   }
@@ -533,7 +535,7 @@ class _SettingsAppState extends State<SettingsApp>
     );
     // The Shortcuts pane is long; pin its Apply/Revert bar to the bottom so it's
     // always reachable without scrolling to the end of the list.
-    if (_section == 5) {
+    if (_section == 6) {
       return Column(
         children: [Expanded(child: list), _shortcutsFooter(t)],
       );
@@ -544,16 +546,18 @@ class _SettingsAppState extends State<SettingsApp>
   List<Widget> _pane(GlimprTokens t) {
     switch (_section) {
       case 1:
-        return _capturePane(t);
+        return _screenshotPane(t);
       case 2:
         return _recordingPane(t);
       case 3:
-        return _outputPane(t);
+        return _imageEditorPane(t);
       case 4:
-        return _workflowPane(t);
+        return _selectionHudPane(t);
       case 5:
-        return _shortcutsPane(t);
+        return _outputPane(t);
       case 6:
+        return _shortcutsPane(t);
+      case 7:
         return _advancedPane(t);
       default:
         return _generalPane(t);
@@ -637,14 +641,116 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionSounds, icon: Icons.volume_up_outlined),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsSoundShutter,
+          hint: _l.settingsSoundShutterHint,
+          trailing: GlassToggle(
+            value: _shutterSound,
+            onChanged: (v) async {
+              await _s.setShutterSound(v);
+              if (mounted) setState(() => _shutterSound = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsSoundCompletion,
+          hint: _l.settingsSoundCompletionHint,
+          trailing: GlassToggle(
+            value: _completionSound,
+            onChanged: (v) async {
+              await _s.setCompletionSound(v);
+              if (mounted) setState(() => _completionSound = v);
+            },
+          ),
+        ),
+      ]),
     ];
   }
 
-  /// Behaviour of the capture overlay itself (pointer, exit gestures, loupe,
-  /// HUD) — everything about HOW a capture is taken.
-  List<Widget> _capturePane(GlimprTokens t) {
+  /// Screenshot: how a screenshot is taken + what it produces. Format, capture
+  /// behaviour, decoration, and the after-screenshot flow.
+  List<Widget> _screenshotPane(GlimprTokens t) {
+    final lossy = _format == ImageFormat.jpeg;
     return [
       _h1(_l.settingsPaneCapture, t),
+      SectionLabel(_l.settingsSectionFormat, icon: Icons.image_outlined),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Segmented<ImageFormat>(
+              full: true,
+              value: _format,
+              options: const [
+                (ImageFormat.png, 'PNG'),
+                (ImageFormat.jpeg, 'JPEG'),
+              ],
+              onChanged: (f) async {
+                await _s.setFormat(f);
+                if (mounted) setState(() => _format = f);
+              },
+            ),
+            // Quality applies to JPEG only. Slide + fade it in/out on format
+            // switch (collapses to zero height for PNG, which is lossless).
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 200),
+              alignment: Alignment.topCenter,
+              sizeCurve: Curves.easeOutCubic,
+              firstCurve: Curves.easeOut,
+              secondCurve: Curves.easeOut,
+              crossFadeState: lossy
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              firstChild: const SizedBox(width: double.infinity, height: 0),
+              secondChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 18),
+                  Divider(height: 1, thickness: 1, color: t.divider),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 130,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _l.settingsFormatQuality,
+                              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _l.settingsFormatQualityHint,
+                              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: GlimprSlider(
+                          value: _jpegQuality.toDouble(),
+                          min: 10,
+                          max: 100,
+                          suffix: '%',
+                          onChanged: (v) =>
+                              setState(() => _jpegQuality = v.round()),
+                          onChangeEnd: (v) => _s.setJpegQuality(v.round()),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionBehaviour, icon: Icons.photo_camera_outlined),
       GlassCard.rows([
         SettingRow(
@@ -655,18 +761,6 @@ class _SettingsAppState extends State<SettingsApp>
             onChanged: (v) async {
               await _s.setCaptureCursor(v);
               if (mounted) setState(() => _captureCursor = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsRightClickExits,
-          hint: _l.settingsRightClickExitsHint,
-          trailing: GlassToggle(
-            value: _rightClickExits,
-            onChanged: (v) async {
-              await _s.setRightClickExits(v);
-              if (mounted) setState(() => _rightClickExits = v);
             },
           ),
         ),
@@ -684,6 +778,101 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
       const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionDecoration, icon: Icons.filter_frames_outlined),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsDecorationWindowSnap,
+          hint: _l.settingsDecorationWindowSnapHint,
+          trailing: GlassToggle(
+            value: _decorateSnap,
+            onChanged: (v) async {
+              await _s.setDecorateSnap(v);
+              if (mounted) setState(() => _decorateSnap = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsDecorationFreehandCrop,
+          hint: _l.settingsDecorationFreehandCropHint,
+          trailing: GlassToggle(
+            value: _decorateCrop,
+            onChanged: (v) async {
+              await _s.setDecorateCrop(v);
+              if (mounted) setState(() => _decorateCrop = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsDecorationFocusedWindow,
+          hint: _l.settingsDecorationFocusedWindowHint,
+          trailing: GlassToggle(
+            value: _decorateWindow,
+            onChanged: (v) async {
+              await _s.setDecorateWindow(v);
+              if (mounted) setState(() => _decorateWindow = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsDecorationDisplay,
+          hint: _l.settingsDecorationDisplayHint,
+          trailing: GlassToggle(
+            value: _decorateDisplay,
+            onChanged: (v) async {
+              await _s.setDecorateDisplay(v);
+              if (mounted) setState(() => _decorateDisplay = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsDecorationLastRegion,
+          hint: _l.settingsDecorationLastRegionHint,
+          trailing: GlassToggle(
+            value: _decorateLastRegion,
+            onChanged: (v) async {
+              await _s.setDecorateLastRegion(v);
+              if (mounted) setState(() => _decorateLastRegion = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsDecorationJpegFill,
+          hint: _l.settingsDecorationJpegFillHint,
+          trailing: _DecorationFillSwatch(
+            argb: _decorationJpegFill,
+            onChanged: (argb) async {
+              await _s.setDecorationJpegFill(argb);
+              if (mounted) setState(() => _decorationJpegFill = argb);
+            },
+          ),
+        ),
+      ]),
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          _l.settingsDecorationPinNote,
+          style: GlimprType.sansStyle(12, 400, t.fg4),
+        ),
+      ),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionAfterCapture, icon: Icons.layers_outlined),
+      GlassCard.rows(_flowRows(capture: true)),
+      _flowCaption(t, capture: true),
+    ];
+  }
+
+  /// Selection & HUD: the interactive selection overlay shared by screenshot,
+  /// recording live-select, and the editor — loupe, crosshair, marching-ants,
+  /// and the right-click-to-exit gesture.
+  List<Widget> _selectionHudPane(GlimprTokens t) {
+    return [
+      _h1(_l.settingsPaneSelectionHud, t),
       SectionLabel(_l.settingsSectionLoupe, icon: Icons.zoom_in),
       GlassCard.padded(child: _loupeBody(t)),
       const SizedBox(height: 8),
@@ -724,6 +913,18 @@ class _SettingsAppState extends State<SettingsApp>
             onChanged: (v) async {
               await _s.setHudMarchingAnts(v);
               if (mounted) setState(() => _hudMarchingAnts = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsRightClickExits,
+          hint: _l.settingsRightClickExitsHint,
+          trailing: GlassToggle(
+            value: _rightClickExits,
+            onChanged: (v) async {
+              await _s.setRightClickExits(v);
+              if (mounted) setState(() => _rightClickExits = v);
             },
           ),
         ),
@@ -824,7 +1025,7 @@ class _SettingsAppState extends State<SettingsApp>
             icon: Icons.videocam_outlined),
         GlassCard.rows([
           SettingRow(
-            title: _l.settingsRecordingCursor,
+            title: _l.settingsMousePointer,
             hint: _l.settingsRecordingCursorHint,
             trailing: GlassToggle(
               value: _recordShowCursor,
@@ -859,41 +1060,8 @@ class _SettingsAppState extends State<SettingsApp>
             ),
           ),
         ]),
-      ],
-    ];
-  }
-
-  Widget _recordingFlowToggle(FlowAction a) => GlassToggle(
-        value: _afterRecording.contains(a),
-        onChanged: (v) async {
-          final next = {..._afterRecording};
-          v ? next.add(a) : next.remove(a);
-          await _s.setAfterRecordingFlow(next);
-          if (mounted) setState(() => _afterRecording = next);
-        },
-      );
-
-  /// Completion flows + the sound feedback around them — what happens AFTER a
-  /// capture / the editor's Done.
-  List<Widget> _workflowPane(GlimprTokens t) {
-    return [
-      _h1(_l.settingsPaneWorkflow, t),
-      SectionLabel(_l.settingsSectionAfterCapture, icon: Icons.layers_outlined),
-      GlassCard.rows(_flowRows(capture: true)),
-      _flowCaption(t, capture: true),
-      const SizedBox(height: 15),
-      // After-recording flow: lives HERE with its sibling completion flows
-      // (Workflow = everything that runs when something finishes); the
-      // Recording pane keeps only how a recording is made (format/behaviour).
-      SectionLabel(_l.settingsSectionAfterRecording, icon: Icons.flag_outlined),
-      if (!_recordAvailable)
-        GlassCard.padded(
-          child: Text(
-            _l.settingsRecordingUnavailable,
-            style: GlimprType.sansStyle(12.5, 400, t.fg3),
-          ),
-        )
-      else
+        const SizedBox(height: 15),
+        SectionLabel(_l.settingsSectionAfterRecording, icon: Icons.flag_outlined),
         GlassCard.rows([
           SettingRow(
             title: _l.settingsFlowCopyFilePath,
@@ -913,38 +1081,86 @@ class _SettingsAppState extends State<SettingsApp>
             trailing: _recordingFlowToggle(FlowAction.shareSheet),
           ),
         ]),
+      ],
+    ];
+  }
+
+  Widget _recordingFlowToggle(FlowAction a) => GlassToggle(
+        value: _afterRecording.contains(a),
+        onChanged: (v) async {
+          final next = {..._afterRecording};
+          v ? next.add(a) : next.remove(a);
+          await _s.setAfterRecordingFlow(next);
+          if (mounted) setState(() => _afterRecording = next);
+        },
+      );
+
+  /// Image Editor: tool defaults, the recents/gallery history, and the
+  /// after-Done flow.
+  List<Widget> _imageEditorPane(GlimprTokens t) {
+    return [
+      _h1(_l.settingsPaneImageEditor, t),
+      SectionLabel(_l.settingsSectionToolStyles, icon: Icons.brush_outlined),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.settingsResetAllToolStyles,
+                style: GlimprType.sansStyle(14.5, 600, t.fg1)),
+            const SizedBox(height: 4),
+            Text(
+              _l.settingsResetAllToolStylesHint,
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 14),
+            // Two-step confirm: wipes EVERY tool's saved style, unrecoverable.
+            ConfirmGhostButton(
+              _l.settingsResetAllToolStyles,
+              confirmLabel: _l.settingsResetAllToolStylesConfirm,
+              onConfirmed: () {
+                ToolStyleStore(Settings.instance.store).resetAll();
+              },
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionRecentHistory, icon: Icons.history),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _l.settingsRecentImagesKept,
+              style: GlimprType.sansStyle(14.5, 600, t.fg1),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _l.settingsRecentImagesKeptHint,
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            const SizedBox(height: 16),
+            // All presets are 5k-1 so the trailing More… tile always closes
+            // the grid as a full rectangle at the minimum window width.
+            Segmented<int>(
+              full: true,
+              value: const [19, 44, 69, 99].contains(_recentCap)
+                  ? _recentCap
+                  : kRecentImagesCap,
+              options: const [(19, '19'), (44, '44'), (69, '69'), (99, '99')],
+              onChanged: (v) async {
+                await RecentImagesStore.setCap(_s.store, v);
+                if (mounted) setState(() => _recentCap = v);
+              },
+            ),
+          ],
+        ),
+      ),
       const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionAfterEditorDone,
           icon: Icons.check_circle_outline),
       GlassCard.rows(_flowRows(capture: false)),
       _flowCaption(t, capture: false),
-      const SizedBox(height: 15),
-      SectionLabel(_l.settingsSectionSounds, icon: Icons.volume_up_outlined),
-      GlassCard.rows([
-        SettingRow(
-          title: _l.settingsSoundShutter,
-          hint: _l.settingsSoundShutterHint,
-          trailing: GlassToggle(
-            value: _shutterSound,
-            onChanged: (v) async {
-              await _s.setShutterSound(v);
-              if (mounted) setState(() => _shutterSound = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsSoundCompletion,
-          hint: _l.settingsSoundCompletionHint,
-          trailing: GlassToggle(
-            value: _completionSound,
-            onChanged: (v) async {
-              await _s.setCompletionSound(v);
-              if (mounted) setState(() => _completionSound = v);
-            },
-          ),
-        ),
-      ]),
     ];
   }
 
@@ -1098,203 +1314,13 @@ class _SettingsAppState extends State<SettingsApp>
   }
 
   List<Widget> _outputPane(GlimprTokens t) {
-    final lossy = _format == ImageFormat.jpeg;
     return [
       _h1(_l.settingsPaneOutput, t),
       SectionLabel(_l.settingsSectionSaveLocation, icon: Icons.folder_outlined),
       GlassCard.padded(child: _saveFolderBody(t)),
       const SizedBox(height: 15),
-      SectionLabel(_l.settingsSectionFormat, icon: Icons.image_outlined),
-      GlassCard.padded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Segmented<ImageFormat>(
-              full: true,
-              value: _format,
-              options: const [
-                (ImageFormat.png, 'PNG'),
-                (ImageFormat.jpeg, 'JPEG'),
-              ],
-              onChanged: (f) async {
-                await _s.setFormat(f);
-                if (mounted) setState(() => _format = f);
-              },
-            ),
-            // Quality applies to JPEG only. Slide + fade it in/out on format
-            // switch (collapses to zero height for PNG, which is lossless).
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 200),
-              alignment: Alignment.topCenter,
-              sizeCurve: Curves.easeOutCubic,
-              firstCurve: Curves.easeOut,
-              secondCurve: Curves.easeOut,
-              crossFadeState: lossy
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              firstChild: const SizedBox(width: double.infinity, height: 0),
-              secondChild: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 18),
-                  Divider(height: 1, thickness: 1, color: t.divider),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 130,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _l.settingsFormatQuality,
-                              style: GlimprType.sansStyle(14.5, 600, t.fg1),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _l.settingsFormatQualityHint,
-                              style: GlimprType.sansStyle(12.5, 400, t.fg3),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: GlimprSlider(
-                          value: _jpegQuality.toDouble(),
-                          min: 10,
-                          max: 100,
-                          suffix: '%',
-                          onChanged: (v) =>
-                              setState(() => _jpegQuality = v.round()),
-                          onChangeEnd: (v) => _s.setJpegQuality(v.round()),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionFilename, icon: Icons.text_fields_outlined),
       GlassCard.padded(child: _filenameBody(t)),
-      const SizedBox(height: 15),
-      SectionLabel(_l.settingsSectionDecoration, icon: Icons.filter_frames_outlined),
-      GlassCard.rows([
-        SettingRow(
-          title: _l.settingsDecorationWindowSnap,
-          hint: _l.settingsDecorationWindowSnapHint,
-          trailing: GlassToggle(
-            value: _decorateSnap,
-            onChanged: (v) async {
-              await _s.setDecorateSnap(v);
-              if (mounted) setState(() => _decorateSnap = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsDecorationFreehandCrop,
-          hint: _l.settingsDecorationFreehandCropHint,
-          trailing: GlassToggle(
-            value: _decorateCrop,
-            onChanged: (v) async {
-              await _s.setDecorateCrop(v);
-              if (mounted) setState(() => _decorateCrop = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsDecorationFocusedWindow,
-          hint: _l.settingsDecorationFocusedWindowHint,
-          trailing: GlassToggle(
-            value: _decorateWindow,
-            onChanged: (v) async {
-              await _s.setDecorateWindow(v);
-              if (mounted) setState(() => _decorateWindow = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsDecorationDisplay,
-          hint: _l.settingsDecorationDisplayHint,
-          trailing: GlassToggle(
-            value: _decorateDisplay,
-            onChanged: (v) async {
-              await _s.setDecorateDisplay(v);
-              if (mounted) setState(() => _decorateDisplay = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsDecorationLastRegion,
-          hint: _l.settingsDecorationLastRegionHint,
-          trailing: GlassToggle(
-            value: _decorateLastRegion,
-            onChanged: (v) async {
-              await _s.setDecorateLastRegion(v);
-              if (mounted) setState(() => _decorateLastRegion = v);
-            },
-          ),
-        ),
-        SettingRow(
-          divider: true,
-          title: _l.settingsDecorationJpegFill,
-          hint: _l.settingsDecorationJpegFillHint,
-          trailing: _DecorationFillSwatch(
-            argb: _decorationJpegFill,
-            onChanged: (argb) async {
-              await _s.setDecorationJpegFill(argb);
-              if (mounted) setState(() => _decorationJpegFill = argb);
-            },
-          ),
-        ),
-      ]),
-      const SizedBox(height: 8),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Text(
-          _l.settingsDecorationPinNote,
-          style: GlimprType.sansStyle(12, 400, t.fg4),
-        ),
-      ),
-      const SizedBox(height: 15),
-      SectionLabel(_l.settingsSectionRecentHistory, icon: Icons.history),
-      GlassCard.padded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _l.settingsRecentImagesKept,
-              style: GlimprType.sansStyle(14.5, 600, t.fg1),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _l.settingsRecentImagesKeptHint,
-              style: GlimprType.sansStyle(12.5, 400, t.fg3),
-            ),
-            const SizedBox(height: 16),
-            // All presets are 5k-1 so the trailing More… tile always closes
-            // the grid as a full rectangle at the minimum window width.
-            Segmented<int>(
-              full: true,
-              value: const [19, 44, 69, 99].contains(_recentCap)
-                  ? _recentCap
-                  : kRecentImagesCap,
-              options: const [(19, '19'), (44, '44'), (69, '69'), (99, '99')],
-              onChanged: (v) async {
-                await RecentImagesStore.setCap(_s.store, v);
-                if (mounted) setState(() => _recentCap = v);
-              },
-            ),
-          ],
-        ),
-      ),
     ];
   }
 
@@ -1474,31 +1500,6 @@ class _SettingsAppState extends State<SettingsApp>
               value: _captureLayerCap.clamp(1, 5),
               options: const [(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')],
               onChanged: _setCaptureLayerCap,
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 15),
-      SectionLabel(_l.settingsSectionToolStyles, icon: Icons.brush_outlined),
-      GlassCard.padded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_l.settingsResetAllToolStyles,
-                style: GlimprType.sansStyle(14.5, 600, t.fg1)),
-            const SizedBox(height: 4),
-            Text(
-              _l.settingsResetAllToolStylesHint,
-              style: GlimprType.sansStyle(12.5, 400, t.fg3),
-            ),
-            const SizedBox(height: 14),
-            // Two-step confirm: wipes EVERY tool's saved style, unrecoverable.
-            ConfirmGhostButton(
-              _l.settingsResetAllToolStyles,
-              confirmLabel: _l.settingsResetAllToolStylesConfirm,
-              onConfirmed: () {
-                ToolStyleStore(Settings.instance.store).resetAll();
-              },
             ),
           ],
         ),

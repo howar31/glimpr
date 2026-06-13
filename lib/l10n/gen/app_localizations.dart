@@ -146,6 +146,18 @@ abstract class AppLocalizations {
   /// **'Advanced'**
   String get settingsPaneAdvanced;
 
+  /// Settings sidebar: Image Editor pane label
+  ///
+  /// In en, this message translates to:
+  /// **'Image Editor'**
+  String get settingsPaneImageEditor;
+
+  /// Settings sidebar: shared Selection & HUD pane label
+  ///
+  /// In en, this message translates to:
+  /// **'Selection & HUD'**
+  String get settingsPaneSelectionHud;
+
   /// Settings > General: Startup section label
   ///
   /// In en, this message translates to:

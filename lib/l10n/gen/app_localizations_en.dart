@@ -33,6 +33,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPaneAdvanced => 'Advanced';
 
   @override
+  String get settingsPaneImageEditor => 'Image Editor';
+
+  @override
+  String get settingsPaneSelectionHud => 'Selection & HUD';
+
+  @override
   String get settingsSectionStartup => 'Startup';
 
   @override

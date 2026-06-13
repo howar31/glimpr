@@ -20,10 +20,6 @@
   "@settingsPaneOutput": {
     "description": "Settings sidebar: Output pane label"
   },
-  "settingsPaneWorkflow": "Workflow",
-  "@settingsPaneWorkflow": {
-    "description": "Settings sidebar: Workflow pane label"
-  },
   "settingsPaneShortcuts": "Shortcuts",
   "@settingsPaneShortcuts": {
     "description": "Settings sidebar: Shortcuts pane label"
@@ -31,6 +27,14 @@
   "settingsPaneAdvanced": "Advanced",
   "@settingsPaneAdvanced": {
     "description": "Settings sidebar: Advanced pane label"
+  },
+  "settingsPaneImageEditor": "Image Editor",
+  "@settingsPaneImageEditor": {
+    "description": "Settings sidebar: Image Editor pane label"
+  },
+  "settingsPaneSelectionHud": "Selection & HUD",
+  "@settingsPaneSelectionHud": {
+    "description": "Settings sidebar: shared Selection & HUD pane label"
   },
   "settingsSectionStartup": "Startup",
   "@settingsSectionStartup": {
@@ -451,10 +455,6 @@
   "settingsRecordingSecondsSuffix": "s",
   "@settingsRecordingSecondsSuffix": {
     "description": "Screen recording: compact seconds unit suffix (e.g. 5s)"
-  },
-  "settingsRecordingCursor": "Show cursor",
-  "@settingsRecordingCursor": {
-    "description": "Settings > Capture > Screen recording: cursor row title"
   },
   "settingsRecordingCursorHint": "Include the mouse pointer in the recording",
   "@settingsRecordingCursorHint": {

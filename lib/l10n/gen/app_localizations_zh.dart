@@ -33,6 +33,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPaneAdvanced => '進階';
 
   @override
+  String get settingsPaneImageEditor => '圖片編輯器';
+
+  @override
+  String get settingsPaneSelectionHud => '選取與 HUD';
+
+  @override
   String get settingsSectionStartup => '啟動';
 
   @override
