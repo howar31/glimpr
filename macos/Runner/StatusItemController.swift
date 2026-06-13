@@ -17,6 +17,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let keyHint: (String) -> (String, UInt)?
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
+  private let onOpenSaveFolder: () -> Void
   private let onOpenRecent: (String) -> Void
   private let onClearRecent: () -> Void
   // The "Open Recent" submenu, rebuilt from the Dart-owned recent list.
@@ -41,6 +42,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
        keyHint: @escaping (String) -> (String, UInt)?,
        onSettings: @escaping () -> Void,
        onOpenImage: @escaping () -> Void,
+       onOpenSaveFolder: @escaping () -> Void,
        onOpenRecent: @escaping (String) -> Void,
        onClearRecent: @escaping () -> Void) {
     self.onAction = onAction
@@ -49,6 +51,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     self.keyHint = keyHint
     self.onSettings = onSettings
     self.onOpenImage = onOpenImage
+    self.onOpenSaveFolder = onOpenSaveFolder
     self.onOpenRecent = onOpenRecent
     self.onClearRecent = onClearRecent
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -115,6 +118,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
     rebuildRecent([]) // seed the placeholder until Dart pushes the list
+    menu.addItem(menuItem(
+      title: L.s("Open Save Folder", "開啟儲存資料夾"),
+      action: #selector(openSaveFolder), key: ""))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
@@ -308,6 +314,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   }
 
   @objc private func openImage() { onOpenImage() }
+  @objc private func openSaveFolder() { onOpenSaveFolder() }
   @objc private func openRecent(_ sender: NSMenuItem) {
     if let path = sender.representedObject as? String { onOpenRecent(path) }
   }

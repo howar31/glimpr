@@ -178,6 +178,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       },
       onSettings: { [weak self] in self?.revealSettings() },
       onOpenImage: { [weak self] in self?.openImageEditor() },
+      onOpenSaveFolder: { [weak self] in self?.openSaveFolder() },
       // A recent item reveals the editor (it may be hidden) then loads the file
       // (confirmed:false → Dart dirty-confirms if an edited image is open).
       onOpenRecent: { [weak self] path in
@@ -523,6 +524,24 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// forward to the control engine's record controller.
   func relayRecordSelection(_ args: [String: Any]) {
     recordingChannel?.notifySelection(args)
+  }
+
+  /// Reveal the effective save folder in Finder — the configured save
+  /// directory, else the ~/Pictures/Glimpr default (mirrors Dart's
+  /// effectiveSaveDir). The default is created first (Dart makes it lazily on
+  /// the first save) so the item always opens something; a configured path is
+  /// opened as-is.
+  private func openSaveFolder() {
+    let configured = UserDefaults.standard.string(forKey: "save_directory")
+    if let c = configured, !c.isEmpty {
+      NSWorkspace.shared.open(URL(fileURLWithPath: c, isDirectory: true))
+    } else {
+      let def = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Pictures/Glimpr", isDirectory: true)
+      try? FileManager.default.createDirectory(
+        at: def, withIntermediateDirectories: true)
+      NSWorkspace.shared.open(def)
+    }
   }
 
   // The live pin windows; a pin removes itself from here when closed.
