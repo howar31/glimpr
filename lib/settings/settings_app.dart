@@ -377,6 +377,14 @@ class _SettingsAppState extends State<SettingsApp>
     );
   }
 
+  /// A muted caption UNDER a section's card (full width, wraps) — for section
+  /// explanations that are too long to sit beside the title without truncating.
+  Widget _sectionNote(GlimprTokens t, String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+        child: Text(text,
+            style: GlimprType.sansStyle(12, 500, t.fg4, height: 1.4)),
+      );
+
   Future<void> _chooseDir() async {
     final picked = await getDirectoryPath();
     if (picked == null) return;
@@ -755,17 +763,25 @@ class _SettingsAppState extends State<SettingsApp>
               },
             ),
           ),
-          SettingRow(
-            divider: true,
-            title: _l.settingsRecordingFps,
-            hint: _l.settingsRecordingFpsHint,
-            trailing: Segmented<int>(
-              value: _recordFps,
-              options: const [(30, '30 fps'), (60, '60 fps')],
-              onChanged: (v) async {
-                await _s.setRecordFps(v);
-                if (mounted) setState(() => _recordFps = v);
-              },
+          // GIF is a fixed 15fps, so the frame-rate row is disabled (dimmed +
+          // non-interactive) for GIF; the hint explains why.
+          Opacity(
+            opacity: _recordFormat == RecordFormat.gif ? 0.4 : 1,
+            child: IgnorePointer(
+              ignoring: _recordFormat == RecordFormat.gif,
+              child: SettingRow(
+                divider: true,
+                title: _l.settingsRecordingFps,
+                hint: _l.settingsRecordingFpsHint,
+                trailing: Segmented<int>(
+                  value: _recordFps,
+                  options: const [(30, '30 fps'), (60, '60 fps')],
+                  onChanged: (v) async {
+                    await _s.setRecordFps(v);
+                    if (mounted) setState(() => _recordFps = v);
+                  },
+                ),
+              ),
             ),
           ),
           SettingRow(
@@ -1514,8 +1530,7 @@ class _SettingsAppState extends State<SettingsApp>
 
     return [
       _h1(_l.settingsPaneShortcuts, t),
-      SectionLabel(_l.settingsPaneCapture, icon: Icons.crop_free,
-          note: _l.settingsShortcutsCaptureNote),
+      SectionLabel(_l.settingsPaneCapture, icon: Icons.crop_free),
       GlassCard.rows([
         for (final a in kGlobalActions)
           if (!kRecordActionKeys.contains(a.actionKey))
@@ -1531,9 +1546,9 @@ class _SettingsAppState extends State<SettingsApp>
               ),
             ),
       ]),
+      _sectionNote(t, _l.settingsShortcutsCaptureNote),
       const SizedBox(height: 24),
-      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined,
-          note: _l.settingsShortcutsRecordingNote),
+      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
       GlassCard.rows([
         for (final a in kGlobalActions)
           if (kRecordActionKeys.contains(a.actionKey))
@@ -1549,6 +1564,7 @@ class _SettingsAppState extends State<SettingsApp>
               ),
             ),
       ]),
+      _sectionNote(t, _l.settingsShortcutsRecordingNote),
       const SizedBox(height: 24),
       // Tools — tool-selection keys (rebindable), in toolbar order.
       SectionLabel(_l.settingsShortcutsTools, icon: Icons.palette_outlined),

@@ -416,7 +416,7 @@
   "@settingsRecordingFps": {
     "description": "Settings > Capture > Screen recording: fps row title"
   },
-  "settingsRecordingFpsHint": "60 fps is smoother but roughly doubles the file size",
+  "settingsRecordingFpsHint": "60 fps is smoother but roughly doubles the file size. Only applies to video recording; GIF is fixed at 15 fps",
   "@settingsRecordingFpsHint": {
     "description": "Settings > Capture > Screen recording: fps row hint"
   },

@@ -713,7 +713,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Screen recording: fps row hint
   ///
   /// In en, this message translates to:
-  /// **'60 fps is smoother but roughly doubles the file size'**
+  /// **'60 fps is smoother but roughly doubles the file size. Only applies to video recording; GIF is fixed at 15 fps'**
   String get settingsRecordingFpsHint;
 
   /// Settings > Capture > Screen recording: output format row title
