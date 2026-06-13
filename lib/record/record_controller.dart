@@ -216,9 +216,11 @@ class RecordController {
     );
   }
 
-  /// A live-select confirm/cancel relayed from the overlay. A snap click
-  /// records the WINDOW (the stream follows it); a drag records the fixed
-  /// region; no selection records the whole display.
+  /// A live-select confirm/cancel relayed from the overlay (region recording
+  /// only — window recording is the direct [kRecordModeWindow] path). It always
+  /// records a FIXED rectangle: a snap arrives as the window's own rect, a drag
+  /// as its rect; no selection records the whole display. It never follows a
+  /// window.
   Future<void> _onSelection(Map<String, dynamic> a) async {
     if ((a['cancelled'] as bool?) ?? false) {
       _phase = RecordPhase.idle;
@@ -230,7 +232,6 @@ class RecordController {
       final cap = await _settings.loadCapture();
       final rec = await _settings.loadRecording();
       final displayId = (a['displayId'] as num?)?.toInt();
-      final windowId = (a['windowId'] as num?)?.toInt();
       Rect? rect;
       if (a['x'] != null) {
         rect = Rect.fromLTWH(
@@ -240,9 +241,7 @@ class RecordController {
           (a['h'] as num).toDouble(),
         );
       }
-      final mode = windowId != null
-          ? kRecordModeWindow
-          : (rect != null ? kRecordModeRegion : kRecordModeDisplay);
+      final mode = rect != null ? kRecordModeRegion : kRecordModeDisplay;
       final title = (a['title'] as String?) ??
           (rect != null ? kRecordingCaptureLabel : kDisplayCaptureLabel);
       final app = (a['app'] as String?) ?? title;
@@ -261,7 +260,6 @@ class RecordController {
         outputPath: '${dir.path}/$fileName',
         displayId: displayId,
         rect: rect,
-        windowId: windowId,
         // The live-select toolbar's one-shot overrides win over the settings.
         fps: (a['fps'] as num?)?.toInt() ?? rec.fps,
         hevc: (a['hevc'] as bool?) ?? rec.hevc,

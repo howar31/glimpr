@@ -16,7 +16,6 @@ import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../output/flow.dart';
-import '../record/record_target.dart';
 import 'toolbar.dart' show RecordOverrides;
 import '../output/sounds.dart';
 import '../settings/settings.dart';
@@ -851,21 +850,20 @@ class _OverlayAppState extends State<OverlayApp> {
     }
     if (_liveSelect) {
       // Live-select confirm: dismiss FIRST (the overlay must be gone before
-      // the recording stream starts), then relay the chosen target. NOTE the
-      // onExport contract (screenshot parity): [window] is merely the window
-      // under the cursor (it names the file); only a SNAP click — selection
-      // == the window's own rect — records the WINDOW (the stream follows
-      // it). A drag records its region; no selection records the display.
+      // the recording stream starts), then relay the chosen region. Region
+      // recording always records a FIXED rectangle: a snap commits the
+      // window's own rect as the selection, so it records that rectangle
+      // (it never follows the window — that is Record Window's job); a drag
+      // records its rect; no selection records the whole display. [window]
+      // only names the output file.
       _liveSelect = false;
       _bridge.broadcastEditorState({'sessionEnded': true});
       _dismiss();
       try {
-        final target = recordTargetFromSelection(selectionLogical, window);
         final o = _recordOverrides;
         await _bridge.recordSelection(
           displayId: d.displayId,
-          rect: target.rect,
-          windowId: target.windowId,
+          rect: selectionLogical,
           title: window?.title,
           app: window?.app,
           showsCursor: o?.showCursor.value,

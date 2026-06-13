@@ -24,13 +24,13 @@ class CaptureBridge {
     return res as Uint8List?;
   }
 
-  /// Live-select confirm/cancel: relays the chosen recording target to the
-  /// control engine's record controller. Null [rect] + null [windowId] =
-  /// whole display; [cancelled] aborts without recording.
+  /// Live-select confirm/cancel: relays the chosen recording REGION to the
+  /// control engine's record controller. Region recording always records a
+  /// fixed rectangle (a snap commits the window's own rect), so no window id
+  /// is relayed. Null [rect] = whole display; [cancelled] aborts.
   Future<void> recordSelection({
     required int displayId,
     Rect? rect,
-    int? windowId,
     String? title,
     String? app,
     // One-shot per-recording overrides (toolbar toggles); null = use the
@@ -49,7 +49,6 @@ class CaptureBridge {
         if (rect != null) ...{
           'x': rect.left, 'y': rect.top, 'w': rect.width, 'h': rect.height,
         },
-        'windowId': ?windowId,
         'title': ?title,
         'app': ?app,
         'showsCursor': ?showsCursor,

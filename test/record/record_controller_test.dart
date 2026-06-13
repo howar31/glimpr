@@ -312,20 +312,24 @@ void main() {
       expect(s['outputPath'], contains('RECORDING'));
     });
 
-    test('a relayed snap-window selection records the WINDOW (follows it)',
+    test('a relayed snap selection records a FIXED region, never the window',
         () async {
       final rc = build();
       await rc.toggle(kRecordModeRegion);
+      // A snap arrives as the window's own rect (the overlay never relays a
+      // windowId for region recording); it records that fixed rectangle and
+      // does not follow the window. The window only names the output file.
       bridge.selection({
         'displayId': 1,
-        'windowId': 42,
+        'x': 10.0, 'y': 20.0, 'w': 300.0, 'h': 200.0,
         'title': 'Safari',
         'app': 'Safari',
       });
       await pumpEventQueue(times: 40);
       final s = bridge.starts.single;
-      expect(s['mode'], kRecordModeWindow);
-      expect(s['windowId'], 42);
+      expect(s['mode'], kRecordModeRegion);
+      expect(s['rect'], const Rect.fromLTWH(10, 20, 300, 200));
+      expect(s['windowId'], isNull);
       expect(s['outputPath'], contains('Safari'));
     });
 

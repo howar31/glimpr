@@ -1219,6 +1219,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
 
   private(set) var isRecording = false
   private var stream: SCStream?
+  // Window mode only: a second, display-scoped stream that supplies SYSTEM
+  // audio (the window stream's own audio would be the target app's only).
+  private var audioStream: SCStream?
   private var sink: RecordingSinkBase?
   private var chrome: RecordingChrome?
   private var tick: Timer?
@@ -1254,6 +1257,11 @@ final class RecordingController: NSObject, SCStreamDelegate {
       var chromeRegionGlobal: NSRect? // Cocoa global bottom-left, for chrome
       var screen: NSScreen
       let scale: CGFloat
+      // The fixed rect + display reported back as the recorded region, so the
+      // control engine can remember it for "Record Last Region" (every mode,
+      // matching the screenshot side). Display-local top-left logical points.
+      var reportedDisplayID: CGDirectDisplayID = 0
+      var reportedRect = CGRect.zero
 
       if spec.mode == "window", let wid = spec.windowID {
         guard let scWindow = content.windows.first(where: { $0.windowID == wid })
@@ -1269,6 +1277,15 @@ final class RecordingController: NSObject, SCStreamDelegate {
         chromeRegionGlobal = wrect
         screen = NSScreen.screens.first(where: { $0.frame.intersects(wrect) })
           ?? NSScreen.main ?? NSScreen.screens[0]
+        reportedDisplayID = (screen.deviceDescription[
+          NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+        // The window's display-local rect at start. The recording follows the
+        // window, but "last region" remembers this fixed rect (parity with the
+        // screenshot window capture).
+        reportedRect = CGRect(
+          x: wrect.minX - screen.frame.minX,
+          y: screen.frame.maxY - wrect.maxY,
+          width: wrect.width, height: wrect.height)
         let c = RecordingChrome()
         c.show(regionGlobalBottomLeft: wrect, on: screen,
                stripHidden: spec.countdown > 0)
@@ -1286,6 +1303,10 @@ final class RecordingController: NSObject, SCStreamDelegate {
         else { throw RecordingError.message("display not found") }
         screen = nsScreen
         scale = nsScreen.backingScaleFactor
+        reportedDisplayID = displayID
+        // region/lastRegion: the requested rect; display: the whole display.
+        reportedRect = spec.rect ?? CGRect(
+          x: 0, y: 0, width: nsScreen.frame.width, height: nsScreen.frame.height)
 
         // Chrome FIRST, so its windows exist in shareable content for the
         // exclusion list (chrome never records; Glimpr content windows do).
@@ -1354,12 +1375,19 @@ final class RecordingController: NSObject, SCStreamDelegate {
         cfg.width = Self.even(Int(screen.frame.width * scale))
         cfg.height = Self.even(Int(screen.frame.height * scale))
       }
-      if spec.systemAudio {
-        cfg.capturesAudio = true
-        cfg.excludesCurrentProcessAudio = true
-      }
-      if spec.microphone {
-        cfg.captureMicrophone = true
+      // Audio: region/display/lastRegion mix it into this (display-scoped)
+      // stream. Window mode does NOT — a single-window filter captures only the
+      // target app's audio, not the whole system; it gets a separate
+      // display-scoped audio stream below so every mode records system audio.
+      let windowMode = spec.mode == "window"
+      if !windowMode {
+        if spec.systemAudio {
+          cfg.capturesAudio = true
+          cfg.excludesCurrentProcessAudio = true
+        }
+        if spec.microphone {
+          cfg.captureMicrophone = true
+        }
       }
 
       let sk: RecordingSinkBase
@@ -1382,7 +1410,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
 
       let s = SCStream(filter: filter, configuration: cfg, delegate: self)
       try s.addStreamOutput(sk, type: .screen, sampleHandlerQueue: sampleQueue)
-      if !spec.gif {
+      if !spec.gif && !windowMode {
         if spec.systemAudio {
           try s.addStreamOutput(sk, type: .audio, sampleHandlerQueue: sampleQueue)
         }
@@ -1391,6 +1419,36 @@ final class RecordingController: NSObject, SCStreamDelegate {
         }
       }
       try await s.startCapture()
+
+      // Window mode + audio: SYSTEM audio comes from a second, display-scoped
+      // stream feeding the SAME sink (it routes by sample type, and the shared
+      // serial sample queue keeps appends ordered). Both streams' PTS ride one
+      // host clock, so audio rebases onto the video session and stays in sync.
+      if !spec.gif && windowMode && (spec.systemAudio || spec.microphone),
+         let aDisplay = content.displays.first(where: {
+           $0.displayID == reportedDisplayID
+         }) {
+        let aCfg = SCStreamConfiguration()
+        aCfg.minimumFrameInterval = CMTime(value: 1, timescale: 1) // video unused
+        aCfg.width = 2
+        aCfg.height = 2
+        if spec.systemAudio {
+          aCfg.capturesAudio = true
+          aCfg.excludesCurrentProcessAudio = true
+        }
+        if spec.microphone { aCfg.captureMicrophone = true }
+        let aStream = SCStream(
+          filter: SCContentFilter(display: aDisplay, excludingWindows: []),
+          configuration: aCfg, delegate: self)
+        if spec.systemAudio {
+          try aStream.addStreamOutput(sk, type: .audio, sampleHandlerQueue: sampleQueue)
+        }
+        if spec.microphone {
+          try aStream.addStreamOutput(sk, type: .microphone, sampleHandlerQueue: sampleQueue)
+        }
+        try await aStream.startCapture()
+        audioStream = aStream
+      }
 
       chrome?.onStop = { [weak self] in Task { await self?.stop() } }
       chrome?.onAbort = { [weak self] in Task { await self?.abort() } }
@@ -1409,9 +1467,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
       startTick()
       PerfLog.mark("recordStart mode=\(spec.mode)")
       events("onRecordStarted", [
-        "displayId": Int(spec.displayID ?? 0),
-        "x": Double(spec.rect?.minX ?? 0), "y": Double(spec.rect?.minY ?? 0),
-        "w": Double(spec.rect?.width ?? 0), "h": Double(spec.rect?.height ?? 0),
+        "displayId": Int(reportedDisplayID),
+        "x": Double(reportedRect.minX), "y": Double(reportedRect.minY),
+        "w": Double(reportedRect.width), "h": Double(reportedRect.height),
       ])
     } catch {
       cleanupSession(graceful: false)
@@ -1424,8 +1482,11 @@ final class RecordingController: NSObject, SCStreamDelegate {
     guard isRecording else { return }
     isRecording = false // block double-stops
     let s = stream
+    let a = audioStream
     stream = nil
+    audioStream = nil
     try? await s?.stopCapture()
+    try? await a?.stopCapture()
     if abortRequested {
       sink?.cancel()
       finalize(result: .aborted)
@@ -1467,7 +1528,14 @@ final class RecordingController: NSObject, SCStreamDelegate {
     Task { @MainActor in
       guard self.isRecording else { return } // our own stop already handled it
       self.isRecording = false
+      // Either stream erroring fails the session; stop the surviving one too
+      // (stopping the already-stopped one is a harmless no-op).
+      let v = self.stream
+      let a = self.audioStream
       self.stream = nil
+      self.audioStream = nil
+      try? await v?.stopCapture()
+      try? await a?.stopCapture()
       self.sink?.cancel()
       self.finalize(result: .failed("\(error)"))
     }
@@ -1505,6 +1573,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     chrome?.dismiss()
     chrome = nil
     stream = nil
+    audioStream = nil
     sink = nil
     outputPath = nil
     isRecording = false
