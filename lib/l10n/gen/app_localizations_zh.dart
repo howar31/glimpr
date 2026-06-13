@@ -24,9 +24,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPaneOutput => '輸出';
 
   @override
-  String get settingsPaneWorkflow => '工作流程';
-
-  @override
   String get settingsPaneShortcuts => '快捷鍵';
 
   @override
@@ -361,10 +358,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingSecondsSuffix => '秒';
 
   @override
-  String get settingsRecordingCursor => '顯示游標';
-
-  @override
-  String get settingsRecordingCursorHint => '錄影內容包含滑鼠游標';
+  String get settingsRecordingCursorHint => '錄影內容包含滑鼠指標';
 
   @override
   String get settingsRecordingSystemAudio => '錄製系統音訊';

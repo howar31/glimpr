@@ -24,9 +24,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPaneOutput => 'Output';
 
   @override
-  String get settingsPaneWorkflow => 'Workflow';
-
-  @override
   String get settingsPaneShortcuts => 'Shortcuts';
 
   @override
@@ -385,9 +382,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsRecordingSecondsSuffix => 's';
-
-  @override
-  String get settingsRecordingCursor => 'Show cursor';
 
   @override
   String get settingsRecordingCursorHint =>

@@ -128,12 +128,6 @@ abstract class AppLocalizations {
   /// **'Output'**
   String get settingsPaneOutput;
 
-  /// Settings sidebar: Workflow pane label
-  ///
-  /// In en, this message translates to:
-  /// **'Workflow'**
-  String get settingsPaneWorkflow;
-
   /// Settings sidebar: Shortcuts pane label
   ///
   /// In en, this message translates to:
@@ -775,12 +769,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'s'**
   String get settingsRecordingSecondsSuffix;
-
-  /// Settings > Capture > Screen recording: cursor row title
-  ///
-  /// In en, this message translates to:
-  /// **'Show cursor'**
-  String get settingsRecordingCursor;
 
   /// Settings > Capture > Screen recording: cursor row hint
   ///
