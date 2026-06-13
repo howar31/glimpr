@@ -588,10 +588,10 @@ final class RecordingChrome {
     stripWindow?.alphaValue = hidden ? 0 : 1
   }
 
-  func update(duration: CMTime, fileSize: Int) {
+  func update(duration: CMTime, detail: String) {
     let s = Int(duration.seconds.rounded(.down))
     timerLabel.stringValue = String(format: "%02d:%02d", s / 60, s % 60)
-    sizeLabel.stringValue = String(format: "%.1f MB", Double(fileSize) / 1_048_576)
+    sizeLabel.stringValue = detail
   }
 
   func dismiss() {
@@ -656,7 +656,7 @@ final class RecordingChrome {
       kind: .ghost, title: L.s("Abort", "中止")
     ) { [weak self] in self?.onAbort?() }
     let stop = StripButton(
-      kind: .redAccent, title: L.s("Stop", "停止")
+      kind: .redAccent, title: L.s("Finish", "完成")
     ) { [weak self] in self?.onStop?() }
 
     // Sequential row layout; widths land before the container exists so the
@@ -787,6 +787,7 @@ final class RecordingWriter {
 protocol RecordingSinkBase: SCStreamOutput {
   func setPaused(_ p: Bool)
   var elapsedSeconds: Double { get } // recorded media time, un-paused
+  var frameCount: Int { get }        // GIF frames so far (0 for mp4)
   func finish() async -> Bool        // finalize the output file
   func cancel()                      // discard a partial output
 }
@@ -820,6 +821,7 @@ final class RecordingSink: NSObject, RecordingSinkBase {
     lock.lock(); paused = p; lock.unlock()
   }
 
+  var frameCount: Int { 0 } // mp4 shows file size instead
   func finish() async -> Bool { await writer.finish() }
   func cancel() { writer.cancel() }
 
@@ -921,6 +923,8 @@ final class GifWriter {
     frames += 1
   }
 
+  var frameCount: Int { frames }
+
   func finish() -> Bool {
     guard let dest, frames > 0 else { return false }
     return CGImageDestinationFinalize(dest)
@@ -962,6 +966,7 @@ final class GifSink: NSObject, RecordingSinkBase {
   }
 
   func setPaused(_ p: Bool) { lock.lock(); paused = p; lock.unlock() }
+  var frameCount: Int { gif.frameCount }
   func finish() async -> Bool { gif.finish() }
   func cancel() { gif.cancel() }
 
@@ -1431,9 +1436,14 @@ final class RecordingController: NSObject, SCStreamDelegate {
       Task { @MainActor in
         guard let self, let sink = self.sink else { return }
         let elapsed = sink.elapsedSeconds
+        // GIF buffers until finalize, so its on-disk size is 0 mid-record; show
+        // the captured frame count instead. mp4 grows on disk, so show size.
+        let detail = self.isGif
+          ? "\(sink.frameCount) " + L.s("frames", "幀")
+          : String(format: "%.1f MB", Double(self.currentFileSize()) / 1_048_576)
         self.chrome?.update(
           duration: CMTime(seconds: elapsed, preferredTimescale: 600),
-          fileSize: self.currentFileSize())
+          detail: detail)
         // Fixed-duration auto-stop: recorded media time excludes paused time,
         // so a paused take never trips this.
         if self.maxDuration > 0, self.isRecording, !self.paused,

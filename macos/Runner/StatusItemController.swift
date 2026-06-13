@@ -87,7 +87,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       let pause = menuItem(
         title: L.s("Pause Recording", "暫停錄影"), action: #selector(recordPauseToggle), key: "")
       let stop = menuItem(
-        title: L.s("Stop Recording", "停止錄影"), action: #selector(recordStop), key: "")
+        title: L.s("Finish Recording", "完成錄影"), action: #selector(recordStop), key: "")
       let abort = menuItem(
         title: L.s("Abort Recording", "中止錄影"), action: #selector(recordAbort), key: "")
       recordPauseItem = pause
