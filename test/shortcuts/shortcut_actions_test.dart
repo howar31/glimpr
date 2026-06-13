@@ -65,12 +65,12 @@ void main() {
     expect(isOpenSettingsChord(keyA, {HotkeyModifier.meta}), isFalse);
   });
 
-  test('open-editor defaults: empty = Cmd+Opt+6, clipboard = Cmd+Opt+5', () {
+  test('open-editor defaults: empty = Cmd+Opt+9, clipboard = Cmd+Opt+0', () {
     final empty = kDefaultBindings[kOpenEditorKey]!;
-    expect(empty.logicalKey, LogicalKeyboardKey.digit6);
+    expect(empty.logicalKey, LogicalKeyboardKey.digit9);
     expect(empty.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
     final clip = kDefaultBindings[kOpenEditorClipboardKey]!;
-    expect(clip.logicalKey, LogicalKeyboardKey.digit5);
+    expect(clip.logicalKey, LogicalKeyboardKey.digit0);
     expect(clip.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
   });
 }

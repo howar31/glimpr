@@ -78,7 +78,7 @@ class _OverlayAppState extends State<OverlayApp> {
   bool _applyingRemote = false;
   // Increments each capture so EditorCanvas is rebuilt fresh (see onCaptureReady).
   int _captureSeq = 0;
-  // The ⌘⌥7 "capture to pin" mode: this session's confirm runs ONLY the pin
+  // The ⌘⌥5 "capture to pin" mode: this session's confirm runs ONLY the pin
   // action instead of the configured after-capture flow.
   bool _pinOnly = false;
   // Live-select (recording) session: transparent base over the live screen;
@@ -958,7 +958,7 @@ class _OverlayAppState extends State<OverlayApp> {
         cursorTopLeftNative: cursorTopLeftNative,
         windowTitle: window?.title,
         appName: window?.app,
-        // ⌘⌥7 capture-to-pin: this LAYER runs ONLY the pin action (snapshot
+        // ⌘⌥5 capture-to-pin: this LAYER runs ONLY the pin action (snapshot
         // taken before the pop, see above).
         flowOverride: pinOnly ? const {FlowAction.pin} : null,
       );

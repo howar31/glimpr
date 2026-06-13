@@ -32,7 +32,7 @@ Future<FlowResult> exportAnnotated({
   String? windowTitle,
   String? appName,
   // Replaces the configured after-capture flow for this export (e.g. the
-  // ⌘⌥7 capture-to-pin session runs {pin} only). Null = cap.flow.
+  // ⌘⌥5 capture-to-pin session runs {pin} only). Null = cap.flow.
   Set<FlowAction>? flowOverride,
 }) async {
   final actions = normalizeFlow(flowOverride ?? cap.flow, forCapture: true);

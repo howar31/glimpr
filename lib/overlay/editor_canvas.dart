@@ -29,7 +29,7 @@ class EditorCanvas extends StatelessWidget {
   // top-left; null when there is none.
   final ui.Image? cursorImage;
   final Offset? cursorTopLeft;
-  // The ⌘⌥7 capture-to-pin session — toolbar shows the pin icon + caption.
+  // The ⌘⌥5 capture-to-pin session — toolbar shows the pin icon + caption.
   final bool pinMode;
   // Live-select (recording) session: transparent base, crop-select only,
   // confirm starts a recording. [liveLoupeSample] feeds the loupe live pixels.

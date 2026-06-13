@@ -91,7 +91,7 @@ Future<void> main() async {
   runApp(SettingsApp(settings: Settings.instance, hotkeyService: hotkeyService));
 }
 
-/// Float the clipboard image as a centered pin window (⌘⌥8 — Snipaste's F3).
+/// Float the clipboard image as a centered pin window (⌘⌥6 — Snipaste's F3).
 /// The image goes through a temp file so the native pin loads it like any
 /// other source; a non-image clipboard surfaces a small native alert.
 Future<void> _pinClipboard() async {

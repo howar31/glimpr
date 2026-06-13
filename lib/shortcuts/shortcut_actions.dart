@@ -117,16 +117,16 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kCaptureLastRegionKey: _b(PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
-  kOpenEditorKey: _b(PhysicalKeyboardKey.digit6, LogicalKeyboardKey.digit6,
+  kOpenEditorKey: _b(PhysicalKeyboardKey.digit9, LogicalKeyboardKey.digit9,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   kOpenEditorClipboardKey: _b(
-      PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5,
+      PhysicalKeyboardKey.digit0, LogicalKeyboardKey.digit0,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
-  // Pin to screen: ⌘⌥7 = capture a region straight to a pin; ⌘⌥8 = pin the
+  // Pin to screen: ⌘⌥5 = capture a region straight to a pin; ⌘⌥6 = pin the
   // clipboard image (no capture).
-  kPinAreaKey: _b(PhysicalKeyboardKey.digit7, LogicalKeyboardKey.digit7,
+  kPinAreaKey: _b(PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
-  kPinClipboardKey: _b(PhysicalKeyboardKey.digit8, LogicalKeyboardKey.digit8,
+  kPinClipboardKey: _b(PhysicalKeyboardKey.digit6, LogicalKeyboardKey.digit6,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
   // Screen recording toggles: ⌃⌘1 region, ⌃⌘2 window, ⌃⌘3 display, ⌃⌘4 last
   // region. NOT ⌘⌥⇧ + digit: ⌘⇧3/4/5 are macOS system screenshot shortcuts and
