@@ -290,22 +290,37 @@ private final class StripButton: NSView {
   private let kind: Kind
   var title: String { didSet { needsDisplay = true } }
   private let action: () -> Void
-  private let confirmDouble: Bool // risky control: only fire on a double-click
+  // Destructive control: nil = fires immediately; non-nil = two-step confirm
+  // (first click arms + shows this danger-coloured label, second click within
+  // ~4s fires, otherwise it disarms) — mirrors Settings' ConfirmGhostButton.
+  private let confirmLabel: String?
+  private var armed = false {
+    didSet {
+      needsDisplay = true
+      if !armed { disarmTimer?.invalidate(); disarmTimer = nil }
+    }
+  }
+  private var disarmTimer: Timer?
   private let font = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
   private var hovered = false { didSet { needsDisplay = true } }
   private var pressed = false { didSet { needsDisplay = true } }
 
-  init(kind: Kind, title: String, confirmDouble: Bool = false,
+  private var displayTitle: String { armed ? (confirmLabel ?? title) : title }
+
+  init(kind: Kind, title: String, confirmLabel: String? = nil,
        action: @escaping () -> Void) {
     self.kind = kind
     self.title = title
-    self.confirmDouble = confirmDouble
+    self.confirmLabel = confirmLabel
     self.action = action
+    // Fit the wider of the idle and confirm labels so the swap never clips.
     let text = title.size(withAttributes: [.font: font])
+    let labelW = max(text.width,
+                     confirmLabel?.size(withAttributes: [.font: font]).width ?? 0)
     let hPad: CGFloat = kind == .redAccent ? 16 : 14
     let iconSpan: CGFloat = kind == .redAccent ? 12 + 7 : 0 // ■ glyph + gap
     super.init(frame: NSRect(
-      x: 0, y: 0, width: hPad * 2 + iconSpan + ceil(text.width),
+      x: 0, y: 0, width: hPad * 2 + iconSpan + ceil(labelW),
       height: ceil(text.height) + 18))
     wantsLayer = true
   }
@@ -332,8 +347,23 @@ private final class StripButton: NSView {
   override func mouseUp(with event: NSEvent) {
     let inside = bounds.contains(convert(event.locationInWindow, from: nil))
     pressed = false
-    // A risky control (Abort) only fires on a double-click.
-    if inside, !confirmDouble || event.clickCount >= 2 { action() }
+    guard inside else { return }
+    // Two-step confirm for a destructive control: first click arms (shows the
+    // danger confirm label), a second click fires; otherwise it disarms.
+    if confirmLabel != nil {
+      if !armed {
+        armed = true
+        disarmTimer = Timer.scheduledTimer(
+          withTimeInterval: 4, repeats: false) { [weak self] _ in
+          self?.armed = false
+        }
+        return
+      }
+      armed = false
+      action()
+      return
+    }
+    action()
   }
 
   override func viewDidChangeEffectiveAppearance() {
@@ -346,9 +376,8 @@ private final class StripButton: NSView {
       .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     let shape = NSBezierPath(
       roundedRect: bounds, xRadius: 9, yRadius: 9)
-    // Content is CENTERED in the (possibly uniform-wider) box so the three
-    // controls can share one width and still look balanced.
-    let textW = ceil(title.size(withAttributes: [.font: font]).width)
+    // Content is CENTERED in the box; the label is the confirm label while armed.
+    let textW = ceil(displayTitle.size(withAttributes: [.font: font]).width)
     let fg: NSColor
     var textX: CGFloat
     switch kind {
@@ -387,20 +416,22 @@ private final class StripButton: NSView {
         wash.setFill()
         shape.fill()
       }
-      fg = dark
-        ? NSColor.white.withAlphaComponent(hovered ? 0.66 : 0.46)
-        : (hovered
-            ? NSColor(srgbRed: 0x47 / 255.0, green: 0x55 / 255.0,
-                      blue: 0x69 / 255.0, alpha: 1) // fg2 light
-            : NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0,
-                      blue: 0x8B / 255.0, alpha: 1)) // fg3 light
+      fg = armed
+        ? RecordingDesign.red // danger: armed/confirm state
+        : (dark
+            ? NSColor.white.withAlphaComponent(hovered ? 0.66 : 0.46)
+            : (hovered
+                ? NSColor(srgbRed: 0x47 / 255.0, green: 0x55 / 255.0,
+                          blue: 0x69 / 255.0, alpha: 1) // fg2 light
+                : NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0,
+                          blue: 0x8B / 255.0, alpha: 1))) // fg3 light
       textX = ((bounds.width - textW) / 2).rounded()
     }
     let attrs: [NSAttributedString.Key: Any] = [
       .font: font, .foregroundColor: fg,
     ]
-    let size = title.size(withAttributes: attrs)
-    title.draw(
+    let size = displayTitle.size(withAttributes: attrs)
+    displayTitle.draw(
       at: NSPoint(x: textX, y: (bounds.height - size.height) / 2),
       withAttributes: attrs)
   }
@@ -673,11 +704,12 @@ final class RecordingChrome {
       f.size.width += resumeExtra
       pause.frame = f
     }
-    // Abort is destructive -> double-click to confirm.
+    // Abort is destructive -> two-step confirm (first click arms a danger
+    // "Confirm?" label, a second click within ~4s aborts).
     let abort = StripButton(
-      kind: .ghost, title: L.s("Abort", "中止"), confirmDouble: true
+      kind: .ghost, title: L.s("Abort", "中止"),
+      confirmLabel: L.s("Confirm?", "確認？")
     ) { [weak self] in self?.onAbort?() }
-    abort.toolTip = L.s("Double-click to abort", "雙擊以中止")
     let stop = StripButton(
       kind: .redAccent, title: L.s("Finish", "完成")
     ) { [weak self] in self?.onStop?() }
