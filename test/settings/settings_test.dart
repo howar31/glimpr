@@ -43,6 +43,26 @@ void main() {
     expect(cap.completionSound, isTrue);
     expect(cap.flow, {FlowAction.copy, FlowAction.save});
     expect(cap.rightClickExits, isTrue);
+    expect(cap.filenameTemplate, '%title_%Y-%m-%d_%H-%M-%S');
+    expect(cap.subfolderPattern, '%Y/%Y-%m/%Y-%m-%d');
+  });
+
+  test('subfolder pattern defaults, round-trips, and allows empty', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getSubfolderPattern(), '%Y/%Y-%m/%Y-%m-%d');
+    await s.setSubfolderPattern('%Y');
+    expect(await s.getSubfolderPattern(), '%Y');
+    // Empty is VALID (= no subfolder); unlike the filename it is not coalesced.
+    await s.setSubfolderPattern('');
+    expect(await s.getSubfolderPattern(), '');
+    expect((await s.loadCapture()).subfolderPattern, '');
+  });
+
+  test('name counter defaults to 0 and round-trips', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getNameCounter(), 0);
+    await s.setNameCounter(42);
+    expect(await s.getNameCounter(), 42);
   });
 
   test('format + quality round-trip and feed the snapshot', () async {

@@ -6,9 +6,8 @@ import '../capture/direct_capture.dart'
     show kDisplayCaptureLabel, kLastRegionCaptureLabel;
 import '../capture/captured_display.dart' show FocusedWindowInfo;
 import '../capture/last_region.dart';
-import '../output/deliver.dart' show effectiveSaveDir;
-import '../output/filename.dart';
 import '../output/flow.dart';
+import '../output/output_naming.dart';
 import '../output/sounds.dart';
 import '../settings/settings.dart';
 import 'record_bridge.dart';
@@ -201,18 +200,18 @@ class RecordController {
     }
 
     final isGif = rec.isGif;
-    final fileName = buildScreenshotName(
-      template: cap.filenameTemplate,
-      t: _now(),
+    final naming = await resolveCaptureNaming(
+      cap: cap,
+      ext: isGif ? 'gif' : 'mp4',
       windowTitle: title,
       appName: app,
-      ext: isGif ? 'gif' : 'mp4',
+      now: _now(),
+      settings: _settings,
     );
-    final dir = effectiveSaveDir(cap.saveDir);
-    await dir.create(recursive: true);
+    await naming.dir.create(recursive: true);
     await _bridge.start(
       mode: mode,
-      outputPath: '${dir.path}/$fileName',
+      outputPath: '${naming.dir.path}/${naming.fileName}',
       displayId: displayId,
       rect: rect,
       windowId: windowId,
@@ -261,18 +260,18 @@ class RecordController {
           (rect != null ? kRecordingCaptureLabel : kDisplayCaptureLabel);
       final app = (a['app'] as String?) ?? title;
       final isGif = (a['gif'] as bool?) ?? rec.isGif;
-      final fileName = buildScreenshotName(
-        template: cap.filenameTemplate,
-        t: _now(),
+      final naming = await resolveCaptureNaming(
+        cap: cap,
+        ext: isGif ? 'gif' : 'mp4',
         windowTitle: title.isEmpty ? null : title,
         appName: app.isEmpty ? null : app,
-        ext: isGif ? 'gif' : 'mp4',
+        now: _now(),
+        settings: _settings,
       );
-      final dir = effectiveSaveDir(cap.saveDir);
-      await dir.create(recursive: true);
+      await naming.dir.create(recursive: true);
       await _bridge.start(
         mode: mode,
-        outputPath: '${dir.path}/$fileName',
+        outputPath: '${naming.dir.path}/${naming.fileName}',
         displayId: displayId,
         rect: rect,
         // The live-select toolbar's one-shot overrides win over the settings.

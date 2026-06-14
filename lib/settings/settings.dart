@@ -22,6 +22,7 @@ class CaptureSettings {
     this.flow = const {FlowAction.copy, FlowAction.save},
     this.rightClickExits = true,
     this.filenameTemplate = defaultFilenameTemplate,
+    this.subfolderPattern = defaultSubfolderPattern,
     this.decorateSnap = false,
     this.decorateCrop = false,
     this.decorateWindow = false,
@@ -40,7 +41,8 @@ class CaptureSettings {
   // the old saveToFile/copyToClipboard pair — those are now flow members.
   final Set<FlowAction> flow;
   final bool rightClickExits; // right-click on empty space leaves capture mode
-  final String filenameTemplate; // tokens: {date} {time} {title} {app}
+  final String filenameTemplate; // %-tokens, see kNameTokens
+  final String subfolderPattern; // output subfolder %-pattern (path mode)
 
   // Opt-in capture decoration (margin + rounded corners + drop shadow), gated
   // per capture scenario. All off by default => output is byte-identical.
@@ -88,6 +90,8 @@ class Settings {
   static const _rightClickExitsKey = 'right_click_exits';
   static const _confirmOnExitKey = 'confirm_on_exit';
   static const _filenameTemplateKey = 'filename_template';
+  static const _subfolderPatternKey = 'subfolder_pattern';
+  static const _nameCounterKey = 'name_counter';
   static const _decorateSnapKey = 'decorate_snap';
   static const _decorateCropKey = 'decorate_crop';
   static const _decorateWindowKey = 'decorate_window';
@@ -185,6 +189,21 @@ class Settings {
 
   Future<void> setFilenameTemplate(String v) =>
       store.setString(_filenameTemplateKey, v);
+
+  // Output subfolder pattern. Unlike the filename, an EMPTY value is valid
+  // (= no subfolder); only an unset key falls back to the date default.
+  Future<String> getSubfolderPattern() async =>
+      (await store.getString(_subfolderPatternKey)) ?? defaultSubfolderPattern;
+
+  Future<void> setSubfolderPattern(String v) =>
+      store.setString(_subfolderPatternKey, v);
+
+  // Persistent `%i` auto-increment counter (global, ShareX-style). Advanced by
+  // the capture path only when a rendered pattern actually uses `%i`.
+  Future<int> getNameCounter() async =>
+      (await store.getInt(_nameCounterKey)) ?? 0;
+
+  Future<void> setNameCounter(int v) => store.setInt(_nameCounterKey, v);
 
   // Capture decoration (opt-in, per scenario) ----------------------------
   Future<bool> getDecorateSnap() async =>
@@ -400,6 +419,7 @@ class Settings {
     flow: await getAfterCaptureFlow(),
     rightClickExits: await getRightClickExits(),
     filenameTemplate: await getFilenameTemplate(),
+    subfolderPattern: await getSubfolderPattern(),
     decorateSnap: await getDecorateSnap(),
     decorateCrop: await getDecorateCrop(),
     decorateWindow: await getDecorateWindow(),

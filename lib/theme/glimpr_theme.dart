@@ -22,6 +22,7 @@ class GlimprTokens {
     required this.insetBg,
     required this.hudBg,
     required this.hudBorder,
+    required this.menuBg,
     required this.fg1,
     required this.fg2,
     required this.fg3,
@@ -59,6 +60,10 @@ class GlimprTokens {
   // any screenshot; one pair app-wide (design guide: one glass language).
   final Color hudBg;
   final Color hudBorder;
+  // Neutral near-opaque surface for popovers INSIDE the settings window (which
+  // is a neutral native-frosted surface, not the Aurora overlay). Distinct from
+  // hudBg so a settings menu reads with the settings palette, not the overlay's.
+  final Color menuBg;
 
   // Foreground ramp
   final Color fg1;
@@ -152,6 +157,7 @@ class GlimprTokens {
     insetBg: Color.fromRGBO(0, 0, 0, 0.22),
     hudBg: Color(0xF21A2236),
     hudBorder: Color(0x33FFFFFF),
+    menuBg: Color(0xF2202024),
     fg1: Color.fromRGBO(255, 255, 255, 0.96),
     fg2: Color.fromRGBO(255, 255, 255, 0.66),
     fg3: Color.fromRGBO(255, 255, 255, 0.46),
@@ -180,6 +186,7 @@ class GlimprTokens {
     insetBg: Color.fromRGBO(15, 23, 42, 0.04),
     hudBg: Color(0xFAFFFFFF),
     hudBorder: Color(0x1F0F172A),
+    menuBg: Color(0xFAFFFFFF),
     fg1: Color(0xFF14223B),
     fg2: Color(0xFF475569),
     fg3: Color(0xFF64748B),

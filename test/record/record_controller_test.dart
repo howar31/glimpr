@@ -323,7 +323,7 @@ void main() {
       bridge.selection({
         'displayId': 1, 'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
       });
-      await pumpEventQueue(times: 40); // -> start() issued; phase starting (countdown)
+      await pumpEventQueue(times: 200); // -> start() issued; phase starting (countdown)
       expect(rc.phase, RecordPhase.starting);
       await rc.toggle(kRecordModeRegion); // hotkey during countdown = stop
       expect(bridge.stops, 1);
@@ -339,7 +339,7 @@ void main() {
         'displayId': 2,
         'x': 5.0, 'y': 6.0, 'w': 100.0, 'h': 80.0,
       });
-      await pumpEventQueue(times: 40);
+      await pumpEventQueue(times: 200);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeRegion);
       expect(s['displayId'], 2);
@@ -360,7 +360,7 @@ void main() {
         'title': 'Safari',
         'app': 'Safari',
       });
-      await pumpEventQueue(times: 40);
+      await pumpEventQueue(times: 200);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeRegion);
       expect(s['rect'], const Rect.fromLTWH(10, 20, 300, 200));
@@ -372,7 +372,7 @@ void main() {
       final rc = build();
       await rc.toggle(kRecordModeRegion);
       bridge.selection({'displayId': 3});
-      await pumpEventQueue(times: 40);
+      await pumpEventQueue(times: 200);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeDisplay);
       expect(s['displayId'], 3);
@@ -394,7 +394,7 @@ void main() {
         'hevc': true,
         'fps': 60,
       });
-      await pumpEventQueue(times: 40);
+      await pumpEventQueue(times: 200);
       final s = bridge.starts.single;
       expect(s['showsCursor'], isFalse); // override wins over the setting
       expect(s['systemAudio'], isTrue);
@@ -452,7 +452,7 @@ void main() {
         'displayId': 1, 'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
         'maxDuration': 5,
       });
-      await pumpEventQueue(times: 40);
+      await pumpEventQueue(times: 200);
       expect(bridge.starts.single['maxDuration'], 5);
     });
 

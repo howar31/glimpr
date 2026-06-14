@@ -8,8 +8,8 @@ import '../editor/composite.dart';
 import '../editor/decoration.dart';
 import '../editor/drawable.dart';
 import '../image_editor/recent_images.dart';
-import '../output/filename.dart';
 import '../output/flow.dart';
+import '../output/output_naming.dart';
 import '../settings/settings.dart';
 
 /// Composites [frozenImage] (native pixels) + [drawables] (logical coords),
@@ -84,18 +84,18 @@ Future<FlowResult> exportAnnotated({
   final sel = selectionLogical ??
       Rect.fromLTWH(0, 0, display.width, display.height);
   final pinRect = sel.shift(Offset(display.left, display.top));
+  final naming = await resolveCaptureNaming(
+    cap: cap,
+    ext: cap.fileExtension,
+    windowTitle: windowTitle,
+    appName: appName,
+  );
   return runFlow(
     actions: actions,
     bytes: bytes,
     pinBytes: pinBytes,
-    saveDir: cap.saveDir,
-    fileName: buildScreenshotName(
-      template: cap.filenameTemplate,
-      t: DateTime.now(),
-      windowTitle: windowTitle,
-      appName: appName,
-      ext: cap.fileExtension,
-    ),
+    saveDir: naming.dir,
+    fileName: naming.fileName,
     soundFn: () async {},
     pinFn: (p) => CaptureBridge.pinImage(p, globalRect: pinRect),
     recordRecentFn: recordRecentCapture,
@@ -117,20 +117,20 @@ Future<FlowResult> deliverEncodedCapture({
   final bytes = capture.bytes;
   // Pin-in-place: the captured rect's GLOBAL top-left logical position.
   final pinRect = capture.rect.shift(capture.displayOrigin);
+  final naming = await resolveCaptureNaming(
+    cap: cap,
+    ext: cap.fileExtension,
+    windowTitle: windowTitle,
+    appName: appName,
+  );
   return runFlow(
     actions: normalizeFlow(cap.flow, forCapture: true),
     bytes: bytes,
     // The undecorated sibling (when the capture was decorated): the pin leg
     // always shows the plain capture, which also keeps pin-in-place aligned.
     pinBytes: capture.plainBytes,
-    saveDir: cap.saveDir,
-    fileName: buildScreenshotName(
-      template: cap.filenameTemplate,
-      t: DateTime.now(),
-      windowTitle: windowTitle,
-      appName: appName,
-      ext: cap.fileExtension,
-    ),
+    saveDir: naming.dir,
+    fileName: naming.fileName,
     soundFn: () async {},
     pinFn: (p) => CaptureBridge.pinImage(p, globalRect: pinRect),
     recordRecentFn: recordRecentCapture,
@@ -162,18 +162,18 @@ Future<FlowResult> deliverWindowBytes({
   // The undecorated sibling rendition for the flow's pin leg (alsoPlain).
   Uint8List? pinBytes,
 }) async {
+  final naming = await resolveCaptureNaming(
+    cap: cap,
+    ext: cap.fileExtension,
+    windowTitle: windowTitle,
+    appName: appName,
+  );
   return runFlow(
     actions: normalizeFlow(cap.flow, forCapture: true),
     bytes: bytes,
     pinBytes: pinBytes,
-    saveDir: cap.saveDir,
-    fileName: buildScreenshotName(
-      template: cap.filenameTemplate,
-      t: DateTime.now(),
-      windowTitle: windowTitle,
-      appName: appName,
-      ext: cap.fileExtension,
-    ),
+    saveDir: naming.dir,
+    fileName: naming.fileName,
     soundFn: () async {},
     recordRecentFn: recordRecentCapture,
   );

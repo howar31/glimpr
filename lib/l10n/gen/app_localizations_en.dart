@@ -268,6 +268,117 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFilenamePreview => 'Preview';
 
   @override
+  String get settingsFilenameHint =>
+      'Uses the window under the cursor when the screenshot ends; %title and %app are left out on the bare desktop.';
+
+  @override
+  String get settingsSectionSubfolder => 'Subfolder';
+
+  @override
+  String get settingsInsertVariable => 'Insert variable';
+
+  @override
+  String get settingsPatternNormalizeHint =>
+      'Reserved characters will be removed on Apply.';
+
+  @override
+  String get settingsPreviewCollision => 'If the name is taken';
+
+  @override
+  String get settingsSubfolderHint =>
+      'Leave empty to save directly in the folder above. Use / for nested folders.';
+
+  @override
+  String get tokCatDateTime => 'Date & time';
+
+  @override
+  String get tokCatContent => 'Content';
+
+  @override
+  String get tokCatCounter => 'Counter';
+
+  @override
+  String get tokCatRandom => 'Random';
+
+  @override
+  String get tokCatComputer => 'Computer';
+
+  @override
+  String get tokYear4 => '4-digit year';
+
+  @override
+  String get tokYear2 => '2-digit year';
+
+  @override
+  String get tokMonth => 'Month, 01–12';
+
+  @override
+  String get tokDay => 'Day of month, 01–31';
+
+  @override
+  String get tokHour24 => 'Hour, 24-hour (00–23)';
+
+  @override
+  String get tokHour12 => 'Hour, 12-hour (01–12)';
+
+  @override
+  String get tokMinute => 'Minute, 00–59';
+
+  @override
+  String get tokSecond => 'Second, 00–59';
+
+  @override
+  String get tokAmPm => 'AM or PM';
+
+  @override
+  String get tokDayOfYear => 'Day of the year, 001–366';
+
+  @override
+  String get tokWeek => 'ISO week number, 01–53';
+
+  @override
+  String get tokWeekdayShort => 'Weekday, short (Mon)';
+
+  @override
+  String get tokWeekdayFull => 'Weekday, full (Monday)';
+
+  @override
+  String get tokMonthShort => 'Month name, short (Jun)';
+
+  @override
+  String get tokMonthFull => 'Month name, full (June)';
+
+  @override
+  String get tokUnix => 'Unix timestamp (seconds)';
+
+  @override
+  String get tokTitle => 'Window title, or the app name if it has none';
+
+  @override
+  String get tokApp => 'Application name';
+
+  @override
+  String get tokCounter => 'Auto-increment counter; %iN pads to N digits';
+
+  @override
+  String get tokRandAlnum => 'Random letters & digits; %raN sets the length';
+
+  @override
+  String get tokRandNum => 'Random digits; %rnN sets the length';
+
+  @override
+  String get tokRandHex => 'Random hexadecimal; %rxN sets the length';
+
+  @override
+  String get tokGuid => 'Random GUID';
+
+  @override
+  String get tokHost => 'Computer name';
+
+  @override
+  String get tokUser => 'User name';
+
+  @override
   String get settingsFilenamePlaceholders => 'Placeholders';
 
   @override

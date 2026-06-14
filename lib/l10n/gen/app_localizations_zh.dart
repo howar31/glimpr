@@ -255,6 +255,115 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFilenamePreview => '預覽';
 
   @override
+  String get settingsFilenameHint =>
+      '使用截圖結束時滑鼠指標所在的視窗;在桌面上時 %title 與 %app 會省略。';
+
+  @override
+  String get settingsSectionSubfolder => '子資料夾';
+
+  @override
+  String get settingsInsertVariable => '插入變數';
+
+  @override
+  String get settingsPatternNormalizeHint => '套用時會移除不允許的字元。';
+
+  @override
+  String get settingsPreviewCollision => '若同名已存在';
+
+  @override
+  String get settingsSubfolderHint => '留空則直接存到上方資料夾；用 / 建立多層資料夾。';
+
+  @override
+  String get tokCatDateTime => '日期與時間';
+
+  @override
+  String get tokCatContent => '內容';
+
+  @override
+  String get tokCatCounter => '序號';
+
+  @override
+  String get tokCatRandom => '隨機';
+
+  @override
+  String get tokCatComputer => '電腦';
+
+  @override
+  String get tokYear4 => '西元年（4 位）';
+
+  @override
+  String get tokYear2 => '西元年（2 位）';
+
+  @override
+  String get tokMonth => '月，01–12';
+
+  @override
+  String get tokDay => '日，01–31';
+
+  @override
+  String get tokHour24 => '時，24 小時制（00–23）';
+
+  @override
+  String get tokHour12 => '時，12 小時制（01–12）';
+
+  @override
+  String get tokMinute => '分，00–59';
+
+  @override
+  String get tokSecond => '秒，00–59';
+
+  @override
+  String get tokAmPm => '上午／下午（AM/PM）';
+
+  @override
+  String get tokDayOfYear => '一年中的第幾天，001–366';
+
+  @override
+  String get tokWeek => 'ISO 週數，01–53';
+
+  @override
+  String get tokWeekdayShort => '星期，縮寫（Mon）';
+
+  @override
+  String get tokWeekdayFull => '星期，完整（Monday）';
+
+  @override
+  String get tokMonthShort => '月名，縮寫（Jun）';
+
+  @override
+  String get tokMonthFull => '月名，完整（June）';
+
+  @override
+  String get tokUnix => 'Unix 時間戳（秒）';
+
+  @override
+  String get tokTitle => '視窗標題；若無標題則用 App 名稱';
+
+  @override
+  String get tokApp => '應用程式名稱';
+
+  @override
+  String get tokCounter => '自動遞增序號；%iN 補零到 N 位';
+
+  @override
+  String get tokRandAlnum => '隨機英數字；%raN 指定長度';
+
+  @override
+  String get tokRandNum => '隨機數字；%rnN 指定長度';
+
+  @override
+  String get tokRandHex => '隨機十六進位；%rxN 指定長度';
+
+  @override
+  String get tokGuid => '隨機 GUID';
+
+  @override
+  String get tokHost => '電腦名稱';
+
+  @override
+  String get tokUser => '使用者名稱';
+
+  @override
   String get settingsFilenamePlaceholders => '可用變數';
 
   @override

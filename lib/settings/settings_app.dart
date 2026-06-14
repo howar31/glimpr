@@ -9,7 +9,9 @@ import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
+import '../output/deliver.dart';
 import '../output/filename.dart';
+import '../output/name_tokens.dart';
 import '../output/flow.dart';
 import '../record/record_bridge.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -24,6 +26,7 @@ import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
 import 'settings.dart';
+import 'token_picker.dart';
 
 /// The settings window content: the "Aurora" design — a frosted-glass window
 /// (the blur comes from a native NSVisualEffectView behind the Flutter view) with
@@ -124,6 +127,21 @@ class _SettingsAppState extends State<SettingsApp>
   bool _hudCrosshair = true;
   bool _hudMarchingAnts = true;
   final _filenameController = TextEditingController();
+  final _filenameFocus = FocusNode();
+  String _subfolderPattern = defaultSubfolderPattern;
+  final _subfolderController = TextEditingController();
+  final _subfolderFocus = FocusNode();
+  // The Output pane is STAGED like Shortcuts: edits update the draft state
+  // (_saveDir / _filenameTemplate / _subfolderPattern) but persist only on
+  // Apply, which also normalizes the patterns and fills an empty field with its
+  // default. These baselines are the last-applied values; dirty = draft != base.
+  String? _savedSaveDir;
+  String _savedFilename = defaultFilenameTemplate;
+  String _savedSubfolder = defaultSubfolderPattern;
+  // On blur, a pattern field flags (without modifying) when it holds reserved
+  // characters that Apply would strip — a heads-up; Apply does the rewrite.
+  bool _filenameWarn = false;
+  bool _subfolderWarn = false;
 
   // Shortcuts draft: null until the user first opens the Shortcuts pane. Only
   // this pane uses a staged draft (the other panes are live-apply). The baseline
@@ -160,13 +178,31 @@ class _SettingsAppState extends State<SettingsApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _filenameFocus.addListener(_onPatternFocusChange);
+    _subfolderFocus.addListener(_onPatternFocusChange);
     _load();
+  }
+
+  // On focus change, re-flag each pattern field: warn (don't modify) when it has
+  // lost focus AND holds reserved characters Apply would strip. A filename can't
+  // span folders, so separators count as reserved there; the subfolder keeps
+  // them (structural). Clears while the field is focused (mid-edit).
+  void _onPatternFocusChange() {
+    setState(() {
+      _filenameWarn = !_filenameFocus.hasFocus &&
+          RegExp(r'[/\\:*?"<>|\x00-\x1f]').hasMatch(_filenameTemplate);
+      _subfolderWarn = !_subfolderFocus.hasFocus &&
+          RegExp(r'[:*?"<>|\x00-\x1f]').hasMatch(_subfolderPattern);
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _filenameController.dispose();
+    _filenameFocus.dispose();
+    _subfolderController.dispose();
+    _subfolderFocus.dispose();
     super.dispose();
   }
 
@@ -186,6 +222,7 @@ class _SettingsAppState extends State<SettingsApp>
     final confirmOnExit = await _s.getConfirmOnExit();
     final captureCursor = await _s.getCaptureCursor();
     final template = await _s.getFilenameTemplate();
+    final subfolder = await _s.getSubfolderPattern();
     final decSnap = await _s.getDecorateSnap();
     final decCrop = await _s.getDecorateCrop();
     final decWindow = await _s.getDecorateWindow();
@@ -215,6 +252,10 @@ class _SettingsAppState extends State<SettingsApp>
       _captureCursor = captureCursor;
       _pinHoverGlow = pinHoverGlow;
       _filenameTemplate = template;
+      _subfolderPattern = subfolder;
+      _savedSaveDir = dir;
+      _savedFilename = template;
+      _savedSubfolder = subfolder;
       _decorateSnap = decSnap;
       _decorateCrop = decCrop;
       _decorateWindow = decWindow;
@@ -240,6 +281,7 @@ class _SettingsAppState extends State<SettingsApp>
       _afterRecording = rec.flow;
     });
     _filenameController.text = template;
+    _subfolderController.text = subfolder;
     // Recording availability is a native (macOS version) fact; guard so an
     // unmocked channel never breaks the rest of the UI (widget tests).
     final recordAvailable = await RecordBridge().isAvailable();
@@ -391,17 +433,14 @@ class _SettingsAppState extends State<SettingsApp>
             style: GlimprType.sansStyle(12, 500, t.fg4, height: 1.4)),
       );
 
+  // Staged: update the draft only; Apply persists (see _applyOutput).
   Future<void> _chooseDir() async {
     final picked = await getDirectoryPath();
     if (picked == null) return;
-    await _s.setSaveDirectory(picked);
     if (mounted) setState(() => _saveDir = picked);
   }
 
-  Future<void> _resetDir() async {
-    await _s.clearSaveDirectory();
-    if (mounted) setState(() => _saveDir = null);
-  }
+  void _resetDir() => setState(() => _saveDir = null);
 
   Future<void> _setWarmTarget(int v) async {
     try {
@@ -543,6 +582,12 @@ class _SettingsAppState extends State<SettingsApp>
     if (_section == 6) {
       return Column(
         children: [Expanded(child: list), _shortcutsFooter(t)],
+      );
+    }
+    // The Output pane is staged too: pin its Apply/Revert bar like Shortcuts.
+    if (_section == 5) {
+      return Column(
+        children: [Expanded(child: list), _outputFooter(t)],
       );
     }
     return list;
@@ -1351,102 +1396,283 @@ class _SettingsAppState extends State<SettingsApp>
       SectionLabel(_l.settingsSectionSaveLocation, icon: Icons.folder_outlined),
       GlassCard.padded(child: _saveFolderBody(t)),
       const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionSubfolder, icon: Icons.account_tree_outlined),
+      GlassCard.padded(child: _subfolderBody(t)),
+      const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionFilename, icon: Icons.text_fields_outlined),
       GlassCard.padded(child: _filenameBody(t)),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsFilenamePreview, icon: Icons.visibility_outlined),
+      GlassCard.padded(child: _previewBody(t)),
     ];
   }
 
-  Widget _filenameBody(GlimprTokens t) {
-    final preview = buildScreenshotName(
-      template: _filenameTemplate.trim().isEmpty
-          ? defaultFilenameTemplate
-          : _filenameTemplate,
-      t: DateTime.now(),
-      windowTitle: 'Safari',
-      appName: 'Safari',
-      ext: _format == ImageFormat.jpeg ? 'jpg' : 'png',
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: _filenameController,
-          style: GlimprType.mono(13, t.fg1),
-          cursorColor: GlimprTokens.accent,
-          onChanged: (v) {
-            _s.setFilenameTemplate(v);
-            setState(() => _filenameTemplate = v);
-          },
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: t.fieldBg,
-            hintText: defaultFilenameTemplate,
-            hintStyle: GlimprType.mono(13, t.fg4),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 11,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: BorderSide(color: t.fieldBorder),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: const BorderSide(
-                color: GlimprTokens.accent,
-                width: 1.5,
+  Widget _patternField(
+    GlimprTokens t, {
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hint,
+    required ValueChanged<String> onChanged,
+    required VoidCallback onReset,
+  }) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: GlimprType.mono(13, t.fg1),
+              cursorColor: GlimprTokens.accent,
+              onChanged: onChanged,
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: t.fieldBg,
+                hintText: hint,
+                hintStyle: GlimprType.mono(13, t.fg4),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(9),
+                  borderSide: BorderSide(color: t.fieldBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(9),
+                  borderSide:
+                      const BorderSide(color: GlimprTokens.accent, width: 1.5),
+                ),
               ),
             ),
           ),
+          const SizedBox(width: 8),
+          TokenInsertButton(
+            t: t,
+            controller: controller,
+            focusNode: focusNode,
+            onChanged: onChanged,
+          ),
+          const SizedBox(width: 8),
+          _resetButton(t, onReset),
+        ],
+      ),
+    );
+  }
+
+  // A field-height bordered icon button that resets a pattern field to its
+  // default (stages the change like any edit; Apply persists it).
+  Widget _resetButton(GlimprTokens t, VoidCallback onReset) => InkWell(
+        onTap: onReset,
+        borderRadius: BorderRadius.circular(9),
+        child: Tooltip(
+          message: _l.settingsSaveFolderReset,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: t.fieldBg,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: t.fieldBorder),
+            ),
+            child: Icon(Icons.settings_backup_restore, size: 16, color: t.fg2),
+          ),
         ),
-        const SizedBox(height: 12),
+      );
+
+  Widget _filenameBody(GlimprTokens t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _patternField(
+          t,
+          controller: _filenameController,
+          focusNode: _filenameFocus,
+          hint: defaultFilenameTemplate,
+          onChanged: (v) => setState(() => _filenameTemplate = v),
+          onReset: () {
+            setState(() {
+              _filenameTemplate = defaultFilenameTemplate;
+              _filenameWarn = false;
+            });
+            _filenameController.text = defaultFilenameTemplate;
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(_l.settingsFilenameHint,
+            style: GlimprType.sansStyle(12, 400, t.fg4)),
+        if (_filenameWarn)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_l.settingsPatternNormalizeHint,
+                style: GlimprType.sansStyle(12, 500, GlimprTokens.danger)),
+          ),
+      ],
+    );
+  }
+
+  /// The combined "where a file lands" preview (its own Output section) plus a
+  /// second line revealing the collision rule: [uniqueName] inserts a _NNN
+  /// counter before the extension when the name is already taken.
+  Widget _previewBody(GlimprTokens t) {
+    final full = _combinedPreview();
+    final name = full.split('/').last;
+    final collided = uniqueName(name, exists: (n) => n == name);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(full, style: GlimprType.mono(12.5, t.fg2)),
+        const SizedBox(height: 10),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_l.settingsFilenamePreview, style: GlimprType.sansStyle(12.5, 600, t.fg4)),
-            const SizedBox(width: 10),
+            Text(_l.settingsPreviewCollision,
+                style: GlimprType.sansStyle(12, 500, t.fg4)),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                preview,
+                collided,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GlimprType.mono(12.5, t.fg3),
+                style: GlimprType.mono(12, t.fg3),
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 16),
-        Text(_l.settingsFilenamePlaceholders, style: GlimprType.sansStyle(12.5, 600, t.fg4)),
-        const SizedBox(height: 8),
-        _token(t, '{window}', _l.settingsFilenameTokenWindowDesc),
-        _token(t, '{app}', _l.settingsFilenameTokenAppDesc),
-        _token(t, '{date}', _l.settingsFilenameTokenDateDesc),
-        _token(t, '{time}', _l.settingsFilenameTokenTimeDesc),
-        const SizedBox(height: 6),
-        Text(
-          _l.settingsFilenameNote('{window}', '{app}'),
-          style: GlimprType.sansStyle(12, 400, t.fg4),
         ),
       ],
     );
   }
 
-  Widget _token(GlimprTokens t, String token, String desc) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
+  Widget _subfolderBody(GlimprTokens t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _patternField(
+          t,
+          controller: _subfolderController,
+          focusNode: _subfolderFocus,
+          hint: defaultSubfolderPattern,
+          onChanged: (v) => setState(() => _subfolderPattern = v),
+          onReset: () {
+            setState(() {
+              _subfolderPattern = defaultSubfolderPattern;
+              _subfolderWarn = false;
+            });
+            _subfolderController.text = defaultSubfolderPattern;
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(_l.settingsSubfolderHint,
+            style: GlimprType.sansStyle(12, 400, t.fg4)),
+        if (_subfolderWarn)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_l.settingsPatternNormalizeHint,
+                style: GlimprType.sansStyle(12, 500, GlimprTokens.danger)),
+          ),
+      ],
+    );
+  }
+
+  /// The combined "where a file lands" preview: save-folder basename / rendered
+  /// subfolder / rendered filename. One shared context so %i + random match;
+  /// fixed sample values keep it stable across rebuilds.
+  String _combinedPreview() {
+    final ctx = NameContext(
+      now: DateTime.now(),
+      windowTitle: 'Safari',
+      appName: 'Safari',
+      counter: 1,
+      rand: (n) => 0,
+    );
+    final ext = _format == ImageFormat.jpeg ? 'jpg' : 'png';
+    final fnPattern = _filenameTemplate.trim().isEmpty
+        ? defaultFilenameTemplate
+        : _filenameTemplate;
+    final name = '${renderPattern(fnPattern, ctx, NameMode.filename)}.$ext';
+    final sub = renderPattern(_subfolderPattern, ctx, NameMode.path)
+        .replaceAll('\\', '/');
+    final basePath = effectiveSaveDir(resolveSaveDir(_saveDir)).path;
+    final segs =
+        basePath.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).toList();
+    final baseName = segs.isEmpty ? 'Glimpr' : segs.last;
+    return ['…', baseName, if (sub.isNotEmpty) sub, name].join('/');
+  }
+
+  bool _outputDirty() =>
+      _saveDir != _savedSaveDir ||
+      _filenameTemplate != _savedFilename ||
+      _subfolderPattern != _savedSubfolder;
+
+  // A filename can't span folders: strip ALL filesystem-reserved characters
+  // (separators included) so the stored pattern matches the sanitized preview /
+  // saved file; trim; empty → default.
+  String _normalizeFilename(String s) {
+    final v = s.replaceAll(RegExp(r'[/\\:*?"<>|\x00-\x1f]'), '').trim();
+    return v.isEmpty ? defaultFilenameTemplate : v;
+  }
+
+  // Subfolder: normalize both separators to the portable '/', strip the reserved
+  // characters EXCEPT the separator (which is structural), collapse repeats, trim
+  // slash/space ends; empty → default (owner: fill the placeholder).
+  String _normalizeSubfolder(String s) {
+    var v = s.replaceAll('\\', '/');
+    v = v.replaceAll(RegExp(r'[:*?"<>|\x00-\x1f]'), '');
+    v = v.replaceAll(RegExp(r'/{2,}'), '/');
+    v = v.replaceAll(RegExp(r'^[/\s]+|[/\s]+$'), '');
+    return v.isEmpty ? defaultSubfolderPattern : v;
+  }
+
+  Future<void> _applyOutput() async {
+    final fn = _normalizeFilename(_filenameTemplate);
+    final sub = _normalizeSubfolder(_subfolderPattern);
+    await _s.setFilenameTemplate(fn);
+    await _s.setSubfolderPattern(sub);
+    if (_saveDir == null) {
+      await _s.clearSaveDirectory();
+    } else {
+      await _s.setSaveDirectory(_saveDir!);
+    }
+    if (!mounted) return;
+    setState(() {
+      _filenameTemplate = fn;
+      _subfolderPattern = sub;
+      _savedFilename = fn;
+      _savedSubfolder = sub;
+      _savedSaveDir = _saveDir;
+      _filenameWarn = false;
+      _subfolderWarn = false;
+    });
+    _filenameController.text = fn;
+    _subfolderController.text = sub;
+  }
+
+  void _revertOutput() {
+    setState(() {
+      _saveDir = _savedSaveDir;
+      _filenameTemplate = _savedFilename;
+      _subfolderPattern = _savedSubfolder;
+    });
+    _filenameController.text = _savedFilename;
+    _subfolderController.text = _savedSubfolder;
+  }
+
+  // The Output pane's Apply/Revert bar (pinned at the bottom by _content), shown
+  // only when a draft differs from its last-applied baseline. Apply is always
+  // valid — it normalizes + fills empty fields on commit.
+  Widget _outputFooter(GlimprTokens t) {
+    if (!_outputDirty()) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 16),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          SizedBox(
-            width: 82,
-            child: Text(
-              token,
-              style: GlimprType.mono(12.5, GlimprTokens.accent),
-            ),
-          ),
-          Expanded(
-            child: Text(desc, style: GlimprType.sansStyle(12.5, 400, t.fg3)),
-          ),
+          GhostButton(_l.settingsShortcutsRevert, onTap: _revertOutput),
+          const SizedBox(width: 8),
+          AccentButton(_l.settingsShortcutsApply, onTap: _applyOutput),
         ],
       ),
     );

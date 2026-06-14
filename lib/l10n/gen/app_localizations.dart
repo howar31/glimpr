@@ -572,6 +572,222 @@ abstract class AppLocalizations {
   /// **'Preview'**
   String get settingsFilenamePreview;
 
+  /// No description provided for @settingsFilenameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the window under the cursor when the screenshot ends; %title and %app are left out on the bare desktop.'**
+  String get settingsFilenameHint;
+
+  /// No description provided for @settingsSectionSubfolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Subfolder'**
+  String get settingsSectionSubfolder;
+
+  /// No description provided for @settingsInsertVariable.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert variable'**
+  String get settingsInsertVariable;
+
+  /// No description provided for @settingsPatternNormalizeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reserved characters will be removed on Apply.'**
+  String get settingsPatternNormalizeHint;
+
+  /// No description provided for @settingsPreviewCollision.
+  ///
+  /// In en, this message translates to:
+  /// **'If the name is taken'**
+  String get settingsPreviewCollision;
+
+  /// No description provided for @settingsSubfolderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to save directly in the folder above. Use / for nested folders.'**
+  String get settingsSubfolderHint;
+
+  /// No description provided for @tokCatDateTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Date & time'**
+  String get tokCatDateTime;
+
+  /// No description provided for @tokCatContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get tokCatContent;
+
+  /// No description provided for @tokCatCounter.
+  ///
+  /// In en, this message translates to:
+  /// **'Counter'**
+  String get tokCatCounter;
+
+  /// No description provided for @tokCatRandom.
+  ///
+  /// In en, this message translates to:
+  /// **'Random'**
+  String get tokCatRandom;
+
+  /// No description provided for @tokCatComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer'**
+  String get tokCatComputer;
+
+  /// No description provided for @tokYear4.
+  ///
+  /// In en, this message translates to:
+  /// **'4-digit year'**
+  String get tokYear4;
+
+  /// No description provided for @tokYear2.
+  ///
+  /// In en, this message translates to:
+  /// **'2-digit year'**
+  String get tokYear2;
+
+  /// No description provided for @tokMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Month, 01–12'**
+  String get tokMonth;
+
+  /// No description provided for @tokDay.
+  ///
+  /// In en, this message translates to:
+  /// **'Day of month, 01–31'**
+  String get tokDay;
+
+  /// No description provided for @tokHour24.
+  ///
+  /// In en, this message translates to:
+  /// **'Hour, 24-hour (00–23)'**
+  String get tokHour24;
+
+  /// No description provided for @tokHour12.
+  ///
+  /// In en, this message translates to:
+  /// **'Hour, 12-hour (01–12)'**
+  String get tokHour12;
+
+  /// No description provided for @tokMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'Minute, 00–59'**
+  String get tokMinute;
+
+  /// No description provided for @tokSecond.
+  ///
+  /// In en, this message translates to:
+  /// **'Second, 00–59'**
+  String get tokSecond;
+
+  /// No description provided for @tokAmPm.
+  ///
+  /// In en, this message translates to:
+  /// **'AM or PM'**
+  String get tokAmPm;
+
+  /// No description provided for @tokDayOfYear.
+  ///
+  /// In en, this message translates to:
+  /// **'Day of the year, 001–366'**
+  String get tokDayOfYear;
+
+  /// No description provided for @tokWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'ISO week number, 01–53'**
+  String get tokWeek;
+
+  /// No description provided for @tokWeekdayShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekday, short (Mon)'**
+  String get tokWeekdayShort;
+
+  /// No description provided for @tokWeekdayFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekday, full (Monday)'**
+  String get tokWeekdayFull;
+
+  /// No description provided for @tokMonthShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Month name, short (Jun)'**
+  String get tokMonthShort;
+
+  /// No description provided for @tokMonthFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Month name, full (June)'**
+  String get tokMonthFull;
+
+  /// No description provided for @tokUnix.
+  ///
+  /// In en, this message translates to:
+  /// **'Unix timestamp (seconds)'**
+  String get tokUnix;
+
+  /// No description provided for @tokTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Window title, or the app name if it has none'**
+  String get tokTitle;
+
+  /// No description provided for @tokApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Application name'**
+  String get tokApp;
+
+  /// No description provided for @tokCounter.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-increment counter; %iN pads to N digits'**
+  String get tokCounter;
+
+  /// No description provided for @tokRandAlnum.
+  ///
+  /// In en, this message translates to:
+  /// **'Random letters & digits; %raN sets the length'**
+  String get tokRandAlnum;
+
+  /// No description provided for @tokRandNum.
+  ///
+  /// In en, this message translates to:
+  /// **'Random digits; %rnN sets the length'**
+  String get tokRandNum;
+
+  /// No description provided for @tokRandHex.
+  ///
+  /// In en, this message translates to:
+  /// **'Random hexadecimal; %rxN sets the length'**
+  String get tokRandHex;
+
+  /// No description provided for @tokGuid.
+  ///
+  /// In en, this message translates to:
+  /// **'Random GUID'**
+  String get tokGuid;
+
+  /// No description provided for @tokHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer name'**
+  String get tokHost;
+
+  /// No description provided for @tokUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User name'**
+  String get tokUser;
+
   /// Settings > Output > Filename: placeholders section label
   ///
   /// In en, this message translates to:

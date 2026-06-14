@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'clipboard.dart';
 import 'filename.dart';
+import 'name_tokens.dart';
 import 'saver.dart';
 
 /// Outcome of delivering one captured image to its destinations. Each leg runs
@@ -48,6 +49,18 @@ Future<void> _defaultSound() =>
 /// folder it opens is exactly where saves land.
 Directory effectiveSaveDir(Directory? configured) =>
     configured ?? Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
+
+/// The effective output directory for a capture: [effectiveSaveDir] with the
+/// rendered [subfolderPattern] appended as a RELATIVE path. An empty rendered
+/// subfolder (or an empty pattern) yields the save dir itself.
+Directory effectiveOutputDir(
+    Directory? base, String subfolderPattern, NameContext ctx) {
+  final root = effectiveSaveDir(base);
+  final sub = renderPattern(subfolderPattern, ctx, NameMode.path);
+  return sub.isEmpty
+      ? root
+      : Directory('${root.path}${Platform.pathSeparator}$sub');
+}
 
 Future<DeliveryResult> deliverCapture({
   required Uint8List pngBytes,

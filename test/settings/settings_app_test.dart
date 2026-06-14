@@ -44,8 +44,9 @@ void main() {
     await tester.pumpAndSettle();
     // The wider save-folder line splits the path into an ellipsizing head and a
     // pinned trailing segment, so the full string is no longer one Text widget.
-    // Assert on the visible trailing folder; the full path lives in the Tooltip.
-    expect(find.textContaining('shots'), findsOneWidget);
+    // 'shots' now also appears in the combined output-path preview, so match
+    // widgets (>=1); the save-folder line is asserted precisely via its Tooltip.
+    expect(find.textContaining('shots'), findsWidgets);
     expect(find.byTooltip('/tmp/shots'), findsOneWidget);
   });
 
