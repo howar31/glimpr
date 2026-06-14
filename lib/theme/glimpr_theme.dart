@@ -98,6 +98,15 @@ class GlimprTokens {
   /// record-select toolbar's highlights — the whole recording flow is red.
   static const Color recordingAccent = Color(0xFFFF453A);
 
+  /// UNIFIED dim/scrim/veil color (owner 2026-06-14): every chrome mask — the
+  /// Settings mask, the discard-dialog barrier, the crop selection scrim, the
+  /// record-select veil, and the native recording scrims — uses this ONE value.
+  /// Pure black at 40% (0x66 = 102/255 ≈ 0.40). Theme-INDEPENDENT (dim veils
+  /// stay dark in both light/dark, macOS modal convention). The native side
+  /// mirrors it as `RecordingDesign.scrim` (NSColor black α 0x66/255). Reference
+  /// this token for any new mask instead of writing a fresh literal.
+  static const Color scrim = Color(0x66000000);
+
   /// Near-solid bar background (the design guide's bar system, owner ruling
   /// 2026-06-13): bars (toolbar / option / caption / popover / native strip)
   /// are NOT liquid glass — small text + complex imagery behind would be

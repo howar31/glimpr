@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../theme/glimpr_theme.dart';
 import 'hud_lines.dart';
 
 /// The scrim path: the whole canvas MINUS the (clamped) selection rectangle.
@@ -23,7 +24,7 @@ class SelectionScrimPainter extends CustomPainter {
 
   const SelectionScrimPainter({
     required this.selection,
-    this.scrimColor = const Color(0x66000000), // 40% black
+    this.scrimColor = GlimprTokens.scrim, // unified chrome dim (pure black 40%)
   });
 
   @override

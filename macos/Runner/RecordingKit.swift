@@ -120,8 +120,12 @@ private enum RecordingDesign {
     srgbRed: 0xFF / 255.0, green: 0x45 / 255.0, blue: 0x3A / 255.0, alpha: 1)
   static let redHi = NSColor( // gradient highlight (the mark's spark tone)
     srgbRed: 0xFF / 255.0, green: 0x6A / 255.0, blue: 0x60 / 255.0, alpha: 1)
+  // UNIFIED chrome dim/scrim (owner 2026-06-14): mirrors Flutter
+  // GlimprTokens.scrim — pure black at 40% (0x66/255). Every app mask (settings
+  // mask, discard barrier, crop scrim, record-select veil, these recording
+  // scrims) shares this one value; theme-independent (dark in both appearances).
   static let scrim = NSColor(
-    srgbRed: 2 / 255.0, green: 6 / 255.0, blue: 23 / 255.0, alpha: 0.62)
+    srgbRed: 0, green: 0, blue: 0, alpha: 0x66 / 255.0)
   static let slate = NSColor( // light-theme ink family base (slate-900)
     srgbRed: 0x0F / 255.0, green: 0x17 / 255.0, blue: 0x2A / 255.0, alpha: 1)
 

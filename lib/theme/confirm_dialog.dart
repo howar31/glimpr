@@ -28,7 +28,7 @@ Future<bool> showDiscardConfirm(
   final t = GlimprTokens.forBrightness(brightness);
   final result = await showDialog<bool>(
     context: context,
-    barrierColor: const Color(0x99000000),
+    barrierColor: GlimprTokens.scrim, // unified chrome dim (pure black 40%)
     builder: (c) => GlimprTheme(
       tokens: t,
       child: Center(

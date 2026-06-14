@@ -41,7 +41,7 @@ void main() {
         matching: find.byType(ColoredBox),
       ),
     );
-    expect(scrim.color, const Color(0x99000000));
+    expect(scrim.color, GlimprTokens.scrim); // unified chrome dim, dark in both
 
     // Card = the shared HUD tier; text = the token fg ramp.
     final deco = cardDecoration(tester);
@@ -64,7 +64,7 @@ void main() {
         matching: find.byType(ColoredBox),
       ),
     );
-    expect(scrim.color, const Color(0x99000000)); // veil stays dark
+    expect(scrim.color, GlimprTokens.scrim); // unified chrome dim, dark in both
 
     final deco = cardDecoration(tester);
     expect(deco.color, GlimprTokens.light.hudBg);

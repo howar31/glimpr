@@ -1218,7 +1218,7 @@ class _OverlayAppState extends State<OverlayApp> {
                 // pixel non-zero alpha (WindowServer click-through guard) and
                 // dims whatever is beneath (live desktop or the frozen session).
                 if (rsActive) ...[
-                  const ColoredBox(color: Color(0x33000000)),
+                  const ColoredBox(color: GlimprTokens.scrim),
                   EditorCanvas(
                     key: ValueKey('rs-$_captureSeq'),
                     display: _recordDisplay!,

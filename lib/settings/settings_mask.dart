@@ -27,7 +27,7 @@ class SettingsMask extends StatelessWidget {
     return Positioned.fill(
       child: AbsorbPointer(
         child: ColoredBox(
-          color: const Color(0x99000000), // ~60% dim
+          color: GlimprTokens.scrim, // unified chrome dim (pure black 40%)
           child: SafeArea(
             child: Align(
               alignment: const Alignment(0, -0.72),
