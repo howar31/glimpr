@@ -632,16 +632,17 @@ final class RecordingChrome {
     }
   }
 
-  /// Strip origin for the region/window case: below the region, flipped above
-  /// when there is no room, clamped inside the screen.
+  /// Strip origin for the region/window case: bottom-CENTER of the region
+  /// (owner: same "下方置中" rule as display mode). Default is just BELOW the
+  /// region (outside); when there is no room below on screen (e.g. a maximized
+  /// window whose bottom hugs the screen edge) the strip tucks just INSIDE the
+  /// region's bottom — it NEVER flips to the top. Final clamp keeps it on screen.
   private static func stripOrigin(forRegion region: NSRect, on screen: NSScreen,
                                   stripSize: NSSize) -> NSPoint {
     let vf = screen.visibleFrame
-    var x = region.minX
+    var x = region.midX - stripSize.width / 2
     var y = region.minY - stripSize.height - 8
-    if y < vf.minY { y = region.maxY + 8 } // no room below -> flip above
-    // Clamp INSIDE the visible frame so a full-screen / maximized-window region
-    // never pushes the strip off-screen (it just lands inside, draggable).
+    if y < vf.minY + 4 { y = region.minY + 8 } // no room below -> tuck inside, not above
     x = min(max(vf.minX + 4, x), vf.maxX - stripSize.width - 4)
     y = min(max(vf.minY + 4, y), vf.maxY - stripSize.height - 4)
     return NSPoint(x: x, y: y)
