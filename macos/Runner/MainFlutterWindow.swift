@@ -215,29 +215,34 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Fixed-size settings window (NOT .resizable) with an inline, transparent
     // title bar so the Flutter sidebar runs to the top edge behind the traffic
     // lights (macOS preferences style). The content lays out its own top inset.
-    self.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+    self.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
     self.title = L.s("Glimpr Settings", "Glimpr 設定")
     self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
-    // Hard-lock the size. Dropping .resizable from the style mask alone proved
-    // unreliable (the window is declared resizable="YES" in MainMenu.xib and the
-    // mask override didn't stay applied), so clamp content min == max — AppKit
-    // enforces this unconditionally, blocking edge-drag resize and window tiling.
-    // Roomier for the denser Shortcuts tab (its many rows scroll within the
-    // content ListView; sizing does not try to fit them all without scrolling).
-    let fixedSize = NSSize(width: 820, height: 700)
-    self.setContentSize(fixedSize)
-    self.contentMinSize = fixedSize
-    self.contentMaxSize = fixedSize
-    // Fixed-size window: disable the green zoom / fullscreen button. This also
-    // removes its window-tiling hover menu, whose modal tracking run loop blocked
-    // the global capture hotkey (same-process Carbon hotkey) while it was open.
-    // AppKit re-enables it on some events (e.g. regaining key after a capture),
-    // so it is re-applied in revealSettings + windowDidUpdate.
+    // Resizable, but floored at the design size: 820x700 is the content's minimum
+    // (the denser Shortcuts tab fits without horizontal clipping; its rows scroll
+    // in the content ListView). Only a minimum is enforced — no maximum — so the
+    // window can grow but never shrink below the content fit. The frame (size +
+    // position) is autosaved so it survives relaunch; the center() below only
+    // positions on first run, before any saved frame exists (mirrors the editor
+    // window). Full-screen stays disabled via collectionBehavior + a disabled
+    // zoom button (see below).
+    let defaultSize = NSSize(width: 820, height: 700)
+    self.setContentSize(defaultSize)
+    self.contentMinSize = defaultSize
+    self.center()
+    self.setFrameAutosaveName("GlimprSettingsWindow")
+    // Disable the green zoom / full-screen button even though the window is now
+    // resizable: resizing is done by edge-drag, and an enabled zoom button brings
+    // back the window-tiling hover menu whose modal tracking run loop blocked the
+    // global capture hotkey (same-process Carbon hotkey) while it was open. AppKit
+    // re-enables it on some events (e.g. regaining key after a capture), so it is
+    // re-applied in revealSettings + windowDidUpdate.
     disableZoomButton()
     self.isReleasedWhenClosed = false
-    // moveToActiveSpace: reveal on the user's current Space. fullScreenNone: this
-    // fixed-size window must not go full-screen (greys out View > Enter Full Screen).
+    // moveToActiveSpace: reveal on the user's current Space. fullScreenNone: keep
+    // full-screen forbidden (greys out View > Enter Full Screen) — the window is
+    // freely resizable but must never enter the full-screen Space.
     self.collectionBehavior = [.moveToActiveSpace, .fullScreenNone]
     self.delegate = self
     // Order front THEN drop alpha (the proven warm-engine order — same as the
@@ -278,7 +283,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       : .normal
     alphaValue = 1
     ignoresMouseEvents = false
-    center()
+    // No center() here: the window keeps its autosaved frame (size + position)
+    // across reveals and relaunches. .moveToActiveSpace still brings it to the
+    // user's current Space; first-run centering happens once at setup.
     NSApp.activate(ignoringOtherApps: true)
     makeKeyAndOrderFront(nil)
     disableZoomButton()
