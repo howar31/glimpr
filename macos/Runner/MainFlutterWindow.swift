@@ -212,10 +212,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     // Resident: keep the engine warm (on-screen, transparent, click-through) so
     // main() runs + the hotkey registers, but present nothing until "Settings…".
-    // Fixed-size settings window (NOT .resizable) with an inline, transparent
-    // title bar so the Flutter sidebar runs to the top edge behind the traffic
-    // lights (macOS preferences style). The content lays out its own top inset.
-    self.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+    // Resizable settings window with an inline, transparent title bar so the
+    // Flutter sidebar runs to the top edge behind the traffic lights (macOS
+    // preferences style). The content lays out its own top inset. NO
+    // .miniaturizable: this warm window's lifecycle is alpha-0 + orderBack (it
+    // must stay on-screen so its engine stays warm), so it must never minimize to
+    // the Dock — and minimizing it over a ⌘,-paused capture would strand the
+    // suspended overlay (only hideSettings resumes it). See miniaturize() below.
+    self.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
     self.title = L.s("Glimpr Settings", "Glimpr 設定")
     self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
@@ -638,6 +642,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   // Belt-and-suspenders with the disabled zoom button: never zoom this window.
   func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
     false
+  }
+
+  // Belt-and-suspenders with the dropped .miniaturizable style: never let this
+  // warm window minimize to the Dock (its lifecycle is alpha-0 + orderBack). The
+  // yellow button is already greyed, but ⌘M / a forced miniaturize(nil) would
+  // still strand a ⌘,-paused overlay (only hideSettings resumes it), so funnel
+  // every minimize path through hideSettings instead.
+  override func miniaturize(_ sender: Any?) {
+    hideSettings()
   }
 
   // AppKit re-enables the zoom (green) button on various events — notably when
