@@ -531,7 +531,8 @@ private final class StripGlassView: NSView {
 final class RecordingChrome {
   private var borderWindow: NSWindow?
   private var stripWindow: NSWindow?
-  private var scrimWindows: [NSWindow] = [] // dim the OTHER screens (display mode)
+  private var scrimWindows: [NSWindow] = [] // dim the OTHER screens (all modes)
+  private var otherScreenScrimsActive = false // are the other-screen veils in use?
   private weak var frameView: RecordingFrameView?
   private var chromeScreen: NSScreen?
   private var stripDetached = false // a manual drag detaches the strip from follow
@@ -559,10 +560,15 @@ final class RecordingChrome {
       + scrimWindows.map { $0.windowNumber }
   }
 
-  /// Dim every screen except [target] (full-display record) so it is clear
-  /// which display is being recorded. Static, full-screen veils on the other
-  /// displays; shown for the countdown and the recording alike.
+  /// Dim every screen except [target] so it is clear which display is being
+  /// recorded — used for ALL record modes (full-display / region / window /
+  /// last). Static, full-screen veils on the other displays; shown for the
+  /// countdown and the recording alike. Idempotent: it rebuilds the set, so
+  /// window-follow can re-call it when the recorded window crosses to another
+  /// display (the now-recorded screen un-dims, the vacated one dims).
   func showOtherScreenScrims(excluding target: NSScreen) {
+    scrimWindows.forEach { $0.orderOut(nil) }
+    scrimWindows.removeAll()
     for screen in NSScreen.screens where screen != target {
       let w = borderlessWindow(
         frame: screen.frame,
@@ -572,6 +578,7 @@ final class RecordingChrome {
       w.orderFrontRegardless()
       scrimWindows.append(w)
     }
+    otherScreenScrimsActive = true
   }
 
   /// [regionGlobalBottomLeft] is in Cocoa GLOBAL (bottom-left) coords; nil =
@@ -658,6 +665,8 @@ final class RecordingChrome {
         bw.setFrame(screen.frame, display: false)
         fv.frame = NSRect(origin: .zero, size: screen.frame.size)
         chromeScreen = screen
+        // Re-home the other-screen veils onto the display the window just left.
+        if otherScreenScrimsActive { showOtherScreenScrims(excluding: screen) }
       }
       let local = NSRect(
         x: region.minX - screen.frame.minX,
@@ -1273,7 +1282,12 @@ final class RecordingController: NSObject, SCStreamDelegate {
       return
     }
     do {
-      let content = try await SCShareableContent.current
+      // Shareable content is fetched lazily per branch: the region/display path
+      // shows its chrome (the mask) FIRST and fetches AFTER, so there is no
+      // mask-less flash between the record-select picker tearing down and the
+      // recording chrome appearing. Window mode resolves its SCWindow up front
+      // (and has no picker), so it fetches first as before.
+      var content: SCShareableContent?
 
       let filter: SCContentFilter
       var chromeRegionGlobal: NSRect? // Cocoa global bottom-left, for chrome
@@ -1286,7 +1300,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
       var reportedRect = CGRect.zero
 
       if spec.mode == "window", let wid = spec.windowID {
-        guard let scWindow = content.windows.first(where: { $0.windowID == wid })
+        let scc = try await SCShareableContent.current
+        content = scc
+        guard let scWindow = scc.windows.first(where: { $0.windowID == wid })
         else { throw RecordingError.message("window not found") }
         filter = SCContentFilter(desktopIndependentWindow: scWindow)
         scale = CGFloat(filter.pointPixelScale)
@@ -1311,14 +1327,20 @@ final class RecordingController: NSObject, SCStreamDelegate {
         let c = RecordingChrome()
         c.show(regionGlobalBottomLeft: wrect, on: screen,
                stripHidden: spec.countdown > 0, showScrim: spec.showScrim)
+        // Dim the OTHER screens (the recorded window lives on one screen). The
+        // window-follow refreshes this set if the window crosses displays.
+        if spec.showScrim { c.showOtherScreenScrims(excluding: screen) }
         chrome = c
         // Follow from now so the frame (and the countdown HUD) tracks the
         // window during the countdown too, not only once recording begins.
         startWindowFollow(windowID: wid)
       } else {
+        // Mask FIRST (needs no SCK): resolve the screen from NSScreen and the
+        // region from spec.rect, show the recording chrome, THEN fetch shareable
+        // content. The chrome appears the instant the record-select picker tears
+        // down — closing the mask-less flash on the picker -> record transition.
         let displayID = spec.displayID ?? Self.cursorDisplayID()
-        guard let scDisplay = content.displays.first(where: { $0.displayID == displayID }),
-              let nsScreen = NSScreen.screens.first(where: {
+        guard let nsScreen = NSScreen.screens.first(where: {
                 ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
                   as? NSNumber)?.uint32Value == displayID
               })
@@ -1330,8 +1352,6 @@ final class RecordingController: NSObject, SCStreamDelegate {
         reportedRect = spec.rect ?? CGRect(
           x: 0, y: 0, width: nsScreen.frame.width, height: nsScreen.frame.height)
 
-        // Chrome FIRST, so its windows exist in shareable content for the
-        // exclusion list (chrome never records; Glimpr content windows do).
         let c = RecordingChrome()
         if let r = spec.rect {
           // top-left display-local -> Cocoa global bottom-left
@@ -1344,16 +1364,22 @@ final class RecordingController: NSObject, SCStreamDelegate {
         c.show(regionGlobalBottomLeft: chromeRegionGlobal, on: nsScreen,
                stripHidden: spec.countdown > 0, showScrim: spec.showScrim)
         chrome = c
-        if spec.rect == nil, spec.showScrim {
-          // Full-display record: dim every OTHER screen (owner) so it is clear
-          // which display is being recorded. They sit on other displays, so
-          // they are never part of this display's capture. Skipped when the
-          // user turned the recording dim off.
+        if spec.showScrim {
+          // Dim every OTHER screen (owner) so it is clear which display is being
+          // recorded — for full-display AND region / last-region. They sit on
+          // other displays, so they are never part of this display's capture.
+          // Skipped when the user turned the recording dim off.
           c.showOtherScreenScrims(excluding: nsScreen)
         }
+        // Content fetched AFTER the chrome exists, so the exclusion list catches
+        // the chrome windows (chrome never records; Glimpr content windows do).
+        let scc = try await SCShareableContent.current
+        content = scc
+        guard let scDisplay = scc.displays.first(
+          where: { $0.displayID == displayID })
+        else { throw RecordingError.message("display not found") }
         let excludedNumbers = c.windowNumbers
-        let fresh = try await SCShareableContent.current
-        let excluded = fresh.windows.filter {
+        let excluded = scc.windows.filter {
           excludedNumbers.contains(Int($0.windowID))
         }
         filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
@@ -1448,7 +1474,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
       // serial sample queue keeps appends ordered). Both streams' PTS ride one
       // host clock, so audio rebases onto the video session and stays in sync.
       if !spec.gif && windowMode && (spec.systemAudio || spec.microphone),
-         let aDisplay = content.displays.first(where: {
+         let scc = content,
+         let aDisplay = scc.displays.first(where: {
            $0.displayID == reportedDisplayID
          }) {
         let aCfg = SCStreamConfiguration()

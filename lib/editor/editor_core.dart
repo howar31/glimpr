@@ -572,6 +572,8 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.addListener(_onToolMaybeStamp);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     c.phase.addListener(_rebuild);
+    c.phase.addListener(_syncCropScrim); // surface region-scrim state to the host
+    _crop.rect.addListener(_syncCropScrim);
     c.style.addListener(_onStyleChanged);
     _textFocus.addListener(_rebuild); // repaint our selection on focus changes
     widget.host.activeSignal.addListener(
@@ -596,6 +598,8 @@ class _EditorCoreState extends State<EditorCore> {
     c.tool.removeListener(_onToolMaybeStamp);
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     c.phase.removeListener(_rebuild);
+    c.phase.removeListener(_syncCropScrim);
+    _crop.rect.removeListener(_syncCropScrim);
     c.style.removeListener(_onStyleChanged);
     _textFocus.removeListener(_rebuild);
     widget.host.activeSignal.removeListener(_onActiveSignal);
@@ -812,6 +816,15 @@ class _EditorCoreState extends State<EditorCore> {
         _resetEditState();
       });
     }
+    _syncCropScrim();
+  }
+
+  /// Keep [c.cropScrimActive] in sync with whether this core is currently
+  /// painting its region scrim (active + in crop + a selection exists). The
+  /// multi-display overlay broadcasts it so the OTHER displays dim fully during
+  /// a region drag; a presentation-only / inactive core resolves to false.
+  void _syncCropScrim() {
+    c.cropScrimActive.value = _active && _inCrop && _crop.rect.value != null;
   }
 
   bool _pasting = false; // re-entrancy guard for paste (tool-switch + ⌘V)

@@ -131,6 +131,12 @@ class _OverlayAppState extends State<OverlayApp> {
   // (rare, so they bypass the style throttle).
   final Set<int> _remoteDirty = {};
   bool _localDirty = false;
+  // Region-drag dim: while THIS engine paints its region scrim (session crop or
+  // the record-select picker), broadcast it so the OTHER displays dim fully —
+  // region-outside includes peer screens. Mirror of the active display's scrim,
+  // not a freeze layer; lifts the moment the drag/selection ends.
+  bool _localCropScrim = false; // last value broadcast by this engine
+  bool _peerCropScrim = false; // a peer engine is region-dragging -> dim us
   // Session-global undo/redo: every engine keeps an identical replica of the
   // session op log; ⌘Z/⇧⌘Z anywhere target the SESSION's latest op and route
   // to the owning display (see SessionOpLog). _lastDepth detects local
@@ -383,6 +389,7 @@ class _OverlayAppState extends State<OverlayApp> {
       return;
     }
     _recordStub?.dispose();
+    _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordOverrides?.dispose();
     final overrides = RecordOverrides(
@@ -412,6 +419,7 @@ class _OverlayAppState extends State<OverlayApp> {
       _rs = RecordSelectState.active;
       _captureSeq++;
     });
+    _recordEditor!.cropScrimActive.addListener(_broadcastCropScrim);
     _bridge.overlayReady(); // reveal this engine's window (no blank flash)
     Settings.instance.loadLoupe().then((l) {
       if (mounted) setState(() => _loupe = l);
@@ -430,6 +438,7 @@ class _OverlayAppState extends State<OverlayApp> {
   /// active/interactive state — toolbar, crosshair, loupe, and cursor management
   /// all re-establish (same idea as `_restoreSuspended`'s `_captureSeq++`).
   void _disposeRecordSelect() {
+    _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
     _recordEditor = null;
@@ -437,17 +446,20 @@ class _OverlayAppState extends State<OverlayApp> {
     _recordDisplay = null;
     _rs = RecordSelectState.none;
     if (_display != null) _captureSeq++;
+    _broadcastCropScrim(); // the picker is gone -> let peers un-dim
   }
 
   /// active -> suspended: a freeze layer was taken on top. Keep the per-take
   /// overrides; drop the live crop editor/stub (rebuilt fresh on resurface).
   void _suspendRecordSelect() {
+    _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
     _recordEditor = null;
     _recordStub = null;
     _recordDisplay = null;
     _rs = RecordSelectState.suspended;
+    _broadcastCropScrim();
   }
 
   /// suspended -> active again (record hotkey, or auto-restore on freeze drain).
@@ -579,6 +591,7 @@ class _OverlayAppState extends State<OverlayApp> {
     e.document.addListener(_broadcastLocalDirty);
     e.document.addListener(_trackLocalOp);
     e.selectedIndex.addListener(_broadcastSelection);
+    e.cropScrimActive.addListener(_broadcastCropScrim);
     e.undoOverride = _globalUndo;
     e.redoOverride = _globalRedo;
   }
@@ -591,6 +604,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.document.removeListener(_broadcastLocalDirty);
     _editor?.document.removeListener(_trackLocalOp);
     _editor?.selectedIndex.removeListener(_broadcastSelection);
+    _editor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _editor?.undoOverride = null;
     _editor?.redoOverride = null;
   }
@@ -662,6 +676,18 @@ class _OverlayAppState extends State<OverlayApp> {
     _bridge.broadcastEditorState({'selectedOn': d.displayId});
   }
 
+  /// Tell the other displays whether THIS engine is showing a region scrim — the
+  /// session crop OR the record-select picker, whichever is live. Sent on
+  /// transitions only (rare, bypasses the style throttle); the bridge never
+  /// echoes a broadcast back, so any receiver is by definition a peer and dims.
+  void _broadcastCropScrim() {
+    final active = (_editor?.cropScrimActive.value ?? false) ||
+        (_recordEditor?.cropScrimActive.value ?? false);
+    if (active == _localCropScrim) return;
+    _localCropScrim = active;
+    _bridge.broadcastEditorState({'cropScrim': active});
+  }
+
   /// Tell the other displays whether THIS display holds unsaved annotations,
   /// on empty<->non-empty transitions only — their cancel confirm must cover
   /// work they cannot see. Sent immediately (not throttled): transitions are
@@ -694,6 +720,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.dispose();
     _frozen?.dispose();
     _cursorImage?.dispose();
+    _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
     _recordOverrides?.dispose();
@@ -817,6 +844,13 @@ class _OverlayAppState extends State<OverlayApp> {
           _resurfaceRecordSelect(d);
         }
       }
+      return;
+    }
+    // Region-drag dim (null-editor tolerant): a peer engine is painting its
+    // region scrim -> dim this whole display, which is entirely region-outside.
+    if (state['cropScrim'] is bool) {
+      final v = state['cropScrim'] as bool;
+      if (_peerCropScrim != v) setState(() => _peerCropScrim = v);
       return;
     }
     final e = _editor;
@@ -1244,6 +1278,15 @@ class _OverlayAppState extends State<OverlayApp> {
                     recordOverrides: _recordOverrides,
                   ),
                 ],
+                // A peer display is region-dragging -> this whole display is
+                // region-outside: dim it fully with the unified scrim token.
+                // Click-through (the cursor is locked to the dragging display).
+                if (_peerCropScrim)
+                  const Positioned.fill(
+                    child: IgnorePointer(
+                      child: ColoredBox(color: GlimprTokens.scrim),
+                    ),
+                  ),
                 // Dim + lock the freeze while a ⌘, Settings detour is open.
                 if (_settingsOpen) const SettingsMask(),
               ],

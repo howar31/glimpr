@@ -86,6 +86,12 @@ class EditorController {
   /// cursor button; read by EditorCore (render) + the export.
   final showCursor = ValueNotifier<bool>(false);
 
+  /// True while THIS core is painting its region scrim (active + in crop + a
+  /// selection exists). EditorCore keeps it in sync; the multi-display overlay
+  /// listens to broadcast it so the OTHER displays dim fully during a region
+  /// drag. The standalone (single-window) editor sets it but nothing listens.
+  final cropScrimActive = ValueNotifier<bool>(false);
+
   /// The current "stamp" image (file-loaded) the stamp tool places, or null
   /// until one is chosen. Session-scoped; not persisted across captures.
   final stampImage = ValueNotifier<Image?>(null);
@@ -455,6 +461,7 @@ class EditorController {
     selectedIndex.dispose();
     phase.dispose();
     eyedropperActive.dispose();
+    cropScrimActive.dispose();
     refocus.dispose();
     stampImage.dispose();
     stampPick.dispose();
