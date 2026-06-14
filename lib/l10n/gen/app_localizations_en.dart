@@ -412,6 +412,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Asks for microphone permission on first use';
 
   @override
+  String get settingsRecordingDim => 'Dim outside the recording';
+
+  @override
+  String get settingsRecordingDimHint =>
+      'Darkens the area outside the region and other displays. Turn off for a clear screen during long recordings; the red frame stays.';
+
+  @override
   String get settingsSectionAfterRecording => 'After recording';
 
   @override

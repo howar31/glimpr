@@ -220,6 +220,7 @@ class RecordController {
       hevc: rec.hevc,
       gif: isGif,
       showsCursor: rec.showCursor,
+      showScrim: rec.scrim,
       // GIF has no audio track.
       systemAudio: isGif ? false : rec.systemAudio,
       microphone: isGif ? false : rec.microphone,
@@ -279,6 +280,7 @@ class RecordController {
         hevc: (a['hevc'] as bool?) ?? rec.hevc,
         gif: isGif,
         showsCursor: (a['showsCursor'] as bool?) ?? rec.showCursor,
+        showScrim: rec.scrim, // settings-only; no per-take toolbar override
         // GIF has no audio track.
         systemAudio: isGif ? false : (a['systemAudio'] as bool?) ?? rec.systemAudio,
         microphone: isGif ? false : (a['microphone'] as bool?) ?? rec.microphone,

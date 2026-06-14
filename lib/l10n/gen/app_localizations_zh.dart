@@ -382,6 +382,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingMicrophoneHint => '首次使用時會要求麥克風權限';
 
   @override
+  String get settingsRecordingDim => '錄影時將周圍變暗';
+
+  @override
+  String get settingsRecordingDimHint =>
+      '將錄製範圍以外的區域與其他螢幕變暗。長時間錄影想要乾淨畫面時可關閉；紅色外框仍會保留。';
+
+  @override
   String get settingsSectionAfterRecording => '錄影完成後';
 
   @override

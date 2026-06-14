@@ -818,6 +818,18 @@ abstract class AppLocalizations {
   /// **'Asks for microphone permission on first use'**
   String get settingsRecordingMicrophoneHint;
 
+  /// Settings > Recording: toggle for dimming the area outside the recorded region (and other displays)
+  ///
+  /// In en, this message translates to:
+  /// **'Dim outside the recording'**
+  String get settingsRecordingDim;
+
+  /// Settings > Recording: hint for the recording dim toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Darkens the area outside the region and other displays. Turn off for a clear screen during long recordings; the red frame stays.'**
+  String get settingsRecordingDimHint;
+
   /// Settings > Capture: after-recording flow section label
   ///
   /// In en, this message translates to:

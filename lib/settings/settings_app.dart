@@ -114,6 +114,7 @@ class _SettingsAppState extends State<SettingsApp>
   int _recordCountdown = 0;
   int _recordMaxDuration = 0;
   bool _recordShowCursor = true;
+  bool _recordScrim = true;
   bool _recordSystemAudio = false;
   bool _recordMicrophone = false;
   Set<FlowAction> _afterRecording = {};
@@ -233,6 +234,7 @@ class _SettingsAppState extends State<SettingsApp>
       _recordCountdown = rec.countdown;
       _recordMaxDuration = rec.maxDuration;
       _recordShowCursor = rec.showCursor;
+      _recordScrim = rec.scrim;
       _recordSystemAudio = rec.systemAudio;
       _recordMicrophone = rec.microphone;
       _afterRecording = rec.flow;
@@ -1074,6 +1076,18 @@ class _SettingsAppState extends State<SettingsApp>
               onChanged: (v) async {
                 await _s.setRecordMicrophone(v);
                 if (mounted) setState(() => _recordMicrophone = v);
+              },
+            ),
+          ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsRecordingDim,
+            hint: _l.settingsRecordingDimHint,
+            trailing: GlassToggle(
+              value: _recordScrim,
+              onChanged: (v) async {
+                await _s.setRecordScrim(v);
+                if (mounted) setState(() => _recordScrim = v);
               },
             ),
           ),

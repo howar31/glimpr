@@ -99,6 +99,7 @@ class Settings {
   static const _recordFormatKey = 'record_format';
   static const _recordFpsKey = 'record_fps';
   static const _recordCursorKey = 'record_show_cursor';
+  static const _recordScrimKey = 'record_scrim';
   static const _recordSystemAudioKey = 'record_system_audio';
   static const _recordMicKey = 'record_microphone';
   static const _flowAfterRecordingKey = 'flow_after_recording';
@@ -258,6 +259,13 @@ class Settings {
   Future<void> setRecordShowCursor(bool v) =>
       store.setBool(_recordCursorKey, v);
 
+  /// Whether to dim the area outside the recorded region + dim other displays
+  /// (the recording scrims). Default on; users turn it off for a clear screen
+  /// during long recordings. The red region frame/brackets are unaffected.
+  Future<bool> getRecordScrim() async =>
+      (await store.getBool(_recordScrimKey)) ?? true;
+  Future<void> setRecordScrim(bool v) => store.setBool(_recordScrimKey, v);
+
   Future<bool> getRecordSystemAudio() async =>
       (await store.getBool(_recordSystemAudioKey)) ?? false;
   Future<void> setRecordSystemAudio(bool v) =>
@@ -306,6 +314,7 @@ class Settings {
         format: await getRecordFormat(),
         fps: await getRecordFps(),
         showCursor: await getRecordShowCursor(),
+        scrim: await getRecordScrim(),
         systemAudio: await getRecordSystemAudio(),
         microphone: await getRecordMicrophone(),
         maxDuration: await getRecordMaxDuration(),
@@ -418,6 +427,7 @@ class RecordingSettings {
     this.format = RecordFormat.h264,
     this.fps = 30,
     this.showCursor = true,
+    this.scrim = true,
     this.systemAudio = false,
     this.microphone = false,
     this.maxDuration = 0,
@@ -430,6 +440,7 @@ class RecordingSettings {
   bool get isGif => format == RecordFormat.gif;
   final int fps; // 30 | 60
   final bool showCursor;
+  final bool scrim; // dim outside the region + other displays
   final bool systemAudio;
   final bool microphone;
   final int maxDuration; // seconds; 0 = off (auto-stop disabled)

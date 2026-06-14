@@ -120,6 +120,8 @@
   "settingsRecordingSystemAudioHint": "包含系統播放的聲音",
   "settingsRecordingMicrophone": "錄製麥克風",
   "settingsRecordingMicrophoneHint": "首次使用時會要求麥克風權限",
+  "settingsRecordingDim": "錄影時將周圍變暗",
+  "settingsRecordingDimHint": "將錄製範圍以外的區域與其他螢幕變暗。長時間錄影想要乾淨畫面時可關閉；紅色外框仍會保留。",
   "settingsSectionAfterRecording": "錄影完成後",
   "settingsRecentImagesKept": "保留的最近圖片數",
   "settingsRecentImagesKeptHint": "圖片編輯器起始頁與選單列「開啟最近項目」保留的圖片數量。",

@@ -51,6 +51,7 @@ class _FakeBridge extends RecordBridge {
     bool hevc = false,
     bool gif = false,
     bool showsCursor = true,
+    bool showScrim = true,
     bool systemAudio = false,
     bool microphone = false,
     int maxDuration = 0,
@@ -66,6 +67,7 @@ class _FakeBridge extends RecordBridge {
       'hevc': hevc,
       'gif': gif,
       'showsCursor': showsCursor,
+      'showScrim': showScrim,
       'systemAudio': systemAudio,
       'microphone': microphone,
       'maxDuration': maxDuration,
@@ -224,6 +226,7 @@ void main() {
       await s.setRecordShowCursor(false);
       await s.setRecordSystemAudio(true);
       await s.setRecordMicrophone(true);
+      await s.setRecordScrim(false);
       await rc.toggle(kRecordModeDisplay);
       final call = bridge.starts.single;
       expect(call['hevc'], isTrue);
@@ -231,6 +234,7 @@ void main() {
       expect(call['showsCursor'], isFalse);
       expect(call['systemAudio'], isTrue);
       expect(call['microphone'], isTrue);
+      expect(call['showScrim'], isFalse);
     });
 
     test('window mode with no focused window errors and stays idle', () async {
@@ -590,6 +594,13 @@ void main() {
       expect((await s.loadRecording()).countdown, 3);
       await s.setRecordCountdown(7); // not a supported step -> 0 (off)
       expect((await s.loadRecording()).countdown, 0);
+    });
+
+    test('record_scrim round-trips and defaults to on', () async {
+      final s = Settings(_FakeStore());
+      expect((await s.loadRecording()).scrim, isTrue);
+      await s.setRecordScrim(false);
+      expect((await s.loadRecording()).scrim, isFalse);
     });
   });
 }

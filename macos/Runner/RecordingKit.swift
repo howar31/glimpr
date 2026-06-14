@@ -184,10 +184,12 @@ private enum RecordingDesign {
 private final class RecordingFrameView: NSView {
   private var region: NSRect // view-local
   private var scrimTop: CGFloat // view-local y where the scrim band ends
+  private let showScrim: Bool // false = red frame only, no dim (owner setting)
 
-  init(frame: NSRect, region: NSRect, scrimTop: CGFloat) {
+  init(frame: NSRect, region: NSRect, scrimTop: CGFloat, showScrim: Bool = true) {
     self.region = region
     self.scrimTop = scrimTop
+    self.showScrim = showScrim
     super.init(frame: frame)
   }
 
@@ -203,16 +205,19 @@ private final class RecordingFrameView: NSView {
   override func draw(_ dirtyRect: NSRect) {
     guard let ctx = NSGraphicsContext.current else { return }
     // Scrim with the region punched out. Clipped to the band so a region
-    // touching the screen top never gets scrim painted INSIDE itself.
-    ctx.saveGraphicsState()
-    NSBezierPath(rect: NSRect(
-      x: 0, y: 0, width: bounds.width, height: scrimTop)).addClip()
-    let scrim = NSBezierPath(rect: bounds)
-    scrim.append(NSBezierPath(roundedRect: region, xRadius: 3, yRadius: 3))
-    scrim.windingRule = .evenOdd
-    RecordingDesign.scrim.setFill()
-    scrim.fill()
-    ctx.restoreGraphicsState()
+    // touching the screen top never gets scrim painted INSIDE itself. Skipped
+    // when the user turned the recording dim off — the red frame still draws.
+    if showScrim {
+      ctx.saveGraphicsState()
+      NSBezierPath(rect: NSRect(
+        x: 0, y: 0, width: bounds.width, height: scrimTop)).addClip()
+      let scrim = NSBezierPath(rect: bounds)
+      scrim.append(NSBezierPath(roundedRect: region, xRadius: 3, yRadius: 3))
+      scrim.windingRule = .evenOdd
+      RecordingDesign.scrim.setFill()
+      scrim.fill()
+      ctx.restoreGraphicsState()
+    }
 
     // 1 px region edge with a faint red glow.
     ctx.saveGraphicsState()
@@ -572,7 +577,7 @@ final class RecordingChrome {
   /// [regionGlobalBottomLeft] is in Cocoa GLOBAL (bottom-left) coords; nil =
   /// display/window mode (no frame; strip parks bottom-center, draggable).
   func show(regionGlobalBottomLeft: NSRect?, on screen: NSScreen,
-            stripHidden: Bool = false) {
+            stripHidden: Bool = false, showScrim: Bool = true) {
     chromeScreen = screen
     if let region = regionGlobalBottomLeft {
       let f = borderlessWindow(
@@ -586,7 +591,8 @@ final class RecordingChrome {
       let fv = RecordingFrameView(
         frame: NSRect(origin: .zero, size: screen.frame.size),
         region: local,
-        scrimTop: screen.visibleFrame.maxY - screen.frame.minY)
+        scrimTop: screen.visibleFrame.maxY - screen.frame.minY,
+        showScrim: showScrim)
       f.contentView = fv
       frameView = fv
       f.orderFrontRegardless()
@@ -1224,6 +1230,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let hevc: Bool
     let gif: Bool // true = direct GIF (no mp4, no audio)
     let showsCursor: Bool
+    let showScrim: Bool // dim outside the region + other displays (red frame stays)
     let systemAudio: Bool
     let microphone: Bool
     let maxDuration: Int // seconds; 0 = off
@@ -1302,7 +1309,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
           width: wrect.width, height: wrect.height)
         let c = RecordingChrome()
         c.show(regionGlobalBottomLeft: wrect, on: screen,
-               stripHidden: spec.countdown > 0)
+               stripHidden: spec.countdown > 0, showScrim: spec.showScrim)
         chrome = c
         // Follow from now so the frame (and the countdown HUD) tracks the
         // window during the countdown too, not only once recording begins.
@@ -1334,12 +1341,13 @@ final class RecordingController: NSObject, SCStreamDelegate {
           chromeRegionGlobal = global
         }
         c.show(regionGlobalBottomLeft: chromeRegionGlobal, on: nsScreen,
-               stripHidden: spec.countdown > 0)
+               stripHidden: spec.countdown > 0, showScrim: spec.showScrim)
         chrome = c
-        if spec.rect == nil {
+        if spec.rect == nil, spec.showScrim {
           // Full-display record: dim every OTHER screen (owner) so it is clear
           // which display is being recorded. They sit on other displays, so
-          // they are never part of this display's capture.
+          // they are never part of this display's capture. Skipped when the
+          // user turned the recording dim off.
           c.showOtherScreenScrims(excluding: nsScreen)
         }
         let excludedNumbers = c.windowNumbers
@@ -1811,6 +1819,7 @@ final class RecordingChannel {
     let hevc = (args["hevc"] as? Bool) ?? false
     let gif = (args["gif"] as? Bool) ?? false
     let showsCursor = (args["showsCursor"] as? Bool) ?? true
+    let showScrim = (args["showScrim"] as? Bool) ?? true
     let systemAudio = (args["systemAudio"] as? Bool) ?? false
     let microphone = (args["microphone"] as? Bool) ?? false
     let maxDuration = (args["maxDuration"] as? Int) ?? 0
@@ -1839,6 +1848,7 @@ final class RecordingChannel {
       let spec = RecordingController.Spec(
         mode: mode, displayID: display, rect: rect, windowID: windowID,
         fps: fps, hevc: hevc, gif: gif, showsCursor: showsCursor,
+        showScrim: showScrim,
         systemAudio: systemAudio, microphone: microphone,
         maxDuration: maxDuration, countdown: countdown, outputPath: outputPath)
       Task { await controller.start(spec) }

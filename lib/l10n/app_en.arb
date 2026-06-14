@@ -488,6 +488,14 @@
   "@settingsRecordingMicrophoneHint": {
     "description": "Settings > Capture > Screen recording: microphone row hint"
   },
+  "settingsRecordingDim": "Dim outside the recording",
+  "@settingsRecordingDim": {
+    "description": "Settings > Recording: toggle for dimming the area outside the recorded region (and other displays)"
+  },
+  "settingsRecordingDimHint": "Darkens the area outside the region and other displays. Turn off for a clear screen during long recordings; the red frame stays.",
+  "@settingsRecordingDimHint": {
+    "description": "Settings > Recording: hint for the recording dim toggle"
+  },
   "settingsSectionAfterRecording": "After recording",
   "@settingsSectionAfterRecording": {
     "description": "Settings > Capture: after-recording flow section label"
