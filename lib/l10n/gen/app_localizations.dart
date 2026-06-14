@@ -602,6 +602,36 @@ abstract class AppLocalizations {
   /// **'If the name is taken'**
   String get settingsPreviewCollision;
 
+  /// No description provided for @settingsPreviewModeWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window'**
+  String get settingsPreviewModeWindow;
+
+  /// No description provided for @settingsPreviewModeDisplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Full screen'**
+  String get settingsPreviewModeDisplay;
+
+  /// No description provided for @settingsPreviewModeLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Last region'**
+  String get settingsPreviewModeLast;
+
+  /// No description provided for @settingsPreviewModeRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsPreviewModeRecording;
+
+  /// No description provided for @settingsPreviewModeDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'No window'**
+  String get settingsPreviewModeDesktop;
+
   /// No description provided for @settingsSubfolderHint.
   ///
   /// In en, this message translates to:

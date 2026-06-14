@@ -271,6 +271,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPreviewCollision => '若同名已存在';
 
   @override
+  String get settingsPreviewModeWindow => '視窗';
+
+  @override
+  String get settingsPreviewModeDisplay => '整個螢幕';
+
+  @override
+  String get settingsPreviewModeLast => '上次區域';
+
+  @override
+  String get settingsPreviewModeRecording => '錄影';
+
+  @override
+  String get settingsPreviewModeDesktop => '無視窗';
+
+  @override
   String get settingsSubfolderHint => '留空則直接存到上方資料夾；用 / 建立多層資料夾。';
 
   @override

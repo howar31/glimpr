@@ -43,7 +43,7 @@ void main() {
     expect(cap.completionSound, isTrue);
     expect(cap.flow, {FlowAction.copy, FlowAction.save});
     expect(cap.rightClickExits, isTrue);
-    expect(cap.filenameTemplate, '%title_%Y-%m-%d_%H-%M-%S');
+    expect(cap.filenameTemplate, '%app_%title_%Y-%m-%d_%H-%M-%S');
     expect(cap.subfolderPattern, '%Y/%Y-%m/%Y-%m-%d');
   });
 

@@ -3,7 +3,10 @@ import 'dart:ui' show Rect;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../capture/capture_bridge.dart';
 import '../capture/direct_capture.dart'
-    show kDisplayCaptureLabel, kLastRegionCaptureLabel;
+    show
+        kDisplayCaptureLabel,
+        kLastRegionCaptureLabel,
+        kRecordingCaptureLabel;
 import '../capture/captured_display.dart' show FocusedWindowInfo;
 import '../capture/last_region.dart';
 import '../output/flow.dart';
@@ -17,9 +20,6 @@ const kRecordModeRegion = 'region';
 const kRecordModeWindow = 'window';
 const kRecordModeDisplay = 'display';
 const kRecordModeLastRegion = 'lastRegion';
-
-/// Filename label for recordings with no window context (region/display).
-const kRecordingCaptureLabel = 'RECORDING';
 
 enum RecordPhase { idle, starting, recording, paused }
 

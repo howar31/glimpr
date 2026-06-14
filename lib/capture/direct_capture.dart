@@ -10,10 +10,11 @@ import 'capture_kind.dart';
 import 'captured_display.dart';
 import 'last_region.dart';
 
-/// Filename labels substituted for the {window}/{app} tokens when a capture has
+/// Filename labels substituted for the %title/%app tokens when a capture has
 /// no real window context, so the saved name is meaningful instead of blank.
 const kDisplayCaptureLabel = 'DISPLAY';
 const kLastRegionCaptureLabel = 'LAST';
+const kRecordingCaptureLabel = 'RECORDING';
 
 /// Deliver a natively-captured window image (real alpha / rounded corners,
 /// decoration applied natively) directly — the "Capture Window" path. The

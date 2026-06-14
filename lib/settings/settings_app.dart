@@ -9,6 +9,11 @@ import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
+import '../capture/direct_capture.dart'
+    show
+        kDisplayCaptureLabel,
+        kLastRegionCaptureLabel,
+        kRecordingCaptureLabel;
 import '../output/deliver.dart';
 import '../output/filename.dart';
 import '../output/name_tokens.dart';
@@ -1413,70 +1418,60 @@ class _SettingsAppState extends State<SettingsApp>
     required FocusNode focusNode,
     required String hint,
     required ValueChanged<String> onChanged,
+    required bool isDefault,
     required VoidCallback onReset,
   }) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: GlimprType.mono(13, t.fg1),
-              cursorColor: GlimprTokens.accent,
-              onChanged: onChanged,
-              decoration: InputDecoration(
-                isDense: true,
-                filled: true,
-                fillColor: t.fieldBg,
-                hintText: hint,
-                hintStyle: GlimprType.mono(13, t.fg4),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(9),
-                  borderSide: BorderSide(color: t.fieldBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(9),
-                  borderSide:
-                      const BorderSide(color: GlimprTokens.accent, width: 1.5),
-                ),
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            style: GlimprType.mono(13, t.fg1),
+            cursorColor: GlimprTokens.accent,
+            onChanged: onChanged,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: t.fieldBg,
+              hintText: hint,
+              hintStyle: GlimprType.mono(13, t.fg4),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: BorderSide(color: t.fieldBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide:
+                    const BorderSide(color: GlimprTokens.accent, width: 1.5),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          TokenInsertButton(
-            t: t,
-            controller: controller,
-            focusNode: focusNode,
-            onChanged: onChanged,
-          ),
-          const SizedBox(width: 8),
-          _resetButton(t, onReset),
-        ],
-      ),
+        ),
+        const SizedBox(width: 4),
+        TokenInsertButton(
+          t: t,
+          controller: controller,
+          focusNode: focusNode,
+          onChanged: onChanged,
+        ),
+        _resetIconButton(t, isDefault: isDefault, onReset: onReset),
+      ],
     );
   }
 
-  // A field-height bordered icon button that resets a pattern field to its
-  // default (stages the change like any edit; Apply persists it).
-  Widget _resetButton(GlimprTokens t, VoidCallback onReset) => InkWell(
-        onTap: onReset,
-        borderRadius: BorderRadius.circular(9),
-        child: Tooltip(
-          message: _l.settingsSaveFolderReset,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: t.fieldBg,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: t.fieldBorder),
-            ),
-            child: Icon(Icons.settings_backup_restore, size: 16, color: t.fg2),
-          ),
+  // The shared Reset-to-default icon button (matches the Shortcuts per-row
+  // reset): restart_alt glyph, dimmed + disabled when already at the default.
+  Widget _resetIconButton(GlimprTokens t,
+          {required bool isDefault, required VoidCallback onReset}) =>
+      Opacity(
+        opacity: isDefault ? 0.25 : 1,
+        child: IconButton(
+          tooltip: isDefault ? null : _l.settingsShortcutsResetToDefault,
+          icon: Icon(Icons.restart_alt, size: 18, color: t.fg3),
+          onPressed: isDefault ? null : onReset,
         ),
       );
 
@@ -1490,6 +1485,7 @@ class _SettingsAppState extends State<SettingsApp>
           focusNode: _filenameFocus,
           hint: defaultFilenameTemplate,
           onChanged: (v) => setState(() => _filenameTemplate = v),
+          isDefault: _filenameTemplate == defaultFilenameTemplate,
           onReset: () {
             setState(() {
               _filenameTemplate = defaultFilenameTemplate;
@@ -1511,34 +1507,76 @@ class _SettingsAppState extends State<SettingsApp>
     );
   }
 
-  /// The combined "where a file lands" preview (its own Output section) plus a
-  /// second line revealing the collision rule: [uniqueName] inserts a _NNN
-  /// counter before the extension when the name is already taken.
+  /// The Output Preview: the resolved folder, then the filename under EACH
+  /// capture mode — revealing the DISPLAY / LAST / RECORDING labels substituted
+  /// for %title/%app when there is no real window, and the date-only collapse on
+  /// the bare desktop — plus the _NNN same-name collision rule (via the real
+  /// [uniqueName]). A fixed sample time + counter keep the rows stable.
   Widget _previewBody(GlimprTokens t) {
-    final full = _combinedPreview();
-    final name = full.split('/').last;
-    final collided = uniqueName(name, exists: (n) => n == name);
+    final ext = _format == ImageFormat.jpeg ? 'jpg' : 'png';
+    final fnPattern = _filenameTemplate.trim().isEmpty
+        ? defaultFilenameTemplate
+        : _filenameTemplate;
+    final now = DateTime.now();
+    NameContext ctx(String title, String app) => NameContext(
+          now: now,
+          windowTitle: title,
+          appName: app,
+          counter: 1,
+          rand: (n) => 0,
+        );
+    String nameFor(String title, String app) =>
+        '${renderPattern(fnPattern, ctx(title, app), NameMode.filename)}.$ext';
+
+    // Distinct sample values so %app vs %title are tellable apart in the window
+    // row (app = Safari, title = Inbox). The DISPLAY/LAST/RECORDING rows really
+    // do set both tokens to the same label — that is faithful, not a sample.
+    final sub =
+        renderPattern(_subfolderPattern, ctx('Inbox', 'Safari'), NameMode.path)
+            .replaceAll('\\', '/');
+    final basePath = effectiveSaveDir(resolveSaveDir(_saveDir)).path;
+    final segs =
+        basePath.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).toList();
+    final baseName = segs.isEmpty ? 'Glimpr' : segs.last;
+    final folder = '${['…', baseName, if (sub.isNotEmpty) sub].join('/')}/';
+
+    final windowName = nameFor('Inbox', 'Safari');
+    final collided = uniqueName(windowName, exists: (n) => n == windowName);
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                child:
+                    Text(label, style: GlimprType.sansStyle(12, 500, t.fg4)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GlimprType.mono(12, t.fg2)),
+              ),
+            ],
+          ),
+        );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(full, style: GlimprType.mono(12.5, t.fg2)),
-        const SizedBox(height: 10),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_l.settingsPreviewCollision,
-                style: GlimprType.sansStyle(12, 500, t.fg4)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                collided,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GlimprType.mono(12, t.fg3),
-              ),
-            ),
-          ],
-        ),
+        Text(folder, style: GlimprType.mono(12.5, t.fg3)),
+        row(_l.settingsPreviewModeWindow, windowName),
+        row(_l.settingsPreviewModeDisplay,
+            nameFor(kDisplayCaptureLabel, kDisplayCaptureLabel)),
+        row(_l.settingsPreviewModeLast,
+            nameFor(kLastRegionCaptureLabel, kLastRegionCaptureLabel)),
+        row(_l.settingsPreviewModeRecording,
+            nameFor(kRecordingCaptureLabel, kRecordingCaptureLabel)),
+        row(_l.settingsPreviewModeDesktop, nameFor('', '')),
+        row(_l.settingsPreviewCollision, collided),
       ],
     );
   }
@@ -1553,6 +1591,7 @@ class _SettingsAppState extends State<SettingsApp>
           focusNode: _subfolderFocus,
           hint: defaultSubfolderPattern,
           onChanged: (v) => setState(() => _subfolderPattern = v),
+          isDefault: _subfolderPattern == defaultSubfolderPattern,
           onReset: () {
             setState(() {
               _subfolderPattern = defaultSubfolderPattern;
@@ -1572,31 +1611,6 @@ class _SettingsAppState extends State<SettingsApp>
           ),
       ],
     );
-  }
-
-  /// The combined "where a file lands" preview: save-folder basename / rendered
-  /// subfolder / rendered filename. One shared context so %i + random match;
-  /// fixed sample values keep it stable across rebuilds.
-  String _combinedPreview() {
-    final ctx = NameContext(
-      now: DateTime.now(),
-      windowTitle: 'Safari',
-      appName: 'Safari',
-      counter: 1,
-      rand: (n) => 0,
-    );
-    final ext = _format == ImageFormat.jpeg ? 'jpg' : 'png';
-    final fnPattern = _filenameTemplate.trim().isEmpty
-        ? defaultFilenameTemplate
-        : _filenameTemplate;
-    final name = '${renderPattern(fnPattern, ctx, NameMode.filename)}.$ext';
-    final sub = renderPattern(_subfolderPattern, ctx, NameMode.path)
-        .replaceAll('\\', '/');
-    final basePath = effectiveSaveDir(resolveSaveDir(_saveDir)).path;
-    final segs =
-        basePath.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).toList();
-    final baseName = segs.isEmpty ? 'Glimpr' : segs.last;
-    return ['…', baseName, if (sub.isNotEmpty) sub, name].join('/');
   }
 
   bool _outputDirty() =>
@@ -2025,16 +2039,11 @@ class _SettingsAppState extends State<SettingsApp>
         const SizedBox(width: 4),
         // Reset to default — disabled + dimmed when the binding already is the
         // default (nothing to reset), so it reads as inactive.
-        Opacity(
-          opacity: isDefault ? 0.25 : 1,
-          child: IconButton(
-            tooltip: isDefault ? null : _l.settingsShortcutsResetToDefault,
-            icon: Icon(Icons.restart_alt, size: 18, color: t.fg3),
-            onPressed: isDefault
-                ? null
-                : () => setState(
-                    () => draft[actionKey] = kDefaultBindings[actionKey]),
-          ),
+        _resetIconButton(
+          t,
+          isDefault: isDefault,
+          onReset: () =>
+              setState(() => draft[actionKey] = kDefaultBindings[actionKey]),
         ),
       ],
     );
@@ -2133,8 +2142,8 @@ class _SettingsAppState extends State<SettingsApp>
               icon: Icons.folder_open_outlined,
               onTap: _chooseDir,
             ),
-            const SizedBox(width: 8),
-            GhostButton(_l.settingsSaveFolderReset, onTap: path == null ? null : _resetDir),
+            const SizedBox(width: 4),
+            _resetIconButton(t, isDefault: path == null, onReset: _resetDir),
           ],
         ),
         const SizedBox(height: 10),

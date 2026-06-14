@@ -23,24 +23,12 @@ class TokenInsertButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    // Icon-only, field-height bordered box (the parent Row stretches it to the
-    // TextField's height) — matches the adjacent Reset button; label in tooltip.
-    return InkWell(
-      onTap: () => _open(context, l),
-      borderRadius: BorderRadius.circular(9),
-      child: Tooltip(
-        message: l.settingsInsertVariable,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: t.fieldBg,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: t.fieldBorder),
-          ),
-          child: Icon(Icons.add, size: 16, color: t.fg2),
-        ),
-      ),
+    // Same icon-button style as the adjacent Reset (Shortcuts pane); label in
+    // the tooltip. Always enabled.
+    return IconButton(
+      tooltip: l.settingsInsertVariable,
+      icon: Icon(Icons.add, size: 18, color: t.fg3),
+      onPressed: () => _open(context, l),
     );
   }
 

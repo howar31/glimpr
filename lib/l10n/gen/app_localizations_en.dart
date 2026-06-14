@@ -285,6 +285,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPreviewCollision => 'If the name is taken';
 
   @override
+  String get settingsPreviewModeWindow => 'Window';
+
+  @override
+  String get settingsPreviewModeDisplay => 'Full screen';
+
+  @override
+  String get settingsPreviewModeLast => 'Last region';
+
+  @override
+  String get settingsPreviewModeRecording => 'Recording';
+
+  @override
+  String get settingsPreviewModeDesktop => 'No window';
+
+  @override
   String get settingsSubfolderHint =>
       'Leave empty to save directly in the folder above. Use / for nested folders.';
 

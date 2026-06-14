@@ -10,8 +10,9 @@ String screenshotFilename(DateTime t, String ext) =>
     '${_pad2(t.hour)}-${_pad2(t.minute)}-${_pad2(t.second)}.$ext';
 
 /// Default user-facing filename template (strftime `%`-tokens; see
-/// [kNameTokens]). Renders e.g. `Safari_2026-06-14_22-30-05`.
-const defaultFilenameTemplate = '%title_%Y-%m-%d_%H-%M-%S';
+/// [kNameTokens]). Renders e.g. `Safari_Inbox_2026-06-14_22-30-05` (the `%app_`
+/// prefix collapses away when the app name is unavailable).
+const defaultFilenameTemplate = '%app_%title_%Y-%m-%d_%H-%M-%S';
 
 /// Default output subfolder pattern (date folders, three levels). Renders e.g.
 /// `2026/2026-06/2026-06-14`. Shared by screenshot + recording.
