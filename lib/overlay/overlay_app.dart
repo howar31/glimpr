@@ -1218,7 +1218,15 @@ class _OverlayAppState extends State<OverlayApp> {
                 // pixel non-zero alpha (WindowServer click-through guard) and
                 // dims whatever is beneath (live desktop or the frozen session).
                 if (rsActive) ...[
-                  const ColoredBox(color: GlimprTokens.scrim),
+                  // No full veil before dragging (screenshot-region parity):
+                  // the crop scrim dims outside the selection only once a drag
+                  // starts. Over the LIVE desktop a fully-transparent borderless
+                  // window click-throughs in WindowServer, so keep a near-zero
+                  // alpha INPUT GUARD (imperceptible, not a visible mask); over a
+                  // frozen session the base image already supplies opaque pixels,
+                  // so no guard is needed.
+                  if (!hasSession)
+                    const ColoredBox(color: Color(0x01000000)),
                   EditorCanvas(
                     key: ValueKey('rs-$_captureSeq'),
                     display: _recordDisplay!,
