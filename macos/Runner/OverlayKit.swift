@@ -1006,6 +1006,7 @@ final class OverlayManager {
   /// Start the per-display live-pixel feeds for the loupe (every overlay
   /// window excluded so the loupe sees TRUE pixels, not the veil).
   func beginLiveSelect() {
+    endLiveSelect() // idempotent: stop any prior feed before starting a fresh one
     liveSelectActive = true
     let excluded = units.values.map { $0.window.windowNumber }
     for (id, _) in units {
@@ -1190,6 +1191,15 @@ final class OverlayManager {
   private func broadcastEditorState(from id: CGDirectDisplayID, args: [String: Any]) {
     for (otherID, u) in units where otherID != id {
       u.overlay.invokeMethod("onEditorState", arguments: args)
+    }
+  }
+
+  /// Record hotkey pressed while a record-select is in flight: relay to EVERY
+  /// overlay engine so each resurfaces a suspended picker or cancels a
+  /// foreground one based on its own state (control engine -> CaptureChannel).
+  func relayRecordSelectHotkey() {
+    for (_, u) in units {
+      u.overlay.invokeMethod("onRecordSelectHotkey", arguments: nil)
     }
   }
 

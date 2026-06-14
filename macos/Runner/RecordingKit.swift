@@ -1,5 +1,6 @@
 import AVFoundation
 import Cocoa
+import CoreGraphics
 import CoreImage
 import FlutterMacOS
 import ImageIO
@@ -127,6 +128,15 @@ private enum RecordingDesign {
   /// Two-step destructive-confirm disarm window. Mirrors the Flutter
   /// kConfirmDisarmDuration (glimpr_controls.dart) — keep the two in sync.
   static let confirmDisarmSeconds: TimeInterval = 3
+
+  /// Recording chrome (frame / scrim / strip / countdown) sits ABOVE everything,
+  /// including the capture overlay — which uses CGShieldingWindowLevel — so a
+  /// recording over a frozen screenshot shows its frame/scrim/strip on TOP
+  /// (owner: top-most). The scrim is click-through, so items beneath stay
+  /// operable. One above the overlay's shielding level.
+  static var windowLevel: NSWindow.Level {
+    NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
+  }
 
   /// Appearance-resolving color (NSTextField etc. re-resolve automatically).
   private static func dyn(_ dark: NSColor, _ light: NSColor) -> NSColor {
@@ -547,7 +557,7 @@ final class RecordingChrome {
     for screen in NSScreen.screens where screen != target {
       let w = borderlessWindow(
         frame: screen.frame,
-        level: NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue - 1))
+        level: RecordingDesign.windowLevel)
       w.ignoresMouseEvents = true
       w.backgroundColor = RecordingDesign.scrim
       w.orderFrontRegardless()
@@ -563,7 +573,7 @@ final class RecordingChrome {
     if let region = regionGlobalBottomLeft {
       let f = borderlessWindow(
         frame: screen.frame,
-        level: NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue - 1))
+        level: RecordingDesign.windowLevel)
       f.ignoresMouseEvents = true
       let local = NSRect(
         x: region.minX - screen.frame.minX,
@@ -774,7 +784,7 @@ final class RecordingChrome {
     }
     container.hairlineViews = [sep]
 
-    let w = borderlessWindow(frame: container.frame, level: .statusBar)
+    let w = borderlessWindow(frame: container.frame, level: RecordingDesign.windowLevel)
     w.contentView = container
     return w
   }
@@ -1161,7 +1171,7 @@ final class CountdownHUD {
                      backing: .buffered, defer: false)
     w.isOpaque = false
     w.backgroundColor = .clear
-    w.level = .statusBar
+    w.level = RecordingDesign.windowLevel
     w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     w.hasShadow = false
     w.isReleasedWhenClosed = false

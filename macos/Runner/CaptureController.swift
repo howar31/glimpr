@@ -77,10 +77,12 @@ final class CaptureController {
       guard let manager = self.manager() else {
         Self.alert(L.s("Overlay manager not ready", "覆疊管理器尚未就緒")); return
       }
-      // A live-select session and a freeze session must not stack onto each
-      // other (a transparent layer in a frozen stack corrupts both); ignore
-      // the trigger while the other kind is up.
-      if manager.liveSelectActive { return }
+      // NOTE: the old "ignore a trigger while a live-select is up" guard was
+      // removed for the additive coexistence model — a record-select layers OVER
+      // a freeze session (and a screenshot SUSPENDS a record-select) by design,
+      // and a second record hotkey is gated at the controller (toggle) level, so
+      // it never reaches here. beginLiveSelect() is idempotent (restarts the loupe
+      // feed) for the re-trigger case.
       if liveSelect {
         // No capture: geometry-only dicts, presented instantly.
         manager.presentBegin(cursorDisplayID: self.capturer.cursorDisplayID())

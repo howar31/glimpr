@@ -29,6 +29,14 @@ import 'export.dart';
 import 'session_layers.dart';
 import 'session_op_log.dart';
 
+/// Record-select overlay state. `active` = the crop region picker is foreground
+/// (layered OVER the live session, which renders presentation-only beneath);
+/// `suspended` = a freeze layer was taken on top of it (the picker's visual is
+/// baked into that freeze frame), so it waits to be restored; `none` = no
+/// pending recording selection. Orthogonal to the freeze [LayerStack]: a
+/// record-select NEVER enters that stack.
+enum RecordSelectState { none, active, suspended }
+
 /// The per-display overlay engine's app. Idle = transparent; on capture it hosts
 /// the annotation editor (EditorCanvas) over the frozen image and, on export,
 /// composites the annotations + crops + delivers (file/clipboard/sound).
@@ -81,11 +89,18 @@ class _OverlayAppState extends State<OverlayApp> {
   // The ⌘⌥5 "capture to pin" mode: this session's confirm runs ONLY the pin
   // action instead of the configured after-capture flow.
   bool _pinOnly = false;
-  // Live-select (recording) session: transparent base over the live screen;
-  // confirm starts a recording instead of exporting.
-  bool _liveSelect = false;
+  // Record-select (RS): an ADDITIVE crop-only region picker layered OVER the
+  // live session (which stays intact, rendered presentation-only beneath).
+  // Orthogonal to the freeze LayerStack — it never enters it.
+  RecordSelectState _rs = RecordSelectState.none;
+  CapturedDisplay? _recordDisplay; // RS layer's display geometry (this engine)
+  ui.Image? _recordStub; // 1x1 transparent base image for the RS crop editor
+  EditorController? _recordEditor; // crop-only; NOT in the cross-display sync
+  // Last live/RS display geometry, kept so a suspended RS can be re-armed when
+  // the freeze layer above it is resolved and the live slot is cleared.
+  CapturedDisplay? _lastKnownDisplay;
   // One-shot per-recording overrides (toolbar toggles), seeded from the
-  // Recording settings each live session; read at confirm, never persisted.
+  // Recording settings each record-select; read at confirm, never persisted.
   RecordOverrides? _recordOverrides;
   // Capture layer stack: suspended sessions below the live one. Capacity is
   // re-read from Settings on every capture; 1 = no stacking (live layer is
@@ -139,6 +154,20 @@ class _OverlayAppState extends State<OverlayApp> {
     _frames.attach();
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d, pinOnly, liveSelect) async {
+        if (liveSelect) {
+          // Recording region selection is an ADDITIVE overlay that NEVER
+          // touches the live screenshot/pin session (the old bug disposed it).
+          await _beginRecordSelect(d);
+          return;
+        }
+        // A screenshot taken while a record-select is foreground suspends it
+        // (its crosshair/veil is frozen INTO this capture as content); it is
+        // restored when this freeze layer (and any above it) is resolved.
+        // onCaptureReady fires on EVERY engine, so each suspends its own RS
+        // locally — no broadcast needed.
+        if (_rs == RecordSelectState.active) {
+          _suspendRecordSelect();
+        }
         // NOTE: _pinOnly is set AFTER the suspend decision below — the
         // suspended layer must keep ITS OWN pin flag.
         // Reseed per-tool styles from disk on EVERY capture so a Settings
@@ -153,23 +182,16 @@ class _OverlayAppState extends State<OverlayApp> {
         // Raw BGRA pixels -> ui.Image (no codec): a pixel upload, not a PNG
         // decode — this is the freeze path's cheap step.
         ui.Image? frozen;
-        if (liveSelect) {
-          // Live-select (recording): no pixels were captured — the base layer
-          // is a 1x1 transparent stub (invisible at any scale) so the shared
-          // editor session runs unchanged over the LIVE screen.
-          frozen = await _transparentStub();
-        } else {
-          try {
-            final completer = Completer<ui.Image>();
-            ui.decodeImageFromPixels(
-              d.rawBytes, d.pixelWidth, d.pixelHeight, ui.PixelFormat.bgra8888,
-              completer.complete, rowBytes: d.rowBytes,
-            );
-            frozen = await completer.future;
-          } catch (_) {
-            // Without a frozen image the overlay presents with no base layer and
-            // the export is skipped — practically unreachable for raw pixels.
-          }
+        try {
+          final completer = Completer<ui.Image>();
+          ui.decodeImageFromPixels(
+            d.rawBytes, d.pixelWidth, d.pixelHeight, ui.PixelFormat.bgra8888,
+            completer.complete, rowBytes: d.rowBytes,
+          );
+          frozen = await completer.future;
+        } catch (_) {
+          // Without a frozen image the overlay presents with no base layer and
+          // the export is skipped — practically unreachable for raw pixels.
         }
         // Decode the OS cursor image (toggleable layer), if any.
         ui.Image? cursorImg;
@@ -190,9 +212,7 @@ class _OverlayAppState extends State<OverlayApp> {
         var replaced = false;
         var evicted = false;
         final live = _display != null && _editor != null && _frozen != null;
-        // A live-select session never stacks onto (or under) freeze layers —
-        // native already guards cross-kind triggers; replace defensively.
-        if (live && _layers.capacity > 1 && !liveSelect && !_liveSelect) {
+        if (live && _layers.capacity > 1) {
           // Stack the live layer under the new one (a trigger never destroys
           // current work at cap >= 2). At the cap the OLDEST suspended layer
           // is evicted instead, so the stack always holds the most recent
@@ -228,31 +248,6 @@ class _OverlayAppState extends State<OverlayApp> {
           _cursorImage?.dispose();
         }
         _pinOnly = pinOnly;
-        _liveSelect = liveSelect;
-        if (liveSelect) {
-          // Seed the toolbar's one-shot overrides from the persisted settings
-          // (async; the notifiers update the toggles when the read lands).
-          _recordOverrides?.dispose();
-          final overrides = RecordOverrides(
-              showCursor: true,
-              systemAudio: false,
-              microphone: false,
-              hevc: false,
-              gif: false,
-              fps: 30,
-              maxDuration: 0);
-          _recordOverrides = overrides;
-          Settings.instance.loadRecording().then((r) {
-            if (!mounted || _recordOverrides != overrides) return;
-            overrides.showCursor.value = r.showCursor;
-            overrides.systemAudio.value = r.systemAudio;
-            overrides.microphone.value = r.microphone;
-            overrides.hevc.value = r.hevc;
-            overrides.gif.value = r.isGif;
-            overrides.fps.value = r.fps;
-            overrides.maxDuration.value = r.maxDuration;
-          });
-        }
         // Reseed BEFORE building the controller so the freshly-loaded styles
         // (incl. a reset that emptied the map) seed this capture's initial tool
         // style. The map instance is shared with the controller, so mutate it in
@@ -331,6 +326,7 @@ class _OverlayAppState extends State<OverlayApp> {
         // without a click (the native side re-keys the overlay window).
         _editor?.requestFocus();
       },
+      onRecordSelectHotkey: _onRecordSelectHotkey,
     );
   }
 
@@ -375,6 +371,179 @@ class _OverlayAppState extends State<OverlayApp> {
     return img;
   }
 
+  // ---- record-select overlay (additive; never touches the live session) ----
+
+  /// Arm (or re-arm) the record-select crop picker on THIS engine WITHOUT
+  /// touching the live screenshot/pin session: it renders on top, the session
+  /// (if any) renders presentation-only beneath. Sets `_rs = active`.
+  Future<void> _beginRecordSelect(CapturedDisplay d) async {
+    final stub = await _transparentStub();
+    if (!mounted) {
+      stub.dispose();
+      return;
+    }
+    _recordStub?.dispose();
+    _recordEditor?.dispose();
+    _recordOverrides?.dispose();
+    final overrides = RecordOverrides(
+        showCursor: true,
+        systemAudio: false,
+        microphone: false,
+        hevc: false,
+        gif: false,
+        fps: 30,
+        maxDuration: 0);
+    _recordOverrides = overrides;
+    Settings.instance.loadRecording().then((r) {
+      if (!mounted || _recordOverrides != overrides) return;
+      overrides.showCursor.value = r.showCursor;
+      overrides.systemAudio.value = r.systemAudio;
+      overrides.microphone.value = r.microphone;
+      overrides.hevc.value = r.hevc;
+      overrides.gif.value = r.isGif;
+      overrides.fps.value = r.fps;
+      overrides.maxDuration.value = r.maxDuration;
+    });
+    setState(() {
+      _recordDisplay = d;
+      _lastKnownDisplay = d;
+      _recordStub = stub;
+      _recordEditor = EditorController(toolStyles: {});
+      _rs = RecordSelectState.active;
+      _captureSeq++;
+    });
+    _bridge.overlayReady(); // reveal this engine's window (no blank flash)
+    Settings.instance.loadLoupe().then((l) {
+      if (mounted) setState(() => _loupe = l);
+    });
+    Settings.instance.loadHud().then((h) {
+      if (mounted) setState(() => _hud = h);
+    });
+  }
+
+  /// Tear down the RS overlay state (confirm / cancel). Does NOT touch the live
+  /// session, the layer stack, or broadcast. If a session REMAINS beneath, bump
+  /// the capture sequence so its EditorCanvas REMOUNTS fresh: while the picker
+  /// was on top the session ran presentation-only (no chrome, input ignored, and
+  /// the native cursor was hidden by the picker's crop tool). A remount re-runs
+  /// initState with presentationOnly == false, so the session returns to the
+  /// active/interactive state — toolbar, crosshair, loupe, and cursor management
+  /// all re-establish (same idea as `_restoreSuspended`'s `_captureSeq++`).
+  void _disposeRecordSelect() {
+    _recordEditor?.dispose();
+    _recordStub?.dispose();
+    _recordEditor = null;
+    _recordStub = null;
+    _recordDisplay = null;
+    _rs = RecordSelectState.none;
+    if (_display != null) _captureSeq++;
+  }
+
+  /// active -> suspended: a freeze layer was taken on top. Keep the per-take
+  /// overrides; drop the live crop editor/stub (rebuilt fresh on resurface).
+  void _suspendRecordSelect() {
+    _recordEditor?.dispose();
+    _recordStub?.dispose();
+    _recordEditor = null;
+    _recordStub = null;
+    _recordDisplay = null;
+    _rs = RecordSelectState.suspended;
+  }
+
+  /// suspended -> active again (record hotkey, or auto-restore on freeze drain).
+  /// The live session (if any) stays in the slot, rendered presentation-only.
+  Future<void> _resurfaceRecordSelect(CapturedDisplay d) async {
+    if (_rs != RecordSelectState.suspended) return;
+    await _beginRecordSelect(d);
+  }
+
+  /// Empty the live session slot (dispose editor/frozen/cursor + reset dirty/op
+  /// state) WITHOUT touching RS, the layer stack, or the native window. Used
+  /// when a freeze layer is resolved but a suspended record-select must surface
+  /// beneath it (the overlay window stays up for RS).
+  void _clearLiveSession() {
+    _lastKnownDisplay = _display ?? _lastKnownDisplay;
+    _detachShared();
+    _editor?.dispose();
+    _frozen?.dispose();
+    _cursorImage?.dispose();
+    _remoteDirty.clear();
+    _localDirty = false;
+    _opLog = SessionOpLog();
+    _lastDepth = 1;
+    _display = null;
+    _editor = null;
+    _frozen = null;
+    _cursorImage = null;
+    _cursorTopLeft = null;
+  }
+
+  /// Record-select confirm: start recording over whatever is beneath, then drop
+  /// the picker on every engine. A session beneath stays up (recorded as
+  /// content); no session -> the overlay dismisses (records the live desktop).
+  Future<void> _onRecordConfirm(Rect? selectionLogical, SnapWindow? window) async {
+    final d = _recordDisplay;
+    if (d == null) return;
+    final o = _recordOverrides;
+    final hadSession = _display != null;
+    _bridge.broadcastEditorState({'recordSelectEnd': true});
+    setState(_disposeRecordSelect);
+    if (!hadSession) _bridge.dismissOverlay(); // nothing beneath -> hide window
+    try {
+      await _bridge.recordSelection(
+        displayId: d.displayId,
+        rect: selectionLogical,
+        title: window?.title,
+        app: window?.app,
+        showsCursor: o?.showCursor.value,
+        systemAudio: o?.systemAudio.value,
+        microphone: o?.microphone.value,
+        hevc: o?.hevc.value,
+        gif: o?.gif.value,
+        fps: o?.fps.value,
+        maxDuration: o?.maxDuration.value,
+      );
+    } catch (_) {}
+  }
+
+  /// Record-select cancel (Esc / right-click on the picker). Drops the picker on
+  /// every engine and tells the record controller; the session beneath (if any)
+  /// stays.
+  Future<void> _onRecordSelectCancel() async {
+    final d = _recordDisplay;
+    final hadSession = _display != null;
+    _bridge.broadcastEditorState({'recordSelectEnd': true});
+    setState(_disposeRecordSelect);
+    if (!hadSession) _bridge.dismissOverlay();
+    if (d != null) {
+      try {
+        await _bridge.recordSelection(displayId: d.displayId, cancelled: true);
+      } catch (_) {}
+    }
+  }
+
+  /// Record hotkey while a record-select exists: resurface a suspended picker
+  /// (session beneath stays), or cancel a foreground one. Relayed from the
+  /// control engine to EVERY overlay engine, so each handles its OWN RS locally
+  /// — no peer broadcast. The redundant cancelled-relay to the record controller
+  /// (one per engine) is idempotent (`_onSelection` just resets the phase).
+  void _onRecordSelectHotkey() {
+    if (_rs == RecordSelectState.active) {
+      final d = _recordDisplay;
+      final hadSession = _display != null;
+      setState(_disposeRecordSelect);
+      if (!hadSession) _bridge.hideOverlayWindow();
+      if (d != null) {
+        _bridge
+            .recordSelection(displayId: d.displayId, cancelled: true)
+            .catchError((_) {});
+      }
+    } else if (_rs == RecordSelectState.suspended) {
+      final d = _display ?? _lastKnownDisplay;
+      if (d != null) _resurfaceRecordSelect(d);
+    }
+  }
+
   void _resetState() {
     _detachShared();
     _remoteDirty.clear();
@@ -389,7 +558,7 @@ class _OverlayAppState extends State<OverlayApp> {
       l.disposeAll();
     }
     _layerNoticeTimer?.cancel();
-    _liveSelect = false;
+    _disposeRecordSelect(); // whole-session teardown drops any record-select too
     setState(() {
       _display = null;
       _editor = null;
@@ -525,6 +694,9 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.dispose();
     _frozen?.dispose();
     _cursorImage?.dispose();
+    _recordEditor?.dispose();
+    _recordStub?.dispose();
+    _recordOverrides?.dispose();
     for (final l in _layers.drain()) {
       l.disposeAll();
     }
@@ -621,6 +793,30 @@ class _OverlayAppState extends State<OverlayApp> {
     }
     if (state['sessionEnded'] == true) {
       _resetState();
+      return;
+    }
+    // Record-select protocol (null-editor-tolerant): a picker can be live on an
+    // engine whose display has no freeze session.
+    if (state['recordSelectEnd'] == true) {
+      if (_rs != RecordSelectState.none) {
+        final hadSession = _display != null;
+        setState(_disposeRecordSelect);
+        if (!hadSession) _bridge.hideOverlayWindow();
+      }
+      return;
+    }
+    if (state['recordSelectRestore'] == true) {
+      // Active engine resolved its last freeze layer with a picker waiting
+      // beneath: clear this engine's just-resolved freeze session and surface
+      // the picker. (Suspend + hotkey-resurface are global per-engine events
+      // and need no peer message; only this freeze-resolution path does.)
+      if (_rs == RecordSelectState.suspended) {
+        final d = _display ?? _lastKnownDisplay;
+        if (d != null) {
+          _clearLiveSession();
+          _resurfaceRecordSelect(d);
+        }
+      }
       return;
     }
     final e = _editor;
@@ -735,6 +931,18 @@ class _OverlayAppState extends State<OverlayApp> {
     if (_layers.suspendedCount > 0) {
       _bridge.broadcastEditorState({'layerPop': true});
       _restoreSuspended();
+    } else if (_rs == RecordSelectState.suspended) {
+      // Last freeze layer resolved, but a record-select waits beneath it:
+      // surface the picker again instead of ending the session. The overlay
+      // window stays up; the just-resolved freeze session is cleared.
+      _bridge.broadcastEditorState({'recordSelectRestore': true});
+      final d = _display ?? _lastKnownDisplay;
+      _clearLiveSession();
+      if (d != null) {
+        _resurfaceRecordSelect(d);
+      } else {
+        _dismiss();
+      }
     } else {
       _bridge.broadcastEditorState({'sessionEnded': true});
       _dismiss();
@@ -793,23 +1001,6 @@ class _OverlayAppState extends State<OverlayApp> {
   /// cannot see.
   Future<void> _onCancelRequested() async {
     if (_confirmingExit) return;
-    if (_liveSelect) {
-      // Live-select has no annotations to confirm-discard; tell the control
-      // engine's record controller the selection was cancelled, then dismiss.
-      final d = _display;
-      _liveSelect = false;
-      if (d != null) {
-        try {
-          await _bridge.recordSelection(
-              displayId: d.displayId, cancelled: true);
-        } catch (_) {}
-      }
-      // End the whole session on every display (same as _endTopLayer's
-      // no-layers branch; live-select never stacks).
-      _bridge.broadcastEditorState({'sessionEnded': true});
-      _dismiss();
-      return;
-    }
     final editor = _editor;
     final hasAnnotations = (editor != null &&
             editor.document.value.drawables.isNotEmpty) ||
@@ -846,35 +1037,6 @@ class _OverlayAppState extends State<OverlayApp> {
     final editor = _editor;
     if (d == null || frozen == null || editor == null) {
       _dismiss();
-      return;
-    }
-    if (_liveSelect) {
-      // Live-select confirm: dismiss FIRST (the overlay must be gone before
-      // the recording stream starts), then relay the chosen region. Region
-      // recording always records a FIXED rectangle: a snap commits the
-      // window's own rect as the selection, so it records that rectangle
-      // (it never follows the window — that is Record Window's job); a drag
-      // records its rect; no selection records the whole display. [window]
-      // only names the output file.
-      _liveSelect = false;
-      _bridge.broadcastEditorState({'sessionEnded': true});
-      _dismiss();
-      try {
-        final o = _recordOverrides;
-        await _bridge.recordSelection(
-          displayId: d.displayId,
-          rect: selectionLogical,
-          title: window?.title,
-          app: window?.app,
-          showsCursor: o?.showCursor.value,
-          systemAudio: o?.systemAudio.value,
-          microphone: o?.microphone.value,
-          hevc: o?.hevc.value,
-          gif: o?.gif.value,
-          fps: o?.fps.value,
-          maxDuration: o?.maxDuration.value,
-        );
-      } catch (_) {}
       return;
     }
     // Snapshot the (immutable) inputs, then HIDE the overlay IMMEDIATELY so the
@@ -999,6 +1161,9 @@ class _OverlayAppState extends State<OverlayApp> {
     final d = _display;
     final frozen = _frozen;
     final editor = _editor;
+    final rsActive = _rs == RecordSelectState.active;
+    final hasSession = d != null && frozen != null && editor != null;
+    final showAnything = hasSession || rsActive;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
@@ -1017,43 +1182,60 @@ class _OverlayAppState extends State<OverlayApp> {
         scaffoldBackgroundColor: Colors.transparent,
         tooltipTheme: glimprTooltipTheme(Brightness.dark),
       ),
-      home: (d == null || frozen == null || editor == null)
+      home: !showAnything
           // Idle: fully transparent until a capture sets the frozen frame.
           ? const SizedBox.shrink()
-          // Every display builds the editor; EditorCanvas shows the interactive
-          // HUD/toolbar only while the cursor is over THIS display, and asks
-          // native to make this window key on entry — so the editor follows the
-          // cursor across displays (design §7, cross-display follow).
           : Stack(
               fit: StackFit.expand,
               children: [
-                // Live-select: a light veil where the frozen frame would be —
-                // dims the live screen AND keeps every window pixel non-zero
-                // alpha (WindowServer would click-through fully transparent
-                // regions of a borderless window).
-                if (_liveSelect)
+                // Bottom: the live screenshot/pin session. While a record-select
+                // is foreground above it the session renders PRESENTATION-ONLY
+                // (no chrome, ignores pointer) so the picker on top owns input.
+                if (hasSession)
+                  IgnorePointer(
+                    ignoring: rsActive,
+                    child: EditorCanvas(
+                      key: ValueKey('session-$_captureSeq'),
+                      display: d,
+                      frozenImage: frozen,
+                      controller: editor,
+                      onExport: _onExport,
+                      onCancel: _onCancelRequested,
+                      activeSignal: _activeSignal,
+                      rightClickExits: _capture.rightClickExits,
+                      editorBindings: _editorBindings,
+                      loupe: _loupe,
+                      hud: _hud,
+                      cursorImage: _cursorImage,
+                      cursorTopLeft: _cursorTopLeft,
+                      pinMode: _pinOnly,
+                      presentationOnly: rsActive,
+                      layerCaption: _layerCaption,
+                      layerAccent: _layerAccent,
+                    ),
+                  ),
+                // Top: the record-select picker. A light veil keeps every window
+                // pixel non-zero alpha (WindowServer click-through guard) and
+                // dims whatever is beneath (live desktop or the frozen session).
+                if (rsActive) ...[
                   const ColoredBox(color: Color(0x33000000)),
-                EditorCanvas(
-                  key: ValueKey(_captureSeq),
-                  display: d,
-                  frozenImage: frozen,
-                  controller: editor,
-                  onExport: _onExport,
-                  onCancel: _onCancelRequested,
-                  activeSignal: _activeSignal,
-                  rightClickExits: _capture.rightClickExits,
-                  editorBindings: _editorBindings,
-                  loupe: _loupe,
-                  hud: _hud,
-                  cursorImage: _cursorImage,
-                  cursorTopLeft: _cursorTopLeft,
-                  pinMode: _pinOnly,
-                  recordMode: _liveSelect,
-                  liveLoupeSample: _liveSelect ? _bridge.loupeSample : null,
-                  recordOverrides: _liveSelect ? _recordOverrides : null,
-                  layerCaption: _layerCaption,
-                  layerAccent: _layerAccent,
-                ),
+                  EditorCanvas(
+                    key: ValueKey('rs-$_captureSeq'),
+                    display: _recordDisplay!,
+                    frozenImage: _recordStub!,
+                    controller: _recordEditor!,
+                    onExport: _onRecordConfirm,
+                    onCancel: _onRecordSelectCancel,
+                    activeSignal: _activeSignal,
+                    rightClickExits: _capture.rightClickExits,
+                    editorBindings: _editorBindings,
+                    loupe: _loupe,
+                    hud: _hud,
+                    recordMode: true,
+                    liveLoupeSample: _bridge.loupeSample,
+                    recordOverrides: _recordOverrides,
+                  ),
+                ],
                 // Dim + lock the freeze while a ⌘, Settings detour is open.
                 if (_settingsOpen) const SettingsMask(),
               ],

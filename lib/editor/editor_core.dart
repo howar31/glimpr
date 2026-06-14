@@ -100,6 +100,14 @@ class EditorCore extends StatefulWidget {
   // hidden); accent marks the transient "top layer was replaced" notice.
   final String? layerCaption;
   final bool layerAccent;
+
+  /// Presentation-only: render the base image + drawables ONLY — no
+  /// toolbar/HUD/crosshair/loupe/selection — and never become `_active` (the
+  /// cross-display active signal is ignored). Used to render the screenshot
+  /// session beneath an active record-select overlay, where input + chrome must
+  /// belong to the record-select layer on top. Distinct from the viewport-level
+  /// `_interactive` getter (image-editor vs overlay).
+  final bool presentationOnly;
   const EditorCore({
     super.key,
     required this.controller,
@@ -113,6 +121,7 @@ class EditorCore extends StatefulWidget {
     this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
+    this.presentationOnly = false,
   });
 
   @override
@@ -542,10 +551,11 @@ class _EditorCoreState extends State<EditorCore> {
       widget.host.size.width / 2 - (widget.recordMode ? 40 : 160),
       widget.host.size.height - 60, // dy = toolbar BOTTOM; options grow upward
     );
-    _active = widget.host.startsActive; // launch display starts active
+    // Presentation-only editors never become active (no chrome / no input).
+    _active = !widget.presentationOnly && widget.host.startsActive;
     // Live-select: keep the loupe's pixels live under a stationary cursor.
     if (widget.host.liveSelect) _startLiveLoupeTimer();
-    _overCanvas = widget.host.startsActive; // pointer starts over canvas
+    _overCanvas = _active; // pointer starts over canvas iff active
     _windows = widget.host.snapWindows;
     c.document.addListener(_rebuild);
     c.document.addListener(_reconcileEffectCache);
@@ -786,6 +796,7 @@ class _EditorCoreState extends State<EditorCore> {
   /// HUD, drop transient draw state). One authoritative signal — no per-engine
   /// guessing or async handoff, so no flicker.
   void _onActiveSignal() {
+    if (widget.presentationOnly) return; // never activates; stays chrome-less
     final sig = widget.host.activeSignal.value;
     final mine = sig.id == widget.host.hostId;
     if (mine && !_active) {

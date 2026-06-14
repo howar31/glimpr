@@ -116,6 +116,7 @@ void main() {
   late List<String> shared;
   late int liveSelects;
   late int completes;
+  late int recordHotkeys;
 
   RecordController build({FocusedWindowInfo? window}) {
     // Seed a temp save folder so the output-path leg never touches the real
@@ -131,8 +132,10 @@ void main() {
     shared = [];
     liveSelects = 0;
     completes = 0;
+    recordHotkeys = 0;
     return RecordController(
       beginLiveSelect: () async => liveSelects++,
+      recordSelectHotkey: () async => recordHotkeys++,
       complete: () => completes++,
       bridge: bridge,
       settings: Settings(store),
@@ -284,16 +287,44 @@ void main() {
       expect(rc.phase, RecordPhase.starting);
     });
 
-    test('a record action during the starting phase cancels, not restarts',
+    test('record hotkey during region picking routes to the overlay, not stop',
         () async {
       final rc = build();
-      await rc.toggle(kRecordModeRegion); // -> starting (live-select/countdown)
+      await rc.toggle(kRecordModeRegion); // -> starting (record-select picker up)
       expect(rc.phase, RecordPhase.starting);
-      await rc.toggle(kRecordModeRegion); // hotkey again during starting
-      expect(rc.phase, RecordPhase.idle);
-      expect(bridge.stops, 1); // cancels the pending session/countdown
+      await rc.toggle(kRecordModeRegion); // hotkey again during region picking
+      // The overlay decides (resurface a suspended picker / cancel a foreground
+      // one); the controller does NOT blanket-cancel or stop here. The phase
+      // stays starting until the overlay relays a cancel via recordSelection.
+      expect(recordHotkeys, 1);
+      expect(bridge.stops, 0);
+      expect(rc.phase, RecordPhase.starting);
       expect(liveSelects, 1); // did NOT begin a second selection
       expect(bridge.starts, isEmpty);
+    });
+
+    test('overlay-relayed cancel after a hotkey idles the controller', () async {
+      final rc = build();
+      await rc.toggle(kRecordModeRegion);
+      await rc.toggle(kRecordModeRegion); // hotkey -> overlay
+      bridge.selection({'displayId': 1, 'cancelled': true}); // overlay cancelled
+      await Future<void>.delayed(Duration.zero);
+      expect(rc.phase, RecordPhase.idle);
+      expect(bridge.starts, isEmpty);
+    });
+
+    test('record hotkey during the post-confirm countdown stops it', () async {
+      final rc = build();
+      await rc.toggle(kRecordModeRegion);
+      bridge.selection({
+        'displayId': 1, 'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
+      });
+      await pumpEventQueue(times: 40); // -> start() issued; phase starting (countdown)
+      expect(rc.phase, RecordPhase.starting);
+      await rc.toggle(kRecordModeRegion); // hotkey during countdown = stop
+      expect(bridge.stops, 1);
+      expect(recordHotkeys, 0); // countdown path does NOT route to the overlay
+      expect(rc.phase, RecordPhase.idle);
     });
 
     test('a relayed region selection starts the recording with its rect',

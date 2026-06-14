@@ -26,6 +26,11 @@ final class CaptureChannel {
           liveSelect: (a?["liveSelect"] as? Bool) ?? false)
         result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
+      // Record hotkey while a record-select is in flight: relay to every overlay
+      // engine to resurface a suspended picker / cancel a foreground one.
+      case "recordSelectHotkey":
+        self?.manager()?.relayRecordSelectHotkey()
+        result(nil)
       // After-capture flow: open the just-exported file in the image editor.
       case "openInEditor":
         if let path = (call.arguments as? [String: Any])?["path"] as? String {

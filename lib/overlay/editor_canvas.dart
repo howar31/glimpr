@@ -41,6 +41,9 @@ class EditorCanvas extends StatelessWidget {
   // marks the transient "top layer was replaced" notice.
   final String? layerCaption;
   final bool layerAccent;
+  // Presentation-only: render base + drawables, no interactive chrome, never
+  // active. Used to show the screenshot session beneath an active record-select.
+  final bool presentationOnly;
 
   const EditorCanvas({
     super.key,
@@ -62,6 +65,7 @@ class EditorCanvas extends StatelessWidget {
     this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
+    this.presentationOnly = false,
   });
 
   @override
@@ -76,6 +80,7 @@ class EditorCanvas extends StatelessWidget {
       recordOverrides: recordOverrides,
       layerCaption: layerCaption,
       layerAccent: layerAccent,
+      presentationOnly: presentationOnly,
       host: OverlayEditorHost(
         display: display,
         frozen: frozenImage,

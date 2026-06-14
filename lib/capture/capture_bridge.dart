@@ -224,6 +224,12 @@ class CaptureBridge {
   Future<void> broadcastEditorState(Map<String, dynamic> state) =>
       _channel.invokeMethod('broadcastEditorState', state);
 
+  /// Record hotkey pressed while a record-select is in flight: native relays it
+  /// to every overlay engine (each resurfaces a suspended picker or cancels a
+  /// foreground one). Called from the control engine's RecordController.
+  Future<void> recordSelectHotkey() =>
+      _channel.invokeMethod('recordSelectHotkey');
+
   /// Warp the OS mouse cursor to a GLOBAL display point (top-left origin,
   /// logical points) so keyboard nudges move the real pointer, not just the
   /// selection (otherwise the next mouse move resets the nudge).
@@ -240,6 +246,7 @@ class CaptureBridge {
     void Function(Map<String, dynamic> state)? onEditorState,
     void Function()? onSettingsOpen,
     void Function()? onResume,
+    void Function()? onRecordSelectHotkey,
   }) {
     _overlay.setMethodCallHandler((call) async {
       switch (call.method) {
@@ -283,6 +290,10 @@ class CaptureBridge {
           // The freeze was resumed after a ⌘, Settings detour -> drop the mask +
           // re-read settings.
           onResume?.call();
+          return null;
+        case 'onRecordSelectHotkey':
+          // Record hotkey while a record-select is in flight: resurface or cancel.
+          onRecordSelectHotkey?.call();
           return null;
         default:
           return null; // onWindowsRefreshed etc. are Phase 4 — ignore.

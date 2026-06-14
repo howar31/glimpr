@@ -41,7 +41,7 @@ class RecordController {
     Future<void> Function(String path)? revealFn,
     Future<void> Function(String path)? shareFn,
     Future<void> Function()? beginLiveSelect,
-    Future<void> Function()? cancelLiveSelect,
+    Future<void> Function()? recordSelectHotkey,
     void Function()? complete,
     DateTime Function()? now,
   })  : _bridge = bridge ?? RecordBridge(),
@@ -56,8 +56,8 @@ class RecordController {
         _share = shareFn ?? CaptureBridge.shareSheet,
         _beginLiveSelect = beginLiveSelect ??
             (() => CaptureBridge().beginCapture(liveSelect: true)),
-        _cancelLiveSelect =
-            cancelLiveSelect ?? (() => CaptureBridge().dismissOverlay()),
+        _recordSelectHotkey = recordSelectHotkey ??
+            (() => CaptureBridge().recordSelectHotkey()),
         _complete = complete ?? (() => playComplete()),
         _now = now ?? DateTime.now {
     _bridge.registerHandlers(
@@ -80,13 +80,17 @@ class RecordController {
   final Future<void> Function(String) _reveal;
   final Future<void> Function(String) _share;
   final Future<void> Function() _beginLiveSelect;
-  final Future<void> Function() _cancelLiveSelect;
+  final Future<void> Function() _recordSelectHotkey;
   final void Function() _complete;
   final DateTime Function() _now;
 
   RecordPhase _phase = RecordPhase.idle;
   RecordPhase get phase => _phase;
   bool get isActive => _phase != RecordPhase.idle;
+  // True while the record-select picker (region picking) is up, vs the
+  // post-confirm countdown — both are RecordPhase.starting, but the record
+  // hotkey treats them differently (overlay resurface/cancel vs stop countdown).
+  bool _inLiveSelect = false;
 
   /// The hotkey/menu entry point: stop when a recording (or its selection) is
   /// in flight, start [mode] otherwise. Any record action stops the active
@@ -94,13 +98,20 @@ class RecordController {
   /// phase it CANCELS the selection instead (nothing is recording yet).
   Future<void> toggle(String mode) async {
     if (_phase == RecordPhase.starting) {
+      if (_inLiveSelect) {
+        // Region picking: let the overlay decide — resurface a suspended picker
+        // or cancel a foreground one. A cancel returns via recordSelection
+        // (cancelled) -> _onSelection (which idles); a resurface keeps the
+        // starting phase. Never starts a second selection, never blanket-
+        // dismisses (which would tear down a screenshot session beneath).
+        try {
+          await _recordSelectHotkey();
+        } catch (_) {}
+        return;
+      }
+      // Post-confirm countdown: a record action cancels it (the controller
+      // resets; native stops the countdown HUD). Never starts another recording.
       _phase = RecordPhase.idle;
-      try {
-        await _cancelLiveSelect();
-      } catch (_) {}
-      // A record action during the start phase cancels a pending native
-      // countdown (stop -> the controller cancels the countdown HUD); it never
-      // starts another recording.
       try {
         await _bridge.stop();
       } catch (_) {}
@@ -144,9 +155,10 @@ class RecordController {
 
   Future<void> _start(String mode) async {
     if (mode == kRecordModeRegion) {
-      // Region selection = the overlay's LIVE-SELECT session (owner mandate:
+      // Region selection = the overlay's record-select picker (owner mandate:
       // capture/recording share ONE selection UI — crosshair/loupe/snap).
       // The confirmed target arrives via _onSelection; Esc cancels there too.
+      _inLiveSelect = true;
       await _beginLiveSelect();
       return;
     }
@@ -224,9 +236,11 @@ class RecordController {
   Future<void> _onSelection(Map<String, dynamic> a) async {
     if ((a['cancelled'] as bool?) ?? false) {
       _phase = RecordPhase.idle;
+      _inLiveSelect = false;
       return;
     }
     if (_phase == RecordPhase.recording) return; // already recording
+    _inLiveSelect = false; // confirmed -> leaving region picking (countdown next)
     _phase = RecordPhase.starting;
     try {
       final cap = await _settings.loadCapture();
@@ -279,6 +293,7 @@ class RecordController {
 
   void _onStarted(int displayId, Rect rect) {
     _phase = RecordPhase.recording;
+    _inLiveSelect = false;
     if (rect.width > 0 && rect.height > 0) {
       // Best-effort bookkeeping for "Record Last Region".
       _regionStore.save(LastRegion(displayId: displayId, rect: rect));
@@ -311,11 +326,13 @@ class RecordController {
 
   void _onFailed(String message) {
     _phase = RecordPhase.idle;
+    _inLiveSelect = false;
     _showError('Recording failed: $message');
   }
 
   void _onAborted() {
     _phase = RecordPhase.idle;
+    _inLiveSelect = false;
   }
 
   static Future<void> _revealInFinder(String path) async {
