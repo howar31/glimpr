@@ -473,9 +473,17 @@
   "@settingsRecordingFps": {
     "description": "Settings > Capture > Screen recording: fps row title"
   },
-  "settingsRecordingFpsHint": "60 fps is smoother but roughly doubles the file size. Only applies to video recording; GIF is fixed at 15 fps",
+  "settingsRecordingFpsHint": "60 fps is smoother but roughly doubles the file size",
   "@settingsRecordingFpsHint": {
-    "description": "Settings > Capture > Screen recording: fps row hint"
+    "description": "Settings > Capture > Screen recording: fps row hint (video formats)"
+  },
+  "settingsRecordingGifFixedFps": "GIF is fixed at 15 fps",
+  "@settingsRecordingGifFixedFps": {
+    "description": "Settings > Recording: fps row hint when the format is GIF (the row is disabled)"
+  },
+  "settingsRecordingGifNoAudio": "GIF has no audio track",
+  "@settingsRecordingGifNoAudio": {
+    "description": "Settings > Recording: system-audio / microphone row hint when the format is GIF (the rows are disabled)"
   },
   "settingsRecordingFormat": "Format",
   "@settingsRecordingFormat": {

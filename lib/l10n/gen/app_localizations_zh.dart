@@ -463,8 +463,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingFps => '影格率';
 
   @override
-  String get settingsRecordingFpsHint =>
-      '60 fps 較流暢，檔案約為兩倍大。僅適用影片錄影；GIF 固定 15 fps';
+  String get settingsRecordingFpsHint => '60 fps 較流暢，檔案約為兩倍大';
+
+  @override
+  String get settingsRecordingGifFixedFps => 'GIF 固定為 15 fps';
+
+  @override
+  String get settingsRecordingGifNoAudio => 'GIF 沒有音訊軌';
 
   @override
   String get settingsRecordingFormat => '格式';

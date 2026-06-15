@@ -980,11 +980,23 @@ abstract class AppLocalizations {
   /// **'Frame rate'**
   String get settingsRecordingFps;
 
-  /// Settings > Capture > Screen recording: fps row hint
+  /// Settings > Capture > Screen recording: fps row hint (video formats)
   ///
   /// In en, this message translates to:
-  /// **'60 fps is smoother but roughly doubles the file size. Only applies to video recording; GIF is fixed at 15 fps'**
+  /// **'60 fps is smoother but roughly doubles the file size'**
   String get settingsRecordingFpsHint;
+
+  /// Settings > Recording: fps row hint when the format is GIF (the row is disabled)
+  ///
+  /// In en, this message translates to:
+  /// **'GIF is fixed at 15 fps'**
+  String get settingsRecordingGifFixedFps;
+
+  /// Settings > Recording: system-audio / microphone row hint when the format is GIF (the rows are disabled)
+  ///
+  /// In en, this message translates to:
+  /// **'GIF has no audio track'**
+  String get settingsRecordingGifNoAudio;
 
   /// Settings > Capture > Screen recording: output format row title
   ///

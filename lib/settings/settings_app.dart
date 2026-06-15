@@ -1003,9 +1003,22 @@ class _SettingsAppState extends State<SettingsApp>
   }
 
   /// Screen recording (macOS 15+ module): its own sidebar pane (owner
+  /// Dim + disable a Recording row that does not apply to the GIF format (GIF is
+  /// a fixed 15 fps and has no audio track), mirroring the toolbar's
+  /// `disabledWhen: gif`. The stored value is untouched — switching back to a
+  /// video format restores interactivity.
+  Widget _gifDisabled(Widget child) {
+    final gif = _recordFormat == RecordFormat.gif;
+    return Opacity(
+      opacity: gif ? 0.4 : 1,
+      child: IgnorePointer(ignoring: gif, child: child),
+    );
+  }
+
   /// request). Codec/fps under Format; cursor + audio under Behaviour; then
   /// the after-recording flow subset.
   List<Widget> _recordingPane(GlimprTokens t) {
+    final isGif = _recordFormat == RecordFormat.gif;
     return [
       _h1(_l.settingsPaneRecording, t),
       if (!_recordAvailable)
@@ -1034,27 +1047,24 @@ class _SettingsAppState extends State<SettingsApp>
               },
             ),
           ),
-          // GIF is a fixed 15fps, so the frame-rate row is disabled (dimmed +
-          // non-interactive) for GIF; the hint explains why.
-          Opacity(
-            opacity: _recordFormat == RecordFormat.gif ? 0.4 : 1,
-            child: IgnorePointer(
-              ignoring: _recordFormat == RecordFormat.gif,
-              child: SettingRow(
-                divider: true,
-                title: _l.settingsRecordingFps,
-                hint: _l.settingsRecordingFpsHint,
-                trailing: Segmented<int>(
-                  value: _recordFps,
-                  options: const [(30, '30 fps'), (60, '60 fps')],
-                  onChanged: (v) async {
-                    await _s.setRecordFps(v);
-                    if (mounted) setState(() => _recordFps = v);
-                  },
-                ),
-              ),
+          // GIF is a fixed 15 fps + has no audio, so the fps and the two audio
+          // rows are disabled (dimmed + non-interactive) for GIF, each with a
+          // dynamic hint explaining why.
+          _gifDisabled(SettingRow(
+            divider: true,
+            title: _l.settingsRecordingFps,
+            hint: isGif
+                ? _l.settingsRecordingGifFixedFps
+                : _l.settingsRecordingFpsHint,
+            trailing: Segmented<int>(
+              value: _recordFps,
+              options: const [(30, '30 fps'), (60, '60 fps')],
+              onChanged: (v) async {
+                await _s.setRecordFps(v);
+                if (mounted) setState(() => _recordFps = v);
+              },
             ),
-          ),
+          )),
           SettingRow(
             divider: true,
             title: _l.settingsRecordingCountdown,
@@ -1105,10 +1115,12 @@ class _SettingsAppState extends State<SettingsApp>
               },
             ),
           ),
-          SettingRow(
+          _gifDisabled(SettingRow(
             divider: true,
             title: _l.settingsRecordingSystemAudio,
-            hint: _l.settingsRecordingSystemAudioHint,
+            hint: isGif
+                ? _l.settingsRecordingGifNoAudio
+                : _l.settingsRecordingSystemAudioHint,
             trailing: GlassToggle(
               value: _recordSystemAudio,
               onChanged: (v) async {
@@ -1116,11 +1128,13 @@ class _SettingsAppState extends State<SettingsApp>
                 if (mounted) setState(() => _recordSystemAudio = v);
               },
             ),
-          ),
-          SettingRow(
+          )),
+          _gifDisabled(SettingRow(
             divider: true,
             title: _l.settingsRecordingMicrophone,
-            hint: _l.settingsRecordingMicrophoneHint,
+            hint: isGif
+                ? _l.settingsRecordingGifNoAudio
+                : _l.settingsRecordingMicrophoneHint,
             trailing: GlassToggle(
               value: _recordMicrophone,
               onChanged: (v) async {
@@ -1128,7 +1142,7 @@ class _SettingsAppState extends State<SettingsApp>
                 if (mounted) setState(() => _recordMicrophone = v);
               },
             ),
-          ),
+          )),
           SettingRow(
             divider: true,
             title: _l.settingsRecordingDim,

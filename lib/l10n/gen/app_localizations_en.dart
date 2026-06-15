@@ -490,7 +490,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsRecordingFpsHint =>
-      '60 fps is smoother but roughly doubles the file size. Only applies to video recording; GIF is fixed at 15 fps';
+      '60 fps is smoother but roughly doubles the file size';
+
+  @override
+  String get settingsRecordingGifFixedFps => 'GIF is fixed at 15 fps';
+
+  @override
+  String get settingsRecordingGifNoAudio => 'GIF has no audio track';
 
   @override
   String get settingsRecordingFormat => 'Format';
