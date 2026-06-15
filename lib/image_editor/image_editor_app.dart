@@ -487,22 +487,23 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     } catch (_) {}
   }
 
-  /// Hot-reload the settings that affect a live editor session: loupe geometry +
-  /// the capture/output snapshot (`_cap`). Deliberately does NOT re-read
-  /// in-session interaction state (the in-progress tool styles, the current
-  /// tool / selection), so returning never clobbers what the user is doing.
+  /// Hot-reload the WHOLE config bundle ([Settings.loadAppConfig]: loupe + HUD +
+  /// capture/output + editor bindings) on a Settings-close / window-key — a new
+  /// config setting hot-reloads here for free just by joining AppConfig.
+  /// Deliberately does NOT re-read in-session interaction state (the in-progress
+  /// tool styles, the current tool / selection), so returning never clobbers what
+  /// the user is doing.
   void _reload() {
-    try {
-      Settings.instance.loadLoupe().then((l) {
-        if (mounted) setState(() => _loupe = l);
-      }).catchError((_) {});
-      Settings.instance.loadHud().then((h) {
-        if (mounted) setState(() => _hud = h);
-      }).catchError((_) {});
-      Settings.instance.loadCapture().then((c) {
-        if (mounted) setState(() => _cap = c);
-      }).catchError((_) {});
-    } catch (_) {}
+    Settings.instance.loadAppConfig().then((cfg) {
+      if (mounted) {
+        setState(() {
+          _loupe = cfg.loupe;
+          _hud = cfg.hud;
+          _cap = cfg.capture;
+          _bindings = cfg.bindings;
+        });
+      }
+    }).catchError((_) {});
   }
 
   /// Done: run the user-configured after-editor flow (Settings), then CLOSE the

@@ -336,21 +336,25 @@ class _OverlayAppState extends State<OverlayApp> {
     );
   }
 
-  /// Hot-reload after a ⌘, Settings detour. RE-READS the settings that affect a
-  /// LIVE capture: loupe geometry + the capture/output snapshot (`_capture`).
-  /// Deliberately does NOT re-read in-session interaction state, because that
-  /// would clobber what the user is doing: the per-capture mouse-pointer toggle
-  /// (they may have flipped it this shot), the in-progress tool styles, and the
-  /// current tool/selection. Those stay as the session left them.
+  /// Hot-reload after a ⌘, Settings detour. RE-READS the WHOLE config bundle
+  /// ([Settings.loadAppConfig]: loupe + HUD + capture/output + editor bindings)
+  /// so everything applies live — a new config setting hot-reloads here for free
+  /// just by joining AppConfig. Deliberately does NOT touch in-session state,
+  /// because that would clobber what the user is doing: the per-shot mouse-pointer
+  /// toggle, the in-progress tool styles, the current tool/selection, and the
+  /// per-take record overrides (the record toolbar's codec/fps/cursor/audio/mic —
+  /// seeded ONCE at record-select start, the toolbar IS their control) all stay
+  /// as the session left them. A Settings change to those applies to the NEXT use.
   void _reloadSettings() {
-    Settings.instance.loadLoupe().then((l) {
-      if (mounted) setState(() => _loupe = l);
-    });
-    Settings.instance.loadHud().then((h) {
-      if (mounted) setState(() => _hud = h);
-    });
-    Settings.instance.loadCapture().then((c) {
-      if (mounted) setState(() => _capture = c);
+    Settings.instance.loadAppConfig().then((cfg) {
+      if (mounted) {
+        setState(() {
+          _loupe = cfg.loupe;
+          _hud = cfg.hud;
+          _capture = cfg.capture;
+          _editorBindings = cfg.bindings;
+        });
+      }
     });
   }
 
@@ -403,13 +407,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _recordOverrides = overrides;
     Settings.instance.loadRecording().then((r) {
       if (!mounted || _recordOverrides != overrides) return;
-      overrides.showCursor.value = r.showCursor;
-      overrides.systemAudio.value = r.systemAudio;
-      overrides.microphone.value = r.microphone;
-      overrides.hevc.value = r.hevc;
-      overrides.gif.value = r.isGif;
-      overrides.fps.value = r.fps;
-      overrides.maxDuration.value = r.maxDuration;
+      overrides.seed(r);
     });
     setState(() {
       _recordDisplay = d;

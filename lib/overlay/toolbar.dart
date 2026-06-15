@@ -500,6 +500,21 @@ class RecordOverrides {
   final ValueNotifier<int> fps; // 30 | 60
   final ValueNotifier<int> maxDuration; // seconds; 0 = off (one-shot)
 
+  /// Seed every override from the recording settings ONCE, at record-select
+  /// start. These are per-take, in-session state: the toolbar IS the control for
+  /// this take, so they are NEVER re-seeded on a ⌘, Settings detour (a Settings
+  /// change applies to the NEXT recording's default). Config that DOES hot-reload
+  /// lives in [Settings.loadAppConfig]; these toggles are deliberately not in it.
+  void seed(RecordingSettings r) {
+    showCursor.value = r.showCursor;
+    systemAudio.value = r.systemAudio;
+    microphone.value = r.microphone;
+    hevc.value = r.hevc;
+    gif.value = r.isGif;
+    fps.value = r.fps;
+    maxDuration.value = r.maxDuration;
+  }
+
   void dispose() {
     showCursor.dispose();
     systemAudio.dispose();

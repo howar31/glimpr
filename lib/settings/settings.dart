@@ -4,6 +4,8 @@ import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../output/filename.dart';
 import '../output/flow.dart';
+import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/shortcut_store.dart';
 import 'settings_store.dart';
 
 /// Output image format for a saved / copied capture.
@@ -69,6 +71,30 @@ class CaptureSettings {
     CaptureKind.lastRegion => decorateLastRegion,
     CaptureKind.overlayWholeDisplay => false,
   };
+}
+
+/// The settings that are SAFE to hot-reload mid-session on ANY surface (capture
+/// overlay / image editor): pure "config", NEVER in-session interaction state
+/// (tool styles, current tool/selection, the per-shot cursor toggle, per-take
+/// record overrides — those must NOT be clobbered on a Settings-close, so they
+/// are deliberately ABSENT here). Both surfaces re-read this whole bundle via
+/// [Settings.loadAppConfig] on every Settings-close (overlay `onResume`, editor
+/// `settingsClosed` / `windowBecameKey`). To make a NEW config setting
+/// hot-reload everywhere, add it to an EXISTING member struct below (LoupeConfig
+/// / HudConfig / CaptureSettings) — it then flows through BOTH session-start and
+/// reload for free, no per-surface patch. A brand-new category is the only case
+/// that also needs a new field here.
+class AppConfig {
+  const AppConfig({
+    required this.loupe,
+    required this.hud,
+    required this.capture,
+    required this.bindings,
+  });
+  final LoupeConfig loupe;
+  final HudConfig hud;
+  final CaptureSettings capture;
+  final Map<String, HotkeyBinding?> bindings; // editor + reserved hotkeys
 }
 
 /// Typed access to persisted settings, shared by the settings UI (writes) and
@@ -428,6 +454,23 @@ class Settings {
     decorationJpegFill: await getDecorationJpegFill(),
     captureCursor: await getCaptureCursor(),
   );
+
+  /// One-shot snapshot of every HOT-RELOADABLE config setting (see [AppConfig]).
+  /// The single source of truth for "what re-reads on a Settings-close" — both
+  /// the capture overlay and the image editor call this in their reload. Loads
+  /// all members in parallel.
+  Future<AppConfig> loadAppConfig() async {
+    final loupe = loadLoupe();
+    final hud = loadHud();
+    final capture = loadCapture();
+    final bindings = ShortcutStore(store).all();
+    return AppConfig(
+      loupe: await loupe,
+      hud: await hud,
+      capture: await capture,
+      bindings: await bindings,
+    );
+  }
 }
 
 /// Maps a stored save-folder path to a Directory, or null when unset/empty so
