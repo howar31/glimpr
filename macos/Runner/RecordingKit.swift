@@ -1537,13 +1537,26 @@ final class RecordingController: NSObject, SCStreamDelegate {
     audioStream = nil
     try? await s?.stopCapture()
     try? await a?.stopCapture()
+    // Hide the recording chrome IMMEDIATELY, BEFORE the encode/finalize that
+    // follows, so the user isn't left staring at the strip/frame/scrim while the
+    // file finalizes in the background (a long GIF in particular) — the same
+    // hide-first flow as the screenshot export. The sink keeps finalizing on its
+    // own; cleanupSession (after finalize) tears down the remaining session state
+    // and its own chrome.dismiss / timer-invalidations then no-op. Covers both
+    // Finish and Abort (abort() routes through stop()).
+    tick?.invalidate()
+    tick = nil
+    followTimer?.invalidate()
+    followTimer = nil
+    chrome?.dismiss()
+    chrome = nil
     if abortRequested {
       sink?.cancel()
       finalize(result: .aborted)
     } else {
-      // GIF finalize encodes every accumulated frame, so flag a processing
-      // phase first; the completion sound + after-record flow fire only after
-      // onRecordFinished (i.e. after the GIF is fully written).
+      // GIF finalize encodes every accumulated frame; the completion sound +
+      // after-record flow fire only after onRecordFinished (i.e. after the GIF is
+      // fully written). The chrome is already gone, so this finalizes invisibly.
       if isGif { events("onRecordProcessing", nil) }
       let ok = await (sink?.finish() ?? false)
       finalize(result: ok ? .finished : .failed("encoder did not complete"))
