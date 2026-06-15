@@ -9,6 +9,11 @@ final class CaptureChannel {
   private let capture: CaptureController
   private let manager: () -> OverlayManager?
 
+  /// Menu-bar processing-pulse driver from the Dart capture/flow pipeline:
+  /// (active) — true at capture commit (shutter moment), false when the output
+  /// is delivered. Independent of the shutter-sound setting (purely visual).
+  var onCaptureProcessingChange: ((Bool) -> Void)?
+
   init(
     messenger: FlutterBinaryMessenger,
     capture: CaptureController,
@@ -26,6 +31,12 @@ final class CaptureChannel {
           liveSelect: (a?["liveSelect"] as? Bool) ?? false)
         result(nil)
       case "dismissOverlay": self?.manager()?.dismiss(); result(nil)
+      // Menu-bar processing pulse: capture committed (true) / delivered (false).
+      case "setProcessing":
+        let active = (call.arguments as? [String: Any])?["active"] as? Bool
+          ?? false
+        DispatchQueue.main.async { self?.onCaptureProcessingChange?(active) }
+        result(nil)
       // Record hotkey while a record-select is in flight: relay to every overlay
       // engine to resurface a suspended picker / cancel a foreground one.
       case "recordSelectHotkey":

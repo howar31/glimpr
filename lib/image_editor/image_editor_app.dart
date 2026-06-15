@@ -18,6 +18,7 @@ import '../overlay/toolbar.dart';
 import '../output/clipboard.dart';
 import '../output/deliver.dart';
 import '../output/flow.dart';
+import '../output/output_naming.dart';
 import '../output/sounds.dart';
 import '../perf/frame_stats.dart';
 import '../settings/settings.dart';
@@ -530,17 +531,31 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         'editorExportBegin actions=${actions.map((a) => a.name).join(',')}');
     try {
       final cap = _cap;
+      // The editor's "shutter": Done/export is the commit moment (parallel to a
+      // capture). The menu-bar processing pulse runs until the output delivers.
+      if (cap.shutterSound) playShutter();
+      _setProcessing(true);
       // After a crop-trim the document carries the smaller canvas image; export
       // that (and the already-shifted drawables), else the untrimmed base.
       final doc = controller.document.value;
+      // Respect the shared output settings exactly like every capture/recording
+      // leg: save dir + subfolder + filename template (owner: drop the old
+      // "-edited" name, the editor now names like a capture). %title resolves to
+      // the source image's name.
+      final naming = await resolveCaptureNaming(
+        cap: cap,
+        ext: cap.isJpeg ? 'jpg' : 'png',
+        windowTitle: _sourceName,
+        appName: _sourceName,
+      );
       final result = await exportImage(
         image: doc.canvasImage ?? baseImage,
         drawables: doc.drawables,
         jpeg: cap.isJpeg,
         jpegQuality: cap.jpegQuality,
         actions: actions,
-        saveDir: cap.saveDir,
-        sourceName: _sourceName,
+        saveDir: naming.dir,
+        fileName: naming.fileName,
         // Route the share/pin legs over the editor's own channel (this engine
         // has no glimpr/capture handler); share anchors to the menu-bar icon,
         // pin centers (no origin rect from the editor).
@@ -568,8 +583,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       if (ok && cap.completionSound) playComplete();
       return ok;
     } finally {
+      _setProcessing(false);
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  /// Drive the menu-bar processing pulse from the editor engine (handled by the
+  /// control engine over `glimpr/imageEditor`). Fire-and-forget.
+  void _setProcessing(bool active) {
+    _channel
+        .invokeMethod('setProcessing', {'active': active})
+        .then((_) {}, onError: (_, _) {});
   }
 
   /// One line summarizing every leg the flow ran, e.g. "Copied · Saved" or

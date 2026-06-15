@@ -119,6 +119,9 @@ class _SettingsAppState extends State<SettingsApp>
   bool _recordAvailable = false;
   RecordFormat _recordFormat = RecordFormat.h264;
   int _recordFps = 30;
+  RecordVideoQuality _recordVideoQuality = RecordVideoQuality.high;
+  int _recordMaxLongSide = 1920;
+  int _recordGifFps = 15;
   int _recordCountdown = 0;
   int _recordMaxDuration = 0;
   bool _recordShowCursor = true;
@@ -277,6 +280,9 @@ class _SettingsAppState extends State<SettingsApp>
       _appLanguageInitial = appLanguage;
       _recordFormat = rec.format;
       _recordFps = rec.fps;
+      _recordVideoQuality = rec.videoQuality;
+      _recordMaxLongSide = rec.maxLongSide;
+      _recordGifFps = rec.gifFps;
       _recordCountdown = rec.countdown;
       _recordMaxDuration = rec.maxDuration;
       _recordShowCursor = rec.showCursor;
@@ -751,15 +757,8 @@ class _SettingsAppState extends State<SettingsApp>
             ),
             // Quality applies to JPEG only. Slide + fade it in/out on format
             // switch (collapses to zero height for PNG, which is lossless).
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 200),
-              alignment: Alignment.topCenter,
-              sizeCurve: Curves.easeOutCubic,
-              firstCurve: Curves.easeOut,
-              secondCurve: Curves.easeOut,
-              crossFadeState: lossy
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
+            SettingCrossFade(
+              showFirst: !lossy,
               firstChild: const SizedBox(width: double.infinity, height: 0),
               secondChild: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1002,21 +1001,12 @@ class _SettingsAppState extends State<SettingsApp>
     ];
   }
 
-  /// Screen recording (macOS 15+ module): its own sidebar pane (owner
-  /// Dim + disable a Recording row that does not apply to the GIF format (GIF is
-  /// a fixed 15 fps and has no audio track), mirroring the toolbar's
-  /// `disabledWhen: gif`. The stored value is untouched — switching back to a
-  /// video format restores interactivity.
-  Widget _gifDisabled(Widget child) {
-    final gif = _recordFormat == RecordFormat.gif;
-    return Opacity(
-      opacity: gif ? 0.4 : 1,
-      child: IgnorePointer(ignoring: gif, child: child),
-    );
-  }
-
-  /// request). Codec/fps under Format; cursor + audio under Behaviour; then
-  /// the after-recording flow subset.
+  /// Screen recording (macOS 15+ module): the Format section holds the codec,
+  /// resolution, and an AnimatedCrossFade block of format-specific encode
+  /// controls (video: quality, fps, system audio, microphone; GIF: fps) that
+  /// collapses by format like the screenshot JPEG-quality control, so only that
+  /// block changes with the format. Then a stable Behaviour section (cursor,
+  /// countdown, stop-after, dim) and the after-recording flow subset.
   List<Widget> _recordingPane(GlimprTokens t) {
     final isGif = _recordFormat == RecordFormat.gif;
     return [
@@ -1047,24 +1037,133 @@ class _SettingsAppState extends State<SettingsApp>
               },
             ),
           ),
-          // GIF is a fixed 15 fps + has no audio, so the fps and the two audio
-          // rows are disabled (dimmed + non-interactive) for GIF, each with a
-          // dynamic hint explaining why.
-          _gifDisabled(SettingRow(
-            divider: true,
-            title: _l.settingsRecordingFps,
-            hint: isGif
-                ? _l.settingsRecordingGifFixedFps
-                : _l.settingsRecordingFpsHint,
-            trailing: Segmented<int>(
-              value: _recordFps,
-              options: const [(30, '30 fps'), (60, '60 fps')],
+          // Format-specific encode controls, collapsed/expanded by format the
+          // same way the screenshot JPEG-quality control is (SettingCrossFade,
+          // not a disabled placeholder). Only this block changes with format;
+          // the format selector above stays anchored. GIF -> firstChild (frame
+          // rate only — GIF size is fixed); video -> secondChild (quality,
+          // resolution, fps, audio). Resolution + audio are video-only.
+          SettingCrossFade(
+            showFirst: isGif,
+            firstChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingFps,
+                  hint: _l.settingsRecordingGifFpsHint,
+                  trailing: Segmented<int>(
+                    value: _recordGifFps,
+                    options: [
+                      for (final n in const [10, 15, 20, 25]) (n, '$n fps'),
+                    ],
+                    onChanged: (v) async {
+                      await _s.setRecordGifFps(v);
+                      if (mounted) setState(() => _recordGifFps = v);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Frame rate first, so it sits on the SAME row as the GIF frame
+                // rate — that row stays put across a format switch (less jump).
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingFps,
+                  hint: _l.settingsRecordingFpsHint,
+                  trailing: Segmented<int>(
+                    value: _recordFps,
+                    options: const [(30, '30 fps'), (60, '60 fps')],
+                    onChanged: (v) async {
+                      await _s.setRecordFps(v);
+                      if (mounted) setState(() => _recordFps = v);
+                    },
+                  ),
+                ),
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingQuality,
+                  hint: _l.settingsRecordingQualityHint,
+                  trailing: Segmented<RecordVideoQuality>(
+                    value: _recordVideoQuality,
+                    options: [
+                      (RecordVideoQuality.low, _l.settingsRecordingQualityLow),
+                      (RecordVideoQuality.medium,
+                          _l.settingsRecordingQualityMedium),
+                      (RecordVideoQuality.high, _l.settingsRecordingQualityHigh),
+                    ],
+                    onChanged: (v) async {
+                      await _s.setRecordVideoQuality(v);
+                      if (mounted) setState(() => _recordVideoQuality = v);
+                    },
+                  ),
+                ),
+                // Output resolution cap (longest side px; native = no cap, far
+                // right as the largest). mp4 ONLY — GIF has a fixed size.
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingResolution,
+                  hint: _l.settingsRecordingResolutionHint,
+                  trailing: Segmented<int>(
+                    value: _recordMaxLongSide,
+                    options: [
+                      for (final n in const [720, 1280, 1920, 2560]) (n, '$n'),
+                      (0, _l.settingsRecordingResolutionNative),
+                    ],
+                    onChanged: (v) async {
+                      await _s.setRecordMaxLongSide(v);
+                      if (mounted) setState(() => _recordMaxLongSide = v);
+                    },
+                  ),
+                ),
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingSystemAudio,
+                  hint: _l.settingsRecordingSystemAudioHint,
+                  trailing: GlassToggle(
+                    value: _recordSystemAudio,
+                    onChanged: (v) async {
+                      await _s.setRecordSystemAudio(v);
+                      if (mounted) setState(() => _recordSystemAudio = v);
+                    },
+                  ),
+                ),
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingMicrophone,
+                  hint: _l.settingsRecordingMicrophoneHint,
+                  trailing: GlassToggle(
+                    value: _recordMicrophone,
+                    onChanged: (v) async {
+                      await _s.setRecordMicrophone(v);
+                      if (mounted) setState(() => _recordMicrophone = v);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ]),
+        const SizedBox(height: 15),
+        SectionLabel(_l.settingsSectionBehaviour,
+            icon: Icons.videocam_outlined),
+        GlassCard.rows([
+          SettingRow(
+            title: _l.settingsMousePointer,
+            hint: _l.settingsRecordingCursorHint,
+            trailing: GlassToggle(
+              value: _recordShowCursor,
               onChanged: (v) async {
-                await _s.setRecordFps(v);
-                if (mounted) setState(() => _recordFps = v);
+                await _s.setRecordShowCursor(v);
+                if (mounted) setState(() => _recordShowCursor = v);
               },
             ),
-          )),
+          ),
+          // Countdown + auto-stop are recording behaviour (when it starts and
+          // stops), not output format.
           SettingRow(
             divider: true,
             title: _l.settingsRecordingCountdown,
@@ -1099,50 +1198,6 @@ class _SettingsAppState extends State<SettingsApp>
               },
             ),
           ),
-        ]),
-        const SizedBox(height: 15),
-        SectionLabel(_l.settingsSectionBehaviour,
-            icon: Icons.videocam_outlined),
-        GlassCard.rows([
-          SettingRow(
-            title: _l.settingsMousePointer,
-            hint: _l.settingsRecordingCursorHint,
-            trailing: GlassToggle(
-              value: _recordShowCursor,
-              onChanged: (v) async {
-                await _s.setRecordShowCursor(v);
-                if (mounted) setState(() => _recordShowCursor = v);
-              },
-            ),
-          ),
-          _gifDisabled(SettingRow(
-            divider: true,
-            title: _l.settingsRecordingSystemAudio,
-            hint: isGif
-                ? _l.settingsRecordingGifNoAudio
-                : _l.settingsRecordingSystemAudioHint,
-            trailing: GlassToggle(
-              value: _recordSystemAudio,
-              onChanged: (v) async {
-                await _s.setRecordSystemAudio(v);
-                if (mounted) setState(() => _recordSystemAudio = v);
-              },
-            ),
-          )),
-          _gifDisabled(SettingRow(
-            divider: true,
-            title: _l.settingsRecordingMicrophone,
-            hint: isGif
-                ? _l.settingsRecordingGifNoAudio
-                : _l.settingsRecordingMicrophoneHint,
-            trailing: GlassToggle(
-              value: _recordMicrophone,
-              onChanged: (v) async {
-                await _s.setRecordMicrophone(v);
-                if (mounted) setState(() => _recordMicrophone = v);
-              },
-            ),
-          )),
           SettingRow(
             divider: true,
             title: _l.settingsRecordingDim,

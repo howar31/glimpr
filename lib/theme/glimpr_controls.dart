@@ -388,6 +388,38 @@ class SettingRow extends StatelessWidget {
   }
 }
 
+/// Settings cross-fade for a format-conditional block: animates the size +
+/// opacity between [firstChild] and [secondChild] with the standard settings
+/// timing, instead of swapping them abruptly. The eye tracks the change and
+/// nothing jumps (owner preference). Used for the screenshot JPEG-quality
+/// control (collapse to empty) and the recording video/GIF encode block.
+class SettingCrossFade extends StatelessWidget {
+  const SettingCrossFade({
+    super.key,
+    required this.showFirst,
+    required this.firstChild,
+    required this.secondChild,
+  });
+
+  /// Whether [firstChild] is the visible state ([secondChild] otherwise).
+  final bool showFirst;
+  final Widget firstChild;
+  final Widget secondChild;
+
+  @override
+  Widget build(BuildContext context) => AnimatedCrossFade(
+        duration: const Duration(milliseconds: 200),
+        alignment: Alignment.topCenter,
+        sizeCurve: Curves.easeOutCubic,
+        firstCurve: Curves.easeOut,
+        secondCurve: Curves.easeOut,
+        crossFadeState:
+            showFirst ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+        firstChild: firstChild,
+        secondChild: secondChild,
+      );
+}
+
 /// Cyan→blue gradient toggle with a white knob.
 class GlassToggle extends StatelessWidget {
   const GlassToggle({super.key, required this.value, required this.onChanged});

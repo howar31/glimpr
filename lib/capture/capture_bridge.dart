@@ -187,6 +187,18 @@ class CaptureBridge {
   static Future<void> notifyRecentChanged() =>
       _channel.invokeMethod('recentChanged');
 
+  /// Drive the menu-bar "processing" pulse: true at capture commit (the shutter
+  /// moment), false once the output is delivered. Purely visual (independent of
+  /// the shutter-sound setting). Fire-and-forget. From the overlay engine this
+  /// relays to the control engine's status item.
+  static Future<void> setCaptureProcessing(bool active) async {
+    try {
+      await _channel.invokeMethod('setProcessing', {'active': active});
+    } catch (_) {
+      // Fire-and-forget; absent in tests / other engines.
+    }
+  }
+
   /// Drop a named perf mark into the NATIVE unified log (subsystem
   /// com.howar31.glimpr, category "perf") so Dart-side completion events land
   /// on the same timeline as the native capture marks. Static for the same

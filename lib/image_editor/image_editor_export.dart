@@ -26,7 +26,7 @@ Future<FlowResult> exportImage({
   required int jpegQuality,
   required Set<FlowAction> actions,
   required Directory? saveDir,
-  required String sourceName,
+  required String fileName,
   RunFlowSeam? run,
   // The editor engine has no glimpr/capture handler, so its share/pin legs
   // ride the editor's own channel — injected here, forwarded to runFlow.
@@ -59,6 +59,6 @@ Future<FlowResult> exportImage({
     actions: actions,
     bytes: bytes,
     saveDir: saveDir,
-    fileName: '$sourceName-edited.${jpeg ? 'jpg' : 'png'}',
+    fileName: fileName,
   );
 }

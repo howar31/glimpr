@@ -135,6 +135,9 @@ class Settings {
   static const _flowAfterRecordingKey = 'flow_after_recording';
   static const _recordMaxDurationKey = 'record_max_duration';
   static const _recordCountdownKey = 'record_countdown';
+  static const _recordVideoQualityKey = 'record_video_quality';
+  static const _recordMaxLongSideKey = 'record_max_long_side';
+  static const _recordGifFpsKey = 'record_gif_fps';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
@@ -341,6 +344,46 @@ class Settings {
   Future<void> setRecordCountdown(int v) => store.setInt(
       _recordCountdownKey, kRecordCountdowns.contains(v) ? v : 0);
 
+  /// mp4 video quality tier (SSOT). The user picks a self-labeling tier; the
+  /// native encoder maps it to an average bitrate (bits-per-pixel × final
+  /// resolution × fps), so the same tier yields consistent quality at any
+  /// resolution. Does not apply to GIF (256-color ImageIO).
+  Future<RecordVideoQuality> getRecordVideoQuality() async {
+    switch (await store.getString(_recordVideoQualityKey)) {
+      case 'low':
+        return RecordVideoQuality.low;
+      case 'medium':
+        return RecordVideoQuality.medium;
+      case 'high':
+        return RecordVideoQuality.high;
+    }
+    return RecordVideoQuality.high; // default
+  }
+
+  Future<void> setRecordVideoQuality(RecordVideoQuality q) =>
+      store.setString(_recordVideoQualityKey, q.name);
+
+  /// Output resolution cap: the longest side in pixels; 0 = native (no cap).
+  /// Shared by mp4 and GIF. Off-step values clamp to the 1920 default.
+  static const kRecordMaxLongSides = <int>[0, 720, 1280, 1920, 2560];
+  Future<int> getRecordMaxLongSide() async {
+    final v = (await store.getInt(_recordMaxLongSideKey)) ?? 1920;
+    return kRecordMaxLongSides.contains(v) ? v : 1920;
+  }
+
+  Future<void> setRecordMaxLongSide(int v) => store.setInt(
+      _recordMaxLongSideKey, kRecordMaxLongSides.contains(v) ? v : 1920);
+
+  /// GIF frame rate in frames per second. Off-step values clamp to 15.
+  static const kRecordGifFps = <int>[10, 15, 20, 25];
+  Future<int> getRecordGifFps() async {
+    final v = (await store.getInt(_recordGifFpsKey)) ?? 15;
+    return kRecordGifFps.contains(v) ? v : 15;
+  }
+
+  Future<void> setRecordGifFps(int v) =>
+      store.setInt(_recordGifFpsKey, kRecordGifFps.contains(v) ? v : 15);
+
   /// The after-recording flow: the path-based subset only (copyPath /
   /// showInFinder / shareSheet). Default = none (silent save, owner decision).
   Future<Set<FlowAction>> getAfterRecordingFlow() async {
@@ -364,6 +407,9 @@ class Settings {
         microphone: await getRecordMicrophone(),
         maxDuration: await getRecordMaxDuration(),
         countdown: await getRecordCountdown(),
+        videoQuality: await getRecordVideoQuality(),
+        maxLongSide: await getRecordMaxLongSide(),
+        gifFps: await getRecordGifFps(),
         flow: await getAfterRecordingFlow(),
       );
 
@@ -485,6 +531,10 @@ Directory? resolveSaveDir(String? path) =>
 /// ImageIO animated-GIF path (no mp4, no audio).
 enum RecordFormat { h264, hevc, gif }
 
+/// mp4 video quality tier. Maps natively to an average encoder bitrate; GIF
+/// ignores it (256-color ImageIO).
+enum RecordVideoQuality { low, medium, high }
+
 class RecordingSettings {
   const RecordingSettings({
     this.format = RecordFormat.h264,
@@ -495,6 +545,9 @@ class RecordingSettings {
     this.microphone = false,
     this.maxDuration = 0,
     this.countdown = 0,
+    this.videoQuality = RecordVideoQuality.high,
+    this.maxLongSide = 1920,
+    this.gifFps = 15,
     this.flow = const {},
   });
 
@@ -508,5 +561,8 @@ class RecordingSettings {
   final bool microphone;
   final int maxDuration; // seconds; 0 = off (auto-stop disabled)
   final int countdown; // seconds; 0 = off (start delay)
+  final RecordVideoQuality videoQuality; // mp4 only
+  final int maxLongSide; // longest side px cap; 0 = native (shared mp4/GIF)
+  final int gifFps; // 10 | 15 | 20 | 25
   final Set<FlowAction> flow; // after-recording, kRecordingFlowActions subset
 }

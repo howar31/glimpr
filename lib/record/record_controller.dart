@@ -42,6 +42,7 @@ class RecordController {
     Future<void> Function()? beginLiveSelect,
     Future<void> Function()? recordSelectHotkey,
     void Function()? complete,
+    void Function()? shutter,
     DateTime Function()? now,
   })  : _bridge = bridge ?? RecordBridge(),
         _settings = settings ?? Settings.instance,
@@ -58,6 +59,7 @@ class RecordController {
         _recordSelectHotkey = recordSelectHotkey ??
             (() => CaptureBridge().recordSelectHotkey()),
         _complete = complete ?? (() => playComplete()),
+        _shutter = shutter ?? (() => playShutter()),
         _now = now ?? DateTime.now {
     _bridge.registerHandlers(
       onStarted: _onStarted,
@@ -67,6 +69,7 @@ class RecordController {
       onSelection: _onSelection,
       onPaused: _onPaused,
       onResumed: _onResumed,
+      onStopping: _onStopping,
     );
   }
 
@@ -81,6 +84,7 @@ class RecordController {
   final Future<void> Function() _beginLiveSelect;
   final Future<void> Function() _recordSelectHotkey;
   final void Function() _complete;
+  final void Function() _shutter;
   final DateTime Function() _now;
 
   RecordPhase _phase = RecordPhase.idle;
@@ -142,6 +146,13 @@ class RecordController {
     if (_phase != RecordPhase.paused) return;
     _phase = RecordPhase.recording;
     await _bridge.resume();
+  }
+
+  /// Native fires this when a recording begins finalizing (stop pressed, any
+  /// path). The recording "shutter" plays here (gated), parallel to the
+  /// screenshot shutter at capture commit; the menu-bar pulse is native-driven.
+  Future<void> _onStopping() async {
+    if ((await _settings.loadCapture()).shutterSound) _shutter();
   }
 
   void _onPaused() {
@@ -225,6 +236,10 @@ class RecordController {
       microphone: isGif ? false : rec.microphone,
       maxDuration: rec.maxDuration,
       countdown: rec.countdown,
+      // Output quality controls: settings-only (no per-take toolbar override).
+      videoQuality: rec.videoQuality.name,
+      maxLongSide: rec.maxLongSide,
+      gifFps: rec.gifFps,
     );
   }
 
@@ -285,6 +300,10 @@ class RecordController {
         microphone: isGif ? false : (a['microphone'] as bool?) ?? rec.microphone,
         maxDuration: (a['maxDuration'] as num?)?.toInt() ?? rec.maxDuration,
         countdown: rec.countdown,
+        // Output quality controls: settings-only (no per-take toolbar override).
+        videoQuality: rec.videoQuality.name,
+        maxLongSide: rec.maxLongSide,
+        gifFps: rec.gifFps,
       );
     } catch (e) {
       _phase = RecordPhase.idle;

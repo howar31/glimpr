@@ -477,13 +477,41 @@
   "@settingsRecordingFpsHint": {
     "description": "Settings > Capture > Screen recording: fps row hint (video formats)"
   },
-  "settingsRecordingGifFixedFps": "GIF is fixed at 15 fps",
-  "@settingsRecordingGifFixedFps": {
-    "description": "Settings > Recording: fps row hint when the format is GIF (the row is disabled)"
+  "settingsRecordingQuality": "Video quality",
+  "@settingsRecordingQuality": {
+    "description": "Settings > Recording: mp4 video quality row title"
   },
-  "settingsRecordingGifNoAudio": "GIF has no audio track",
-  "@settingsRecordingGifNoAudio": {
-    "description": "Settings > Recording: system-audio / microphone row hint when the format is GIF (the rows are disabled)"
+  "settingsRecordingQualityHint": "Higher quality looks crisper but makes larger files; applies to mp4 (H.264 / HEVC)",
+  "@settingsRecordingQualityHint": {
+    "description": "Settings > Recording: video quality row hint (video formats)"
+  },
+  "settingsRecordingQualityLow": "Low",
+  "@settingsRecordingQualityLow": {
+    "description": "Settings > Recording: video quality tier (low)"
+  },
+  "settingsRecordingQualityMedium": "Medium",
+  "@settingsRecordingQualityMedium": {
+    "description": "Settings > Recording: video quality tier (medium)"
+  },
+  "settingsRecordingQualityHigh": "High",
+  "@settingsRecordingQualityHigh": {
+    "description": "Settings > Recording: video quality tier (high)"
+  },
+  "settingsRecordingResolution": "Resolution limit",
+  "@settingsRecordingResolution": {
+    "description": "Settings > Recording: output resolution cap row title (shared by video and GIF)"
+  },
+  "settingsRecordingResolutionHint": "Cap the longest side in pixels; larger recordings are downscaled. Video only (GIF is fixed at 1024 px)",
+  "@settingsRecordingResolutionHint": {
+    "description": "Settings > Recording: resolution cap row hint"
+  },
+  "settingsRecordingResolutionNative": "Native",
+  "@settingsRecordingResolutionNative": {
+    "description": "Settings > Recording: resolution cap option meaning no downscale (native resolution)"
+  },
+  "settingsRecordingGifFpsHint": "Frames per second for GIF recordings; higher is smoother but larger",
+  "@settingsRecordingGifFpsHint": {
+    "description": "Settings > Recording: GIF frame-rate row hint (GIF section)"
   },
   "settingsRecordingFormat": "Format",
   "@settingsRecordingFormat": {

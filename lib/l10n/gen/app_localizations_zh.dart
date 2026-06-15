@@ -466,10 +466,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingFpsHint => '60 fps 較流暢，檔案約為兩倍大';
 
   @override
-  String get settingsRecordingGifFixedFps => 'GIF 固定為 15 fps';
+  String get settingsRecordingQuality => '影片品質';
 
   @override
-  String get settingsRecordingGifNoAudio => 'GIF 沒有音訊軌';
+  String get settingsRecordingQualityHint =>
+      '品質越高越清晰，但檔案越大；適用於 mp4（H.264／HEVC）';
+
+  @override
+  String get settingsRecordingQualityLow => '低';
+
+  @override
+  String get settingsRecordingQualityMedium => '中';
+
+  @override
+  String get settingsRecordingQualityHigh => '高';
+
+  @override
+  String get settingsRecordingResolution => '解析度上限';
+
+  @override
+  String get settingsRecordingResolutionHint =>
+      '限制最長邊的像素；過大的錄影會被縮小。僅限影片（GIF 固定 1024 px）';
+
+  @override
+  String get settingsRecordingResolutionNative => '原生';
+
+  @override
+  String get settingsRecordingGifFpsHint => 'GIF 錄影的每秒影格數；越高越流暢，但檔案越大';
 
   @override
   String get settingsRecordingFormat => '格式';

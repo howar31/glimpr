@@ -36,6 +36,9 @@ class RecordBridge {
     bool microphone = false,
     int maxDuration = 0,
     int countdown = 0,
+    String videoQuality = 'high',
+    int maxLongSide = 0,
+    int gifFps = 15,
   }) =>
       _channel.invokeMethod('start', {
         'mode': mode,
@@ -54,6 +57,9 @@ class RecordBridge {
         'microphone': microphone,
         'maxDuration': maxDuration,
         'countdown': countdown,
+        'videoQuality': videoQuality,
+        'maxLongSide': maxLongSide,
+        'gifFps': gifFps,
       });
 
   /// Stop the active recording (file finalizes -> onRecordFinished).
@@ -80,12 +86,15 @@ class RecordBridge {
     void Function(Map<String, dynamic> args)? onSelection,
     void Function()? onPaused,
     void Function()? onResumed,
+    void Function()? onStopping,
   }) {
     _channel.setMethodCallHandler((call) async {
       final args = call.arguments;
       switch (call.method) {
         case 'onRecordSelection':
           onSelection?.call((args as Map).cast<String, dynamic>());
+        case 'onRecordStopping':
+          onStopping?.call();
         case 'onRecordPaused':
           onPaused?.call();
         case 'onRecordResumed':

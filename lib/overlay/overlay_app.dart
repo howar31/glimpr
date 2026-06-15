@@ -1086,6 +1086,10 @@ class _OverlayAppState extends State<OverlayApp> {
       rect: resolveRecordedRect(
           selectionLogical, window?.rect, d.width, d.height),
     ));
+    // Pin-only captures don't run the processing pulse (owner: pin is exempt).
+    if (!_pinOnly) {
+      CaptureBridge.setCaptureProcessing(true); // menu-bar pulse: commit
+    }
     if (cap.shutterSound) {
       playShutter(); // shutter at the instant of capture (fire-and-forget)
     }
@@ -1173,6 +1177,7 @@ class _OverlayAppState extends State<OverlayApp> {
     } catch (e) {
       _bridge.showError(appL10n.overlayCaptureFailedError('$e'));
     } finally {
+      CaptureBridge.setCaptureProcessing(false); // menu-bar pulse: delivered
       windowMask?.dispose();
       cursorImg?.dispose();
       frozen.dispose();

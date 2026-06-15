@@ -200,6 +200,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     recordingChannel?.onRecordingPauseChange = { [weak self] paused in
       self?.statusItem?.setRecordingPaused(paused)
     }
+    recordingChannel?.onRecordingProcessingChange = { [weak self] active in
+      self?.statusItem?.setProcessing(active)
+    }
+    captureChannel?.onCaptureProcessingChange = { [weak self] active in
+      self?.statusItem?.setProcessing(active)
+    }
     statusItem?.onRecordPause = { [weak self] in self?.recordingChannel?.pauseActive() }
     statusItem?.onRecordResume = { [weak self] in self?.recordingChannel?.resumeActive() }
     PerfLog.mark("statusItemReady")
@@ -331,6 +337,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           self?.statusItem?.setRecentImages(paths)
         }
         result(nil)
+      // Editor Done/export: drive the menu-bar processing pulse, parallel to a
+      // capture's commit→delivered.
+      case "setProcessing":
+        let active = (call.arguments as? [String: Any])?["active"] as? Bool
+          ?? false
+        self?.statusItem?.setProcessing(active)
+        result(nil)
       // Dart signals its editor channel handler is installed → flush any path
       // that a Finder "Open With" delivered during a cold start.
       case "editorReady":
@@ -442,6 +455,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// Open an image that arrived from outside the app (Finder "Open With" / an
   /// `openURLs` Apple event). If the editor Dart side has not signalled ready yet
   /// (cold start), buffer the path and flush it on `editorReady`.
+  /// Drive the menu-bar processing pulse from any engine (the overlay engine
+  /// reaches the control engine's status item through the shared window — same
+  /// process). Control-engine captures wire `onCaptureProcessingChange` instead.
+  func setCaptureProcessing(_ active: Bool) {
+    DispatchQueue.main.async { [weak self] in
+      self?.statusItem?.setProcessing(active)
+    }
+  }
+
   func openImageFromExternal(_ path: String) {
     guard imageEditorReady else {
       pendingOpenPath = path

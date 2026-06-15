@@ -56,6 +56,9 @@ class _FakeBridge extends RecordBridge {
     bool microphone = false,
     int maxDuration = 0,
     int countdown = 0,
+    String videoQuality = 'high',
+    int maxLongSide = 0,
+    int gifFps = 15,
   }) async {
     starts.add({
       'mode': mode,
@@ -72,6 +75,9 @@ class _FakeBridge extends RecordBridge {
       'microphone': microphone,
       'maxDuration': maxDuration,
       'countdown': countdown,
+      'videoQuality': videoQuality,
+      'maxLongSide': maxLongSide,
+      'gifFps': gifFps,
     });
   }
 
@@ -98,6 +104,7 @@ class _FakeBridge extends RecordBridge {
     void Function(Map<String, dynamic> args)? onSelection,
     void Function()? onPaused,
     void Function()? onResumed,
+    void Function()? onStopping,
   }) {
     started = onStarted;
     finished = onFinished;
@@ -165,6 +172,11 @@ void main() {
       expect(s['showsCursor'], isTrue);
       expect(s['systemAudio'], isFalse);
       expect(s['microphone'], isFalse);
+      // Output quality defaults: high quality, 1920 long-side cap, GIF 15 fps,
+      // high GIF quality (two-pass).
+      expect(s['videoQuality'], 'high');
+      expect(s['maxLongSide'], 1920);
+      expect(s['gifFps'], 15);
       expect(rc.phase, RecordPhase.starting);
     });
 
@@ -227,6 +239,9 @@ void main() {
       await s.setRecordSystemAudio(true);
       await s.setRecordMicrophone(true);
       await s.setRecordScrim(false);
+      await s.setRecordVideoQuality(RecordVideoQuality.low);
+      await s.setRecordMaxLongSide(1280);
+      await s.setRecordGifFps(25);
       await rc.toggle(kRecordModeDisplay);
       final call = bridge.starts.single;
       expect(call['hevc'], isTrue);
@@ -235,6 +250,9 @@ void main() {
       expect(call['systemAudio'], isTrue);
       expect(call['microphone'], isTrue);
       expect(call['showScrim'], isFalse);
+      expect(call['videoQuality'], 'low');
+      expect(call['maxLongSide'], 1280);
+      expect(call['gifFps'], 25);
     });
 
     test('window mode with no focused window errors and stays idle', () async {

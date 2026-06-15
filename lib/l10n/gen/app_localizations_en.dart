@@ -493,10 +493,34 @@ class AppLocalizationsEn extends AppLocalizations {
       '60 fps is smoother but roughly doubles the file size';
 
   @override
-  String get settingsRecordingGifFixedFps => 'GIF is fixed at 15 fps';
+  String get settingsRecordingQuality => 'Video quality';
 
   @override
-  String get settingsRecordingGifNoAudio => 'GIF has no audio track';
+  String get settingsRecordingQualityHint =>
+      'Higher quality looks crisper but makes larger files; applies to mp4 (H.264 / HEVC)';
+
+  @override
+  String get settingsRecordingQualityLow => 'Low';
+
+  @override
+  String get settingsRecordingQualityMedium => 'Medium';
+
+  @override
+  String get settingsRecordingQualityHigh => 'High';
+
+  @override
+  String get settingsRecordingResolution => 'Resolution limit';
+
+  @override
+  String get settingsRecordingResolutionHint =>
+      'Cap the longest side in pixels; larger recordings are downscaled. Video only (GIF is fixed at 1024 px)';
+
+  @override
+  String get settingsRecordingResolutionNative => 'Native';
+
+  @override
+  String get settingsRecordingGifFpsHint =>
+      'Frames per second for GIF recordings; higher is smoother but larger';
 
   @override
   String get settingsRecordingFormat => 'Format';

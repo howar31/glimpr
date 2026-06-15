@@ -986,17 +986,59 @@ abstract class AppLocalizations {
   /// **'60 fps is smoother but roughly doubles the file size'**
   String get settingsRecordingFpsHint;
 
-  /// Settings > Recording: fps row hint when the format is GIF (the row is disabled)
+  /// Settings > Recording: mp4 video quality row title
   ///
   /// In en, this message translates to:
-  /// **'GIF is fixed at 15 fps'**
-  String get settingsRecordingGifFixedFps;
+  /// **'Video quality'**
+  String get settingsRecordingQuality;
 
-  /// Settings > Recording: system-audio / microphone row hint when the format is GIF (the rows are disabled)
+  /// Settings > Recording: video quality row hint (video formats)
   ///
   /// In en, this message translates to:
-  /// **'GIF has no audio track'**
-  String get settingsRecordingGifNoAudio;
+  /// **'Higher quality looks crisper but makes larger files; applies to mp4 (H.264 / HEVC)'**
+  String get settingsRecordingQualityHint;
+
+  /// Settings > Recording: video quality tier (low)
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get settingsRecordingQualityLow;
+
+  /// Settings > Recording: video quality tier (medium)
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get settingsRecordingQualityMedium;
+
+  /// Settings > Recording: video quality tier (high)
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get settingsRecordingQualityHigh;
+
+  /// Settings > Recording: output resolution cap row title (shared by video and GIF)
+  ///
+  /// In en, this message translates to:
+  /// **'Resolution limit'**
+  String get settingsRecordingResolution;
+
+  /// Settings > Recording: resolution cap row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Cap the longest side in pixels; larger recordings are downscaled. Video only (GIF is fixed at 1024 px)'**
+  String get settingsRecordingResolutionHint;
+
+  /// Settings > Recording: resolution cap option meaning no downscale (native resolution)
+  ///
+  /// In en, this message translates to:
+  /// **'Native'**
+  String get settingsRecordingResolutionNative;
+
+  /// Settings > Recording: GIF frame-rate row hint (GIF section)
+  ///
+  /// In en, this message translates to:
+  /// **'Frames per second for GIF recordings; higher is smoother but larger'**
+  String get settingsRecordingGifFpsHint;
 
   /// Settings > Capture > Screen recording: output format row title
   ///

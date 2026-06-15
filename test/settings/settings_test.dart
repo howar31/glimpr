@@ -158,4 +158,43 @@ void main() {
     expect(await s.getLoupeSpan(), 20);
     expect(await s.getLoupeZoom(), 4);
   });
+
+  test('recording output-quality settings default and round-trip', () async {
+    final s = Settings(FakeStore());
+    // Defaults: high quality, 1920 long-side cap, GIF 15 fps, high GIF quality.
+    expect(await s.getRecordVideoQuality(), RecordVideoQuality.high);
+    expect(await s.getRecordMaxLongSide(), 1920);
+    expect(await s.getRecordGifFps(), 15);
+    final rec = await s.loadRecording();
+    expect(rec.videoQuality, RecordVideoQuality.high);
+    expect(rec.maxLongSide, 1920);
+    expect(rec.gifFps, 15);
+
+    await s.setRecordVideoQuality(RecordVideoQuality.low);
+    await s.setRecordMaxLongSide(0); // native
+    await s.setRecordGifFps(25);
+    expect(await s.getRecordVideoQuality(), RecordVideoQuality.low);
+    expect(await s.getRecordMaxLongSide(), 0);
+    expect(await s.getRecordGifFps(), 25);
+  });
+
+  test('recording resolution + GIF fps clamp off-step values', () async {
+    final s = Settings(FakeStore());
+    // Off-step resolution clamps to the 1920 default; GIF fps clamps to 15.
+    await s.setRecordMaxLongSide(999);
+    expect(await s.getRecordMaxLongSide(), 1920);
+    await s.setRecordGifFps(17);
+    expect(await s.getRecordGifFps(), 15);
+  });
+
+  test('recording getters clamp an out-of-range stored value on read',
+      () async {
+    final store = FakeStore();
+    // Simulate corrupt / out-of-range persisted values (bypassing setters).
+    await store.setInt('record_max_long_side', 4096);
+    await store.setInt('record_gif_fps', 99);
+    final s = Settings(store);
+    expect(await s.getRecordMaxLongSide(), 1920);
+    expect(await s.getRecordGifFps(), 15);
+  });
 }

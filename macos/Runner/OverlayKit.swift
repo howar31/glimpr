@@ -762,6 +762,13 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self.dismiss(); result(nil)
+        // Menu-bar processing pulse — relay to the control engine's status item
+        // (the overlay capture lifecycle lives in this engine).
+        case "setProcessing":
+          let active = (call.arguments as? [String: Any])?["active"] as? Bool
+            ?? false
+          MainFlutterWindow.shared?.setCaptureProcessing(active)
+          result(nil)
         // Hide ONLY the calling engine's window (a layer pop reached an
         // engine with no frame for the restored layer).
         case "hideOverlay":

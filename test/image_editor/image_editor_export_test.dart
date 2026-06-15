@@ -23,11 +23,11 @@ void main() {
       jpegQuality: 90,
       actions: {FlowAction.save},
       saveDir: null,
-      sourceName: 'photo',
+      fileName: 'photo_2026-06-15.png',
       run: ({required actions, required bytes, saveDir, fileName}) async {
         delivered = bytes;
         ran = actions;
-        expect(fileName, 'photo-edited.png');
+        expect(fileName, 'photo_2026-06-15.png');
         return const FlowResult(DeliveryResult(
             copiedToClipboard: false,
             soundPlayed: false,

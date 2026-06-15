@@ -743,9 +743,12 @@ final class RecordingChrome {
     // GIF frame count) never overflows into the divider.
     let readoutFont = sizeLabel.font
       ?? .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+    // Reserve for the LOCALIZED frame-count label — the English word "frames"
+    // is far wider than the single CJK "幀", so a hardcoded zh width overflows.
     sizeLabel.frame.size.width = ceil(max(
       ("9999.9 MB" as NSString).size(withAttributes: [.font: readoutFont]).width,
-      ("99999 幀" as NSString).size(withAttributes: [.font: readoutFont]).width))
+      (("99999 " + L.s("frames", "幀")) as NSString)
+        .size(withAttributes: [.font: readoutFont]).width))
     sizeLabel.alignment = .right // value hugs the divider as it grows
 
     let sep = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 22))
@@ -826,14 +829,21 @@ final class RecordingWriter {
   private var micInput: AVAssetWriterInput?
   private(set) var started = false
 
-  init(url: URL, width: Int, height: Int, hevc: Bool,
+  init(url: URL, width: Int, height: Int, hevc: Bool, bitrate: Int,
        systemAudio: Bool, microphone: Bool) throws {
     try? FileManager.default.removeItem(at: url)
     writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+    // Average target bitrate is the user video-quality tier resolved to
+    // bits-per-pixel × width × height × fps by the caller. Unset before this,
+    // the encoder used an AVFoundation default. AVVideoQualityKey is ignored by
+    // the H.264/HEVC encoders, so an average bitrate is the reliable knob.
     let videoSettings: [String: Any] = [
       AVVideoCodecKey: hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
       AVVideoWidthKey: width,
       AVVideoHeightKey: height,
+      AVVideoCompressionPropertiesKey: [
+        AVVideoAverageBitRateKey: bitrate,
+      ],
     ]
     videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
     videoInput.expectsMediaDataInRealTime = true
@@ -1245,8 +1255,17 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let microphone: Bool
     let maxDuration: Int // seconds; 0 = off
     let countdown: Int // seconds; 0 = off (start delay)
+    let videoQuality: String // low | medium | high (mp4 only)
+    let maxLongSide: Int // longest side px cap; 0 = native (shared mp4/GIF)
+    let gifFps: Int // GIF frame rate
     let outputPath: String
   }
+
+  // GIF buffers every frame in memory until finalize (ImageIO has no incremental
+  // flush) and the live encoder can't sustain high resolutions, so GIF caps the
+  // long side to a practical value and ignores the (mp4-only) resolution
+  // setting. A practical limit, not an exact target.
+  static let kGifMaxLongSide = 1024
 
   private(set) var isRecording = false
   private var stream: SCStream?
@@ -1271,6 +1290,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
   var onStateChange: ((Bool, Bool) -> Void)?
   /// Paused-state hook for the menu-bar Pause/Resume item.
   var onPauseChange: ((Bool) -> Void)?
+  /// (active) — drives the menu-bar "processing" pulse while the recording is
+  /// being finalized after stop (parallel to the shared capture pulse).
+  var onProcessingChange: ((Bool) -> Void)?
 
   init(events: @escaping (String, Any?) -> Void) {
     self.events = events
@@ -1424,6 +1446,9 @@ final class RecordingController: NSObject, SCStreamDelegate {
         cfg.width = Self.even(Int(screen.frame.width * scale))
         cfg.height = Self.even(Int(screen.frame.height * scale))
       }
+      // User resolution cap (longest side, pixels; 0 = native). mp4 ONLY — GIF
+      // ignores it and uses its own fixed ceiling (kGifMaxLongSide), set below.
+      if !spec.gif { Self.capLongSide(cfg, to: spec.maxLongSide) }
       // Audio: region/display/lastRegion mix it into this (display-scoped)
       // stream. Window mode does NOT — a single-window filter captures only the
       // target app's audio, not the whole system; it gets a separate
@@ -1441,16 +1466,32 @@ final class RecordingController: NSObject, SCStreamDelegate {
 
       let sk: RecordingSinkBase
       if spec.gif {
-        // GIF: no AVAssetWriter, no audio; sample at the GIF frame rate.
-        cfg.minimumFrameInterval = CMTime(value: 1, timescale: 15)
+        // GIF: direct ImageIO single-pass, no audio, at the GIF frame rate.
+        // Fixed long-side ceiling, independent of the mp4-only resolution
+        // setting (ImageIO buffers every frame until finalize + the live
+        // encoder can't sustain large frames).
+        let gifFps = max(1, spec.gifFps)
+        cfg.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(gifFps))
+        Self.capLongSide(cfg, to: Self.kGifMaxLongSide)
         let g = GifWriter(url: URL(fileURLWithPath: spec.outputPath))
-        let gs = GifSink(gif: g, gifFps: 15, maxLongSide: 800)
+        let gs = GifSink(gif: g, gifFps: gifFps,
+                         maxLongSide: max(cfg.width, cfg.height))
         gs.onStarted = { PerfLog.mark("recordFirstFrame") }
         sk = gs
       } else {
+        // mp4 video. Video-quality tier -> bits-per-pixel × pixels × fps.
+        let bpp: Double
+        switch spec.videoQuality {
+        case "low": bpp = 0.045
+        case "medium": bpp = 0.09
+        default: bpp = 0.18 // high
+        }
+        let bitrate = max(
+          500_000, Int(Double(cfg.width * cfg.height) * Double(spec.fps) * bpp))
         let w = try RecordingWriter(
           url: URL(fileURLWithPath: spec.outputPath),
           width: cfg.width, height: cfg.height, hevc: spec.hevc,
+          bitrate: bitrate,
           systemAudio: spec.systemAudio, microphone: spec.microphone)
         let rs = RecordingSink(writer: w)
         rs.onStarted = { PerfLog.mark("recordFirstFrame") }
@@ -1557,8 +1598,16 @@ final class RecordingController: NSObject, SCStreamDelegate {
       // GIF finalize encodes every accumulated frame; the completion sound +
       // after-record flow fire only after onRecordFinished (i.e. after the GIF is
       // fully written). The chrome is already gone, so this finalizes invisibly.
-      if isGif { events("onRecordProcessing", nil) }
+      // The "shutter" for recording fires at stop (Dart plays it, gated by the
+      // shutter-sound setting), and the menu-bar switches from the recording-red
+      // breath to the processing pulse while the file finalizes (snap, no
+      // graceful ease-back so it doesn't fight the pulse). The pulse ends when
+      // finalize returns.
+      events("onRecordStopping", nil)
+      onStateChange?(false, false)
+      onProcessingChange?(true)
       let ok = await (sink?.finish() ?? false)
+      onProcessingChange?(false)
       finalize(result: ok ? .finished : .failed("encoder did not complete"))
     }
   }
@@ -1679,6 +1728,18 @@ final class RecordingController: NSObject, SCStreamDelegate {
 
   private static func even(_ v: Int) -> Int { max(2, v - (v % 2)) }
 
+  /// Downscale [cfg]'s width/height so the longer side is ≤ [maxLong] (even
+  /// dimensions kept). [maxLong] == 0 means no cap. SCStreamConfiguration is a
+  /// class, so this mutates the passed instance.
+  private static func capLongSide(_ cfg: SCStreamConfiguration, to maxLong: Int) {
+    guard maxLong > 0 else { return }
+    let long = max(cfg.width, cfg.height)
+    guard long > maxLong else { return }
+    let k = Double(maxLong) / Double(long)
+    cfg.width = even(Int((Double(cfg.width) * k).rounded()))
+    cfg.height = even(Int((Double(cfg.height) * k).rounded()))
+  }
+
   /// Poll the recorded window's position ~30 Hz and move the frame + strip to
   /// track it (the owner accepts the cost for an accurate recording-range
   /// frame). Stops with the session.
@@ -1742,6 +1803,9 @@ final class RecordingChannel {
   var onRecordingStateChange: ((Bool, Bool) -> Void)?
   /// Paused-state hook for the menu-bar Pause/Resume item.
   var onRecordingPauseChange: ((Bool) -> Void)?
+  /// Processing hook (active) for the menu-bar pulse while a recording is
+  /// finalized after stop.
+  var onRecordingProcessingChange: ((Bool) -> Void)?
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: "glimpr/record", binaryMessenger: messenger)
@@ -1841,6 +1905,9 @@ final class RecordingChannel {
     c.onStateChange = { [weak self] active, graceful in
       self?.onRecordingStateChange?(active, graceful)
     }
+    c.onProcessingChange = { [weak self] active in
+      self?.onRecordingProcessingChange?(active)
+    }
     c.onPauseChange = { [weak self] paused in
       self?.onRecordingPauseChange?(paused)
     }
@@ -1865,6 +1932,9 @@ final class RecordingChannel {
     let microphone = (args["microphone"] as? Bool) ?? false
     let maxDuration = (args["maxDuration"] as? Int) ?? 0
     let countdown = (args["countdown"] as? Int) ?? 0
+    let videoQuality = (args["videoQuality"] as? String) ?? "high"
+    let maxLongSide = (args["maxLongSide"] as? Int) ?? 0
+    let gifFps = (args["gifFps"] as? Int) ?? 15
     let outputPath = (args["outputPath"] as? String) ?? ""
     guard !outputPath.isEmpty else {
       channel.invokeMethod(
@@ -1891,7 +1961,9 @@ final class RecordingChannel {
         fps: fps, hevc: hevc, gif: gif, showsCursor: showsCursor,
         showScrim: showScrim,
         systemAudio: systemAudio, microphone: microphone,
-        maxDuration: maxDuration, countdown: countdown, outputPath: outputPath)
+        maxDuration: maxDuration, countdown: countdown,
+        videoQuality: videoQuality, maxLongSide: maxLongSide, gifFps: gifFps,
+        outputPath: outputPath)
       Task { await controller.start(spec) }
     }
 

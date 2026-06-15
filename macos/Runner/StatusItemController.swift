@@ -307,6 +307,90 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     return img
   }
 
+  private var processingTimer: Timer?
+  private var processingPhase: Double = 0
+  private var processingStop = false
+  private var processingLastCycle = 0
+  private static let kProcessingPeriod = 0.5 // ~3.4× faster than the 1.7s breath
+
+  /// Shared capture/recording "processing" state: the brand mark fills with the
+  /// LOGO gradient (cyan→blue→violet; memory glimpr-brand-logo, NOT accentGrad)
+  /// and PULSES — faster than the recording-red breath and a punchier curve, so
+  /// the two never read alike. No determinate progress (finalize is opaque); it
+  /// pulses until the work completes, with a minimum of one full pulse so even
+  /// an instant capture is visible. [active] = false requests a stop (ends at
+  /// the next pulse low after ≥ 1 cycle). Reduced motion holds a static fill.
+  func setProcessing(_ active: Bool) {
+    if active {
+      processingStop = false
+      if processingTimer != nil { return } // already pulsing — keep it alive
+      processingPhase = 0
+      processingLastCycle = 0
+      let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+      let period = Self.kProcessingPeriod
+      item.button?.image = processingIcon(intensity: reduce ? 1 : 0.35)
+      let timer = Timer.scheduledTimer(
+        withTimeInterval: 0.05, repeats: true
+      ) { [weak self] tm in
+        guard let self else { tm.invalidate(); return }
+        self.processingPhase += 0.05
+        let localT = self.processingPhase.truncatingRemainder(
+          dividingBy: period) / period
+        // Punchy pulse (sharper than a plain cosine) so it isn't a "fast breath".
+        let intensity = reduce
+          ? 1.0
+          : 0.35 + 0.65 * pow(0.5 - 0.5 * cos(localT * 2 * .pi), 0.6)
+        self.item.button?.image = self.processingIcon(intensity: intensity)
+        // End at a pulse low (cycle boundary), once stopped and ≥ 1 full cycle.
+        // The 10s ceiling is a safety net in case a "stop" is ever missed on a
+        // capture error path — the pulse never gets stuck.
+        let cycle = Int(self.processingPhase / period)
+        let endNow = (self.processingStop && cycle >= 1
+          && cycle > self.processingLastCycle) || self.processingPhase > 10
+        if endNow {
+          tm.invalidate()
+          if self.processingTimer === tm { self.processingTimer = nil }
+          self.item.button?.image = self.normalImage
+          self.item.button?.setAccessibilityLabel("Glimpr")
+        }
+        self.processingLastCycle = cycle
+      }
+      RunLoop.main.add(timer, forMode: .common)
+      processingTimer = timer
+      item.button?.setAccessibilityLabel(
+        L.s("Glimpr, processing", "Glimpr，處理中"))
+    } else {
+      processingStop = true
+    }
+  }
+
+  /// The brand mark filled with the logo gradient at [intensity] opacity (the
+  /// pulse modulates intensity). Geometry never changes.
+  private func processingIcon(intensity: Double) -> NSImage {
+    let size = normalImage?.size ?? NSSize(width: 18, height: 18)
+    let mark = normalImage
+    let grad = NSGradient(colorsAndLocations:
+      (NSColor(srgbRed: 0x22 / 255.0, green: 0xD3 / 255.0,
+               blue: 0xEE / 255.0, alpha: 1), 0.0),
+      (NSColor(srgbRed: 0x3B / 255.0, green: 0x82 / 255.0,
+               blue: 0xF6 / 255.0, alpha: 1), 0.52),
+      (NSColor(srgbRed: 0xA7 / 255.0, green: 0x8B / 255.0,
+               blue: 0xFA / 255.0, alpha: 1), 1.0))
+    let img = NSImage(size: size, flipped: false) { rect in
+      guard let base = mark?.copy() as? NSImage else { return true }
+      base.lockFocus()
+      NSGraphicsContext.current?.compositingOperation = .sourceAtop
+      grad?.draw(in: NSRect(origin: .zero, size: size), angle: -45)
+      base.unlockFocus()
+      base.isTemplate = false
+      base.draw(in: rect, from: .zero, operation: .sourceOver,
+                fraction: CGFloat(max(0, min(1, intensity))))
+      return true
+    }
+    img.isTemplate = false
+    return img
+  }
+
   @objc private func recordStop() { onRecordStop?() }
   @objc private func recordAbort() { onRecordAbort?() }
   @objc private func recordPauseToggle() {

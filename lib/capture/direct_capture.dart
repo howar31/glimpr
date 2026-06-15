@@ -159,6 +159,7 @@ class DirectCapture {
       if (delivered != null) {
         final bytes = delivered.bytes;
         _perfMark('windowImageReceived bytes=${bytes.length}');
+        CaptureBridge.setCaptureProcessing(true); // menu-bar pulse: commit
         if (cap.shutterSound) _shutter();
         try {
           final result = await _deliverWindow(bytes, cap, info!,
@@ -170,6 +171,7 @@ class DirectCapture {
           } else {
             _showError('Capture failed');
           }
+          CaptureBridge.setCaptureProcessing(false); // pulse: delivered
           // kind=window marks the real-alpha leg; the rectangular fallback
           // below reports kind=focusedWindow through _capture's mark instead.
           _perfMark('directDelivered ok=$ok kind=window');
@@ -259,6 +261,7 @@ class DirectCapture {
       return true; // surfaced -> no retry
     }
     if (result == null) return silentOnMissingDisplay;
+    CaptureBridge.setCaptureProcessing(true); // menu-bar pulse: commit
     if (cap.shutterSound) _shutter();
     try {
       final flow = await _deliverEncoded(result, cap, kind, windowTitle, appName);
@@ -269,6 +272,7 @@ class DirectCapture {
       } else {
         _showError('Capture failed');
       }
+      CaptureBridge.setCaptureProcessing(false); // pulse: delivered
       _perfMark('directDelivered ok=$ok kind=${kind.name}');
     } catch (e) {
       _showError('Capture failed: $e');
