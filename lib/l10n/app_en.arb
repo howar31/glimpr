@@ -389,13 +389,13 @@
       }
     }
   },
-  "settingsDecorationWindowSnap": "Window snap",
-  "@settingsDecorationWindowSnap": {
-    "description": "Settings > Output > Decoration: window snap toggle title"
+  "settingsDecorationSnap": "Snap",
+  "@settingsDecorationSnap": {
+    "description": "Settings > Screenshot > Decoration: interactive-overlay snap toggle title (snaps to a window or AX element)"
   },
-  "settingsDecorationWindowSnapHint": "Shadow + margin when snapping to a window",
-  "@settingsDecorationWindowSnapHint": {
-    "description": "Settings > Output > Decoration: window snap toggle hint"
+  "settingsDecorationSnapHint": "Shadow + margin on a snapped capture",
+  "@settingsDecorationSnapHint": {
+    "description": "Settings > Screenshot > Decoration: interactive-overlay snap toggle hint"
   },
   "settingsDecorationFreehandCrop": "Freehand crop",
   "@settingsDecorationFreehandCrop": {

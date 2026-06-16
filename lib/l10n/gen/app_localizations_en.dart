@@ -417,11 +417,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsDecorationWindowSnap => 'Window snap';
+  String get settingsDecorationSnap => 'Snap';
 
   @override
-  String get settingsDecorationWindowSnapHint =>
-      'Shadow + margin when snapping to a window';
+  String get settingsDecorationSnapHint =>
+      'Shadow + margin on a snapped capture';
 
   @override
   String get settingsDecorationFreehandCrop => 'Freehand crop';

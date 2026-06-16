@@ -854,17 +854,17 @@ abstract class AppLocalizations {
   /// **'Uses the window under the cursor when the screenshot ends. On bare desktop, {windowToken} and {appToken} are left out.'**
   String settingsFilenameNote(String windowToken, String appToken);
 
-  /// Settings > Output > Decoration: window snap toggle title
+  /// Settings > Screenshot > Decoration: interactive-overlay snap toggle title (snaps to a window or AX element)
   ///
   /// In en, this message translates to:
-  /// **'Window snap'**
-  String get settingsDecorationWindowSnap;
+  /// **'Snap'**
+  String get settingsDecorationSnap;
 
-  /// Settings > Output > Decoration: window snap toggle hint
+  /// Settings > Screenshot > Decoration: interactive-overlay snap toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Shadow + margin when snapping to a window'**
-  String get settingsDecorationWindowSnapHint;
+  /// **'Shadow + margin on a snapped capture'**
+  String get settingsDecorationSnapHint;
 
   /// Settings > Output > Decoration: freehand crop toggle title
   ///

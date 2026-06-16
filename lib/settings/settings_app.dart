@@ -952,8 +952,8 @@ class _SettingsAppState extends State<SettingsApp>
       SectionLabel(_l.settingsSectionDecoration, icon: Icons.filter_frames_outlined),
       GlassCard.rows([
         SettingRow(
-          title: _l.settingsDecorationWindowSnap,
-          hint: _l.settingsDecorationWindowSnapHint,
+          title: _l.settingsDecorationSnap,
+          hint: _l.settingsDecorationSnapHint,
           trailing: GlassToggle(
             value: _decorateSnap,
             onChanged: (v) async {

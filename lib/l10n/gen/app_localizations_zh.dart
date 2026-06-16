@@ -399,10 +399,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsDecorationWindowSnap => '視窗框選';
+  String get settingsDecorationSnap => '吸附';
 
   @override
-  String get settingsDecorationWindowSnapHint => '框選視窗截圖時加上陰影與邊距';
+  String get settingsDecorationSnapHint => '吸附截圖時加上陰影與邊距';
 
   @override
   String get settingsDecorationFreehandCrop => '手動框選';
