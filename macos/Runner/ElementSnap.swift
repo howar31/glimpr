@@ -111,19 +111,23 @@ enum ElementSnap {
   // cursor and shadowed every query. Owner reverted high-layer support 2026-06-16.
   private static let appLevels: Set<Int> = [0, 3, 8]
 
-  /// The owning PID of the frontmost app window (layers {0,3,8}) under [pt] that
-  /// is NOT ours — so the AX query targets the surface beneath our overlay.
-  /// Invisible + self windows skipped. AX-only: without the permission the query
-  /// returns nil and falls back to window snap, so this is inert until granted.
+  /// The owning PID to AX-query for the frontmost snappable window (layers
+  /// {0,3,8}, visible) under [pt]. Our OWN windows are NOT skipped past: if our
+  /// window is the visual top under the point, return nil so Dart whole-window-
+  /// snaps it (the topmost overlay shadows our own AX tree, so an element query
+  /// can't reach it) — matching the non-AX window-snap path, which also includes
+  /// our own Settings/editor windows. Do NOT peer at the app BEHIND our window;
+  /// our window is the target. The overlay itself is excluded by the layer filter
+  /// (shielding level), the warm control window by the alpha filter. AX-only:
+  /// without the permission the query returns nil and falls back to window snap,
+  /// so this is inert until granted.
   private static func targetPID(at pt: CGPoint) -> pid_t? {
     guard let infos = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
     let selfPID = getpid()
     for w in infos { // front-to-back
-      guard let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
-            pid != selfPID,
-            let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
+      guard let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05,
             let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             appLevels.contains(layer),
@@ -131,8 +135,13 @@ enum ElementSnap {
             let x = (b["X"] as? NSNumber)?.doubleValue,
             let y = (b["Y"] as? NSNumber)?.doubleValue,
             let ww = (b["Width"] as? NSNumber)?.doubleValue,
-            let hh = (b["Height"] as? NSNumber)?.doubleValue else { continue }
-      if CGRect(x: x, y: y, width: ww, height: hh).contains(pt) { return pid }
+            let hh = (b["Height"] as? NSNumber)?.doubleValue,
+            let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value
+      else { continue }
+      guard CGRect(x: x, y: y, width: ww, height: hh).contains(pt) else { continue }
+      // First snappable window under the point = the visual top. If it's ours,
+      // nil -> Dart whole-window snap; otherwise AX-query that app.
+      return pid == selfPID ? nil : pid
     }
     return nil
   }
