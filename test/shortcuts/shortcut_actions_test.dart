@@ -73,4 +73,47 @@ void main() {
     expect(clip.logicalKey, LogicalKeyboardKey.digit0);
     expect(clip.modifiers, {HotkeyModifier.meta, HotkeyModifier.alt});
   });
+
+  group('isEditorReservedCombo', () {
+    const none = <HotkeyModifier>{};
+    const meta = {HotkeyModifier.meta};
+    const shift = {HotkeyModifier.shift};
+
+    test('reserves the bare element-snap / loupe keys', () {
+      expect(isEditorReservedCombo(LogicalKeyboardKey.comma, none), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.period, none), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.slash, none), isTrue);
+      // Shift+/ = ? cycles the loupe info.
+      expect(isEditorReservedCombo(LogicalKeyboardKey.slash, shift), isTrue);
+    });
+
+    test('reserves the editor/system chords ⌘W / ⌘, / ⌘1 / ⌘2', () {
+      expect(isEditorReservedCombo(LogicalKeyboardKey.keyW, meta), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.comma, meta), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.digit1, meta), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.digit2, meta), isTrue);
+    });
+
+    test('keeps esc / arrows whole-key reserved', () {
+      expect(isEditorReservedCombo(LogicalKeyboardKey.escape, none), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.arrowUp, none), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.arrowDown, none), isTrue);
+    });
+
+    test('does NOT reserve the bare digit tools or unrelated chords', () {
+      // Rectangle / ellipse tools are bare 1 / 2 — must stay bindable.
+      expect(isEditorReservedCombo(LogicalKeyboardKey.digit1, none), isFalse);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.digit2, none), isFalse);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.keyW, none), isFalse);
+      // Only the precise chord is reserved, not the whole key.
+      expect(isEditorReservedCombo(LogicalKeyboardKey.period, meta), isFalse);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.slash, meta), isFalse);
+    });
+
+    test('does NOT reserve Enter / Shift+Enter (Export default + text overload)',
+        () {
+      expect(isEditorReservedCombo(LogicalKeyboardKey.enter, none), isFalse);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.enter, shift), isFalse);
+    });
+  });
 }

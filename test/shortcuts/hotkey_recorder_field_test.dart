@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/shortcuts/widgets/hotkey_recorder_field.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
+import 'package:glimpr/shortcuts/shortcut_actions.dart';
 import 'package:glimpr/theme/glimpr_theme.dart';
 
 // The field renders KeyCapChips (which read GlimprTheme.of), so the test widget
@@ -78,7 +79,7 @@ void main() {
       HotkeyRecorderField(
         value: null,
         requireModifier: false,
-        reservedKeys: {LogicalKeyboardKey.escape},
+        isReserved: (k, m) => k == LogicalKeyboardKey.escape,
         onChanged: (b) => out = b,
       ),
     ));
@@ -98,7 +99,7 @@ void main() {
       HotkeyRecorderField(
         value: null,
         requireModifier: false,
-        reservedKeys: {LogicalKeyboardKey.arrowUp},
+        isReserved: (k, m) => k == LogicalKeyboardKey.arrowUp,
         onChanged: (b) => out = b,
       ),
     ));
@@ -109,6 +110,35 @@ void main() {
     expect(out, isNull);
     expect(find.textContaining('Reserved'), findsOneWidget);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+  });
+
+  testWidgets('combo-aware reserved: bare comma rejected, bare digit1 records',
+      (tester) async {
+    HotkeyBinding? out;
+    await tester.pumpWidget(_wrap(
+      HotkeyRecorderField(
+        value: null,
+        requireModifier: false,
+        isReserved: isEditorReservedCombo,
+        onChanged: (b) => out = b,
+      ),
+    ));
+    // Bare comma is reserved (element-snap level) -> rejected.
+    await tester.tap(find.byType(HotkeyRecorderField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.comma);
+    await tester.pump();
+    expect(out, isNull);
+    expect(find.textContaining('Reserved'), findsOneWidget);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.comma);
+    // Bare digit1 is the rectangle tool's key, NOT reserved -> records.
+    await tester.tap(find.byType(HotkeyRecorderField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.digit1);
+    await tester.pump();
+    expect(out, isNotNull);
+    expect(out!.logicalKey, LogicalKeyboardKey.digit1);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.digit1);
   });
 
   testWidgets('Backspace is recordable (no longer a clear shortcut)',

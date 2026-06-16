@@ -307,6 +307,8 @@ class SettingRow extends StatelessWidget {
     required this.trailing,
     this.icon,
     this.iconWidget,
+    this.tag,
+    this.warning,
     this.divider = false,
     this.enabled = true,
   });
@@ -315,6 +317,16 @@ class SettingRow extends StatelessWidget {
   final String? hint;
   final Widget trailing;
   final IconData? icon;
+
+  /// Optional small chip rendered as the row's leading gutter, before the icon
+  /// tile, so the title + hint indent past it. Null = no tag, the icon/title
+  /// lead as before.
+  final Widget? tag;
+
+  /// Optional danger-styled line under the title/hint (e.g. a Shortcuts-pane
+  /// "Duplicate" / "Needs a modifier" warning). Kept here, not in [trailing], so
+  /// the trailing stays narrow and a leading tag can't overflow the row.
+  final String? warning;
 
   /// Custom glyph rendered inside the standard 34x34 icon tile instead of
   /// [icon] (e.g. the Crop / Pin row's diagonal dual icon). The tile itself
@@ -326,11 +338,18 @@ class SettingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
+    final hasIcon = icon != null || iconWidget != null;
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       child: Row(
         children: [
-          if (icon != null || iconWidget != null) ...[
+          // Leading gutter: the tag chip sits at the far left of every row, so
+          // the icon + title + hint all indent past it and line up across rows.
+          if (tag != null) ...[
+            tag!,
+            const SizedBox(width: 12),
+          ],
+          if (hasIcon) ...[
             Container(
               width: 34,
               height: 34,
@@ -362,6 +381,15 @@ class SettingRow extends StatelessWidget {
                     child: Text(
                       hint!,
                       style: GlimprType.sansStyle(12.5, 400, t.fg3, height: 1.4),
+                    ),
+                  ),
+                if (warning != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      warning!,
+                      style: GlimprType.sansStyle(
+                          11.5, 600, GlimprTokens.danger),
                     ),
                   ),
               ],

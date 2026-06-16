@@ -1586,6 +1586,72 @@ abstract class AppLocalizations {
   /// **'Reserved'**
   String get settingsShortcutsReserved;
 
+  /// Settings > Shortcuts: scope tag for system-wide hotkeys
+  ///
+  /// In en, this message translates to:
+  /// **'Global'**
+  String get scopeGlobal;
+
+  /// Settings > Shortcuts: scope tag for editor (overlay + image editor) shortcuts
+  ///
+  /// In en, this message translates to:
+  /// **'Editor'**
+  String get scopeEditor;
+
+  /// Settings > Shortcuts: scope tag for capture-overlay-only shortcuts
+  ///
+  /// In en, this message translates to:
+  /// **'Overlay'**
+  String get scopeOverlay;
+
+  /// Settings > Shortcuts: scope tag for image-editor-only shortcuts
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get scopeImage;
+
+  /// Settings > Shortcuts: scope tag for shortcuts active only while editing a text annotation
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get scopeText;
+
+  /// Settings > Shortcuts legend: gloss for the Global scope tag
+  ///
+  /// In en, this message translates to:
+  /// **'System-wide hotkeys'**
+  String get scopeGlobalDesc;
+
+  /// Settings > Shortcuts legend: gloss for the Editor scope tag
+  ///
+  /// In en, this message translates to:
+  /// **'Capture overlay and image editor'**
+  String get scopeEditorDesc;
+
+  /// Settings > Shortcuts legend: gloss for the Overlay scope tag
+  ///
+  /// In en, this message translates to:
+  /// **'Capture overlay only'**
+  String get scopeOverlayDesc;
+
+  /// Settings > Shortcuts legend: gloss for the Image scope tag
+  ///
+  /// In en, this message translates to:
+  /// **'Image editor only'**
+  String get scopeImageDesc;
+
+  /// Settings > Shortcuts legend: gloss for the Text scope tag
+  ///
+  /// In en, this message translates to:
+  /// **'While editing a text annotation'**
+  String get scopeTextDesc;
+
+  /// Settings > Shortcuts: legend intro explaining page-wide uniqueness and the scope tags
+  ///
+  /// In en, this message translates to:
+  /// **'Every shortcut must be unique across the whole page, so a key combination can\'t be used twice and reserved keys can\'t be reassigned. The tag on each row shows where it applies:'**
+  String get shortcutsLegendDedup;
+
   /// Global action label: interactive capture
   ///
   /// In en, this message translates to:
@@ -2606,11 +2672,11 @@ abstract class AppLocalizations {
   /// **'Needs a modifier (⌘ ⌥ ⌃ ⇧)'**
   String get recorderNeedsModifier;
 
-  /// 3e batch: masks/confirm/recorder/overlay
+  /// Shortcut recorder: tooltip on the prohibition glyph that clears the binding (sets it to no shortcut)
   ///
   /// In en, this message translates to:
-  /// **'Clear'**
-  String get recorderClear;
+  /// **'Disable'**
+  String get recorderDisable;
 
   /// 3e batch: masks/confirm/recorder/overlay
   ///

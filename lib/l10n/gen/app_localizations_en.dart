@@ -824,6 +824,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsShortcutsReserved => 'Reserved';
 
   @override
+  String get scopeGlobal => 'Global';
+
+  @override
+  String get scopeEditor => 'Editor';
+
+  @override
+  String get scopeOverlay => 'Overlay';
+
+  @override
+  String get scopeImage => 'Image';
+
+  @override
+  String get scopeText => 'Text';
+
+  @override
+  String get scopeGlobalDesc => 'System-wide hotkeys';
+
+  @override
+  String get scopeEditorDesc => 'Capture overlay and image editor';
+
+  @override
+  String get scopeOverlayDesc => 'Capture overlay only';
+
+  @override
+  String get scopeImageDesc => 'Image editor only';
+
+  @override
+  String get scopeTextDesc => 'While editing a text annotation';
+
+  @override
+  String get shortcutsLegendDedup =>
+      'Every shortcut must be unique across the whole page, so a key combination can\'t be used twice and reserved keys can\'t be reassigned. The tag on each row shows where it applies:';
+
+  @override
   String get actionCapture => 'Screenshot Region';
 
   @override
@@ -1358,7 +1392,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recorderNeedsModifier => 'Needs a modifier (⌘ ⌥ ⌃ ⇧)';
 
   @override
-  String get recorderClear => 'Clear';
+  String get recorderDisable => 'Disable';
 
   @override
   String get recorderPressKeys => 'Press keys…';

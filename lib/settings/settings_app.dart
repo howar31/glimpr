@@ -454,6 +454,81 @@ class _SettingsAppState extends State<SettingsApp>
             style: GlimprType.sansStyle(12, 500, t.fg4, height: 1.4)),
       );
 
+  // Every scope chip on the Shortcuts page shares one width — the widest of the
+  // five localized labels — so the chips (and the title indent past them) line
+  // up across rows. Recomputed per build (cheap: 5 measurements); set at the top
+  // of _shortcutsPane before any chip is built.
+  double _scopeChipW = 0;
+  double _computeScopeChipWidth() {
+    final style =
+        GlimprType.sansStyle(10.5, 600, const Color(0xFF000000), letterSpacing: 0.2);
+    var w = 0.0;
+    for (final s in [
+      _l.scopeGlobal,
+      _l.scopeEditor,
+      _l.scopeOverlay,
+      _l.scopeImage,
+      _l.scopeText,
+    ]) {
+      final tp = TextPainter(
+        text: TextSpan(text: s, style: style),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      if (tp.width > w) w = tp.width;
+    }
+    return w + 13; // 6 + 6 horizontal padding, + 1 rounding slack
+  }
+
+  Widget _scopeChip(String label) => ScopeTag(label, width: _scopeChipW);
+
+  // One legend row: the scope chip in a fixed-width column so the glosses line
+  // up, then its description.
+  Widget _legendRow(GlimprTokens t, String tag, String desc) => Padding(
+        padding: const EdgeInsets.only(top: 7),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 68,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _scopeChip(tag),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(desc,
+                  style: GlimprType.sansStyle(12.5, 500, t.fg2, height: 1.3)),
+            ),
+          ],
+        ),
+      );
+
+  // Shortcuts-pane legend: the page-wide uniqueness rule + what each scope chip
+  // means, shown above the first section. A bordered panel (NOT a GlassCard) so
+  // it stays visually distinct from the binding cards.
+  Widget _shortcutsLegend(GlimprTokens t) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: t.divider),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _l.shortcutsLegendDedup,
+              style: GlimprType.sansStyle(12.5, 500, t.fg3, height: 1.45),
+            ),
+            const SizedBox(height: 6),
+            _legendRow(t, _l.scopeGlobal, _l.scopeGlobalDesc),
+            _legendRow(t, _l.scopeEditor, _l.scopeEditorDesc),
+            _legendRow(t, _l.scopeOverlay, _l.scopeOverlayDesc),
+            _legendRow(t, _l.scopeImage, _l.scopeImageDesc),
+            _legendRow(t, _l.scopeText, _l.scopeTextDesc),
+          ],
+        ),
+      );
+
   // Staged: update the draft only; Apply persists (see _applyOutput).
   Future<void> _chooseDir() async {
     final picked = await getDirectoryPath();
@@ -1967,10 +2042,13 @@ class _SettingsAppState extends State<SettingsApp>
       _ensureShortcutsDraft();
       return const [Center(child: CircularProgressIndicator())];
     }
+    _scopeChipW = _computeScopeChipWidth();
     final dupes = duplicateActionKeys(draft);
 
     return [
       _h1(_l.settingsPaneShortcuts, t),
+      _shortcutsLegend(t),
+      const SizedBox(height: 24),
       SectionLabel(_l.settingsPaneCapture, icon: Icons.crop_free),
       GlassCard.rows([
         for (final a in kGlobalActions)
@@ -1978,12 +2056,12 @@ class _SettingsAppState extends State<SettingsApp>
             SettingRow(
               title: globalActionLabel(_l, a.actionKey),
               hint: globalActionHint(_l, a.actionKey),
+              tag: _scopeChip(_l.scopeGlobal),
+              warning: _bindingWarning(a.actionKey, true, dupes),
               trailing: _bindingRow(
                 t: t,
                 actionKey: a.actionKey,
                 requireModifier: true,
-                reserved: const {},
-                dupes: dupes,
               ),
             ),
       ]),
@@ -1996,12 +2074,12 @@ class _SettingsAppState extends State<SettingsApp>
             SettingRow(
               title: globalActionLabel(_l, a.actionKey),
               hint: globalActionHint(_l, a.actionKey),
+              tag: _scopeChip(_l.scopeGlobal),
+              warning: _bindingWarning(a.actionKey, true, dupes),
               trailing: _bindingRow(
                 t: t,
                 actionKey: a.actionKey,
                 requireModifier: true,
-                reserved: const {},
-                dupes: dupes,
               ),
             ),
       ]),
@@ -2015,6 +2093,7 @@ class _SettingsAppState extends State<SettingsApp>
             // Shared with the toolbar tooltips (tool_meta) — never drifts.
             title: toolSettingsLabel(_l, tool),
             icon: icon,
+            tag: _scopeChip(_l.scopeEditor),
             // The crop slot's one binding drives crop AND the pin-mode pin
             // selector: crop keeps the standard 18px glyph (row rhythm) and
             // the pin rides its corner as a small badge — the toolbar's
@@ -2022,12 +2101,11 @@ class _SettingsAppState extends State<SettingsApp>
             iconWidget: tool == ToolKind.crop
                 ? _CropPinGlyph(t: t)
                 : null,
+            warning: _bindingWarning(kEditorToolActionKey[tool]!, false, dupes),
             trailing: _bindingRow(
               t: t,
               actionKey: kEditorToolActionKey[tool]!,
               requireModifier: false,
-              reserved: kEditorReservedKeys,
-              dupes: dupes,
             ),
           ),
       ]),
@@ -2071,12 +2149,12 @@ class _SettingsAppState extends State<SettingsApp>
           SettingRow(
             title: cmd.$2,
             hint: cmd.$3,
+            tag: _scopeChip(_l.scopeEditor),
+            warning: _bindingWarning(cmd.$1, false, dupes),
             trailing: _bindingRow(
               t: t,
               actionKey: cmd.$1,
               requireModifier: false,
-              reserved: kEditorReservedKeys,
-              dupes: dupes,
             ),
           ),
       ]),
@@ -2090,21 +2168,25 @@ class _SettingsAppState extends State<SettingsApp>
         SettingRow(
           title: _l.settingsReservedCancelExit,
           hint: _l.settingsReservedHint,
+          tag: _scopeChip(_l.scopeEditor),
           trailing: _reservedField(t, const [KeyCap('esc')]),
         ),
         SettingRow(
           title: _l.settingsReservedCloseWindow,
           hint: _l.settingsReservedHintEditorSettings,
+          tag: _scopeChip(_l.scopeEditor),
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('W')]),
         ),
         SettingRow(
           title: _l.settingsReservedOpenSettings,
           hint: _l.settingsReservedHintOverlayEditor,
+          tag: _scopeChip(_l.scopeEditor),
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap(',')]),
         ),
         SettingRow(
           title: _l.settingsReservedNudgeCrosshair,
           hint: _l.settingsReservedHintRegionTools,
+          tag: _scopeChip(_l.scopeOverlay),
           trailing: _reservedField(
             t,
             const [KeyCap('←'), KeyCap('↑'), KeyCap('↓'), KeyCap('→')],
@@ -2113,22 +2195,26 @@ class _SettingsAppState extends State<SettingsApp>
         SettingRow(
           title: _l.settingsReservedElementSnapLevel,
           hint: _l.settingsReservedElementSnapLevelHint,
+          tag: _scopeChip(_l.scopeOverlay),
           trailing: _reservedField(t, const [KeyCap(','), KeyCap('.')]),
         ),
         SettingRow(
           title: _l.settingsCycleLoupeInfo,
           hint: _l.settingsCycleLoupeInfoHint,
+          tag: _scopeChip(_l.scopeOverlay),
           trailing: _reservedField(t, const [KeyCap('?'), KeyCap('/')]),
         ),
         // Image-editor viewport zoom — fixed keys (the capture overlay is 1:1).
         SettingRow(
           title: _l.settingsReservedFitToWindow,
           hint: _l.settingsReservedHintImageEditor,
+          tag: _scopeChip(_l.scopeImage),
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('1')]),
         ),
         SettingRow(
           title: _l.settingsReservedZoomTo100,
           hint: _l.settingsReservedHintImageEditor,
+          tag: _scopeChip(_l.scopeImage),
           trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('2')]),
         ),
         // Text-input semantics, fixed while editing a text annotation — one row
@@ -2136,16 +2222,19 @@ class _SettingsAppState extends State<SettingsApp>
         SettingRow(
           title: _l.settingsReservedCommitText,
           hint: _l.settingsReservedHintWhileEditingText,
+          tag: _scopeChip(_l.scopeText),
           trailing: _reservedField(t, const [KeyCap('⏎')]),
         ),
         SettingRow(
           title: _l.settingsReservedNewLine,
           hint: _l.settingsReservedHintWhileEditingText,
+          tag: _scopeChip(_l.scopeText),
           trailing: _reservedField(t, const [KeyCap('⇧'), KeyCap('⏎')]),
         ),
         SettingRow(
           title: _l.settingsReservedCancelText,
           hint: _l.settingsReservedHintWhileEditingText,
+          tag: _scopeChip(_l.scopeText),
           trailing: _reservedField(t, const [KeyCap('esc')]),
         ),
       ]),
@@ -2181,36 +2270,40 @@ class _SettingsAppState extends State<SettingsApp>
     );
   }
 
+  // The row's danger sub-line, shown under the title (NOT inline in the
+  // recorder row) so the trailing stays narrow and the leading scope tag never
+  // overflows: missing-modifier (global rows) or a duplicate combo.
+  String? _bindingWarning(
+    String actionKey,
+    bool requireModifier,
+    Set<String> dupes,
+  ) {
+    final b = _shortcutsDraft![actionKey];
+    if (requireModifier && b != null && !b.hasModifier) {
+      return _l.settingsShortcutsNeedsModifier;
+    }
+    if (dupes.contains(actionKey)) return _l.settingsShortcutsDuplicate;
+    return null;
+  }
+
   Widget _bindingRow({
     required GlimprTokens t,
     required String actionKey,
     required bool requireModifier,
-    required Set<LogicalKeyboardKey> reserved,
-    required Set<String> dupes,
   }) {
     final draft = _shortcutsDraft!;
     final binding = draft[actionKey];
     final isDefault = binding == kDefaultBindings[actionKey];
-    final needsModifier =
-        requireModifier && binding != null && !binding.hasModifier;
-    final isDupe = dupes.contains(actionKey);
-    final warning = needsModifier
-        ? _l.settingsShortcutsNeedsModifier
-        : (isDupe ? _l.settingsShortcutsDuplicate : null);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (warning != null) ...[
-          Text(
-            warning,
-            style: GlimprType.sansStyle(11.5, 600, GlimprTokens.danger),
-          ),
-          const SizedBox(width: 10),
-        ],
         HotkeyRecorderField(
           value: binding,
           requireModifier: requireModifier,
-          reservedKeys: reserved,
+          // Every row rejects the same fixed editor/system combos (⌘W, ⌘1, ⌘2,
+          // bare , / . , / and the ⌘, settings chord), so a binding can never
+          // land on a reserved shortcut anywhere on the page.
+          isReserved: isEditorReservedCombo,
           onChanged: (b) => setState(() => draft[actionKey] = b),
           onRecordingChanged: _onRecordingChanged,
         ),

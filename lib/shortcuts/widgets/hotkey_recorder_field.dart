@@ -7,8 +7,10 @@ import 'key_cap_chips.dart';
 
 /// Click to record a combo, then press the desired key chord. [requireModifier]
 /// rejects modifier-less combos (Tier 1, the global capture hotkey).
-/// [reservedKeys] rejects fixed editor keys (Esc / arrows). Esc cancels
-/// recording (keeps the prior value); clicking anywhere else also cancels.
+/// [isReserved] rejects a recorded combo that collides with a fixed editor /
+/// system shortcut (the full key + modifier set is passed, so it can reject ⌘W
+/// while allowing bare W). Esc cancels recording (keeps the prior value);
+/// clicking anywhere else also cancels.
 ///
 /// Clearing a binding is the row's job (a visible ✕ button), NOT a key — so every
 /// other key, including Backspace, is freely recordable. The field is a FIXED
@@ -20,7 +22,7 @@ class HotkeyRecorderField extends StatefulWidget {
     required this.value,
     required this.onChanged,
     required this.requireModifier,
-    this.reservedKeys = const {},
+    this.isReserved,
     this.emptyLabel,
     this.onRecordingChanged,
   });
@@ -28,7 +30,11 @@ class HotkeyRecorderField extends StatefulWidget {
   final HotkeyBinding? value;
   final ValueChanged<HotkeyBinding?> onChanged;
   final bool requireModifier;
-  final Set<LogicalKeyboardKey> reservedKeys;
+
+  /// Returns true when binding the given key + modifiers would collide with a
+  /// fixed editor / system shortcut, so the recorder refuses it.
+  final bool Function(LogicalKeyboardKey key, Set<HotkeyModifier> modifiers)?
+      isReserved;
 
   /// Fired when recording starts / stops. The Shortcuts pane uses it to SUSPEND
   /// the live global hotkeys while recording — otherwise a system-registered
@@ -113,10 +119,6 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
       return KeyEventResult.handled;
     }
     if (_isModifierKey(key)) return KeyEventResult.handled; // wait for a main key
-    if (widget.reservedKeys.contains(key)) {
-      setState(() => _error = AppLocalizations.of(context).recorderReservedKey);
-      return KeyEventResult.handled;
-    }
 
     final pressed = <HotkeyModifier>{
       if (HardwareKeyboard.instance.isMetaPressed) HotkeyModifier.meta,
@@ -124,6 +126,12 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
       if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
+    // Combo-aware reserved check: the full key + modifier set must be known, so
+    // it runs after `pressed` is built (⌘W is rejected, bare W is allowed).
+    if (widget.isReserved?.call(key, pressed) ?? false) {
+      setState(() => _error = AppLocalizations.of(context).recorderReservedKey);
+      return KeyEventResult.handled;
+    }
     if (widget.requireModifier && pressed.isEmpty) {
       setState(() =>
           _error = AppLocalizations.of(context).recorderNeedsModifier);
@@ -142,8 +150,9 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
   }
 
   // The field's fixed trailing slot is contextual: when idle it is a keyboard
-  // glyph (= "click here to record"); while recording it becomes a ✕ (= "click
-  // to clear / disable this binding"). Clear is therefore reachable only through
+  // glyph (= "click here to record"); while recording it becomes a prohibition
+  // glyph (= "click to clear / disable this binding" — semantically "no
+  // shortcut", clearer than a plain ✕). Clear is therefore reachable only through
   // recording — there is no outside clear button — and the always-present slot
   // never shifts the row left/right.
   Widget _trailingIcon(GlimprTokens t) {
@@ -151,7 +160,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
       return Icon(Icons.keyboard_outlined, size: 15, color: t.fg3);
     }
     return Tooltip(
-      message: AppLocalizations.of(context).recorderClear,
+      message: AppLocalizations.of(context).recorderDisable,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -163,7 +172,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
         },
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
-          child: Icon(Icons.close, size: 15, color: t.fg2),
+          child: Icon(Icons.block, size: 15, color: t.fg2),
         ),
       ),
     );
@@ -191,11 +200,20 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     // the prompt / error never changes the field's — or the row's — height. The
     // always-present trailing slot flips keyboard↔✕ by state (see _trailingIcon),
     // so no element comes/goes to shift the row.
+    // Bound the prompt/error width so a long message (e.g. "Needs a modifier
+    // (⌘ ⌥ ⌃ ⇧)") can't stretch the field — and the row's trailing — wide enough
+    // to overflow a narrow row. The fixed height keeps it to one line, so it
+    // ellipsizes rather than wraps. Key-cap combos are short and stay unbounded.
     final Widget primary = _recording
-        ? Text(
-            _error ?? AppLocalizations.of(context).recorderPressKeys,
-            style: GlimprType.sansStyle(
-                12.5, 600, hasError ? GlimprTokens.danger : t.fg2),
+        ? ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 210),
+            child: Text(
+              _error ?? AppLocalizations.of(context).recorderPressKeys,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GlimprType.sansStyle(
+                  12.5, 600, hasError ? GlimprTokens.danger : t.fg2),
+            ),
           )
         : KeyCapChips(widget.value,
             emptyLabel: widget.emptyLabel ??
@@ -225,7 +243,8 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     );
     if (_recording) {
       // Hovering the record area while recording explains the cancel key. The
-      // trailing ✕ keeps its own "Clear" tooltip (wins on its own region).
+      // trailing prohibition glyph keeps its own "Disable" tooltip (wins on its
+      // own region).
       field = Tooltip(
           message: AppLocalizations.of(context).recorderEscToCancel,
           child: field);

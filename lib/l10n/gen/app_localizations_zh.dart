@@ -781,6 +781,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsShortcutsReserved => '保留';
 
   @override
+  String get scopeGlobal => '全域';
+
+  @override
+  String get scopeEditor => '編輯器';
+
+  @override
+  String get scopeOverlay => '擷取';
+
+  @override
+  String get scopeImage => '圖片';
+
+  @override
+  String get scopeText => '文字';
+
+  @override
+  String get scopeGlobalDesc => '系統全域快捷鍵';
+
+  @override
+  String get scopeEditorDesc => '擷取畫面與圖片編輯器';
+
+  @override
+  String get scopeOverlayDesc => '僅擷取畫面時';
+
+  @override
+  String get scopeImageDesc => '僅圖片編輯器';
+
+  @override
+  String get scopeTextDesc => '編輯文字時';
+
+  @override
+  String get shortcutsLegendDedup =>
+      '整個頁面的快捷鍵都必須唯一：同一組按鍵不能重複使用，保留鍵也不能改綁。每一列的標籤代表它的作用範圍：';
+
+  @override
   String get actionCapture => '截圖框選範圍';
 
   @override
@@ -1301,7 +1335,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recorderNeedsModifier => '需要修飾鍵（⌘ ⌥ ⌃ ⇧）';
 
   @override
-  String get recorderClear => '清除';
+  String get recorderDisable => '停用';
 
   @override
   String get recorderPressKeys => '請按下按鍵…';

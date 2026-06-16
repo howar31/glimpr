@@ -36,9 +36,11 @@ Future<void> _openShortcuts(WidgetTester tester, Settings settings) async {
 }
 
 // The Global section is the first GlassCard in the pane; the Editor section
-// (added in Phase 4.1b) is the second. These finders scope the global-row
-// assertions to that first card so the editor rows below it don't make
-// type-based finds (HotkeyRecorderField / KeyCap / 'Reset to default') ambiguous.
+// (added in Phase 4.1b) is the second. (The Shortcuts legend above it is a plain
+// bordered panel, NOT a GlassCard, so it does not shift these indices.) These
+// finders scope the global-row assertions to that first card so the editor rows
+// below don't make type-based finds (HotkeyRecorderField / KeyCap / 'Reset to
+// default') ambiguous.
 final _globalCard = find.byType(GlassCard).first;
 Finder _inGlobal(Finder matching) =>
     find.descendant(of: _globalCard, matching: matching);
@@ -247,10 +249,11 @@ void main() {
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    // Clear is reachable through recording: click the field, then the in-field ✕.
+    // Disabling is reachable through recording: click the field, then the
+    // in-field prohibition glyph.
     await tester.tap(_globalRecorder);
     await tester.pump();
-    await tester.tap(find.byTooltip('Clear'));
+    await tester.tap(find.byTooltip('Disable'));
     await tester.pumpAndSettle();
 
     // Unbound => muted "Disabled" text (NOT a pressable cap); null is valid for a
@@ -268,6 +271,12 @@ void main() {
 
   testWidgets('clicking Reset while recording cancels record + shows new value',
       (tester) async {
+    // The legend above the cards pushes the capture rows down, so enlarge the
+    // surface to keep them (and their reset buttons) on-screen for interaction.
+    tester.view.physicalSize = const Size(1000, 3600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
@@ -295,6 +304,12 @@ void main() {
 
   testWidgets('a duplicate combo flags both rows and ghosts Apply',
       (tester) async {
+    // The legend above the cards pushes the second capture row down; enlarge the
+    // surface so both rows being bound are on-screen for interaction.
+    tester.view.physicalSize = const Size(1000, 3600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 

@@ -207,8 +207,8 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       _b(PhysicalKeyboardKey.keyV, LogicalKeyboardKey.keyV),
 };
 
-/// Keys reserved for fixed editor behavior — cannot be bound to an editor action
-/// (recorder rejects them). Esc = safety Cancel/Exit; arrows = crosshair nudge.
+/// Keys reserved as WHOLE keys (rejected with any modifier combination). Esc =
+/// safety Cancel/Exit; arrows = crosshair nudge.
 final kEditorReservedKeys = <LogicalKeyboardKey>{
   LogicalKeyboardKey.escape,
   LogicalKeyboardKey.arrowUp,
@@ -216,6 +216,42 @@ final kEditorReservedKeys = <LogicalKeyboardKey>{
   LogicalKeyboardKey.arrowLeft,
   LogicalKeyboardKey.arrowRight,
 };
+
+/// Reserved as EXACT combos (this key with exactly these modifiers). Bare , / .
+/// walk the element-snap level; bare / and Shift+/ (= ?) cycle the loupe info;
+/// the chords are the fixed editor/system shortcuts ⌘W (close window), ⌘,
+/// (open settings), ⌘1 (fit to window), ⌘2 (zoom to 100%). Enter and Shift+Enter
+/// are intentionally absent: Enter is the rebindable Export command default and
+/// is suppressed only while editing a text annotation.
+final _kEditorReservedCombos = <(LogicalKeyboardKey, Set<HotkeyModifier>)>[
+  (LogicalKeyboardKey.comma, const {}),
+  (LogicalKeyboardKey.period, const {}),
+  (LogicalKeyboardKey.slash, const {}),
+  (LogicalKeyboardKey.slash, const {HotkeyModifier.shift}),
+  (LogicalKeyboardKey.keyW, const {HotkeyModifier.meta}),
+  (LogicalKeyboardKey.comma, const {HotkeyModifier.meta}),
+  (LogicalKeyboardKey.digit1, const {HotkeyModifier.meta}),
+  (LogicalKeyboardKey.digit2, const {HotkeyModifier.meta}),
+];
+
+/// Whether binding [key] with [modifiers] would collide with a fixed editor or
+/// system shortcut, so the recorder rejects it on every binding row. Whole-key
+/// reserved (esc / arrows) match regardless of modifiers; the rest match the
+/// exact combo, so the bare 1/2 tools and ⌘. / ⌘/ stay bindable.
+bool isEditorReservedCombo(
+  LogicalKeyboardKey key,
+  Set<HotkeyModifier> modifiers,
+) {
+  if (kEditorReservedKeys.contains(key)) return true;
+  for (final (k, mods) in _kEditorReservedCombos) {
+    if (k == key &&
+        mods.length == modifiers.length &&
+        mods.containsAll(modifiers)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// A bindable global action. Only actions with a handler appear here, so the
 /// Shortcuts UI renders no dead rows. This slice: captureArea only.

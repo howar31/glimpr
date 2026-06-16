@@ -880,6 +880,50 @@
   "@settingsShortcutsReserved": {
     "description": "Settings > Shortcuts: Reserved section label"
   },
+  "scopeGlobal": "Global",
+  "@scopeGlobal": {
+    "description": "Settings > Shortcuts: scope tag for system-wide hotkeys"
+  },
+  "scopeEditor": "Editor",
+  "@scopeEditor": {
+    "description": "Settings > Shortcuts: scope tag for editor (overlay + image editor) shortcuts"
+  },
+  "scopeOverlay": "Overlay",
+  "@scopeOverlay": {
+    "description": "Settings > Shortcuts: scope tag for capture-overlay-only shortcuts"
+  },
+  "scopeImage": "Image",
+  "@scopeImage": {
+    "description": "Settings > Shortcuts: scope tag for image-editor-only shortcuts"
+  },
+  "scopeText": "Text",
+  "@scopeText": {
+    "description": "Settings > Shortcuts: scope tag for shortcuts active only while editing a text annotation"
+  },
+  "scopeGlobalDesc": "System-wide hotkeys",
+  "@scopeGlobalDesc": {
+    "description": "Settings > Shortcuts legend: gloss for the Global scope tag"
+  },
+  "scopeEditorDesc": "Capture overlay and image editor",
+  "@scopeEditorDesc": {
+    "description": "Settings > Shortcuts legend: gloss for the Editor scope tag"
+  },
+  "scopeOverlayDesc": "Capture overlay only",
+  "@scopeOverlayDesc": {
+    "description": "Settings > Shortcuts legend: gloss for the Overlay scope tag"
+  },
+  "scopeImageDesc": "Image editor only",
+  "@scopeImageDesc": {
+    "description": "Settings > Shortcuts legend: gloss for the Image scope tag"
+  },
+  "scopeTextDesc": "While editing a text annotation",
+  "@scopeTextDesc": {
+    "description": "Settings > Shortcuts legend: gloss for the Text scope tag"
+  },
+  "shortcutsLegendDedup": "Every shortcut must be unique across the whole page, so a key combination can't be used twice and reserved keys can't be reassigned. The tag on each row shows where it applies:",
+  "@shortcutsLegendDedup": {
+    "description": "Settings > Shortcuts: legend intro explaining page-wide uniqueness and the scope tags"
+  },
   "actionCapture": "Screenshot Region",
   "@actionCapture": {
     "description": "Global action label: interactive capture"
@@ -1585,9 +1629,9 @@
   "@recorderNeedsModifier": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
-  "recorderClear": "Clear",
-  "@recorderClear": {
-    "description": "3e batch: masks/confirm/recorder/overlay"
+  "recorderDisable": "Disable",
+  "@recorderDisable": {
+    "description": "Shortcut recorder: tooltip on the prohibition glyph that clears the binding (sets it to no shortcut)"
   },
   "recorderPressKeys": "Press keys…",
   "@recorderPressKeys": {

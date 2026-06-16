@@ -43,6 +43,39 @@ class KeyCap extends StatelessWidget {
   }
 }
 
+/// A small muted pill naming the surface a shortcut applies to (Global / Editor
+/// / Overlay / Image / Text). Informational only, and deliberately borderless so
+/// it never reads as a recordable key cap. [width], when set, fixes the pill to
+/// a shared width (the widest label) and centres the text, so every chip on a
+/// page lines up regardless of label length.
+class ScopeTag extends StatelessWidget {
+  const ScopeTag(this.label, {super.key, this.width});
+  final String label;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final dark = t.brightness == Brightness.dark;
+    return Container(
+      width: width,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: dark
+            ? const Color.fromRGBO(255, 255, 255, 0.06)
+            : const Color.fromRGBO(15, 23, 42, 0.05),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: GlimprType.sansStyle(10.5, 600, t.fg3, letterSpacing: 0.2),
+      ),
+    );
+  }
+}
+
 /// Renders a binding as a row of key caps (modifiers in canonical order + key),
 /// or [emptyLabel] when the binding is null/unbound.
 class KeyCapChips extends StatelessWidget {
