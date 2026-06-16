@@ -85,6 +85,13 @@ final class CaptureChannel {
           PerfLog.mark(label)
         }
         result(nil)
+      // Precise element snap (Advanced): does the app hold AX permission?
+      case "accessibilityTrusted":
+        result(ElementSnap.trusted())
+      // Prompt for AX permission (system dialog / System Settings deep link).
+      case "requestAccessibility":
+        ElementSnap.requestTrust()
+        result(nil)
       case "captureRegion":
         // Main actor like triggerCapture: the capture reaches NSScreen and the
         // channel reply must land on the platform (main) thread.

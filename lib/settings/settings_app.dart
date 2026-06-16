@@ -9,6 +9,7 @@ import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
+import '../capture/capture_bridge.dart';
 import '../capture/direct_capture.dart'
     show
         kDisplayCaptureLabel,
@@ -99,6 +100,10 @@ class _SettingsAppState extends State<SettingsApp>
   int _warmTarget = 2;
   int _recentCap = kRecentImagesCap;
   int _captureLayerCap = 1;
+  // Precise AX element snap (Advanced experiment) + the live Accessibility
+  // permission state (re-checked on load + while the grant prompt is pending).
+  bool _snapElementMode = false;
+  bool _axTrusted = false;
   // App language choice + the value active since launch (restart-effective,
   // like the warm target): the restart hint shows while they differ.
   String _appLanguage = 'system';
@@ -243,6 +248,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudCrosshair = await _s.getHudCrosshair();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final layerCap = await _s.getCaptureLayerCap();
+    final snapElementMode = await _s.getSnapElementMode();
     final appLanguage = await _s.getAppLanguage();
     final pinHoverGlow = await _s.getPinHoverGlow();
     final rec = await _s.loadRecording();
@@ -276,6 +282,7 @@ class _SettingsAppState extends State<SettingsApp>
       _hudCrosshair = hudCrosshair;
       _hudMarchingAnts = hudMarchingAnts;
       _captureLayerCap = layerCap;
+      _snapElementMode = snapElementMode;
       _appLanguage = appLanguage;
       _appLanguageInitial = appLanguage;
       _recordFormat = rec.format;
@@ -297,6 +304,9 @@ class _SettingsAppState extends State<SettingsApp>
     // unmocked channel never breaks the rest of the UI (widget tests).
     final recordAvailable = await RecordBridge().isAvailable();
     if (mounted) setState(() => _recordAvailable = recordAvailable);
+    // AX permission is a native fact (element-snap status row); query it
+    // separately for the same reason (unmocked channel in widget tests).
+    _refreshAxTrusted();
     // Login state comes from the OS (SMAppService) over a native channel; query
     // it separately so a slow / unavailable channel never blocks the rest of the
     // settings UI (and never stalls widget tests where the channel is unmocked).
@@ -463,6 +473,38 @@ class _SettingsAppState extends State<SettingsApp>
   void _setCaptureLayerCap(int v) {
     _s.setCaptureLayerCap(v);
     setState(() => _captureLayerCap = v);
+  }
+
+  Future<void> _setSnapElementMode(bool v) async {
+    setState(() => _snapElementMode = v);
+    await _s.setSnapElementMode(v);
+    // Turning it on without permission prompts for it; then poll so the status
+    // row flips live once the user grants in System Settings.
+    if (v && !_axTrusted) {
+      await CaptureBridge().requestAccessibility();
+      _recheckAxTrusted();
+    }
+  }
+
+  /// One-shot AX permission check (off the critical load path so an unmocked
+  /// channel never stalls widget tests).
+  Future<void> _refreshAxTrusted() async {
+    final t = await CaptureBridge().accessibilityTrusted();
+    if (!mounted || t == _axTrusted) return;
+    setState(() => _axTrusted = t);
+  }
+
+  /// Poll the AX permission for a short window so the status row updates after
+  /// the user grants it in the system prompt / System Settings (no app restart).
+  Future<void> _recheckAxTrusted() async {
+    for (var i = 0; i < 12; i++) {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+      final t = await CaptureBridge().accessibilityTrusted();
+      if (!mounted) return;
+      if (t != _axTrusted) setState(() => _axTrusted = t);
+      if (t) return;
+    }
   }
 
   void _setAppLanguage(String v) {
@@ -1845,6 +1887,63 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionElementSnap, icon: Icons.ads_click),
+      GlassCard.padded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _l.settingsElementSnapTitle,
+                    style: GlimprType.sansStyle(14.5, 600, t.fg1),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GlassToggle(
+                  value: _snapElementMode,
+                  onChanged: _setSnapElementMode,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _l.settingsElementSnapBody,
+              style: GlimprType.sansStyle(12.5, 400, t.fg3),
+            ),
+            if (_snapElementMode && !_axTrusted) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.lock_outline,
+                    size: 15,
+                    color: GlimprTokens.danger,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _l.settingsElementSnapNeedsPermission,
+                      style:
+                          GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GhostButton(
+                    _l.settingsElementSnapGrant,
+                    onTap: () async {
+                      await CaptureBridge().requestAccessibility();
+                      _recheckAxTrusted();
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     ];
   }
 
@@ -2010,6 +2109,16 @@ class _SettingsAppState extends State<SettingsApp>
             t,
             const [KeyCap('←'), KeyCap('↑'), KeyCap('↓'), KeyCap('→')],
           ),
+        ),
+        SettingRow(
+          title: _l.settingsReservedElementSnapLevel,
+          hint: _l.settingsReservedElementSnapLevelHint,
+          trailing: _reservedField(t, const [KeyCap(','), KeyCap('.')]),
+        ),
+        SettingRow(
+          title: _l.settingsCycleLoupeInfo,
+          hint: _l.settingsCycleLoupeInfoHint,
+          trailing: _reservedField(t, const [KeyCap('?'), KeyCap('/')]),
         ),
         // Image-editor viewport zoom — fixed keys (the capture overlay is 1:1).
         SettingRow(

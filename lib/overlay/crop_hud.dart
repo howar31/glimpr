@@ -391,6 +391,51 @@ class BoxSizeLabel extends StatelessWidget {
   }
 }
 
+/// The element-snap LEVEL block under the loupe (its own pill, centered like
+/// [LoupeReadout]): the current tree level (Advanced "precise element snap").
+class LoupeLevelBlock extends StatelessWidget {
+  final String text;
+  const LoupeLevelBlock({super.key, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = _isDark(context);
+    return _hudPill(dark, Text(text, style: _hudText(dark)));
+  }
+}
+
+/// The SHORTCUTS block under the loupe (its own pill): a two-column table, the
+/// key cell and the description in aligned columns (no inline separator, so a
+/// punctuation mark is never mistaken for a key). One [(key, description)] row
+/// per aiming-stage shortcut.
+class LoupeShortcutsBlock extends StatelessWidget {
+  final List<(String, String)> rows;
+  const LoupeShortcutsBlock({super.key, required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = _isDark(context);
+    final style = _hudText(dark);
+    return _hudPill(
+      dark,
+      Table(
+        defaultColumnWidth: const IntrinsicColumnWidth(),
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          for (final (k, d) in rows)
+            TableRow(children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Text(k, style: style),
+              ),
+              Opacity(opacity: 0.7, child: Text(d, style: style)),
+            ]),
+        ],
+      ),
+    );
+  }
+}
+
 /// The drag-start origin (NATIVE pixels), shown beside the selection's start
 /// corner. [cornerLeft]/[cornerTop] say which corner the start point is, so the
 /// arrow points back at it (the pill sits just outside that corner of the box).

@@ -32,6 +32,7 @@ class CaptureSettings {
     this.decorateLastRegion = false,
     this.decorationJpegFill = 0xFFFFFFFF,
     this.captureCursor = false,
+    this.snapElementMode = false,
   });
 
   final Directory? saveDir;
@@ -55,6 +56,10 @@ class CaptureSettings {
   final bool decorateLastRegion; // direct last-region capture
   final int decorationJpegFill; // ARGB; the JPEG margin fill colour
   final bool captureCursor; // include the mouse pointer in the capture
+  // Precise AX element snap (Advanced experiment): the overlay snaps to the
+  // Accessibility element under the cursor instead of the whole window. Default
+  // off; needs the macOS Accessibility permission, falls back to window snap.
+  final bool snapElementMode;
 
   static const defaults = CaptureSettings();
 
@@ -125,6 +130,7 @@ class Settings {
   static const _decorateLastRegionKey = 'decorate_last_region';
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
+  static const _snapElementModeKey = 'snap_element_mode';
   static const _pinHoverGlowKey = 'pin_hover_glow';
   static const _recordFormatKey = 'record_format';
   static const _recordFpsKey = 'record_fps';
@@ -268,6 +274,12 @@ class Settings {
       (await store.getBool(_captureCursorKey)) ?? false;
   Future<void> setCaptureCursor(bool v) =>
       store.setBool(_captureCursorKey, v);
+
+  // Precise AX element snap (Advanced experiment). Default OFF.
+  Future<bool> getSnapElementMode() async =>
+      (await store.getBool(_snapElementModeKey)) ?? false;
+  Future<void> setSnapElementMode(bool v) =>
+      store.setBool(_snapElementModeKey, v);
 
   // Pinned-window hover glow (Aurora corona). Default ON; read live by the
   // native PinPanel on each hover.
@@ -499,6 +511,7 @@ class Settings {
     decorateLastRegion: await getDecorateLastRegion(),
     decorationJpegFill: await getDecorationJpegFill(),
     captureCursor: await getCaptureCursor(),
+    snapElementMode: await getSnapElementMode(),
   );
 
   /// One-shot snapshot of every HOT-RELOADABLE config setting (see [AppConfig]).

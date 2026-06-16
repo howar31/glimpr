@@ -409,6 +409,13 @@ class _OverlayAppState extends State<OverlayApp> {
       if (!mounted || _recordOverrides != overrides) return;
       overrides.seed(r);
     });
+    // Load capture settings so element snap (snapElementMode) is available on the
+    // FIRST recording of a launch too. Without this the record-select picker only
+    // got window snap until a screenshot had run once and seeded _capture (the
+    // screenshot path's loadCapture is skipped by the liveSelect early-return).
+    Settings.instance.loadCapture().then((c) {
+      if (mounted) setState(() => _capture = c);
+    });
     setState(() {
       _recordDisplay = d;
       _lastKnownDisplay = d;
@@ -1249,6 +1256,14 @@ class _OverlayAppState extends State<OverlayApp> {
                       presentationOnly: rsActive,
                       layerCaption: _layerCaption,
                       layerAccent: _layerAccent,
+                      // Precise element snap (Advanced experiment): only on the
+                      // frozen screenshot session, only when the setting is on.
+                      // Native returns null without the AX permission -> the
+                      // window snap stands.
+                      elementSnapAt: _capture.snapElementMode
+                          ? (Offset p, {int walk = 0}) => _bridge.elementSnapAt(
+                              d.displayId, p.dx, p.dy, walk: walk)
+                          : null,
                     ),
                   ),
                 // Top: the record-select picker. A light veil keeps every window
@@ -1279,6 +1294,14 @@ class _OverlayAppState extends State<OverlayApp> {
                     recordMode: true,
                     liveLoupeSample: _bridge.loupeSample,
                     recordOverrides: _recordOverrides,
+                    // Element snap for recording live-select: same hook + setting.
+                    // Cleaner here than screenshots — the picker is over the LIVE
+                    // screen, so there is no frozen-vs-live divergence. A snapped
+                    // element commits as the fixed record region.
+                    elementSnapAt: _capture.snapElementMode
+                        ? (Offset p, {int walk = 0}) => _bridge.elementSnapAt(
+                            _recordDisplay!.displayId, p.dx, p.dy, walk: walk)
+                        : null,
                   ),
                 ],
                 // A peer display is region-dragging -> this whole display is

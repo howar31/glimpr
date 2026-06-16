@@ -5,7 +5,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
+import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import '../capture/element_snap.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../output/clipboard.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -66,6 +68,19 @@ Offset _snap8(Offset a, Offset p) {
   final proj = v.dx * dir.dx + v.dy * dir.dy; // |v| component along the ray
   return a + dir * proj;
 }
+
+/// The rect a snap commits to: the live AX [element] when present, else the
+/// hovered [window], else none. The single source for both the snap highlight
+/// and the confirm so they never disagree.
+Rect? resolveSnapRect({ElementSnap? element, SnapWindow? window}) =>
+    element?.rect ?? window?.rect;
+
+/// What the loupe shows beneath the glass; cycled by `?` / `/` (a fixed, not
+/// rebindable, shortcut). Session-sticky and shared across displays (a top-level
+/// var, not per-State), so it survives capture-to-capture but resets on relaunch.
+enum LoupeInfoMode { coords, level, shortcuts, hidden }
+
+LoupeInfoMode _loupeInfoMode = LoupeInfoMode.coords;
 
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
@@ -201,6 +216,25 @@ class _EditorCoreState extends State<EditorCore> {
   List<SnapWindow> _windows = const [];
   Rect? _hoverWindow;
   bool _cancelGesture = false; // right-click cancelled the active drag
+
+  // Precise AX element snap (Advanced experiment) — overlay only, when
+  // host.elementSnapAt != null. The live AX candidate under the cursor, the
+  // tree-walk depth (wheel up/down), and the async-query throttle/in-flight
+  // guard. Window snap stays untouched when the host hook is null.
+  ElementSnap? _hoverElement;
+  int _elementWalk = 0;
+  bool _elementQueryInFlight = false;
+  DateTime _lastElementQueryAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Offset _lastQueryPos = const Offset(-1e9, -1e9); // last AX-queried point
+  // Wheel tree-walk debounce: one physical scroll fires many PointerScrollEvents
+  // (trackpad / high-res wheel momentum), so step at most one level per cooldown.
+  DateTime _lastWalkStepAt = DateTime.fromMillisecondsSinceEpoch(0);
+  // Trackpad two-finger scroll is a pan gesture (not a wheel signal): accumulate
+  // its vertical pan and step the element-snap walk once per _kPanWalkStep of
+  // travel (resets each gesture in _onPanZoomStart).
+  double _panWalkAccum = 0.0;
+  static const _kPanWalkStep = 28.0; // logical px of two-finger travel per level
+  bool get _elementSnapOn => widget.host.elementSnapAt != null;
 
   // Inline text editing — one uniform style per text box.
   final _textFocus = FocusNode();
@@ -359,6 +393,30 @@ class _EditorCoreState extends State<EditorCore> {
   /// Mouse-wheel / two-finger scroll: Cmd+scroll = cursor-anchored zoom;
   /// Shift+scroll = horizontal pan (common convention); else pan.
   void _onPointerSignal(PointerSignalEvent e) {
+    // Precise element snap (overlay): the wheel walks the AX tree up (grow) /
+    // down (shrink) around the current hover, then re-queries immediately.
+    // Handled before the interactive (editor viewport) zoom/pan path.
+    if (_elementSnapOn &&
+        e is PointerScrollEvent &&
+        _active &&
+        !_dragging &&
+        _snapTools.contains(c.tool.value) &&
+        _hoverElement != null) {
+      final dy = e.scrollDelta.dy;
+      // Ignore jitter / horizontal-only events, and step at most one level per
+      // cooldown so a single flick's event burst + momentum tail = one step.
+      if (dy.abs() < 2) return;
+      final now = DateTime.now();
+      if (now.difference(_lastWalkStepAt) < const Duration(milliseconds: 150)) {
+        return;
+      }
+      _lastWalkStepAt = now;
+      // Up = grow (walk toward ancestors), down = shrink (re-descend toward the
+      // cursor, below the auto-chosen "sensible" element down to the raw leaf).
+      _elementWalk = (_elementWalk + (dy < 0 ? 1 : -1)).clamp(-8, 12);
+      _maybeQueryElement(_cursor, force: true);
+      return;
+    }
     if (!_interactive || e is! PointerScrollEvent) return;
     if (HardwareKeyboard.instance.isMetaPressed) {
       final ns = (_viewport.scale * (1 - e.scrollDelta.dy * 0.0015))
@@ -378,10 +436,36 @@ class _EditorCoreState extends State<EditorCore> {
 
   void _onPanZoomStart(PointerPanZoomStartEvent e) {
     _panZoomBaseScale = _viewport.scale;
+    _panWalkAccum = 0.0;
   }
 
   /// Trackpad pinch = cursor-anchored zoom; two-finger drag during pinch = pan.
   void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    // Precise element snap (overlay): a two-finger trackpad scroll arrives as a
+    // pan gesture, not a wheel signal, so the _onPointerSignal walk never sees
+    // it. Translate the vertical pan into the same one-level-per-step walk the
+    // mouse wheel does. Handled before the interactive (editor zoom) path.
+    if (_elementSnapOn &&
+        _active &&
+        !_dragging &&
+        _snapTools.contains(c.tool.value) &&
+        _hoverElement != null) {
+      _panWalkAccum += e.panDelta.dy;
+      if (_panWalkAccum.abs() >= _kPanWalkStep) {
+        final now = DateTime.now();
+        if (now.difference(_lastWalkStepAt) >=
+            const Duration(milliseconds: 150)) {
+          _lastWalkStepAt = now;
+          // Fingers up (negative pan) = grow, matching the wheel's scroll-up.
+          // If the direction feels inverted on-device, flip this sign.
+          _elementWalk = (_elementWalk + (_panWalkAccum < 0 ? 1 : -1))
+              .clamp(-8, 12);
+          _maybeQueryElement(_cursor, force: true);
+        }
+        _panWalkAccum = 0.0;
+      }
+      return;
+    }
     if (!_interactive) return;
     final ns = (_panZoomBaseScale * e.scale).clamp(_kMinScale, _kMaxScale);
     setState(
@@ -656,6 +740,9 @@ class _EditorCoreState extends State<EditorCore> {
   void _onToolChanged() {
     // Switching tools commits any in-progress text (its tool is gone).
     if (_editingText) _commitText();
+    // Fresh tool intent -> reset the element-snap tree-walk depth (it persists
+    // across commits WITHIN a tool so repeated same-level snaps don't re-scroll).
+    _elementWalk = 0;
   }
 
   // ---- region-local blur/pixelate effect cache ---------------------------
@@ -785,6 +872,8 @@ class _EditorCoreState extends State<EditorCore> {
       _reconcileEffectCache(); // rebuild existing regions from the new frame
       _windows = widget.host.snapWindows;
       _hoverWindow = null;
+      _hoverElement = null;
+      _elementWalk = 0;
       // Re-fit a re-loaded image (interactive editor). Usually moot because the
       // app re-keys EditorCore by ValueKey(image) so a fresh State runs initial
       // fit anyway, but kept correct for in-place baseImage swaps.
@@ -1022,6 +1111,31 @@ class _EditorCoreState extends State<EditorCore> {
       if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
+    // Element snap: ',' shrinks / '.' grows the AX selection along the tree — a
+    // keyboard fallback for the wheel (a trackpad two-finger scroll is a drag,
+    // not a wheel, so it can't walk). Bare keys only, so ⌘',' still opens
+    // Settings below. Mirrors the wheel: '.'/'>' grow (+1), ','/'<' shrink (-1).
+    if (_elementSnapOn &&
+        pressed.isEmpty &&
+        !_dragging &&
+        _snapTools.contains(c.tool.value) &&
+        (key == LogicalKeyboardKey.comma || key == LogicalKeyboardKey.period)) {
+      // Always CONSUME the key in this mode (no system error beep), even with no
+      // element yet under the cursor — the forced query establishes one.
+      final grow = key == LogicalKeyboardKey.period;
+      _elementWalk = (_elementWalk + (grow ? 1 : -1)).clamp(-8, 12);
+      _maybeQueryElement(_cursor, force: true);
+      return KeyEventResult.handled;
+    }
+    // ? or / (the slash key, with or without Shift) cycles the loupe info
+    // display: coordinates -> element level -> shortcuts -> all hidden. A FIXED
+    // (non-rebindable) shortcut; shown in Settings > Shortcuts as reserved.
+    if (key == LogicalKeyboardKey.slash &&
+        pressed.difference({HotkeyModifier.shift}).isEmpty) {
+      setState(() => _loupeInfoMode = LoupeInfoMode
+          .values[(_loupeInfoMode.index + 1) % LoupeInfoMode.values.length]);
+      return KeyEventResult.handled;
+    }
     // ⌘, opens Settings (fixed macOS Preferences convention; reserved). The host
     // decides whether to dismiss first (the overlay does, the editor doesn't).
     if (isOpenSettingsChord(e, pressed)) {
@@ -1124,10 +1238,10 @@ class _EditorCoreState extends State<EditorCore> {
       // effect). Skipped mid-gesture (a drag/edit in progress).
       if (_showsCrosshair) {
         // Crosshair/loupe tools (crop/blur/pixelate + any future ones): capture
-        // the snap target — the window under the cursor, or the whole display
-        // when none is under it.
-        final win = topmostWindowAt(_windows, _cursor);
-        widget.host.onExport(win?.rect, win);
+        // the snap target — the AX element (element mode) or the window under the
+        // cursor, or the whole display when none is under it.
+        final s = _snapCommit(_cursor);
+        widget.host.onExport(s.rect, s.window);
       } else {
         // Other tools: export the whole (annotated) display.
         widget.host.onExport(null, topmostWindowAt(_windows, _cursor));
@@ -1411,13 +1525,19 @@ class _EditorCoreState extends State<EditorCore> {
     // drawable spanning it. With NO window under the cursor the tools fall back
     // to their normal tap (crop -> whole display; the rest select).
     final win = topmostWindowAt(_windows, p);
+    // The snap rect for the drawable tools: the AX element (element mode) else
+    // the window. The crop/confirm path uses _snapCommit (it also needs the
+    // SnapWindow for naming + the window-shape mask).
+    final snapRect = _snapRectAt(p);
     final style = c.style.value;
     switch (c.tool.value) {
       case ToolKind.crop:
         // Editor: crop is drag-to-trim (then Enter/✔ confirms); a bare tap does
-        // nothing. Overlay: a tap captures the snapped window / whole display.
+        // nothing. Overlay: a tap captures the snapped element/window / whole
+        // display.
         if (widget.host.cropTrims) return;
-        widget.host.onExport(win?.rect, win); // null window -> whole display
+        final s = _snapCommit(p);
+        widget.host.onExport(s.rect, s.window); // null window -> whole display
         return;
       // For the snap tools, selecting an existing same-type region WINS over
       // snapping a new one — so you can click a committed region to re-select /
@@ -1426,8 +1546,9 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.blur:
         if (_hitActiveType(p) case final hit?) {
           _selectAndPin(hit);
-        } else if (win != null) {
-          c.commitDrawable(BlurDrawable(win.rect, style));
+        } else if (snapRect != null) {
+          c.commitDrawable(BlurDrawable(snapRect, style));
+          _markElementDivergence();
         } else {
           _selectAndPin(null);
         }
@@ -1435,8 +1556,9 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.pixelate:
         if (_hitActiveType(p) case final hit?) {
           _selectAndPin(hit);
-        } else if (win != null) {
-          c.commitDrawable(PixelateDrawable(win.rect, style));
+        } else if (snapRect != null) {
+          c.commitDrawable(PixelateDrawable(snapRect, style));
+          _markElementDivergence();
         } else {
           _selectAndPin(null);
         }
@@ -1444,8 +1566,9 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.rectangle:
         if (_hitActiveType(p) case final hit?) {
           _selectAndPin(hit);
-        } else if (win != null) {
-          c.commitDrawable(RectangleDrawable(win.rect, style));
+        } else if (snapRect != null) {
+          c.commitDrawable(RectangleDrawable(snapRect, style));
+          _markElementDivergence();
         } else {
           _selectAndPin(null);
         }
@@ -1453,8 +1576,9 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.ellipse:
         if (_hitActiveType(p) case final hit?) {
           _selectAndPin(hit);
-        } else if (win != null) {
-          c.commitDrawable(EllipseDrawable(win.rect, style));
+        } else if (snapRect != null) {
+          c.commitDrawable(EllipseDrawable(snapRect, style));
+          _markElementDivergence();
         } else {
           _selectAndPin(null);
         }
@@ -1533,6 +1657,105 @@ class _EditorCoreState extends State<EditorCore> {
     }
   }
 
+  /// The rect the snap tools commit to at [p]: the live AX element (AX mode +
+  /// a current hover candidate) else the top-most window, else null.
+  Rect? _snapRectAt(Offset p) => resolveSnapRect(
+      element: _elementSnapOn ? _hoverElement : null,
+      window: topmostWindowAt(_windows, p));
+
+  /// The (selectionRect, SnapWindow) a confirm/export commits at [p]. An AX
+  /// element becomes a fixed rect with NO windowId, so the overlay takes the
+  /// rectangular-crop path (a sub-element is rectangular); a window snap keeps
+  /// its windowId so the export masks to the window's real rounded shape.
+  /// Emit the frozen-vs-live geometry divergence perf mark for the current
+  /// element hover at a COMMIT (the element's window may have moved/resized
+  /// since the freeze). Only actual movement is logged — a stationary window
+  /// produces no mark. No-op outside element mode / with no hover element.
+  void _markElementDivergence() {
+    final el = _hoverElement;
+    if (!_elementSnapOn || el == null) return;
+    Rect? freeze;
+    if (el.windowId != null) {
+      for (final w in _windows) {
+        if (w.windowId == el.windowId) {
+          freeze = w.rect;
+          break;
+        }
+      }
+    }
+    final d = el.divergence(freeze);
+    if (d != null && (d.dx.abs() > 1 || d.dy.abs() > 1 || d.resized)) {
+      CaptureBridge.perfMark(
+          'elementSnap diverge dx=${d.dx.round()} dy=${d.dy.round()} '
+          'resized=${d.resized}');
+    }
+  }
+
+  ({Rect? rect, SnapWindow? window}) _snapCommit(Offset p) {
+    final el = _elementSnapOn ? _hoverElement : null;
+    if (el != null) {
+      _markElementDivergence();
+      return (
+        rect: el.rect,
+        window: SnapWindow(rect: el.rect, title: el.title, app: el.app),
+      );
+    }
+    final w = topmostWindowAt(_windows, p);
+    return (rect: w?.rect, window: w);
+  }
+
+  /// Fire a throttled async AX element query at display-local [p] and fold the
+  /// result into the snap highlight. Overlay-only (guarded by [_elementSnapOn]).
+  /// A hung target app returns null -> the window-snap highlight stands. [force]
+  /// bypasses the throttle (a wheel tree-walk).
+  void _maybeQueryElement(Offset p, {bool force = false}) {
+    if (!_elementSnapOn || _elementQueryInFlight) return;
+    // Movement gate: a stationary cursor re-queries the same element, so skip it
+    // — this drops idle-hover queries (and the load on the hovered app) without
+    // hurting responsiveness. The wheel tree-walk passes force (depth changed,
+    // not the cursor) to bypass both this and the time throttle.
+    if (!force && (p - _lastQueryPos).distance < 3) return;
+    final now = DateTime.now();
+    if (!force &&
+        now.difference(_lastElementQueryAt) < const Duration(milliseconds: 33)) {
+      return;
+    }
+    _elementQueryInFlight = true;
+    _lastElementQueryAt = now;
+    _lastQueryPos = p;
+    final q = p;
+    final requestedWalk = _elementWalk;
+    widget.host.elementSnapAt!(q, walk: requestedWalk).then((el) {
+      _elementQueryInFlight = false;
+      if (!mounted || !_active) return;
+      // Drop a stale reply: the cursor moved on, or snapping no longer applies.
+      if ((_cursor - q).distance > 24) return;
+      if (!_snapTools.contains(c.tool.value) ||
+          _dragging ||
+          _overAnnotation(q)) {
+        return;
+      }
+      // The user scrolled while this was in flight -> the depth changed; re-fire
+      // with the latest depth rather than applying this stale one.
+      if (_elementWalk != requestedWalk) {
+        _maybeQueryElement(_cursor, force: true);
+        return;
+      }
+      setState(() {
+        _hoverElement = el;
+        // Clamp the counter to the depth the native walk ACTUALLY reached (it
+        // stops at the real root/leaf), so scrolling past the end can't overshoot
+        // — otherwise reversing direction has a dead stretch.
+        if (el != null) _elementWalk = el.appliedWalk;
+        _hoverWindow = resolveSnapRect(
+            element: el, window: topmostWindowAt(_windows, _cursor));
+      });
+      CaptureBridge.perfMark(el == null
+          ? 'elementSnap fallback'
+          : 'elementSnap lat=${el.latencyUs} walk=$_elementWalk');
+    });
+  }
+
   /// Track the crosshair from the raw pointer stream (outermost Listener), so it
   /// follows everywhere on the active display — over the toolbar, and while the
   /// left button is still held after a right-click cancel.
@@ -1543,13 +1766,31 @@ class _EditorCoreState extends State<EditorCore> {
     // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging and not
     // while hovering an annotation the tool would engage (then the snap frame is
     // redundant). The full-screen crosshair / reticle still follow the pointer.
-    final hover = (_snapTools.contains(c.tool.value) && !_dragging && !_overAnnotation(p))
-        ? topmostWindowAt(_windows, p)
-        : null;
+    final wantSnap =
+        _snapTools.contains(c.tool.value) && !_dragging && !_overAnnotation(p);
+    final hover = wantSnap ? topmostWindowAt(_windows, p) : null;
     setState(() {
       _setCursor(_clampToDisplay(p), 'track');
-      _hoverWindow = hover?.rect;
+      if (!wantSnap) {
+        _hoverElement = null;
+        // Keep _elementWalk: persist the relative tree-walk depth across commits
+        // and brief leaves (e.g. blurring several same-level elements) so the
+        // user doesn't re-scroll each time. It resets on tool change / new
+        // capture session / crop drag.
+        _hoverWindow = null;
+      } else if (_elementSnapOn &&
+          _hoverElement != null &&
+          _hoverElement!.rect.contains(p)) {
+        // Keep the element highlight while still inside it; an async query
+        // refines it as the cursor moves.
+        _hoverWindow = _hoverElement!.rect;
+      } else {
+        // Outside any element candidate -> show the window rect immediately; an
+        // AX query may refine it to a sub-element.
+        _hoverWindow = hover?.rect;
+      }
     });
+    if (wantSnap && _elementSnapOn) _maybeQueryElement(p);
   }
 
   /// The universal SELECT tool (the repurposed "paste" slot): operates on any
@@ -1749,6 +1990,8 @@ class _EditorCoreState extends State<EditorCore> {
       setState(() {
         _setCursor(p, 'cropStart');
         _hoverWindow = null;
+        _hoverElement = null;
+        _elementWalk = 0;
       });
       _crop.begin(p);
       return;
@@ -2144,22 +2387,27 @@ class _EditorCoreState extends State<EditorCore> {
     });
   }
 
-  /// Loupe placement for the OVERLAY (clamped within the display, flipping near
-  /// the bottom/right edges). The editor positions its loupe in screen space
-  /// (see [_editorLoupe]) so it can float over the checkerboard margin.
-  Offset _loupeOrigin() {
-    final size = widget.loupe.box;
+  /// Loupe placement for [cur] (cursor) within [box]: which EDGE to anchor so the
+  /// glass keeps a constant [gap] from the reticle regardless of the info blocks'
+  /// size. Anchors the glass's LEFT (loupe right of the cursor) or RIGHT (flipped
+  /// left, blocks then right-aligned), and TOP (below) or BOTTOM (flipped up, the
+  /// stack reversed so the glass stays nearest the cursor). Using right/bottom
+  /// anchors keeps the glass-to-cursor margin identical in every orientation.
+  ({double? left, double? right, double? top, double? bottom,
+    CrossAxisAlignment cross, bool flipV}) _loupePlacement(Offset cur, Size box) {
     const gap = 24.0;
-    final tall = size + _kLoupeReadoutReserve; // loupe + readout below it
-    var lx = _cursor.dx + gap;
-    var ly = _cursor.dy + gap;
-    if (lx + size > _canvasSize.width) lx = _cursor.dx - gap - size;
-    if (ly + tall > _canvasSize.height) ly = _cursor.dy - gap - tall;
-    // After a crop-trim the canvas can be smaller than the loupe; guard the
-    // upper clamp bound so it never goes negative (clamp throws if min > max).
-    final maxX = (_canvasSize.width - size).clamp(0.0, double.infinity);
-    final maxY = (_canvasSize.height - tall).clamp(0.0, double.infinity);
-    return Offset(lx.clamp(0.0, maxX), ly.clamp(0.0, maxY));
+    final size = widget.loupe.box;
+    final tall = size + _loupeBelowReserve();
+    final goRight = cur.dx + gap + size <= box.width;
+    final goDown = cur.dy + gap + tall <= box.height;
+    return (
+      left: goRight ? cur.dx + gap : null,
+      right: goRight ? null : box.width - (cur.dx - gap),
+      top: goDown ? cur.dy + gap : null,
+      bottom: goDown ? null : box.height - (cur.dy - gap),
+      cross: goRight ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      flipV: !goDown,
+    );
   }
 
   /// The annotation layer, masked to the image rect for the editor (so a drawing
@@ -2211,21 +2459,18 @@ class _EditorCoreState extends State<EditorCore> {
   /// the logical cursor.
   Widget _editorLoupe(EditorViewport v) {
     final size = widget.loupe.box;
-    const gap = 24.0;
-    final tall = size + _kLoupeReadoutReserve; // loupe + readout below it
     final cs = v.toLocal(_cursor); // cursor in screen coords
-    var lx = cs.dx + gap;
-    var ly = cs.dy + gap;
-    if (lx + size > _lastBoxSize.width) lx = cs.dx - gap - size;
-    if (ly + tall > _lastBoxSize.height) ly = cs.dy - gap - tall;
+    final p = _loupePlacement(cs, _lastBoxSize);
     return Positioned(
-      left: lx,
-      top: ly,
+      left: p.left,
+      right: p.right,
+      top: p.top,
+      bottom: p.bottom,
       child: IgnorePointer(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+          crossAxisAlignment: p.cross,
+          children: _loupeColumn(
             CustomPaint(
               size: Size(size, size),
               painter: LoupePainter(
@@ -2240,9 +2485,8 @@ class _EditorCoreState extends State<EditorCore> {
                     Brightness.dark,
               ),
             ),
-            const SizedBox(height: 6),
-            _loupeReadout(),
-          ],
+            flipUp: p.flipV,
+          ),
         ),
       ),
     );
@@ -2319,7 +2563,7 @@ class _EditorCoreState extends State<EditorCore> {
   /// image; a live-select session magnifies the latest live patch from the
   /// native stream (same painter, so the grid / center marker / frame are
   /// identical). Hidden until the live stream delivers its first patch.
-  Widget _overlayLoupe(Offset loupeOrigin) {
+  Widget _overlayLoupe() {
     final live = widget.host.liveSelect;
     if (live) _maybeFetchLiveLoupe();
     final ui.Image image;
@@ -2340,14 +2584,17 @@ class _EditorCoreState extends State<EditorCore> {
       image = _canvasImage;
       center = _cursor;
     }
+    final p = _loupePlacement(_cursor, _canvasSize);
     return Positioned(
-      left: loupeOrigin.dx,
-      top: loupeOrigin.dy,
+      left: p.left,
+      right: p.right,
+      top: p.top,
+      bottom: p.bottom,
       child: IgnorePointer(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+          crossAxisAlignment: p.cross,
+          children: _loupeColumn(
             CustomPaint(
               size: Size(widget.loupe.box, widget.loupe.box),
               painter: LoupePainter(
@@ -2364,12 +2611,81 @@ class _EditorCoreState extends State<EditorCore> {
                     Brightness.dark,
               ),
             ),
-            const SizedBox(height: 6),
-            _loupeReadout(),
-          ],
+            flipUp: p.flipV,
+          ),
         ),
       ),
     );
+  }
+
+  /// The blocks under the loupe glass, per the CUMULATIVE [_loupeInfoMode] cycle
+  /// (`?` / `/`): coordinates always (until hidden), then the element level, then
+  /// the shortcuts, then nothing. The level + shortcuts blocks only apply while
+  /// element snap is active for a snap tool.
+  List<Widget> _loupeBlocks() {
+    if (_loupeInfoMode == LoupeInfoMode.hidden) return const [];
+    final elementMode = _elementSnapOn && _snapTools.contains(c.tool.value);
+    final showLevel =
+        elementMode && _loupeInfoMode.index >= LoupeInfoMode.level.index;
+    final showShortcuts =
+        elementMode && _loupeInfoMode.index >= LoupeInfoMode.shortcuts.index;
+    return [
+      _loupeReadout(),
+      if (showLevel) _levelBlock(),
+      if (showShortcuts) _shortcutsBlock(),
+    ];
+  }
+
+  /// The loupe column's children: the glass plus the info blocks, 6px-separated,
+  /// LEFT-aligned so the glass stays put regardless of a wider block. When the
+  /// loupe is flipped ABOVE the cursor ([flipUp]) the whole stack is reversed
+  /// (blocks above, glass at the bottom) so the glass stays nearest the cursor.
+  List<Widget> _loupeColumn(Widget glass, {required bool flipUp}) {
+    final items = [glass, ..._loupeBlocks()];
+    final ordered = flipUp ? items.reversed.toList() : items;
+    return [
+      for (var i = 0; i < ordered.length; i++) ...[
+        if (i > 0) const SizedBox(height: 6),
+        ordered[i],
+      ],
+    ];
+  }
+
+  /// The element-snap LEVEL block (its own pill): the current tree level.
+  Widget _levelBlock() {
+    final l = AppLocalizations.of(context);
+    final w = _elementWalk;
+    final lvl = w == 0
+        ? l.elementSnapLevelDefault
+        : w > 0
+            ? l.elementSnapLevelOut(w)
+            : l.elementSnapLevelIn(-w);
+    return LoupeLevelBlock(text: l.elementSnapLevelLabel(lvl));
+  }
+
+  /// The SHORTCUTS block (its own left-aligned pill): the aiming-stage shortcuts
+  /// not shown in the toolbar — element walk, arrow nudge, Shift angle snap.
+  Widget _shortcutsBlock() {
+    final l = AppLocalizations.of(context);
+    return LoupeShortcutsBlock(rows: [
+      (l.loupeShortcutWalkKey, l.loupeShortcutWalkDesc),
+      (l.loupeShortcutNudgeKey, l.loupeShortcutNudgeDesc),
+      (l.loupeShortcutAngleKey, l.loupeShortcutAngleDesc),
+    ]);
+  }
+
+  /// Vertical space the visible loupe blocks need (for the edge-flip clamp):
+  /// nothing when hidden, the readout reserve for coords, plus the level /
+  /// shortcuts blocks when the cumulative mode reveals them.
+  double _loupeBelowReserve() {
+    if (_loupeInfoMode == LoupeInfoMode.hidden) return 0;
+    final elementMode = _elementSnapOn && _snapTools.contains(c.tool.value);
+    var r = _kLoupeReadoutReserve;
+    if (elementMode && _loupeInfoMode.index >= LoupeInfoMode.level.index) r += 30;
+    if (elementMode && _loupeInfoMode.index >= LoupeInfoMode.shortcuts.index) {
+      r += 56;
+    }
+    return r;
   }
 
   Widget _loupeReadout() => LoupeReadout(
@@ -2556,7 +2872,6 @@ class _EditorCoreState extends State<EditorCore> {
     }
     final inCrop = _inCrop;
     final showsCrosshair = _showsCrosshair;
-    final loupeOrigin = _loupeOrigin();
     // The precision crosshair + loupe show on the active display. For the editor
     // they ALSO require the cursor to be over the image (or mid-gesture): off the
     // image they hide instead of freezing at the edge. The overlay is full-screen,
@@ -2602,10 +2917,17 @@ class _EditorCoreState extends State<EditorCore> {
       onPointerDown: _interactive ? _onMiddleButtonDown : null,
       onPointerUp: _interactive ? _onMiddleButtonUp : null,
       // Zoom/pan signals (image editor only): scroll = pan, Cmd+scroll = zoom,
-      // trackpad pinch = zoom. The overlay passes null (no viewport).
-      onPointerSignal: _interactive ? _onPointerSignal : null,
-      onPointerPanZoomStart: _interactive ? _onPanZoomStart : null,
-      onPointerPanZoomUpdate: _interactive ? _onPanZoomUpdate : null,
+      // trackpad pinch = zoom. The overlay normally has no viewport, but element
+      // snap also needs the wheel (walk the AX tree), so wire it then too;
+      // _onPointerSignal handles the element-snap branch before the viewport one.
+      onPointerSignal:
+          (_interactive || _elementSnapOn) ? _onPointerSignal : null,
+      // Element snap also needs the trackpad two-finger pan (walk the AX tree);
+      // _onPanZoomUpdate handles the element-snap branch before the zoom one.
+      onPointerPanZoomStart:
+          (_interactive || _elementSnapOn) ? _onPanZoomStart : null,
+      onPointerPanZoomUpdate:
+          (_interactive || _elementSnapOn) ? _onPanZoomUpdate : null,
       child: Focus(
         focusNode: _focus,
         autofocus: true,
@@ -2648,9 +2970,12 @@ class _EditorCoreState extends State<EditorCore> {
                 onHover: _onHover,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  // Editor: exclude trackpad so a two-finger pan/pinch zooms (handled
-                  // on the outer Listener) instead of being claimed as a draw drag.
-                  supportedDevices: _interactive ? _kDrawDevices : null,
+                  // Exclude trackpad in BOTH modes: a two-finger trackpad scroll
+                  // arrives as a pan gesture, and if the recognizer accepts it the
+                  // editor would zoom-as-draw and the overlay would start a marquee
+                  // box-selection. A single-finger click-drag (how a laptop draws)
+                  // reports as mouse-kind, so marquee/draw still works.
+                  supportedDevices: _kDrawDevices,
                   onTapUp: _onTapUp,
                   onPanStart: _panStart,
                   onPanUpdate: _panUpdate,
@@ -2858,7 +3183,7 @@ class _EditorCoreState extends State<EditorCore> {
                   ),
                 // Loupe is bound to the crosshair — shown/hidden together, so it
                 // never flickers off when hovering over an existing region.
-                if (showHud && !_interactive) _overlayLoupe(loupeOrigin),
+                if (showHud && !_interactive) _overlayLoupe(),
                 // Small reticle for the drawing tools (replaces the system arrow
                 // with a precise inverting cross). Region tools use the crosshair
                 // above. OVERLAY only; the editor renders it in the outer stack.

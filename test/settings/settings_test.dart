@@ -32,6 +32,15 @@ void main() {
     expect(await s.getSaveDirectory(), isNull);
   });
 
+  test('snapElementMode round-trips and defaults false', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getSnapElementMode(), isFalse);
+    expect((await s.loadCapture()).snapElementMode, isFalse);
+    await s.setSnapElementMode(true);
+    expect(await s.getSnapElementMode(), isTrue);
+    expect((await s.loadCapture()).snapElementMode, isTrue);
+  });
+
   test('loadCapture defaults reproduce the original behaviour', () async {
     final cap = await Settings(FakeStore()).loadCapture();
     expect(cap.saveDir, isNull);

@@ -310,31 +310,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tokYear2 => '西元年（2 位）';
 
   @override
-  String get tokMonth => '月，01–12';
+  String get tokMonth => '月，01 到 12';
 
   @override
-  String get tokDay => '日，01–31';
+  String get tokDay => '日，01 到 31';
 
   @override
-  String get tokHour24 => '時，24 小時制（00–23）';
+  String get tokHour24 => '時，24 小時制（00 到 23）';
 
   @override
-  String get tokHour12 => '時，12 小時制（01–12）';
+  String get tokHour12 => '時，12 小時制（01 到 12）';
 
   @override
-  String get tokMinute => '分，00–59';
+  String get tokMinute => '分，00 到 59';
 
   @override
-  String get tokSecond => '秒，00–59';
+  String get tokSecond => '秒，00 到 59';
 
   @override
   String get tokAmPm => '上午／下午（AM/PM）';
 
   @override
-  String get tokDayOfYear => '一年中的第幾天，001–366';
+  String get tokDayOfYear => '一年中的第幾天，001 到 366';
 
   @override
-  String get tokWeek => 'ISO 週數，01–53';
+  String get tokWeek => 'ISO 週數，01 到 53';
 
   @override
   String get tokWeekdayShort => '星期，縮寫（Mon）';
@@ -571,6 +571,71 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get settingsCaptureLayersBody =>
       '在截圖進行中再次按下截圖快捷鍵，會在上方疊加一張新的凍結畫面（前一層會原樣留在截圖中，包含所有標註）；完成或取消一層後會回到下面那層。\n\n設為 1（預設）時不會疊層：截圖中再次觸發會重新開始並捨棄標註。設為 2 到 5 時，達到上限後會丟棄最底部的「最舊」圖層，保留最近的圖層；兩種情況工具列都會提示。\n\n成本：截圖進行期間，每個疊起的圖層在每個螢幕各保留一張全解析度凍結圖片（4K 或 5K 約 30 到 60 MB）。下次截圖時生效；無需重新啟動。';
+
+  @override
+  String get settingsSectionElementSnap => '元素框選';
+
+  @override
+  String get settingsElementSnapTitle => '精細元素框選（實驗）';
+
+  @override
+  String get settingsElementSnapBody =>
+      '框選滑鼠指標下的 UI 元素（按鈕、面板、清單列）而非整個視窗。截圖與錄影區域選取皆適用；用滾輪沿元素樹放大或縮小選取範圍。\n\n需要輔助使用權限：它讓 Glimpr 能讀取其他 app 的螢幕 UI，且為系統層級授權（不限於截圖或錄影當下）。每次 hover 會即時查詢一次（通常數毫秒，app 忙碌時略多），一般視窗框選則為零；查詢跑在繪製執行緒之外，不會卡住畫面。能框多細由各 app 決定：原生 app 暴露較完整的元素，部分瀏覽器、Electron、自繪或遊戲介面幾乎不暴露，會退回視窗框選。框到的範圍是該元素回報的邊界，因此可能含元素自身的留白。實驗性：高亮為即時查詢，若底層視窗在凍結後移動，可能與凍結截圖短暫不一致。';
+
+  @override
+  String get settingsElementSnapNeedsPermission => '尚未取得輔助使用權限';
+
+  @override
+  String get settingsElementSnapGrant => '前往授權…';
+
+  @override
+  String elementSnapLevelLabel(String lvl) {
+    return '元素層級 $lvl';
+  }
+
+  @override
+  String get loupeShortcutWalkKey => '滾輪 / , .';
+
+  @override
+  String get loupeShortcutWalkDesc => '元素換層';
+
+  @override
+  String get loupeShortcutNudgeKey => '方向鍵';
+
+  @override
+  String get loupeShortcutNudgeDesc => '微調';
+
+  @override
+  String get loupeShortcutAngleKey => 'Shift';
+
+  @override
+  String get loupeShortcutAngleDesc => '拖曳時 45°';
+
+  @override
+  String get settingsCycleLoupeInfo => '循環放大鏡資訊';
+
+  @override
+  String get settingsCycleLoupeInfoHint => '循環放大鏡顯示的內容:座標、元素層級、快捷鍵、隱藏。';
+
+  @override
+  String get settingsReservedElementSnapLevel => '元素 snap 層級';
+
+  @override
+  String get settingsReservedElementSnapLevelHint =>
+      '啟用精細元素 snap 時,, 與 .(或滾輪)沿元素樹縮小與放大框選的元素。';
+
+  @override
+  String get elementSnapLevelDefault => '自動';
+
+  @override
+  String elementSnapLevelOut(int n) {
+    return '外 $n';
+  }
+
+  @override
+  String elementSnapLevelIn(int n) {
+    return '內 $n';
+  }
 
   @override
   String get settingsSectionToolStyles => '工具樣式';

@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Offset, Rect, Size, VoidCallback;
 import '../capture/captured_display.dart' show SnapWindow;
+import '../capture/element_snap.dart';
 import '../editor/editor_host.dart';
 
 /// [EditorHost] for the standalone Image Editor: a loaded image whose logical
@@ -53,6 +54,9 @@ class ImageEditorHost implements EditorHost {
   Offset get globalOrigin => Offset.zero;
   @override
   List<SnapWindow> get snapWindows => const [];
+  @override
+  Future<ElementSnap?> Function(Offset displayLocalPoint, {int walk})?
+      get elementSnapAt => null; // no AX element snap in the image editor
   @override
   EditorCursorController get cursor => const NoopCursorController();
   @override

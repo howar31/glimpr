@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'captured_display.dart';
+import 'element_snap.dart';
 
 /// Dart-side facade over the native `glimpr/capture` MethodChannel.
 class CaptureBridge {
@@ -89,6 +90,44 @@ class CaptureBridge {
     });
     if (res == null) return null;
     return RegionCapture.fromMap((res as Map).cast<dynamic, dynamic>());
+  }
+
+  /// Live AX element under the display-local LOGICAL point (top-left origin) on
+  /// [displayId]. [walk]: 0 = the element at the point; +N = N levels up the
+  /// ancestry; -N = N levels down toward the point. Null when AX is off / not
+  /// trusted / the query timed out / no element — the caller falls back to the
+  /// static window snap. Runs natively on a background queue (short messaging
+  /// timeout) so a hung target app degrades to null, never blocks the overlay.
+  Future<ElementSnap?> elementSnapAt(int displayId, double x, double y,
+      {int walk = 0}) async {
+    try {
+      final res = await _channel.invokeMethod('elementSnapAt',
+          {'displayId': displayId, 'x': x, 'y': y, 'walk': walk});
+      if (res == null) return null;
+      return ElementSnap.fromMap((res as Map).cast<dynamic, dynamic>());
+    } catch (_) {
+      return null; // absent in tests / non-overlay engines
+    }
+  }
+
+  /// Whether the app currently holds the macOS Accessibility (AX) permission.
+  Future<bool> accessibilityTrusted() async {
+    try {
+      return (await _channel.invokeMethod('accessibilityTrusted')) as bool? ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Prompt for Accessibility permission (system dialog / opens System Settings
+  /// ▸ Privacy & Security ▸ Accessibility). Fire-and-forget.
+  Future<void> requestAccessibility() async {
+    try {
+      await _channel.invokeMethod('requestAccessibility');
+    } catch (_) {
+      // Absent in tests / non-control engines.
+    }
   }
 
   /// The frontmost focused window's display-local rect + names, or null if none.

@@ -892,6 +892,27 @@ final class OverlayManager {
                 code: "capture_failed", message: "\(error)", details: nil))
             }
           }
+        // Precise element snap (Advanced experiment): the AX element under a
+        // display-local logical point (top-left). AX is a SYNCHRONOUS
+        // cross-process call to the target app, so run it on a background queue
+        // with the short messaging timeout ElementSnap installs — a hung target
+        // yields nil (Dart falls back to window snap) instead of stalling the
+        // overlay. Returns nil without the AX permission too.
+        case "elementSnapAt":
+          if let a = call.arguments as? [String: Any],
+             let id = (a["displayId"] as? NSNumber)?.uint32Value,
+             let x = a["x"] as? Double, let y = a["y"] as? Double {
+            let walk = (a["walk"] as? Int) ?? 0
+            let origin = CGDisplayBounds(CGDirectDisplayID(id)).origin
+            let global = CGPoint(x: origin.x + x, y: origin.y + y)
+            DispatchQueue.global(qos: .userInteractive).async {
+              let out = ElementSnap.query(
+                globalTopLeft: global, walk: walk, displayOrigin: origin)
+              DispatchQueue.main.async { result(out) }
+            }
+          } else {
+            result(nil)
+          }
         default: result(FlutterMethodNotImplemented)
         }
       }

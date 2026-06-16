@@ -325,31 +325,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tokYear2 => '2-digit year';
 
   @override
-  String get tokMonth => 'Month, 01–12';
+  String get tokMonth => 'Month, 01 to 12';
 
   @override
-  String get tokDay => 'Day of month, 01–31';
+  String get tokDay => 'Day of month, 01 to 31';
 
   @override
-  String get tokHour24 => 'Hour, 24-hour (00–23)';
+  String get tokHour24 => 'Hour, 24-hour (00 to 23)';
 
   @override
-  String get tokHour12 => 'Hour, 12-hour (01–12)';
+  String get tokHour12 => 'Hour, 12-hour (01 to 12)';
 
   @override
-  String get tokMinute => 'Minute, 00–59';
+  String get tokMinute => 'Minute, 00 to 59';
 
   @override
-  String get tokSecond => 'Second, 00–59';
+  String get tokSecond => 'Second, 00 to 59';
 
   @override
   String get tokAmPm => 'AM or PM';
 
   @override
-  String get tokDayOfYear => 'Day of the year, 001–366';
+  String get tokDayOfYear => 'Day of the year, 001 to 366';
 
   @override
-  String get tokWeek => 'ISO week number, 01–53';
+  String get tokWeek => 'ISO week number, 01 to 53';
 
   @override
   String get tokWeekdayShort => 'Weekday, short (Mon)';
@@ -607,6 +607,73 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsCaptureLayersBody =>
       'Press the screenshot shortcut while a screenshot is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the screenshot. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next screenshot; no restart needed.';
+
+  @override
+  String get settingsSectionElementSnap => 'Element snap';
+
+  @override
+  String get settingsElementSnapTitle => 'Precise element snap (experimental)';
+
+  @override
+  String get settingsElementSnapBody =>
+      'Snap to the UI element under the cursor (a button, a pane, a list row) instead of the whole window. Works for both screenshots and recording region select; use the scroll wheel to grow or shrink the selection along the element tree.\n\nNeeds Accessibility permission, which lets Glimpr read the on-screen UI of other apps system-wide (not only while capturing). Each hover runs a live query (typically a few milliseconds, a little more on a busy app) versus none for plain window snap; it runs off the render thread, so it never stalls the overlay. How finely an app can be snapped is up to that app: native apps expose detailed elements, while some browsers, Electron, custom-drawn or game interfaces expose little and fall back to window snap. The captured region is the element\'s reported bounds, so it can include the element\'s own padding. Experimental: the highlight is queried live, so it may briefly differ from the frozen screenshot if a window moves underneath.';
+
+  @override
+  String get settingsElementSnapNeedsPermission =>
+      'Accessibility permission not granted';
+
+  @override
+  String get settingsElementSnapGrant => 'Grant…';
+
+  @override
+  String elementSnapLevelLabel(String lvl) {
+    return 'Element level $lvl';
+  }
+
+  @override
+  String get loupeShortcutWalkKey => 'Scroll / , .';
+
+  @override
+  String get loupeShortcutWalkDesc => 'element level';
+
+  @override
+  String get loupeShortcutNudgeKey => 'Arrow keys';
+
+  @override
+  String get loupeShortcutNudgeDesc => 'nudge';
+
+  @override
+  String get loupeShortcutAngleKey => 'Shift';
+
+  @override
+  String get loupeShortcutAngleDesc => '45° while dragging';
+
+  @override
+  String get settingsCycleLoupeInfo => 'Cycle loupe info';
+
+  @override
+  String get settingsCycleLoupeInfoHint =>
+      'Cycle what the loupe shows: coordinates, element level, shortcuts, hidden.';
+
+  @override
+  String get settingsReservedElementSnapLevel => 'Element snap level';
+
+  @override
+  String get settingsReservedElementSnapLevelHint =>
+      'While precise element snap is on, , and . (or the scroll wheel) shrink and grow the snapped element along its tree.';
+
+  @override
+  String get elementSnapLevelDefault => 'auto';
+
+  @override
+  String elementSnapLevelOut(int n) {
+    return 'out $n';
+  }
+
+  @override
+  String elementSnapLevelIn(int n) {
+    return 'in $n';
+  }
 
   @override
   String get settingsSectionToolStyles => 'Tool styles';

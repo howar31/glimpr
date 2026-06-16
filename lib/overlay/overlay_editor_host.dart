@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Offset, Rect, Size, VoidCallback;
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
+import '../capture/element_snap.dart';
 import '../editor/editor_host.dart';
 
 /// Adapts the native [CaptureBridge] cursor calls to [EditorCursorController].
@@ -36,6 +37,9 @@ class OverlayEditorHost implements EditorHost {
   final bool liveSelect;
   @override
   final Future<Uint8List?> Function(int x, int y, int span)? liveLoupeSample;
+  @override
+  final Future<ElementSnap?> Function(Offset displayLocalPoint, {int walk})?
+      elementSnapAt;
 
   OverlayEditorHost({
     required this.display,
@@ -49,6 +53,7 @@ class OverlayEditorHost implements EditorHost {
     this.cursorTopLeft,
     this.liveSelect = false,
     this.liveLoupeSample,
+    this.elementSnapAt,
   }) : _cursor = cursor ?? OverlayCursorController();
 
   @override

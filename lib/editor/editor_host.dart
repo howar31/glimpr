@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Offset, Rect, Size;
 import '../capture/captured_display.dart' show SnapWindow;
+import '../capture/element_snap.dart';
 
 /// Native cursor control EditorCore needs. The overlay implements this with the
 /// native capture bridge; the image editor uses [NoopCursorController].
@@ -62,6 +63,15 @@ abstract class EditorHost {
 
   /// Snappable windows (overlay: capture-time list; editor: empty).
   List<SnapWindow> get snapWindows;
+
+  /// Optional LIVE Accessibility element snap. Non-null ONLY on the screenshot
+  /// overlay when the Advanced "precise element snap" setting is on AND the AX
+  /// permission is granted; null everywhere else (image editor, recording
+  /// live-select, AX off) — callers then use [snapWindows] only. [walk]: 0 at
+  /// the point, +N up the AX ancestry, -N down toward the point. Returns null on
+  /// timeout / no element so the caller falls back to the window snap.
+  Future<ElementSnap?> Function(Offset displayLocalPoint, {int walk})?
+      get elementSnapAt => null;
 
   /// Cross-display active signal (overlay: native poll; editor: constant).
   ValueListenable<({int id, Offset cursor})> get activeSignal;

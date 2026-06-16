@@ -683,37 +683,37 @@ abstract class AppLocalizations {
   /// No description provided for @tokMonth.
   ///
   /// In en, this message translates to:
-  /// **'Month, 01–12'**
+  /// **'Month, 01 to 12'**
   String get tokMonth;
 
   /// No description provided for @tokDay.
   ///
   /// In en, this message translates to:
-  /// **'Day of month, 01–31'**
+  /// **'Day of month, 01 to 31'**
   String get tokDay;
 
   /// No description provided for @tokHour24.
   ///
   /// In en, this message translates to:
-  /// **'Hour, 24-hour (00–23)'**
+  /// **'Hour, 24-hour (00 to 23)'**
   String get tokHour24;
 
   /// No description provided for @tokHour12.
   ///
   /// In en, this message translates to:
-  /// **'Hour, 12-hour (01–12)'**
+  /// **'Hour, 12-hour (01 to 12)'**
   String get tokHour12;
 
   /// No description provided for @tokMinute.
   ///
   /// In en, this message translates to:
-  /// **'Minute, 00–59'**
+  /// **'Minute, 00 to 59'**
   String get tokMinute;
 
   /// No description provided for @tokSecond.
   ///
   /// In en, this message translates to:
-  /// **'Second, 00–59'**
+  /// **'Second, 00 to 59'**
   String get tokSecond;
 
   /// No description provided for @tokAmPm.
@@ -725,13 +725,13 @@ abstract class AppLocalizations {
   /// No description provided for @tokDayOfYear.
   ///
   /// In en, this message translates to:
-  /// **'Day of the year, 001–366'**
+  /// **'Day of the year, 001 to 366'**
   String get tokDayOfYear;
 
   /// No description provided for @tokWeek.
   ///
   /// In en, this message translates to:
-  /// **'ISO week number, 01–53'**
+  /// **'ISO week number, 01 to 53'**
   String get tokWeek;
 
   /// No description provided for @tokWeekdayShort.
@@ -1189,6 +1189,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Press the screenshot shortcut while a screenshot is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the screenshot. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next screenshot; no restart needed.'**
   String get settingsCaptureLayersBody;
+
+  /// Settings > Advanced: Element snap section label
+  ///
+  /// In en, this message translates to:
+  /// **'Element snap'**
+  String get settingsSectionElementSnap;
+
+  /// Settings > Advanced > Element snap: toggle title
+  ///
+  /// In en, this message translates to:
+  /// **'Precise element snap (experimental)'**
+  String get settingsElementSnapTitle;
+
+  /// Settings > Advanced > Element snap: explanatory body
+  ///
+  /// In en, this message translates to:
+  /// **'Snap to the UI element under the cursor (a button, a pane, a list row) instead of the whole window. Works for both screenshots and recording region select; use the scroll wheel to grow or shrink the selection along the element tree.\n\nNeeds Accessibility permission, which lets Glimpr read the on-screen UI of other apps system-wide (not only while capturing). Each hover runs a live query (typically a few milliseconds, a little more on a busy app) versus none for plain window snap; it runs off the render thread, so it never stalls the overlay. How finely an app can be snapped is up to that app: native apps expose detailed elements, while some browsers, Electron, custom-drawn or game interfaces expose little and fall back to window snap. The captured region is the element\'s reported bounds, so it can include the element\'s own padding. Experimental: the highlight is queried live, so it may briefly differ from the frozen screenshot if a window moves underneath.'**
+  String get settingsElementSnapBody;
+
+  /// Settings > Advanced > Element snap: permission-missing notice
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility permission not granted'**
+  String get settingsElementSnapNeedsPermission;
+
+  /// Settings > Advanced > Element snap: button that opens the Accessibility permission prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Grant…'**
+  String get settingsElementSnapGrant;
+
+  /// Capture loupe element-snap level block: the current level
+  ///
+  /// In en, this message translates to:
+  /// **'Element level {lvl}'**
+  String elementSnapLevelLabel(String lvl);
+
+  /// Loupe shortcuts block: the keys that change the element level
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll / , .'**
+  String get loupeShortcutWalkKey;
+
+  /// Loupe shortcuts block: what the element-level keys do
+  ///
+  /// In en, this message translates to:
+  /// **'element level'**
+  String get loupeShortcutWalkDesc;
+
+  /// Loupe shortcuts block: the keys that nudge the cursor
+  ///
+  /// In en, this message translates to:
+  /// **'Arrow keys'**
+  String get loupeShortcutNudgeKey;
+
+  /// Loupe shortcuts block: what the arrow keys do
+  ///
+  /// In en, this message translates to:
+  /// **'nudge'**
+  String get loupeShortcutNudgeDesc;
+
+  /// Loupe shortcuts block: the key that snaps a drag to 45 degrees
+  ///
+  /// In en, this message translates to:
+  /// **'Shift'**
+  String get loupeShortcutAngleKey;
+
+  /// Loupe shortcuts block: what Shift does while dragging a line/arrow
+  ///
+  /// In en, this message translates to:
+  /// **'45° while dragging'**
+  String get loupeShortcutAngleDesc;
+
+  /// Settings > Shortcuts: the fixed key that cycles the loupe info display
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle loupe info'**
+  String get settingsCycleLoupeInfo;
+
+  /// Settings > Shortcuts > Reserved: cycle-loupe-info row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle what the loupe shows: coordinates, element level, shortcuts, hidden.'**
+  String get settingsCycleLoupeInfoHint;
+
+  /// Settings > Shortcuts > Reserved: element-snap level keys row title
+  ///
+  /// In en, this message translates to:
+  /// **'Element snap level'**
+  String get settingsReservedElementSnapLevel;
+
+  /// Settings > Shortcuts > Reserved: element-snap level keys row hint
+  ///
+  /// In en, this message translates to:
+  /// **'While precise element snap is on, , and . (or the scroll wheel) shrink and grow the snapped element along its tree.'**
+  String get settingsReservedElementSnapLevelHint;
+
+  /// Element snap level label at the auto-picked element
+  ///
+  /// In en, this message translates to:
+  /// **'auto'**
+  String get elementSnapLevelDefault;
+
+  /// Element snap level label, n levels toward the ancestor (bigger)
+  ///
+  /// In en, this message translates to:
+  /// **'out {n}'**
+  String elementSnapLevelOut(int n);
+
+  /// Element snap level label, n levels toward the leaf (smaller)
+  ///
+  /// In en, this message translates to:
+  /// **'in {n}'**
+  String elementSnapLevelIn(int n);
 
   /// Settings > Advanced: Tool styles section label
   ///

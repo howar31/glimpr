@@ -334,15 +334,15 @@
   "tokCatComputer": "Computer",
   "tokYear4": "4-digit year",
   "tokYear2": "2-digit year",
-  "tokMonth": "Month, 01–12",
-  "tokDay": "Day of month, 01–31",
-  "tokHour24": "Hour, 24-hour (00–23)",
-  "tokHour12": "Hour, 12-hour (01–12)",
-  "tokMinute": "Minute, 00–59",
-  "tokSecond": "Second, 00–59",
+  "tokMonth": "Month, 01 to 12",
+  "tokDay": "Day of month, 01 to 31",
+  "tokHour24": "Hour, 24-hour (00 to 23)",
+  "tokHour12": "Hour, 12-hour (01 to 12)",
+  "tokMinute": "Minute, 00 to 59",
+  "tokSecond": "Second, 00 to 59",
   "tokAmPm": "AM or PM",
-  "tokDayOfYear": "Day of the year, 001–366",
-  "tokWeek": "ISO week number, 01–53",
+  "tokDayOfYear": "Day of the year, 001 to 366",
+  "tokWeek": "ISO week number, 01 to 53",
   "tokWeekdayShort": "Weekday, short (Mon)",
   "tokWeekdayFull": "Weekday, full (Monday)",
   "tokMonthShort": "Month name, short (Jun)",
@@ -612,6 +612,85 @@
   "settingsCaptureLayersBody": "Press the screenshot shortcut while a screenshot is already open to stack a new freeze on top (the previous layer stays in the screenshot, annotations and all); finishing or cancelling a layer returns to the one below.\n\nWith 1 (the default) nothing stacks: a new trigger restarts the screenshot. With 2 to 5, the OLDEST layer is dropped once the cap is reached, keeping the most recent ones; the toolbar announces both cases.\n\nCost: each stacked layer holds a full-resolution frozen image per display (roughly 30 to 60 MB at 4K or 5K) while the session is open. Applies on the next screenshot; no restart needed.",
   "@settingsCaptureLayersBody": {
     "description": "Settings > Advanced > Capture layers: explanatory body (multi-paragraph)"
+  },
+  "settingsSectionElementSnap": "Element snap",
+  "@settingsSectionElementSnap": {
+    "description": "Settings > Advanced: Element snap section label"
+  },
+  "settingsElementSnapTitle": "Precise element snap (experimental)",
+  "@settingsElementSnapTitle": {
+    "description": "Settings > Advanced > Element snap: toggle title"
+  },
+  "settingsElementSnapBody": "Snap to the UI element under the cursor (a button, a pane, a list row) instead of the whole window. Works for both screenshots and recording region select; use the scroll wheel to grow or shrink the selection along the element tree.\n\nNeeds Accessibility permission, which lets Glimpr read the on-screen UI of other apps system-wide (not only while capturing). Each hover runs a live query (typically a few milliseconds, a little more on a busy app) versus none for plain window snap; it runs off the render thread, so it never stalls the overlay. How finely an app can be snapped is up to that app: native apps expose detailed elements, while some browsers, Electron, custom-drawn or game interfaces expose little and fall back to window snap. The captured region is the element's reported bounds, so it can include the element's own padding. Experimental: the highlight is queried live, so it may briefly differ from the frozen screenshot if a window moves underneath.",
+  "@settingsElementSnapBody": {
+    "description": "Settings > Advanced > Element snap: explanatory body"
+  },
+  "settingsElementSnapNeedsPermission": "Accessibility permission not granted",
+  "@settingsElementSnapNeedsPermission": {
+    "description": "Settings > Advanced > Element snap: permission-missing notice"
+  },
+  "settingsElementSnapGrant": "Grant…",
+  "@settingsElementSnapGrant": {
+    "description": "Settings > Advanced > Element snap: button that opens the Accessibility permission prompt"
+  },
+  "elementSnapLevelLabel": "Element level {lvl}",
+  "@elementSnapLevelLabel": {
+    "description": "Capture loupe element-snap level block: the current level",
+    "placeholders": { "lvl": { "type": "String" } }
+  },
+  "loupeShortcutWalkKey": "Scroll / , .",
+  "@loupeShortcutWalkKey": {
+    "description": "Loupe shortcuts block: the keys that change the element level"
+  },
+  "loupeShortcutWalkDesc": "element level",
+  "@loupeShortcutWalkDesc": {
+    "description": "Loupe shortcuts block: what the element-level keys do"
+  },
+  "loupeShortcutNudgeKey": "Arrow keys",
+  "@loupeShortcutNudgeKey": {
+    "description": "Loupe shortcuts block: the keys that nudge the cursor"
+  },
+  "loupeShortcutNudgeDesc": "nudge",
+  "@loupeShortcutNudgeDesc": {
+    "description": "Loupe shortcuts block: what the arrow keys do"
+  },
+  "loupeShortcutAngleKey": "Shift",
+  "@loupeShortcutAngleKey": {
+    "description": "Loupe shortcuts block: the key that snaps a drag to 45 degrees"
+  },
+  "loupeShortcutAngleDesc": "45° while dragging",
+  "@loupeShortcutAngleDesc": {
+    "description": "Loupe shortcuts block: what Shift does while dragging a line/arrow"
+  },
+  "settingsCycleLoupeInfo": "Cycle loupe info",
+  "@settingsCycleLoupeInfo": {
+    "description": "Settings > Shortcuts: the fixed key that cycles the loupe info display"
+  },
+  "settingsCycleLoupeInfoHint": "Cycle what the loupe shows: coordinates, element level, shortcuts, hidden.",
+  "@settingsCycleLoupeInfoHint": {
+    "description": "Settings > Shortcuts > Reserved: cycle-loupe-info row hint"
+  },
+  "settingsReservedElementSnapLevel": "Element snap level",
+  "@settingsReservedElementSnapLevel": {
+    "description": "Settings > Shortcuts > Reserved: element-snap level keys row title"
+  },
+  "settingsReservedElementSnapLevelHint": "While precise element snap is on, , and . (or the scroll wheel) shrink and grow the snapped element along its tree.",
+  "@settingsReservedElementSnapLevelHint": {
+    "description": "Settings > Shortcuts > Reserved: element-snap level keys row hint"
+  },
+  "elementSnapLevelDefault": "auto",
+  "@elementSnapLevelDefault": {
+    "description": "Element snap level label at the auto-picked element"
+  },
+  "elementSnapLevelOut": "out {n}",
+  "@elementSnapLevelOut": {
+    "description": "Element snap level label, n levels toward the ancestor (bigger)",
+    "placeholders": { "n": { "type": "int" } }
+  },
+  "elementSnapLevelIn": "in {n}",
+  "@elementSnapLevelIn": {
+    "description": "Element snap level label, n levels toward the leaf (smaller)",
+    "placeholders": { "n": { "type": "int" } }
   },
   "settingsSectionToolStyles": "Tool styles",
   "@settingsSectionToolStyles": {

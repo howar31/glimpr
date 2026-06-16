@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../capture/captured_display.dart';
+import '../capture/element_snap.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
 import '../editor/hud_config.dart';
@@ -44,6 +45,10 @@ class EditorCanvas extends StatelessWidget {
   // Presentation-only: render base + drawables, no interactive chrome, never
   // active. Used to show the screenshot session beneath an active record-select.
   final bool presentationOnly;
+  // Precise AX element snap (Advanced experiment). Non-null only on the frozen
+  // screenshot session when the setting is on; null on the record-select picker.
+  final Future<ElementSnap?> Function(Offset displayLocalPoint, {int walk})?
+      elementSnapAt;
 
   const EditorCanvas({
     super.key,
@@ -66,6 +71,7 @@ class EditorCanvas extends StatelessWidget {
     this.layerCaption,
     this.layerAccent = false,
     this.presentationOnly = false,
+    this.elementSnapAt,
   });
 
   @override
@@ -92,6 +98,7 @@ class EditorCanvas extends StatelessWidget {
         cursorTopLeft: cursorTopLeft,
         liveSelect: recordMode,
         liveLoupeSample: liveLoupeSample,
+        elementSnapAt: elementSnapAt,
       ),
     );
   }
