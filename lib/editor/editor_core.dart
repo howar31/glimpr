@@ -3001,6 +3001,14 @@ class _EditorCoreState extends State<EditorCore> {
                 onHover: _onHover,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  // Anchor a drag at the actual pointer-DOWN point, not where the
+                  // pan won the arena. With the default `.start`, onPanStart's
+                  // position is down + the movement accumulated before acceptance
+                  // (large on a FAST drag, since coalesced moves can jump far before
+                  // the pan beats the tap), so the region's start corner landed
+                  // away from the aimed click. `.down` reports the true down point
+                  // and feeds that accumulated delta through the first onPanUpdate.
+                  dragStartBehavior: DragStartBehavior.down,
                   // Exclude trackpad in BOTH modes: a two-finger trackpad scroll
                   // arrives as a pan gesture, and if the recognizer accepts it the
                   // editor would zoom-as-draw and the overlay would start a marquee
