@@ -671,6 +671,15 @@ class _EditorCoreState extends State<EditorCore> {
 
   @override
   void dispose() {
+    // Balance any app-global cursor-hide this engine pushed: _syncCursorHidden
+    // only pushes on CHANGE, so disposing while hidden (e.g. a record-select
+    // crop torn down mid-drag with no session beneath to remount) would leave
+    // the OS cursor hidden — the next editor starts _lastHide=false and never
+    // sends the unhide, so the cursor stays gone.
+    if (_lastHide) {
+      _lastHide = false;
+      widget.host.cursor.setHidden(false);
+    }
     _copiedFlash?.cancel();
     c.document.removeListener(_rebuild);
     c.selectedIndex.removeListener(_rebuild);
