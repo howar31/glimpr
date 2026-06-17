@@ -140,6 +140,42 @@ abstract class AppLocalizations {
   /// **'Advanced'**
   String get settingsPaneAdvanced;
 
+  /// Settings sidebar: About pane label
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsPaneAbout;
+
+  /// About pane: link to the creator's Ko-fi tip page (Ko-fi brand logo leads the row)
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsAboutKofi;
+
+  /// About pane: link to the GitHub repository (GitHub brand logo leads the row)
+  ///
+  /// In en, this message translates to:
+  /// **'Source code'**
+  String get settingsAboutGithub;
+
+  /// About pane: link to the official website
+  ///
+  /// In en, this message translates to:
+  /// **'Website'**
+  String get settingsAboutWebsite;
+
+  /// About pane: opens the in-app open-source license page
+  ///
+  /// In en, this message translates to:
+  /// **'Licenses & acknowledgements'**
+  String get settingsAboutLicenses;
+
+  /// About > Licenses: number of licenses a package has
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 license} other{{count} licenses}}'**
+  String settingsLicenseCount(int count);
+
   /// Settings sidebar: Image Editor pane label
   ///
   /// In en, this message translates to:

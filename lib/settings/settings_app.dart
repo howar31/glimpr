@@ -3,6 +3,9 @@ import 'dart:ui' as ui;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:simple_icons/simple_icons.dart';
+
+import 'licenses_page.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -74,7 +77,11 @@ const _kSections = <(String, IconData)>[
   ('Output', Icons.folder_outlined),
   ('Shortcuts', Icons.keyboard),
   ('Advanced', Icons.memory),
+  ('About', Icons.info_outline),
 ];
+
+// The About pane's section index (last entry of [_kSections]).
+const int _kAboutSection = 8;
 
 class _SettingsAppState extends State<SettingsApp>
     with WidgetsBindingObserver {
@@ -82,6 +89,11 @@ class _SettingsAppState extends State<SettingsApp>
   // (set in the Builder in build()). Using a field instead of a context-arg
   // avoids threading BuildContext through every helper method.
   late AppLocalizations _l;
+
+  // A context INSIDE the MaterialApp (below its Navigator), captured each build
+  // alongside [_l]. The State's own `context` sits ABOVE the MaterialApp, so
+  // routes pushed from there (e.g. showLicensePage) find no Navigator.
+  BuildContext? _pageContext;
 
   int _section = 0;
 
@@ -193,8 +205,26 @@ class _SettingsAppState extends State<SettingsApp>
     WidgetsBinding.instance.addObserver(this);
     _filenameFocus.addListener(_onPatternFocusChange);
     _subfolderFocus.addListener(_onPatternFocusChange);
+    // Native → Dart pushes on the role channel (menu-bar "About Glimpr" deep-link).
+    _roleChannel.setMethodCallHandler(_onRoleCall);
     _load();
   }
+
+  // Handle native-initiated role-channel calls (Dart→native still uses
+  // invokeMethod separately; a MethodChannel is bidirectional).
+  Future<dynamic> _onRoleCall(MethodCall call) async {
+    if (call.method == 'showAbout' && mounted) {
+      setState(() => _section = _kAboutSection);
+    }
+    return null;
+  }
+
+  // The app's marketing + build version, read once from the native bundle.
+  late final Future<String> _appVersionFuture =
+      _roleChannel.invokeMethod<String>('appVersion').then((v) => v ?? '');
+
+  void _openUrl(String url) =>
+      _roleChannel.invokeMethod('openExternalUrl', {'url': url});
 
   // On focus change, re-flag each pattern field: warn (don't modify) when it has
   // lost focus AND holds reserved characters Apply would strip. A filename can't
@@ -621,6 +651,7 @@ class _SettingsAppState extends State<SettingsApp>
                   // Resolve localizations from a context that is inside the
                   // MaterialApp's Localizations scope (not the outer context).
                   _l = AppLocalizations.of(ctx);
+                  _pageContext = ctx; // below the Navigator (for showLicensePage)
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -651,6 +682,7 @@ class _SettingsAppState extends State<SettingsApp>
       case 5: return _l.settingsPaneOutput;
       case 6: return _l.settingsPaneShortcuts;
       case 7: return _l.settingsPaneAdvanced;
+      case 8: return _l.settingsPaneAbout;
       default: return _l.settingsPaneGeneral;
     }
   }
@@ -737,12 +769,105 @@ class _SettingsAppState extends State<SettingsApp>
         return _shortcutsPane(t);
       case 7:
         return _advancedPane(t);
+      case 8:
+        return _aboutPane(t);
       default:
         return _generalPane(t);
     }
   }
 
   // ---- panes -------------------------------------------------------------
+
+  List<Widget> _aboutPane(GlimprTokens t) {
+    return [
+      const SizedBox(height: 24),
+      Center(
+        child: Column(
+          children: [
+            const GlimprMark(size: 64),
+            const SizedBox(height: 14),
+            const Wordmark(size: 30),
+            const SizedBox(height: 8),
+            FutureBuilder<String>(
+              future: _appVersionFuture,
+              builder: (_, snap) => Text(
+                snap.data ?? '',
+                style: GlimprType.sansStyle(12.5, 500, t.fg4),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 28),
+      GlassCard.rows([
+        _aboutLinkRow(t,
+            icon: SimpleIcons.kofi,
+            label: _l.settingsAboutKofi,
+            onTap: () => _openUrl('https://ko-fi.com/howar31')),
+        _aboutLinkRow(t,
+            icon: SimpleIcons.github,
+            label: _l.settingsAboutGithub,
+            divider: true,
+            onTap: () => _openUrl('https://github.com/howar31/glimpr')),
+        _aboutLinkRow(t,
+            // Our own site → the Glimpr mark (solid, tinted like the other icons).
+            iconWidget: GlimprMark(size: 18, color: t.accentFg),
+            label: _l.settingsAboutWebsite,
+            divider: true,
+            onTap: () => _openUrl('https://glimpr.howar31.com')),
+        _aboutLinkRow(t,
+            icon: Icons.balance,
+            label: _l.settingsAboutLicenses,
+            divider: true,
+            external: false,
+            onTap: _openLicenses),
+      ]),
+      const SizedBox(height: 22),
+      Center(
+        child: Text('© 2026 Howar31',
+            style: GlimprType.sansStyle(11.5, 500, t.fg4)),
+      ),
+    ];
+  }
+
+  // A full-width tappable About row: SettingRow's icon tile + label, with a
+  // trailing affordance (↗ = opens an external URL, › = an in-app page).
+  Widget _aboutLinkRow(GlimprTokens t,
+      {IconData? icon,
+      Widget? iconWidget,
+      required String label,
+      required VoidCallback onTap,
+      bool divider = false,
+      bool external = true}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SettingRow(
+        icon: icon,
+        iconWidget: iconWidget,
+        title: label,
+        divider: divider,
+        trailing: Icon(
+          external ? Icons.north_east : Icons.chevron_right,
+          size: 18,
+          color: t.fg4,
+        ),
+      ),
+    );
+  }
+
+  // Open the Glimpr-styled open-source license browser (lib/settings/
+  // licenses_page.dart). It reads the SAME auto-generated LicenseRegistry data
+  // as Flutter's stock page, just rendered in our own chrome (flat menuBg
+  // surface, traffic-light-safe header) — no elevation seams / vibrancy bands.
+  void _openLicenses() {
+    final ctx = _pageContext;
+    if (ctx == null) return;
+    final tokens = GlimprTheme.of(ctx);
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => glimprLicenseSurface(tokens, const LicensesView()),
+    ));
+  }
 
   List<Widget> _generalPane(GlimprTokens t) {
     return [

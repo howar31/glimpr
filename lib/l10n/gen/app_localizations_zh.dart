@@ -30,6 +30,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPaneAdvanced => '進階';
 
   @override
+  String get settingsPaneAbout => '關於';
+
+  @override
+  String get settingsAboutKofi => '贊助';
+
+  @override
+  String get settingsAboutGithub => '原始碼';
+
+  @override
+  String get settingsAboutWebsite => '官方網站';
+
+  @override
+  String get settingsAboutLicenses => '授權與第三方致謝';
+
+  @override
+  String settingsLicenseCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 項授權',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get settingsPaneImageEditor => '圖片編輯器';
 
   @override

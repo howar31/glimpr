@@ -24,6 +24,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let recentMenu = NSMenu()
   // Items whose key-equivalent hint follows a rebindable global action.
   private var hintedItems: [(NSMenuItem, String)] = []
+  // About Glimpr menu item → reveal Settings on the About pane (set by the host).
+  var onAbout: (() -> Void)?
   // Screen recording (macOS 15+): native stop/abort while a recording runs.
   var onRecordStop: (() -> Void)?
   var onRecordAbort: (() -> Void)?
@@ -122,6 +124,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       title: L.s("Open Save Folder", "開啟儲存資料夾"),
       action: #selector(openSaveFolder), key: ""))
     menu.addItem(.separator())
+    menu.addItem(menuItem(title: L.s("About Glimpr", "關於 Glimpr"), action: #selector(about), key: ""))
     menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: L.s("Quit Glimpr", "結束 Glimpr"), action: #selector(quit), key: "q"))
@@ -404,5 +407,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   }
   @objc private func clearRecent() { onClearRecent() }
   @objc private func settings() { onSettings() }
+  @objc private func about() { onAbout?() }
   @objc private func quit() { NSApp.terminate(nil) }
 }

@@ -121,6 +121,19 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         try? task.run()
         result(nil)
         NSApp.terminate(nil)
+      // About pane: open a link in the default browser.
+      case "openExternalUrl":
+        if let args = call.arguments as? [String: Any],
+           let s = args["url"] as? String, let url = URL(string: s) {
+          NSWorkspace.shared.open(url)
+        }
+        result(nil)
+      // About pane: the app's marketing + build version from the bundle.
+      case "appVersion":
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+          as? String ?? ""
+        let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        result(b.isEmpty ? v : "\(v) (\(b))")
       default: result(FlutterMethodNotImplemented)
       }
     }
@@ -197,6 +210,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     statusItem?.onRecordStop = { [weak self] in self?.recordingChannel?.stopActive() }
     statusItem?.onRecordAbort = { [weak self] in self?.recordingChannel?.abortActive() }
+    // About Glimpr: reveal Settings, then deep-link the UI to the About pane.
+    statusItem?.onAbout = { [weak self] in
+      self?.revealSettings()
+      self?.roleChannel?.invokeMethod("showAbout", arguments: nil)
+    }
     recordingChannel?.onRecordingPauseChange = { [weak self] paused in
       self?.statusItem?.setRecordingPaused(paused)
     }

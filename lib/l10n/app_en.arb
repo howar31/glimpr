@@ -28,6 +28,33 @@
   "@settingsPaneAdvanced": {
     "description": "Settings sidebar: Advanced pane label"
   },
+  "settingsPaneAbout": "About",
+  "@settingsPaneAbout": {
+    "description": "Settings sidebar: About pane label"
+  },
+  "settingsAboutKofi": "Support",
+  "@settingsAboutKofi": {
+    "description": "About pane: link to the creator's Ko-fi tip page (Ko-fi brand logo leads the row)"
+  },
+  "settingsAboutGithub": "Source code",
+  "@settingsAboutGithub": {
+    "description": "About pane: link to the GitHub repository (GitHub brand logo leads the row)"
+  },
+  "settingsAboutWebsite": "Website",
+  "@settingsAboutWebsite": {
+    "description": "About pane: link to the official website"
+  },
+  "settingsAboutLicenses": "Licenses & acknowledgements",
+  "@settingsAboutLicenses": {
+    "description": "About pane: opens the in-app open-source license page"
+  },
+  "settingsLicenseCount": "{count, plural, =1{1 license} other{{count} licenses}}",
+  "@settingsLicenseCount": {
+    "description": "About > Licenses: number of licenses a package has",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "settingsPaneImageEditor": "Image Editor",
   "@settingsPaneImageEditor": {
     "description": "Settings sidebar: Image Editor pane label"

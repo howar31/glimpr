@@ -30,6 +30,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPaneAdvanced => 'Advanced';
 
   @override
+  String get settingsPaneAbout => 'About';
+
+  @override
+  String get settingsAboutKofi => 'Support';
+
+  @override
+  String get settingsAboutGithub => 'Source code';
+
+  @override
+  String get settingsAboutWebsite => 'Website';
+
+  @override
+  String get settingsAboutLicenses => 'Licenses & acknowledgements';
+
+  @override
+  String settingsLicenseCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count licenses',
+      one: '1 license',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get settingsPaneImageEditor => 'Image Editor';
 
   @override
