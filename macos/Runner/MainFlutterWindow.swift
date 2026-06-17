@@ -270,8 +270,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.isReleasedWhenClosed = false
     // moveToActiveSpace: reveal on the user's current Space. fullScreenNone: keep
     // full-screen forbidden (greys out View > Enter Full Screen) — the window is
-    // freely resizable but must never enter the full-screen Space.
-    self.collectionBehavior = [.moveToActiveSpace, .fullScreenNone]
+    // freely resizable but must never enter the full-screen Space. transient:
+    // start hidden (alpha 0, ordered-in) so App Exposé doesn't surface it;
+    // revealSettings drops .transient, hideSettings re-adds it.
+    self.collectionBehavior = [.moveToActiveSpace, .fullScreenNone, .transient]
     self.delegate = self
     // Order front THEN drop alpha (the proven warm-engine order — same as the
     // overlay windows): an on-screen layout pass realizes the Metal surface and
@@ -311,6 +313,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       : .normal
     alphaValue = 1
     ignoresMouseEvents = false
+    // Visible again -> normal Exposé participation (drop the hidden-state .transient).
+    collectionBehavior = [.moveToActiveSpace, .fullScreenNone]
     // No center() here: the window keeps its autosaved frame (size + position)
     // across reveals and relaunches. .moveToActiveSpace still brings it to the
     // user's current Space; first-run centering happens once at setup.
@@ -455,6 +459,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.orderFrontRegardless()
     w.alphaValue = 0
     w.ignoresMouseEvents = true
+    // Parked warm at alpha 0 but still ordered-in (never orderOut, to avoid a
+    // blank re-show), so App Exposé / Mission Control would otherwise surface the
+    // hidden window. .transient is hidden by Exposé; openImageEditor restores it.
+    w.collectionBehavior = [.transient]
   }
 
   /// Reveal the warm Image Editor window in its landing state. Opening the editor
@@ -464,6 +472,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     guard let w = imageEditorWindow else { return }
     w.alphaValue = 1
     w.ignoresMouseEvents = false
+    w.collectionBehavior = [.managed] // visible again -> normal Exposé participation
     // No re-centre: the frame-autosave name keeps the user's last size+position.
     updateActivationPolicy()
     NSApp.activate(ignoringOtherApps: true)
@@ -632,6 +641,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.alphaValue = 0
     w.ignoresMouseEvents = true
     w.orderBack(nil)
+    w.collectionBehavior = [.transient] // keep the hidden window out of Exposé
     updateActivationPolicy()
   }
 
@@ -644,6 +654,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     ignoresMouseEvents = true
     level = .normal // restore from a possible aboveOverlay raise
     orderBack(nil)
+    // Keep the hidden settings window out of App Exposé / Mission Control.
+    collectionBehavior = [.moveToActiveSpace, .fullScreenNone, .transient]
     updateActivationPolicy()
     // If ⌘, paused a capture, resume the freeze now that Settings is gone.
     if overlayManager?.isSuspended == true {
