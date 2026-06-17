@@ -841,8 +841,16 @@ class DrawablePainter extends CustomPainter {
 class SelectionHighlightPainter extends CustomPainter {
   final Drawable? selected;
   final ValueListenable<double>? march;
-  const SelectionHighlightPainter({required this.selected, this.march})
-    : super(repaint: march);
+
+  /// Draw the resize / endpoint handles. True only for a SELECTED (pinned/clicked)
+  /// shape; a hover preview passes false so it shows ONLY the dashed outline —
+  /// handles (and handle-dragging) belong solely to the selected shape.
+  final bool showHandles;
+  const SelectionHighlightPainter({
+    required this.selected,
+    this.march,
+    this.showHandles = true,
+  }) : super(repaint: march);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -859,7 +867,7 @@ class SelectionHighlightPainter extends CustomPainter {
           phase: phase,
         );
       }
-      paintResizeHandles(canvas, d.sourceRect);
+      if (showHandles) paintResizeHandles(canvas, d.sourceRect);
       return;
     }
     // Box flush to the shape's geometric bounds (no outward inflation), so the
@@ -870,6 +878,10 @@ class SelectionHighlightPainter extends CustomPainter {
       [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
       phase: phase,
     );
+    // Hover preview gets the outline alone; the handles below appear only once
+    // the shape is selected (pinned), which is also the only state it can be
+    // handle-dragged in.
+    if (!showHandles) return;
     // Segment shapes (line/arrow/highlighter): the box PLUS a handle at every
     // control point (endpoints + interior curve points), so each is grabbable
     // and the span is easy to spot.
@@ -885,7 +897,9 @@ class SelectionHighlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SelectionHighlightPainter old) =>
-      old.selected != selected || old.march != march;
+      old.selected != selected ||
+      old.march != march ||
+      old.showHandles != showHandles;
 }
 
 /// The shared resize-handle style — a monochrome dot (white fill + dark ring, so

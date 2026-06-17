@@ -960,7 +960,8 @@ class _EditorCoreState extends State<EditorCore> {
       );
       c.commitDrawable(ImageDrawable(rect, img, c.style.value));
       c.selectTool(ToolKind.paste); // so it can be dragged/resized at once
-      c.selectedIndex.value = c.document.value.drawables.length - 1;
+      // Pin it so its handles show immediately (handles == pinned selection).
+      _selectAndPin(c.document.value.drawables.length - 1);
     } finally {
       _pasting = false;
     }
@@ -1633,7 +1634,8 @@ class _EditorCoreState extends State<EditorCore> {
         final hit = _hitActiveType(p);
         if (hit == null) {
           c.commitDrawable(ImageDrawable(_stampRectAt(p, img), img, style));
-          c.selectedIndex.value = c.document.value.drawables.length - 1;
+          // Pin it so its handles show immediately (handles == pinned selection).
+          _selectAndPin(c.document.value.drawables.length - 1);
         } else {
           _selectAndPin(hit);
         }
@@ -2012,47 +2014,47 @@ class _EditorCoreState extends State<EditorCore> {
       return;
     }
     final drawables = c.document.value.drawables;
-    // Rect-shape corner-resize (rectangle/ellipse): check every same-type shape's
-    // corners (topmost first) with a generous tolerance, independent of the
-    // current hover selection.
     final filter = _typeFilter();
-    if (_rectShapeTools.contains(c.tool.value)) {
-      for (var idx = drawables.length - 1; idx >= 0; idx--) {
-        final d = drawables[idx];
-        if (d is! RectShaped || (filter != null && !filter(d))) continue;
-        final handles = _rectHandles((d as RectShaped).rect);
-        for (var ci = 0; ci < handles.length; ci++) {
-          if ((handles[ci] - p).distance <= 16) {
-            _editIndex = idx;
-            _editOriginal = drawables[idx];
-            _editPreview = drawables[idx];
-            _resizeHandle = ci;
-            c.selectedIndex.value = idx;
-            _pinned = true; // dragging an existing shape pins it
-            return;
-          }
+    // Handle grab is restricted to the CURRENTLY-SELECTED (pinned) shape: only a
+    // selected shape shows handles, so only it is handle-draggable. This stops an
+    // overlapping higher-z neighbour (which shows no handles) from stealing the
+    // press the moment two handle zones overlap. To resize another shape, click
+    // it first (which pins it + reveals its handles).
+    final selIdx = _pinned ? c.selectedIndex.value : null;
+    final sel =
+        (selIdx != null &&
+            selIdx >= 0 &&
+            selIdx < drawables.length &&
+            (filter == null || filter(drawables[selIdx])))
+        ? drawables[selIdx]
+        : null;
+    // Rect-shape corner/edge resize (rectangle/ellipse + the raster regions).
+    if (sel is RectShaped && _rectShapeTools.contains(c.tool.value)) {
+      final handles = _rectHandles((sel as RectShaped).rect);
+      for (var ci = 0; ci < handles.length; ci++) {
+        if ((handles[ci] - p).distance <= 16) {
+          _editIndex = selIdx;
+          _editOriginal = drawables[selIdx!];
+          _editPreview = drawables[selIdx];
+          _resizeHandle = ci;
+          return; // already the pinned selection
         }
       }
     }
-    // Segment control-point drag (line/arrow/highlighter, + the universal Select
-    // tool): a press near ANY handle (endpoints + interior curve points) moves
-    // just that point; a press on the body falls through to move. `_endpoint`
-    // indexes into `points`.
-    if (_segmentTools.contains(c.tool.value) || _isSelectTool) {
-      for (var idx = drawables.length - 1; idx >= 0; idx--) {
-        final d = drawables[idx];
-        if (d is! Segmented || (filter != null && !filter(d))) continue;
-        final pts = (d as Segmented).points;
-        for (var ei = 0; ei < pts.length; ei++) {
-          if ((pts[ei] - p).distance <= 16) {
-            _editIndex = idx;
-            _editOriginal = drawables[idx];
-            _editPreview = drawables[idx];
-            _endpoint = ei;
-            c.selectedIndex.value = idx;
-            _pinned = true; // dragging a control point pins the shape
-            return;
-          }
+    // Segment control-point drag (line/arrow/highlighter + the universal Select
+    // tool): a press near a control point (endpoints + interior curve points)
+    // moves just that point; a press on the body falls through to move.
+    // `_endpoint` indexes into `points`.
+    if (sel is Segmented &&
+        (_segmentTools.contains(c.tool.value) || _isSelectTool)) {
+      final pts = (sel as Segmented).points;
+      for (var ei = 0; ei < pts.length; ei++) {
+        if ((pts[ei] - p).distance <= 16) {
+          _editIndex = selIdx;
+          _editOriginal = drawables[selIdx!];
+          _editPreview = drawables[selIdx];
+          _endpoint = ei;
+          return;
         }
       }
     }
@@ -2463,7 +2465,13 @@ class _EditorCoreState extends State<EditorCore> {
     return IgnorePointer(
       child: CustomPaint(
         size: _canvasSize,
-        painter: SelectionHighlightPainter(selected: selected, march: _march),
+        // Handles (and thus handle-dragging) only for a PINNED (clicked)
+        // selection; a hover preview is outline-only.
+        painter: SelectionHighlightPainter(
+          selected: selected,
+          march: _march,
+          showHandles: _pinned,
+        ),
       ),
     );
   }
