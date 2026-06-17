@@ -471,6 +471,12 @@ private final class StripButton: NSView {
 private final class StripGlassView: NSView {
   private let glass = NSVisualEffectView()
   private let fill = CALayer() // near-opaque tint over the vibrancy
+  // Auto-stop progress rail along the bottom edge: a faint red track + a solid
+  // red fill, clipped to the 12 pt rounded corners. Hidden until
+  // configureProgressTrack(visible:) turns it on (auto-stop enabled).
+  private let progressTrack = CALayer()
+  private let progressFill = CALayer()
+  private let progressHeight: CGFloat = 2.5
   /// Views recolored to the divider tone on every appearance change.
   var hairlineViews: [NSView] = [] { didSet { applyPalette() } }
 
@@ -490,6 +496,14 @@ private final class StripGlassView: NSView {
     fill.frame = glass.bounds
     fill.cornerRadius = 12
     glass.layer?.addSublayer(fill)
+    // The rail sits ABOVE the tint and BELOW the content subviews (added later);
+    // it lives only in the bottom progressHeight pt, where no content overlaps.
+    progressTrack.isHidden = true
+    progressFill.isHidden = true
+    progressFill.anchorPoint = .zero // grow rightward from the left edge
+    progressFill.position = .zero
+    glass.layer?.addSublayer(progressTrack)
+    glass.layer?.addSublayer(progressFill)
     addSubview(glass)
     applyPalette()
   }
@@ -511,11 +525,48 @@ private final class StripGlassView: NSView {
     appearance.performAsCurrentDrawingAppearance {
       fill.backgroundColor = RecordingDesign.barBg.cgColor
       glass.layer?.borderColor = RecordingDesign.barBorder.cgColor
+      progressTrack.backgroundColor =
+        RecordingDesign.red.withAlphaComponent(0.16).cgColor
+      progressFill.backgroundColor = RecordingDesign.red.cgColor
     }
     let divider = dark
       ? NSColor.white.withAlphaComponent(0.08)
       : RecordingDesign.slate.withAlphaComponent(0.08)
     for v in hairlineViews { v.layer?.backgroundColor = divider.cgColor }
+    CATransaction.commit()
+  }
+
+  /// Size + show the bottom progress rail. [fullWidth] is the strip width;
+  /// called once from buildStrip after layout. [visible] == false leaves both
+  /// layers hidden (auto-stop off → no rail).
+  func configureProgressTrack(visible: Bool, fullWidth: CGFloat) {
+    progressTrack.isHidden = !visible
+    progressFill.isHidden = !visible
+    guard visible else { return }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    progressTrack.frame = NSRect(x: 0, y: 0, width: fullWidth, height: progressHeight)
+    progressFill.bounds = NSRect(x: 0, y: 0, width: 0, height: progressHeight)
+    progressFill.position = .zero
+    CATransaction.commit()
+    applyPalette()
+  }
+
+  /// Set the fill fraction (clamped to [0,1]). Animated = a 0.5 s linear glide
+  /// matching the tick cadence so short limits don't step; non-animated snaps
+  /// (reduced motion).
+  func setProgress(_ fraction: Double, animated: Bool) {
+    guard !progressFill.isHidden else { return }
+    let w = (progressTrack.frame.width * CGFloat(max(0, min(1, fraction)))).rounded()
+    CATransaction.begin()
+    if animated {
+      CATransaction.setAnimationDuration(0.5)
+      CATransaction.setAnimationTimingFunction(
+        CAMediaTimingFunction(name: .linear))
+    } else {
+      CATransaction.setDisableActions(true)
+    }
+    progressFill.bounds = NSRect(x: 0, y: 0, width: w, height: progressHeight)
     CATransaction.commit()
   }
 }
@@ -540,6 +591,11 @@ final class RecordingChrome {
   private var stripMoveObserver: NSObjectProtocol?
   private let timerLabel = NSTextField(labelWithString: "00:00")
   private let sizeLabel = NSTextField(labelWithString: "0 MB")
+  /// Auto-stop limit in seconds; 0 = off (no "/ total" readout, no progress
+  /// rail). Set by the controller BEFORE show() so buildStrip can size the
+  /// readout and turn the rail on.
+  var maxDuration: Int = 0
+  private weak var stripGlass: StripGlassView?
   var onStop: (() -> Void)?
   var onAbort: (() -> Void)?
   var onPause: (() -> Void)?
@@ -691,9 +747,21 @@ final class RecordingChrome {
     stripWindow?.alphaValue = hidden ? 0 : 1
   }
 
+  /// MM:SS for a whole-second count.
+  private func mmss(_ seconds: Int) -> String {
+    String(format: "%02d:%02d", seconds / 60, seconds % 60)
+  }
+
   func update(duration: CMTime, detail: String) {
     let s = Int(duration.seconds.rounded(.down))
-    timerLabel.stringValue = String(format: "%02d:%02d", s / 60, s % 60)
+    if maxDuration > 0 {
+      timerLabel.stringValue = "\(mmss(s)) / \(mmss(maxDuration))"
+      let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+      stripGlass?.setProgress(
+        duration.seconds / Double(maxDuration), animated: !reduceMotion)
+    } else {
+      timerLabel.stringValue = mmss(s)
+    }
     sizeLabel.stringValue = detail
   }
 
@@ -735,7 +803,10 @@ final class RecordingChrome {
     timerLabel.textColor = RecordingDesign.fg1
     sizeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
     sizeLabel.textColor = RecordingDesign.fg3
-    timerLabel.stringValue = "00:00"
+    // With auto-stop on the readout grows to "MM:SS / MM:SS"; seed it with the
+    // full-width form so sizeToFit reserves the exact runtime width (monospaced
+    // digits → every value is the same width, so this never overflows).
+    timerLabel.stringValue = maxDuration > 0 ? "00:00 / \(mmss(maxDuration))" : "00:00"
     sizeLabel.stringValue = "0.0 MB"
     timerLabel.sizeToFit()
     sizeLabel.sizeToFit()
@@ -806,6 +877,8 @@ final class RecordingChrome {
       container.addSubview(v)
     }
     container.hairlineViews = [sep]
+    container.configureProgressTrack(visible: maxDuration > 0, fullWidth: x)
+    stripGlass = container
 
     let w = borderlessWindow(frame: container.frame, level: RecordingDesign.windowLevel)
     w.contentView = container
@@ -1347,6 +1420,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
           y: screen.frame.maxY - wrect.maxY,
           width: wrect.width, height: wrect.height)
         let c = RecordingChrome()
+        c.maxDuration = spec.maxDuration // before show(): buildStrip reads it
         c.show(regionGlobalBottomLeft: wrect, on: screen,
                stripHidden: spec.countdown > 0, showScrim: spec.showScrim)
         // Dim the OTHER screens (the recorded window lives on one screen). The
@@ -1375,6 +1449,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
           x: 0, y: 0, width: nsScreen.frame.width, height: nsScreen.frame.height)
 
         let c = RecordingChrome()
+        c.maxDuration = spec.maxDuration // before show(): buildStrip reads it
         if let r = spec.rect {
           // top-left display-local -> Cocoa global bottom-left
           let global = NSRect(
