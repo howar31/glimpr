@@ -1778,7 +1778,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   }
 
   private func startTick() {
-    tick = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
+    let t = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
       [weak self] _ in
       Task { @MainActor in
         guard let self, let sink = self.sink else { return }
@@ -1799,6 +1799,13 @@ final class RecordingController: NSObject, SCStreamDelegate {
         }
       }
     }
+    // Tick in .common modes so the timer / size / progress keep updating during
+    // event-tracking run-loop modes (dragging the strip, scrolling, menu or
+    // Mission Control tracking) — like startWindowFollow below. A .default-only
+    // timer stalls during tracking, then jumps when it ends (the "freeze then
+    // recover" the readouts showed).
+    RunLoop.main.add(t, forMode: .common)
+    tick = t
   }
 
   private static func even(_ v: Int) -> Int { max(2, v - (v % 2)) }
