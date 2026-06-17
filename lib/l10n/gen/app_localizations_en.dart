@@ -631,7 +631,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get loupeShortcutWalkKey => 'Scroll / , .';
+  String get loupeShortcutWalkKey => 'Scroll or , .';
 
   @override
   String get loupeShortcutWalkDesc => 'element level';

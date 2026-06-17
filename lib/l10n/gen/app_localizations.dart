@@ -1229,7 +1229,7 @@ abstract class AppLocalizations {
   /// Loupe shortcuts block: the keys that change the element level
   ///
   /// In en, this message translates to:
-  /// **'Scroll / , .'**
+  /// **'Scroll or , .'**
   String get loupeShortcutWalkKey;
 
   /// Loupe shortcuts block: what the element-level keys do

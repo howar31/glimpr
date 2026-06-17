@@ -638,7 +638,7 @@
     "description": "Capture loupe element-snap level block: the current level",
     "placeholders": { "lvl": { "type": "String" } }
   },
-  "loupeShortcutWalkKey": "Scroll / , .",
+  "loupeShortcutWalkKey": "Scroll or , .",
   "@loupeShortcutWalkKey": {
     "description": "Loupe shortcuts block: the keys that change the element level"
   },

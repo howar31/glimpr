@@ -188,7 +188,7 @@
   "settingsElementSnapNeedsPermission": "尚未取得輔助使用權限",
   "settingsElementSnapGrant": "前往授權…",
   "elementSnapLevelLabel": "元素層級 {lvl}",
-  "loupeShortcutWalkKey": "滾輪 / , .",
+  "loupeShortcutWalkKey": "滾輪或 , .",
   "loupeShortcutWalkDesc": "元素換層",
   "loupeShortcutNudgeKey": "方向鍵",
   "loupeShortcutNudgeDesc": "微調",

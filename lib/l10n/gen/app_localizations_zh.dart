@@ -594,7 +594,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get loupeShortcutWalkKey => '滾輪 / , .';
+  String get loupeShortcutWalkKey => '滾輪或 , .';
 
   @override
   String get loupeShortcutWalkDesc => '元素換層';
