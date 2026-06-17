@@ -5,6 +5,8 @@ import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
 import '../capture/element_snap.dart';
 import '../editor/editor_host.dart';
+import '../editor/loupe_config.dart' show LoupeInfoMode;
+import '../settings/settings.dart';
 
 /// Adapts the native [CaptureBridge] cursor calls to [EditorCursorController].
 class OverlayCursorController implements EditorCursorController {
@@ -99,4 +101,8 @@ class OverlayEditorHost implements EditorHost {
     // frozen frame + annotations.
     CaptureBridge().openSettings();
   }
+
+  @override
+  void persistLoupeInfoMode(LoupeInfoMode mode) =>
+      Settings.instance.setLoupeInfoMode(mode);
 }

@@ -83,8 +83,11 @@ void main() {
       expect(isEditorReservedCombo(LogicalKeyboardKey.comma, none), isTrue);
       expect(isEditorReservedCombo(LogicalKeyboardKey.period, none), isTrue);
       expect(isEditorReservedCombo(LogicalKeyboardKey.slash, none), isTrue);
-      // Shift+/ = ? cycles the loupe info.
+      // Shift+/ = ? cycles the loupe info. Flutter reports `?` as the logical
+      // key `question` (not slash+Shift), so both must be reserved.
       expect(isEditorReservedCombo(LogicalKeyboardKey.slash, shift), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.question, shift), isTrue);
+      expect(isEditorReservedCombo(LogicalKeyboardKey.question, none), isTrue);
     });
 
     test('reserves the editor/system chords ⌘W / ⌘, / ⌘1 / ⌘2', () {

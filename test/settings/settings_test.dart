@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/editor/loupe_config.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_store.dart';
@@ -166,6 +167,22 @@ void main() {
     final s = Settings(store);
     expect(await s.getLoupeSpan(), 20);
     expect(await s.getLoupeZoom(), 4);
+  });
+
+  test('loupe info mode defaults to coords, round-trips, and feeds loadLoupe',
+      () async {
+    final s = Settings(FakeStore());
+    expect(await s.getLoupeInfoMode(), LoupeInfoMode.coords);
+    expect((await s.loadLoupe()).infoMode, LoupeInfoMode.coords);
+    await s.setLoupeInfoMode(LoupeInfoMode.hidden);
+    expect(await s.getLoupeInfoMode(), LoupeInfoMode.hidden);
+    expect((await s.loadLoupe()).infoMode, LoupeInfoMode.hidden);
+  });
+
+  test('loupe info mode reads an unknown stored value as coords', () async {
+    final store = FakeStore();
+    await store.setString('loupe_info_mode', 'bogus');
+    expect(await Settings(store).getLoupeInfoMode(), LoupeInfoMode.coords);
   });
 
   test('recording output-quality settings default and round-trip', () async {

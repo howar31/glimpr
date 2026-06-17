@@ -75,12 +75,14 @@ Offset _snap8(Offset a, Offset p) {
 Rect? resolveSnapRect({ElementSnap? element, SnapWindow? window}) =>
     element?.rect ?? window?.rect;
 
-/// What the loupe shows beneath the glass; cycled by `?` / `/` (a fixed, not
-/// rebindable, shortcut). Session-sticky and shared across displays (a top-level
-/// var, not per-State), so it survives capture-to-capture but resets on relaunch.
-enum LoupeInfoMode { coords, level, shortcuts, hidden }
-
+/// The loupe info display (`?` / `/` cycle; [LoupeInfoMode] lives in
+/// loupe_config.dart). A top-level var, not per-State, so it is session-sticky
+/// across captures within a process. [_loupeInfoModeUserSet] tracks whether the
+/// user has cycled it THIS process: until then it follows the persisted setting
+/// ([LoupeConfig.infoMode]) so a relaunch restores the last choice; once cycled
+/// it owns the value and persists every change via the host.
 LoupeInfoMode _loupeInfoMode = LoupeInfoMode.coords;
+bool _loupeInfoModeUserSet = false;
 
 /// In-overlay annotation editor for ONE display. Default tool is Crop; each
 /// annotation tool manages only its OWN drawable type (hover highlights, drag
@@ -624,6 +626,7 @@ class _EditorCoreState extends State<EditorCore> {
   @override
   void initState() {
     super.initState();
+    _restoreLoupeInfoMode();
     // Seed the crosshair at the real cursor (native passes its display-local
     // position on the cursor display), not the display centre.
     final seed = widget.host.cursorSeed;
@@ -865,6 +868,10 @@ class _EditorCoreState extends State<EditorCore> {
     super.didUpdateWidget(old);
     // Settings hot-reload (e.g. a ⌘, detour) may change the eyedropper mode.
     c.eyedropperToolSwitchCancels = widget.loupe.toolKeysCancelSampling;
+    // The loupe geometry/config loads async (default config at first mount, real
+    // values land via a later setState -> didUpdateWidget); re-apply the persisted
+    // info mode until the user takes over with `?`/`/`.
+    _restoreLoupeInfoMode();
     // New frozen frame (in-place re-capture) -> the pre-computed images are
     // stale; drop them and recompute for the active tool.
     if (old.host.baseImage != widget.host.baseImage) {
@@ -1127,13 +1134,21 @@ class _EditorCoreState extends State<EditorCore> {
       _maybeQueryElement(_cursor, force: true);
       return KeyEventResult.handled;
     }
-    // ? or / (the slash key, with or without Shift) cycles the loupe info
-    // display: coordinates -> element level -> shortcuts -> all hidden. A FIXED
-    // (non-rebindable) shortcut; shown in Settings > Shortcuts as reserved.
-    if (key == LogicalKeyboardKey.slash &&
+    // ? or / cycles the loupe info display: coordinates -> element level ->
+    // shortcuts -> all hidden. A FIXED (non-rebindable) shortcut; shown in
+    // Settings > Shortcuts as reserved. Match BOTH logical keys: bare `/` is
+    // `slash`, but Shift+`/` (= `?`) reports `question`, not slash+Shift — so
+    // checking slash alone misses `?` (and the unhandled key beeps).
+    if ((key == LogicalKeyboardKey.slash ||
+            key == LogicalKeyboardKey.question) &&
         pressed.difference({HotkeyModifier.shift}).isEmpty) {
-      setState(() => _loupeInfoMode = LoupeInfoMode
-          .values[(_loupeInfoMode.index + 1) % LoupeInfoMode.values.length]);
+      setState(() {
+        _loupeInfoMode = LoupeInfoMode
+            .values[(_loupeInfoMode.index + 1) % LoupeInfoMode.values.length];
+        _loupeInfoModeUserSet = true;
+      });
+      // Persist so the choice survives relaunch (the host writes to Settings).
+      widget.host.persistLoupeInfoMode(_loupeInfoMode);
       return KeyEventResult.handled;
     }
     // ⌘, opens Settings (fixed macOS Preferences convention; reserved). The host
@@ -2616,6 +2631,14 @@ class _EditorCoreState extends State<EditorCore> {
         ),
       ),
     );
+  }
+
+  /// Apply the persisted loupe info mode ([LoupeConfig.infoMode]) to the
+  /// process-global cycle, but only until the user first cycles it this process
+  /// — after that the live value owns it (and is persisted on every change), so
+  /// a Settings-close hot-reload never clobbers an in-session choice.
+  void _restoreLoupeInfoMode() {
+    if (!_loupeInfoModeUserSet) _loupeInfoMode = widget.loupe.infoMode;
   }
 
   /// The blocks under the loupe glass, per the CUMULATIVE [_loupeInfoMode] cycle

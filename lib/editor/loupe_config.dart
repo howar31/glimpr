@@ -10,6 +10,11 @@ const int kLoupeZoomMin = 4;
 const int kLoupeZoomMax = 16;
 const int kLoupeZoomDefault = 8;
 
+/// What the loupe shows beneath the glass; cycled by `?` / `/` (a fixed, not
+/// rebindable, shortcut): coordinates -> element level -> shortcuts -> hidden.
+/// Persisted (see [LoupeConfig.infoMode]) so the choice survives relaunch.
+enum LoupeInfoMode { coords, level, shortcuts, hidden }
+
 class LoupeConfig {
   final int span; // native px shown per axis
   final int zoom; // loupe px per native px (magnification)
@@ -20,10 +25,17 @@ class LoupeConfig {
   /// carefully aimed sample.
   final bool toolKeysCancelSampling;
 
+  /// The persisted loupe-info-display choice (`?`/`/` cycle). Seeds the
+  /// process-global cycle on the first editor of a session so a relaunch
+  /// restores the last choice; the live cycle then owns it and writes back via
+  /// [Settings.setLoupeInfoMode] (see EditorCore's host persist callback).
+  final LoupeInfoMode infoMode;
+
   const LoupeConfig({
     this.span = kLoupeSpanDefault,
     this.zoom = kLoupeZoomDefault,
     this.toolKeysCancelSampling = true,
+    this.infoMode = LoupeInfoMode.coords,
   });
 
   /// Builds a config clamped to the valid ranges; null inputs fall back to the
@@ -32,11 +44,13 @@ class LoupeConfig {
     int? span,
     int? zoom,
     bool? toolKeysCancelSampling,
+    LoupeInfoMode? infoMode,
   }) =>
       LoupeConfig(
         span: (span ?? kLoupeSpanDefault).clamp(kLoupeSpanMin, kLoupeSpanMax),
         zoom: (zoom ?? kLoupeZoomDefault).clamp(kLoupeZoomMin, kLoupeZoomMax),
         toolKeysCancelSampling: toolKeysCancelSampling ?? true,
+        infoMode: infoMode ?? LoupeInfoMode.coords,
       );
 
   /// The loupe's on-screen box size (logical px), square.
@@ -47,8 +61,10 @@ class LoupeConfig {
       other is LoupeConfig &&
       other.span == span &&
       other.zoom == zoom &&
-      other.toolKeysCancelSampling == toolKeysCancelSampling;
+      other.toolKeysCancelSampling == toolKeysCancelSampling &&
+      other.infoMode == infoMode;
 
   @override
-  int get hashCode => Object.hash(span, zoom, toolKeysCancelSampling);
+  int get hashCode =>
+      Object.hash(span, zoom, toolKeysCancelSampling, infoMode);
 }

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Offset, Rect, Size;
 import '../capture/captured_display.dart' show SnapWindow;
 import '../capture/element_snap.dart';
+import 'loupe_config.dart' show LoupeInfoMode;
 
 /// Native cursor control EditorCore needs. The overlay implements this with the
 /// native capture bridge; the image editor uses [NoopCursorController].
@@ -116,4 +117,9 @@ abstract class EditorHost {
   /// Open the Settings window (⌘,). The overlay must dismiss the capture first
   /// (it sits above normal windows); the image editor reveals it directly.
   void openSettings();
+
+  /// Persist the loupe info-display choice after the `?`/`/` cycle so it survives
+  /// relaunch. Default no-op; the capture overlay and image editor write it to
+  /// Settings (seeded back via [LoupeConfig.infoMode] on the next session).
+  void persistLoupeInfoMode(LoupeInfoMode mode) {}
 }

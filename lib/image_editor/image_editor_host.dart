@@ -4,6 +4,8 @@ import 'package:flutter/widgets.dart' show Offset, Rect, Size, VoidCallback;
 import '../capture/captured_display.dart' show SnapWindow;
 import '../capture/element_snap.dart';
 import '../editor/editor_host.dart';
+import '../editor/loupe_config.dart' show LoupeInfoMode;
+import '../settings/settings.dart';
 
 /// [EditorHost] for the standalone Image Editor: a loaded image whose logical
 /// canvas IS the image's native pixel grid ([size] = native size, [pixelScale]
@@ -79,4 +81,7 @@ class ImageEditorHost implements EditorHost {
   void onCancel() => onClose?.call();
   @override
   void openSettings() => onOpenSettings?.call();
+  @override
+  void persistLoupeInfoMode(LoupeInfoMode mode) =>
+      Settings.instance.setLoupeInfoMode(mode);
 }

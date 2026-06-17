@@ -223,11 +223,17 @@ final kEditorReservedKeys = <LogicalKeyboardKey>{
 /// (open settings), ⌘1 (fit to window), ⌘2 (zoom to 100%). Enter and Shift+Enter
 /// are intentionally absent: Enter is the rebindable Export command default and
 /// is suppressed only while editing a text annotation.
+///
+/// NOTE: Shift+/ reports the logical key `question` (NOT slash+Shift), so the
+/// loupe-cycle key is reserved under BOTH `slash` and `question` to match what
+/// the recorder actually captures.
 final _kEditorReservedCombos = <(LogicalKeyboardKey, Set<HotkeyModifier>)>[
   (LogicalKeyboardKey.comma, const {}),
   (LogicalKeyboardKey.period, const {}),
   (LogicalKeyboardKey.slash, const {}),
   (LogicalKeyboardKey.slash, const {HotkeyModifier.shift}),
+  (LogicalKeyboardKey.question, const {}),
+  (LogicalKeyboardKey.question, const {HotkeyModifier.shift}),
   (LogicalKeyboardKey.keyW, const {HotkeyModifier.meta}),
   (LogicalKeyboardKey.comma, const {HotkeyModifier.meta}),
   (LogicalKeyboardKey.digit1, const {HotkeyModifier.meta}),

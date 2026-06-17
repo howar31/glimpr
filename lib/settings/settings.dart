@@ -146,6 +146,7 @@ class Settings {
   static const _recordGifFpsKey = 'record_gif_fps';
   static const _loupeSpanKey = 'loupe_span';
   static const _loupeZoomKey = 'loupe_zoom';
+  static const _loupeInfoModeKey = 'loupe_info_mode';
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
   static const _hudCrosshairKey = 'hud_crosshair';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
@@ -461,6 +462,19 @@ class Settings {
   Future<void> setLoupeZoom(int v) =>
       store.setInt(_loupeZoomKey, v.clamp(kLoupeZoomMin, kLoupeZoomMax));
 
+  // Loupe info display (`?`/`/` cycle): persisted so the choice survives
+  // relaunch. Stored as the enum name; an unknown/missing value reads as coords.
+  Future<LoupeInfoMode> getLoupeInfoMode() async {
+    final name = await store.getString(_loupeInfoModeKey);
+    return LoupeInfoMode.values.firstWhere(
+      (m) => m.name == name,
+      orElse: () => LoupeInfoMode.coords,
+    );
+  }
+
+  Future<void> setLoupeInfoMode(LoupeInfoMode v) =>
+      store.setString(_loupeInfoModeKey, v.name);
+
   // Eyedropper: what a tool shortcut does while sampling (true = cancel
   // sampling and switch — the default; false = sampling is modal).
   Future<bool> getEyedropperToolKeysCancel() async =>
@@ -474,6 +488,7 @@ class Settings {
         span: await getLoupeSpan(),
         zoom: await getLoupeZoom(),
         toolKeysCancelSampling: await getEyedropperToolKeysCancel(),
+        infoMode: await getLoupeInfoMode(),
       );
 
   // HUD options (crosshair lines + marching-ants animation) ----------------
