@@ -1154,6 +1154,18 @@ abstract class AppLocalizations {
   /// **'Asks for microphone permission on first use'**
   String get settingsRecordingMicrophoneHint;
 
+  /// Settings > Capture > Screen recording: merge-audio row title
+  ///
+  /// In en, this message translates to:
+  /// **'Merge audio into one track'**
+  String get settingsRecordingMergeAudio;
+
+  /// Settings > Capture > Screen recording: merge-audio row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Combine system audio and microphone into a single track for wider compatibility; applies only when both are recorded'**
+  String get settingsRecordingMergeAudioHint;
+
   /// Settings > Recording: toggle for dimming the area outside the recorded region (and other displays)
   ///
   /// In en, this message translates to:

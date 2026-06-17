@@ -913,10 +913,15 @@ final class RecordingWriter {
   private let adaptor: AVAssetWriterInputPixelBufferAdaptor
   private var systemInput: AVAssetWriterInput?
   private var micInput: AVAssetWriterInput?
+  // Merge path (mergeAudio && both sources): ONE input fed by a live mixer that
+  // sums system + mic. The default (off / single-source) path keeps the
+  // separate inputs above, byte-for-byte unchanged.
+  private var mergedInput: AVAssetWriterInput?
+  private var mixer: AudioMixer?
   private(set) var started = false
 
   init(url: URL, width: Int, height: Int, hevc: Bool, bitrate: Int,
-       systemAudio: Bool, microphone: Bool) throws {
+       systemAudio: Bool, microphone: Bool, mergeAudio: Bool) throws {
     try? FileManager.default.removeItem(at: url)
     writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
     // Average target bitrate is the user video-quality tier resolved to
@@ -958,8 +963,17 @@ final class RecordingWriter {
       writer.add(a)
       return a
     }
-    if systemAudio { systemInput = addAudio() }
-    if microphone { micInput = addAudio() }
+    // Merge only kicks in when BOTH sources are recorded; otherwise there is
+    // nothing to mix, so a single source uses its own input as before.
+    if mergeAudio && systemAudio && microphone {
+      if let merged = addAudio() {
+        mergedInput = merged
+        mixer = AudioMixer(output: merged)
+      }
+    } else {
+      if systemAudio { systemInput = addAudio() }
+      if microphone { micInput = addAudio() }
+    }
   }
 
   func start() {
@@ -974,18 +988,24 @@ final class RecordingWriter {
   }
 
   func appendSystem(_ sb: CMSampleBuffer) {
-    guard started, let a = systemInput, a.isReadyForMoreMediaData else { return }
+    guard started else { return }
+    if let mixer { mixer.add(.system, sb); return }
+    guard let a = systemInput, a.isReadyForMoreMediaData else { return }
     a.append(sb)
   }
 
   func appendMic(_ sb: CMSampleBuffer) {
-    guard started, let a = micInput, a.isReadyForMoreMediaData else { return }
+    guard started else { return }
+    if let mixer { mixer.add(.mic, sb); return }
+    guard let a = micInput, a.isReadyForMoreMediaData else { return }
     a.append(sb)
   }
 
   func finish() async -> Bool {
     guard started else { return false }
     videoInput.markAsFinished()
+    mixer?.finish() // flush any buffered mixed audio before closing the input
+    mergedInput?.markAsFinished()
     systemInput?.markAsFinished()
     micInput?.markAsFinished()
     await writer.finishWriting()
@@ -995,6 +1015,186 @@ final class RecordingWriter {
   func cancel() {
     if started { writer.cancelWriting() }
     try? FileManager.default.removeItem(at: writer.outputURL)
+  }
+}
+
+/// Live PCM mixer (merge-audio path): sums system + mic onto ONE track. Both
+/// sources arrive already PTS-rebased (the sink removes pause gaps), so this
+/// only aligns and adds. Runs inline on the sink's serial sampleQueue — single
+/// owner, no locks. Each source is converted to a canonical 48 kHz / stereo /
+/// Float32 format (handles mono→stereo + sample-rate match), summed into a
+/// frame-indexed accumulator, and flushed up to the lower of the two sources'
+/// high-water marks (with a silence-gap fallback so a quiet source can't stall
+/// the flush). Output PCM is appended to [output], an AAC writer input.
+@available(macOS 15.0, *)
+final class AudioMixer {
+  enum Source { case system, mic }
+
+  private let output: AVAssetWriterInput
+  private let canonical: AVAudioFormat
+  private let sampleRate: Double = 48_000
+  // Deinterleaved Float32 stereo accumulator; accL[0] == frame `baseFrame`.
+  private var accL: [Float] = []
+  private var accR: [Float] = []
+  private var baseFrame: Int64 = -1 // -1 until the first sample lands
+  private var sysHWM: Int64 = 0     // highest frame delivered by each source
+  private var micHWM: Int64 = 0
+  // If one source lags the other by more than this, flush past the gap treating
+  // the laggard as silence (SCStream may emit nothing during pure silence).
+  private let lagFrames: Int64 = 48_000 * 3 / 10 // 0.3 s
+
+  private var sysConverter: AVAudioConverter?
+  private var sysSrcFormat: AVAudioFormat?
+  private var micConverter: AVAudioConverter?
+  private var micSrcFormat: AVAudioFormat?
+
+  init(output: AVAssetWriterInput) {
+    self.output = output
+    canonical = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32, sampleRate: 48_000,
+      channels: 2, interleaved: false)!
+  }
+
+  func add(_ source: Source, _ sb: CMSampleBuffer) {
+    guard CMSampleBufferDataIsReady(sb),
+          let fd = CMSampleBufferGetFormatDescription(sb),
+          let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd),
+          let srcFormat = AVAudioFormat(streamDescription: asbd),
+          let srcPCM = Self.pcmBuffer(from: sb, format: srcFormat)
+    else { return }
+    guard let conv = converter(for: source, srcFormat: srcFormat) else { return }
+
+    let pts = CMSampleBufferGetPresentationTimeStamp(sb)
+    let startFrame = Int64((pts.seconds * sampleRate).rounded())
+    let ratio = canonical.sampleRate / srcFormat.sampleRate
+    let cap = AVAudioFrameCount(Double(srcPCM.frameLength) * ratio + 16)
+    guard let outPCM = AVAudioPCMBuffer(pcmFormat: canonical, frameCapacity: cap)
+    else { return }
+    var fed = false
+    var err: NSError?
+    conv.convert(to: outPCM, error: &err) { _, status in
+      if fed { status.pointee = .noDataNow; return nil }
+      fed = true
+      status.pointee = .haveData
+      return srcPCM
+    }
+    guard err == nil, outPCM.frameLength > 0,
+          let ch = outPCM.floatChannelData else { return }
+    let n = Int(outPCM.frameLength)
+    mixIn(left: ch[0], right: ch[1], frames: n, startFrame: startFrame)
+    let endFrame = startFrame + Int64(n)
+    if source == .system { sysHWM = max(sysHWM, endFrame) }
+    else { micHWM = max(micHWM, endFrame) }
+    flush(final: false)
+  }
+
+  /// Flush remaining buffered audio (called before the writer closes the input).
+  func finish() { flush(final: true) }
+
+  // MARK: - internals
+
+  private func converter(for source: Source,
+                         srcFormat: AVAudioFormat) -> AVAudioConverter? {
+    let cached = source == .system ? sysSrcFormat : micSrcFormat
+    if let cached, cached == srcFormat {
+      return source == .system ? sysConverter : micConverter
+    }
+    guard let conv = AVAudioConverter(from: srcFormat, to: canonical) else { return nil }
+    // Guarantee a mono source is centred (duplicated to both output channels)
+    // rather than landing on one side only.
+    if srcFormat.channelCount == 1 { conv.channelMap = [0, 0] }
+    if source == .system { sysConverter = conv; sysSrcFormat = srcFormat }
+    else { micConverter = conv; micSrcFormat = srcFormat }
+    return conv
+  }
+
+  private func mixIn(left: UnsafePointer<Float>, right: UnsafePointer<Float>,
+                     frames: Int, startFrame: Int64) {
+    if baseFrame < 0 { baseFrame = startFrame }
+    let needEnd = startFrame + Int64(frames)
+    let curEnd = baseFrame + Int64(accL.count)
+    if needEnd > curEnd {
+      let add = Int(needEnd - curEnd)
+      accL.append(contentsOf: repeatElement(0, count: add))
+      accR.append(contentsOf: repeatElement(0, count: add))
+    }
+    let offset = Int(startFrame - baseFrame)
+    guard offset >= 0 else { return } // a few ms before base: drop (sub-buffer)
+    for i in 0..<frames {
+      accL[offset + i] += left[i]
+      accR[offset + i] += right[i]
+    }
+  }
+
+  private func flush(final: Bool) {
+    guard baseFrame >= 0, !accL.isEmpty else { return }
+    let watermark: Int64
+    if final {
+      watermark = baseFrame + Int64(accL.count)
+    } else {
+      var w = min(sysHWM, micHWM)
+      let hi = max(sysHWM, micHWM)
+      if hi - w > lagFrames { w = hi - lagFrames } // silence-gap safety
+      watermark = w
+    }
+    let count = Int(watermark - baseFrame)
+    guard count > 0, output.isReadyForMoreMediaData,
+          let pcm = AVAudioPCMBuffer(
+            pcmFormat: canonical, frameCapacity: AVAudioFrameCount(count)),
+          let ch = pcm.floatChannelData else { return }
+    pcm.frameLength = AVAudioFrameCount(count)
+    for i in 0..<count {
+      ch[0][i] = min(max(accL[i], -1), 1) // sum, clamped to [-1, 1]
+      ch[1][i] = min(max(accR[i], -1), 1)
+    }
+    let pts = CMTime(value: baseFrame, timescale: 48_000)
+    if let out = Self.makeSampleBuffer(pcm, pts: pts) {
+      output.append(out)
+    }
+    accL.removeFirst(count)
+    accR.removeFirst(count)
+    baseFrame = watermark
+  }
+
+  /// CMSampleBuffer (PCM, source format) -> AVAudioPCMBuffer of that format.
+  private static func pcmBuffer(from sb: CMSampleBuffer,
+                                format: AVAudioFormat) -> AVAudioPCMBuffer? {
+    let frames = CMSampleBufferGetNumSamples(sb)
+    guard frames > 0,
+          let pcm = AVAudioPCMBuffer(
+            pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))
+    else { return nil }
+    pcm.frameLength = AVAudioFrameCount(frames)
+    let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
+      sb, at: 0, frameCount: Int32(frames), into: pcm.mutableAudioBufferList)
+    return status == noErr ? pcm : nil
+  }
+
+  /// AVAudioPCMBuffer -> CMSampleBuffer stamped at [pts] (for the AAC input).
+  private static func makeSampleBuffer(_ pcm: AVAudioPCMBuffer,
+                                       pts: CMTime) -> CMSampleBuffer? {
+    var formatDesc: CMAudioFormatDescription?
+    guard CMAudioFormatDescriptionCreate(
+      allocator: kCFAllocatorDefault, asbd: pcm.format.streamDescription,
+      layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
+      extensions: nil, formatDescriptionOut: &formatDesc) == noErr,
+      let formatDesc else { return nil }
+    var sb: CMSampleBuffer?
+    var timing = CMSampleTimingInfo(
+      duration: CMTime(value: 1, timescale: 48_000),
+      presentationTimeStamp: pts, decodeTimeStamp: .invalid)
+    guard CMSampleBufferCreate(
+      allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false,
+      makeDataReadyCallback: nil, refcon: nil, formatDescription: formatDesc,
+      sampleCount: CMItemCount(pcm.frameLength), sampleTimingEntryCount: 1,
+      sampleTimingArray: &timing, sampleSizeEntryCount: 0,
+      sampleSizeArray: nil, sampleBufferOut: &sb) == noErr, let sb
+    else { return nil }
+    guard CMSampleBufferSetDataBufferFromAudioBufferList(
+      sb, blockBufferAllocator: kCFAllocatorDefault,
+      blockBufferMemoryAllocator: kCFAllocatorDefault, flags: 0,
+      bufferList: pcm.audioBufferList) == noErr else { return nil }
+    return sb
   }
 }
 
@@ -1339,6 +1539,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let showScrim: Bool // dim outside the region + other displays (red frame stays)
     let systemAudio: Bool
     let microphone: Bool
+    let mergeAudio: Bool // mix system + mic into ONE track (both-on only)
     let maxDuration: Int // seconds; 0 = off
     let countdown: Int // seconds; 0 = off (start delay)
     let videoQuality: String // low | medium | high (mp4 only)
@@ -1580,7 +1781,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
           url: URL(fileURLWithPath: spec.outputPath),
           width: cfg.width, height: cfg.height, hevc: spec.hevc,
           bitrate: bitrate,
-          systemAudio: spec.systemAudio, microphone: spec.microphone)
+          systemAudio: spec.systemAudio, microphone: spec.microphone,
+          mergeAudio: spec.mergeAudio)
         let rs = RecordingSink(writer: w)
         rs.onStarted = { PerfLog.mark("recordFirstFrame") }
         sk = rs
@@ -2025,6 +2227,7 @@ final class RecordingChannel {
     let showScrim = (args["showScrim"] as? Bool) ?? true
     let systemAudio = (args["systemAudio"] as? Bool) ?? false
     let microphone = (args["microphone"] as? Bool) ?? false
+    let mergeAudio = (args["mergeAudio"] as? Bool) ?? false
     let maxDuration = (args["maxDuration"] as? Int) ?? 0
     let countdown = (args["countdown"] as? Int) ?? 0
     let videoQuality = (args["videoQuality"] as? String) ?? "high"
@@ -2056,6 +2259,7 @@ final class RecordingChannel {
         fps: fps, hevc: hevc, gif: gif, showsCursor: showsCursor,
         showScrim: showScrim,
         systemAudio: systemAudio, microphone: microphone,
+        mergeAudio: mergeAudio,
         maxDuration: maxDuration, countdown: countdown,
         videoQuality: videoQuality, maxLongSide: maxLongSide, gifFps: gifFps,
         outputPath: outputPath)

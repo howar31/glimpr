@@ -234,6 +234,8 @@ class RecordController {
       // GIF has no audio track.
       systemAudio: isGif ? false : rec.systemAudio,
       microphone: isGif ? false : rec.microphone,
+      // Merge is settings-only (no per-take override), like the quality knobs.
+      mergeAudio: isGif ? false : rec.mergeAudio,
       maxDuration: rec.maxDuration,
       countdown: rec.countdown,
       // Output quality controls: settings-only (no per-take toolbar override).
@@ -298,6 +300,8 @@ class RecordController {
         // GIF has no audio track.
         systemAudio: isGif ? false : (a['systemAudio'] as bool?) ?? rec.systemAudio,
         microphone: isGif ? false : (a['microphone'] as bool?) ?? rec.microphone,
+        // Merge is settings-only (no per-take override), like the quality knobs.
+        mergeAudio: isGif ? false : rec.mergeAudio,
         maxDuration: (a['maxDuration'] as num?)?.toInt() ?? rec.maxDuration,
         countdown: rec.countdown,
         // Output quality controls: settings-only (no per-take toolbar override).

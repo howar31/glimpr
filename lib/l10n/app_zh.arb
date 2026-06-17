@@ -176,6 +176,8 @@
   "settingsRecordingSystemAudioHint": "包含系統播放的聲音",
   "settingsRecordingMicrophone": "錄製麥克風",
   "settingsRecordingMicrophoneHint": "首次使用時會要求麥克風權限",
+  "settingsRecordingMergeAudio": "合併音訊為單軌",
+  "settingsRecordingMergeAudioHint": "將系統音訊與麥克風合併為單一軌以提升相容性；兩者皆錄製時才生效",
   "settingsRecordingDim": "錄影時將周圍變暗",
   "settingsRecordingDimHint": "將錄製範圍以外的區域與其他螢幕變暗。長時間錄影想要乾淨畫面時可關閉；紅色外框仍會保留。",
   "settingsSectionAfterRecording": "錄影完成後",

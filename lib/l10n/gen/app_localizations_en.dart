@@ -594,6 +594,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Asks for microphone permission on first use';
 
   @override
+  String get settingsRecordingMergeAudio => 'Merge audio into one track';
+
+  @override
+  String get settingsRecordingMergeAudioHint =>
+      'Combine system audio and microphone into a single track for wider compatibility; applies only when both are recorded';
+
+  @override
   String get settingsRecordingDim => 'Dim outside the recording';
 
   @override

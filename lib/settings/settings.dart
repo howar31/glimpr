@@ -138,6 +138,7 @@ class Settings {
   static const _recordScrimKey = 'record_scrim';
   static const _recordSystemAudioKey = 'record_system_audio';
   static const _recordMicKey = 'record_microphone';
+  static const _recordMergeAudioKey = 'record_merge_audio';
   static const _flowAfterRecordingKey = 'flow_after_recording';
   static const _recordMaxDurationKey = 'record_max_duration';
   static const _recordCountdownKey = 'record_countdown';
@@ -337,6 +338,13 @@ class Settings {
   Future<void> setRecordMicrophone(bool v) =>
       store.setBool(_recordMicKey, v);
 
+  /// Merge system audio + mic into ONE mp4 audio track (default off = two
+  /// separate tracks). Only takes effect when BOTH sources are recorded.
+  Future<bool> getRecordMergeAudio() async =>
+      (await store.getBool(_recordMergeAudioKey)) ?? false;
+  Future<void> setRecordMergeAudio(bool v) =>
+      store.setBool(_recordMergeAudioKey, v);
+
   /// Fixed recording duration in seconds; 0 = off. Off-step values clamp to 0.
   static const kRecordMaxDurations = <int>[0, 5, 10, 15, 30, 60];
   Future<int> getRecordMaxDuration() async {
@@ -418,6 +426,7 @@ class Settings {
         scrim: await getRecordScrim(),
         systemAudio: await getRecordSystemAudio(),
         microphone: await getRecordMicrophone(),
+        mergeAudio: await getRecordMergeAudio(),
         maxDuration: await getRecordMaxDuration(),
         countdown: await getRecordCountdown(),
         videoQuality: await getRecordVideoQuality(),
@@ -571,6 +580,7 @@ class RecordingSettings {
     this.scrim = true,
     this.systemAudio = false,
     this.microphone = false,
+    this.mergeAudio = false,
     this.maxDuration = 0,
     this.countdown = 0,
     this.videoQuality = RecordVideoQuality.high,
@@ -587,6 +597,7 @@ class RecordingSettings {
   final bool scrim; // dim outside the region + other displays
   final bool systemAudio;
   final bool microphone;
+  final bool mergeAudio; // merge both audio sources into one track (both-on only)
   final int maxDuration; // seconds; 0 = off (auto-stop disabled)
   final int countdown; // seconds; 0 = off (start delay)
   final RecordVideoQuality videoQuality; // mp4 only

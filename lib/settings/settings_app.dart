@@ -145,6 +145,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _recordScrim = true;
   bool _recordSystemAudio = false;
   bool _recordMicrophone = false;
+  bool _recordMergeAudio = false;
   Set<FlowAction> _afterRecording = {};
   int _loupeSpan = kLoupeSpanDefault;
   int _loupeZoom = kLoupeZoomDefault;
@@ -326,6 +327,7 @@ class _SettingsAppState extends State<SettingsApp>
       _recordScrim = rec.scrim;
       _recordSystemAudio = rec.systemAudio;
       _recordMicrophone = rec.microphone;
+      _recordMergeAudio = rec.mergeAudio;
       _afterRecording = rec.flow;
     });
     _filenameController.text = template;
@@ -1382,6 +1384,18 @@ class _SettingsAppState extends State<SettingsApp>
                     onChanged: (v) async {
                       await _s.setRecordMicrophone(v);
                       if (mounted) setState(() => _recordMicrophone = v);
+                    },
+                  ),
+                ),
+                SettingRow(
+                  divider: true,
+                  title: _l.settingsRecordingMergeAudio,
+                  hint: _l.settingsRecordingMergeAudioHint,
+                  trailing: GlassToggle(
+                    value: _recordMergeAudio,
+                    onChanged: (v) async {
+                      await _s.setRecordMergeAudio(v);
+                      if (mounted) setState(() => _recordMergeAudio = v);
                     },
                   ),
                 ),

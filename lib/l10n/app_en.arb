@@ -592,6 +592,14 @@
   "@settingsRecordingMicrophoneHint": {
     "description": "Settings > Capture > Screen recording: microphone row hint"
   },
+  "settingsRecordingMergeAudio": "Merge audio into one track",
+  "@settingsRecordingMergeAudio": {
+    "description": "Settings > Capture > Screen recording: merge-audio row title"
+  },
+  "settingsRecordingMergeAudioHint": "Combine system audio and microphone into a single track for wider compatibility; applies only when both are recorded",
+  "@settingsRecordingMergeAudioHint": {
+    "description": "Settings > Capture > Screen recording: merge-audio row hint"
+  },
   "settingsRecordingDim": "Dim outside the recording",
   "@settingsRecordingDim": {
     "description": "Settings > Recording: toggle for dimming the area outside the recorded region (and other displays)"

@@ -54,6 +54,7 @@ class _FakeBridge extends RecordBridge {
     bool showScrim = true,
     bool systemAudio = false,
     bool microphone = false,
+    bool mergeAudio = false,
     int maxDuration = 0,
     int countdown = 0,
     String videoQuality = 'high',
@@ -73,6 +74,7 @@ class _FakeBridge extends RecordBridge {
       'showScrim': showScrim,
       'systemAudio': systemAudio,
       'microphone': microphone,
+      'mergeAudio': mergeAudio,
       'maxDuration': maxDuration,
       'countdown': countdown,
       'videoQuality': videoQuality,
@@ -238,6 +240,7 @@ void main() {
       await s.setRecordShowCursor(false);
       await s.setRecordSystemAudio(true);
       await s.setRecordMicrophone(true);
+      await s.setRecordMergeAudio(true);
       await s.setRecordScrim(false);
       await s.setRecordVideoQuality(RecordVideoQuality.low);
       await s.setRecordMaxLongSide(1280);
@@ -249,6 +252,7 @@ void main() {
       expect(call['showsCursor'], isFalse);
       expect(call['systemAudio'], isTrue);
       expect(call['microphone'], isTrue);
+      expect(call['mergeAudio'], isTrue);
       expect(call['showScrim'], isFalse);
       expect(call['videoQuality'], 'low');
       expect(call['maxLongSide'], 1280);
@@ -602,6 +606,14 @@ void main() {
       expect((await s.loadRecording()).maxDuration, 15);
       await s.setRecordMaxDuration(7); // not a supported step -> 0 (off)
       expect((await s.loadRecording()).maxDuration, 0);
+    });
+
+    test('record_merge_audio round-trips and defaults to false', () async {
+      final s = Settings(_FakeStore());
+      expect((await s.loadRecording()).mergeAudio, isFalse); // default: two tracks
+      await s.setRecordMergeAudio(true);
+      expect((await s.loadRecording()).mergeAudio, isTrue);
+      expect(await s.getRecordMergeAudio(), isTrue);
     });
 
     test('record_countdown round-trips, defaults 0, clamps off-steps',

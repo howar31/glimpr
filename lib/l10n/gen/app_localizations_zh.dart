@@ -559,6 +559,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingMicrophoneHint => '首次使用時會要求麥克風權限';
 
   @override
+  String get settingsRecordingMergeAudio => '合併音訊為單軌';
+
+  @override
+  String get settingsRecordingMergeAudioHint =>
+      '將系統音訊與麥克風合併為單一軌以提升相容性；兩者皆錄製時才生效';
+
+  @override
   String get settingsRecordingDim => '錄影時將周圍變暗';
 
   @override
