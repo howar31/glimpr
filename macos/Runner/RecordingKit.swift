@@ -328,6 +328,11 @@ private final class StripButton: NSView {
   private let font = NSFont.systemFont(ofSize: 13.5, weight: .semibold)
   private var hovered = false { didSet { needsDisplay = true } }
   private var pressed = false { didSet { needsDisplay = true } }
+  /// Emphasis state — the strip's Pause button turns this on for "Resume" while
+  /// paused so the ghost reads as the primary action (full-strength label +
+  /// faint always-on wash) instead of the dim idle ghost. Neutral by design, so
+  /// it never collides with the recording-red accent (Finish/Stop).
+  var emphasized = false { didSet { needsDisplay = true } }
 
   private var displayTitle: String { armed ? (confirmLabel ?? title) : title }
 
@@ -433,23 +438,30 @@ private final class StripButton: NSView {
       textX = startX + 12 + 7
     case .ghost:
       // GhostButton: borderless; hover paints the nav-hover wash and lifts
-      // the label one foreground step (fg3 -> fg2).
-      if hovered || pressed {
+      // the label one foreground step (fg3 -> fg2). When emphasized (the strip's
+      // Resume state) it reads as the primary action: a faint always-on wash +
+      // the full-strength label, neutral so it never collides with the red Stop.
+      let washA: CGFloat = pressed
+        ? 0.08
+        : hovered ? (emphasized ? 0.07 : 0.05) : (emphasized ? 0.05 : 0)
+      if washA > 0 {
         let wash = dark
-          ? NSColor.white.withAlphaComponent(pressed ? 0.08 : 0.05)
-          : RecordingDesign.slate.withAlphaComponent(pressed ? 0.08 : 0.05)
+          ? NSColor.white.withAlphaComponent(washA)
+          : RecordingDesign.slate.withAlphaComponent(washA)
         wash.setFill()
         shape.fill()
       }
       fg = armed
         ? RecordingDesign.red // danger: armed/confirm state
-        : (dark
-            ? NSColor.white.withAlphaComponent(hovered ? 0.66 : 0.46)
-            : (hovered
-                ? NSColor(srgbRed: 0x47 / 255.0, green: 0x55 / 255.0,
-                          blue: 0x69 / 255.0, alpha: 1) // fg2 light
-                : NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0,
-                          blue: 0x8B / 255.0, alpha: 1))) // fg3 light
+        : emphasized
+          ? RecordingDesign.fg1 // primary action (Resume): full-strength label
+          : (dark
+              ? NSColor.white.withAlphaComponent(hovered ? 0.66 : 0.46)
+              : (hovered
+                  ? NSColor(srgbRed: 0x47 / 255.0, green: 0x55 / 255.0,
+                            blue: 0x69 / 255.0, alpha: 1) // fg2 light
+                  : NSColor(srgbRed: 0x64 / 255.0, green: 0x74 / 255.0,
+                            blue: 0x8B / 255.0, alpha: 1))) // fg3 light
       textX = ((bounds.width - textW) / 2).rounded()
     }
     let attrs: [NSAttributedString.Key: Any] = [
@@ -608,6 +620,7 @@ final class RecordingChrome {
   func setPaused(_ p: Bool) {
     paused = p
     pauseButton?.title = p ? L.s("Resume", "繼續") : L.s("Pause", "暫停")
+    pauseButton?.emphasized = p
   }
 
   /// All chrome windows, for the SCContentFilter exclusion list.
