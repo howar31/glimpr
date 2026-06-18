@@ -115,7 +115,19 @@ class LineDrawable extends Drawable implements Segmented {
 class HighlighterDrawable extends Drawable implements Segmented {
   @override
   final List<Offset> points;
-  const HighlighterDrawable(this.points, DrawStyle style) : super(style);
+
+  /// Stable per-stroke seed for the procedural marker texture. Fixed when the
+  /// stroke is created and CARRIED through every transform (move / resize /
+  /// restyle), so the texture never re-randomizes while the stroke is dragged
+  /// or moved. The default derives from the START point only — which is fixed
+  /// during the draw drag (only the end follows the cursor), so the live
+  /// preview is stable without threading a gesture seed. The painter ignores
+  /// it for the Clean texture (no noise). See [paintHighlighterStroke].
+  final int seed;
+
+  HighlighterDrawable(this.points, DrawStyle style, {int? seed})
+      : seed = seed ?? _seedFromStart(points),
+        super(style);
 
   // The band follows the Catmull-Rom curve through `points`; the endpoints are
   // the first/last points and the rest are interior control points.
@@ -129,10 +141,10 @@ class HighlighterDrawable extends Drawable implements Segmented {
         start,
         if (points.length > 2) ...points.sublist(1, points.length - 1),
         end,
-      ], style);
+      ], style, seed: seed);
   @override
   HighlighterDrawable withPoints(List<Offset> p) =>
-      HighlighterDrawable(p, style);
+      HighlighterDrawable(p, style, seed: seed);
 
   @override
   Rect get bounds {
@@ -150,10 +162,16 @@ class HighlighterDrawable extends Drawable implements Segmented {
 
   @override
   HighlighterDrawable moved(Offset d) =>
-      HighlighterDrawable([for (final p in points) p + d], style);
+      HighlighterDrawable([for (final p in points) p + d], style, seed: seed);
 
-  HighlighterDrawable withStyle(DrawStyle s) => HighlighterDrawable(points, s);
+  HighlighterDrawable withStyle(DrawStyle s) =>
+      HighlighterDrawable(points, s, seed: seed);
 }
+
+/// Default highlighter texture seed from the START point only (translation of
+/// the END must not change it — see [HighlighterDrawable.seed]).
+int _seedFromStart(List<Offset> pts) =>
+    pts.isEmpty ? 0 : (pts.first.dx * 131 + pts.first.dy * 557).round();
 
 /// A freehand polyline through the captured pointer [points]. Move-only.
 class PenDrawable extends Drawable {

@@ -60,6 +60,20 @@ double _band(double strokeWidth) => strokeWidth / 2 > _kArrowHitTolerance
     ? strokeWidth / 2
     : _kArrowHitTolerance;
 
+/// Half-width to inflate a shape's geometric [Drawable.bounds] by so the
+/// selection outline bounds exactly what is CLICKABLE (see [_hits]). Stroke
+/// shapes spread by their band half-width (the same `_band` the hit uses, so the
+/// inflated bbox is the hit capsule's bbox); box / filled / handle-resizable
+/// shapes return 0 — their box equals their geometry, the thin stroke slop stays
+/// invisible, and their resize handles sit on the geometry. Shared by
+/// SelectionHighlightPainter so the box can never drift from the hit region.
+double selectionInflate(Drawable d) => switch (d) {
+      HighlighterDrawable() => _band(d.style.strokeWidth * 5),
+      LineDrawable() || ArrowDrawable() || PenDrawable() =>
+        _band(d.style.strokeWidth),
+      _ => 0,
+    };
+
 /// Point inside the (stroke-inflated) ellipse inscribed in [rect].
 bool _hitsEllipse(Rect rect, Offset p, double stroke) {
   final r = rect.inflate(stroke);

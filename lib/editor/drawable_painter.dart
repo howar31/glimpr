@@ -7,6 +7,7 @@ import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'geometry.dart';
+import 'hit_test.dart' show selectionInflate;
 import 'spotlight.dart';
 import 'text_metrics.dart';
 
@@ -131,8 +132,9 @@ class _MarkerNoise {
 void paintHighlighterStroke(
   Canvas canvas,
   List<Offset> control,
-  DrawStyle style,
-) {
+  DrawStyle style, {
+  int? seed,
+}) {
   if (control.isEmpty) return;
   final w = style.strokeWidth * 5; // wide marker band
   final color = style.color;
@@ -177,9 +179,12 @@ void paintHighlighterStroke(
   const lengthAmp = 0.22; // along-stroke variation (per-streak gradient)
   const edgeInk = 0.7; // extra darkening at the long edges
 
-  final seed =
+  // A stable per-stroke seed keeps the texture from re-randomizing as the
+  // stroke is dragged/moved (the drawable supplies a fixed one). The geometry
+  // fallback is only for seedless callers (the static toolbar texture preview).
+  final seedV = seed ??
       (start.dx * 131 + start.dy * 557 + end.dx * 1289 + end.dy * 2741).round();
-  final noise = _MarkerNoise(seed);
+  final noise = _MarkerNoise(seedV);
   final baseA = color.a; // the chosen alpha (0..1)
   Color withA(double a) => color.withValues(alpha: a.clamp(0.0, 0.95));
 
@@ -231,7 +236,7 @@ void paintHighlighterStroke(
 
   // Frayed: dry split-fork streaks off both ends, along the end tangents.
   if (style.texture == HighlighterTexture.frayed) {
-    final fn = _MarkerNoise(seed * 5 + 1);
+    final fn = _MarkerNoise(seedV * 5 + 1);
     final fray = Paint()
       ..isAntiAlias = true
       ..strokeCap = StrokeCap.round;
@@ -702,7 +707,7 @@ class DrawablePainter extends CustomPainter {
   }
 
   void _paintHighlighter(Canvas canvas, HighlighterDrawable d) =>
-      paintHighlighterStroke(canvas, d.points, d.style);
+      paintHighlighterStroke(canvas, d.points, d.style, seed: d.seed);
 
   void _paintStep(Canvas canvas, StepDrawable d) {
     final fill = Paint()
@@ -870,9 +875,11 @@ class SelectionHighlightPainter extends CustomPainter {
       if (showHandles) paintResizeHandles(canvas, d.sourceRect);
       return;
     }
-    // Box flush to the shape's geometric bounds (no outward inflation), so the
-    // outline sits right on the shape's baseline.
-    final r = d.bounds;
+    // The outline bounds the CLICKABLE region: stroke shapes inflate by their
+    // band half-width (so the box wraps the painted width, matching hit-testing
+    // — see selectionInflate); box / filled shapes inflate by 0 (box == geometry,
+    // handles on the geometry). Keeps the visual box and the hit region in step.
+    final r = d.bounds.inflate(selectionInflate(d));
     drawMarchingPolyline(
       canvas,
       [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],

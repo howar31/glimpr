@@ -57,11 +57,43 @@ void main() {
   });
 
   test('highlighter bounds is the points bbox; move shifts every point', () {
-    const d = HighlighterDrawable([Offset(5, 5), Offset(45, 35)], style);
+    final d = HighlighterDrawable([const Offset(5, 5), const Offset(45, 35)], style);
     expect(d.bounds, const Rect.fromLTRB(5, 5, 45, 35));
     final m = d.moved(const Offset(-5, -5));
     expect(m.points.first, const Offset(0, 0));
     expect(m.points.last, const Offset(40, 30));
+  });
+
+  group('highlighter texture seed is stable across transforms', () {
+    test('default seed depends only on start, not the moving end', () {
+      // While a stroke is drawn the END moves but the START is fixed; the
+      // procedural marker texture must NOT re-randomize, so the default seed
+      // ignores the end point.
+      final a =
+          HighlighterDrawable([const Offset(5, 5), const Offset(45, 35)], style);
+      final b =
+          HighlighterDrawable([const Offset(5, 5), const Offset(200, 99)], style);
+      expect(a.seed, b.seed);
+    });
+
+    test('moved / withPoints / withEndpoints / withStyle preserve the seed', () {
+      // A committed stroke being moved/resized/restyled keeps its texture.
+      final d = HighlighterDrawable(
+          [const Offset(5, 5), const Offset(45, 35)], style,
+          seed: 12345);
+      expect(d.moved(const Offset(10, 10)).seed, 12345);
+      expect(d.withPoints([const Offset(1, 1), const Offset(2, 2)]).seed, 12345);
+      expect(
+          d.withEndpoints(const Offset(9, 9), const Offset(8, 8)).seed, 12345);
+      expect(d.withStyle(const DrawStyle()).seed, 12345);
+    });
+
+    test('explicit seed overrides the start-derived default', () {
+      final d = HighlighterDrawable(
+          [const Offset(5, 5), const Offset(45, 35)], style,
+          seed: 7);
+      expect(d.seed, 7);
+    });
   });
 
   test(

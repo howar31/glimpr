@@ -16,7 +16,7 @@ void main() {
     const EllipseDrawable(Rect.fromLTWH(60, 10, 40, 30), style),
     const ArrowDrawable(Offset(10, 60), Offset(60, 90), style),
     const LineDrawable(Offset(70, 60), Offset(120, 90), style),
-    const HighlighterDrawable([Offset(10, 100), Offset(120, 100)], style),
+    HighlighterDrawable([const Offset(10, 100), const Offset(120, 100)], style),
     const PenDrawable([
       Offset(10, 120),
       Offset(40, 140),

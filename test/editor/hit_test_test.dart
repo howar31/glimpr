@@ -8,6 +8,64 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const style = DrawStyle();
 
+  group('selectionInflate — box matches the hit region', () {
+    test('stroke shapes spread by their band half-width (= the hit radius)', () {
+      // highlighter band = strokeWidth * 5; half = 10 (>8 tolerance) at sw 4.
+      expect(
+          selectionInflate(HighlighterDrawable(
+              [const Offset(0, 0), const Offset(10, 0)],
+              const DrawStyle(strokeWidth: 4))),
+          10);
+      // thin highlighter: band half (5) < 8 tolerance -> 8.
+      expect(
+          selectionInflate(HighlighterDrawable(
+              [const Offset(0, 0), const Offset(10, 0)],
+              const DrawStyle(strokeWidth: 2))),
+          8);
+      // line/arrow/pen spread by strokeWidth/2 (floored at the 8 tolerance).
+      expect(
+          selectionInflate(const LineDrawable(
+              Offset(0, 0), Offset(10, 0), DrawStyle(strokeWidth: 40))),
+          20);
+      expect(
+          selectionInflate(const ArrowDrawable(
+              Offset(0, 0), Offset(10, 0), DrawStyle(strokeWidth: 4))),
+          8); // sw/2 = 2 < 8
+      expect(
+          selectionInflate(PenDrawable(
+              [const Offset(0, 0), const Offset(10, 0)],
+              const DrawStyle(strokeWidth: 40))),
+          20);
+    });
+
+    test('box / filled shapes do not inflate (box == geometry)', () {
+      expect(
+          selectionInflate(
+              const RectangleDrawable(Rect.fromLTWH(0, 0, 10, 10), style)),
+          0);
+      expect(
+          selectionInflate(
+              const EllipseDrawable(Rect.fromLTWH(0, 0, 10, 10), style)),
+          0);
+      expect(
+          selectionInflate(
+              const BlurDrawable(Rect.fromLTWH(0, 0, 10, 10), style)),
+          0);
+      expect(
+          selectionInflate(
+              const SpotlightDrawable(Rect.fromLTWH(0, 0, 10, 10), style)),
+          0);
+    });
+
+    test('inflated bounds equal the hit-region bbox of a highlighter', () {
+      final d = HighlighterDrawable(
+          [const Offset(5, 5), const Offset(45, 35)],
+          const DrawStyle(strokeWidth: 4));
+      expect(d.bounds.inflate(selectionInflate(d)),
+          const Rect.fromLTRB(-5, -5, 55, 45)); // pad 10 on all sides
+    });
+  });
+
   test('returns topmost (last) drawable under the point', () {
     final list = <Drawable>[
       const RectangleDrawable(Rect.fromLTWH(0, 0, 100, 100), style),
@@ -46,7 +104,7 @@ void main() {
     expect(hitTestTop(line, const Offset(50, 40)), isNull);
     // Highlighter is wide (5x), so a point well off the centerline still hits.
     final hl = <Drawable>[
-      const HighlighterDrawable([Offset(0, 0), Offset(100, 0)], style),
+      HighlighterDrawable([const Offset(0, 0), const Offset(100, 0)], style),
     ];
     expect(hitTestTop(hl, const Offset(50, 9)), 0); // inside the wide band
   });
