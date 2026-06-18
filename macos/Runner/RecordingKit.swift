@@ -615,8 +615,8 @@ final class RecordingChrome {
   private weak var pauseButton: StripButton?
   private var paused = false
 
-  /// Toggle the strip Pause/Resume button label (styling unified in a later
-  /// pass; functional only here).
+  /// Toggle the strip Pause/Resume button: while paused the button reads
+  /// "Resume" and is emphasized (the primary action), else "Pause".
   func setPaused(_ p: Bool) {
     paused = p
     pauseButton?.title = p ? L.s("Resume", "繼續") : L.s("Pause", "暫停")
@@ -1430,7 +1430,7 @@ final class GifSink: NSObject, RecordingSinkBase {
 /// A pre-recording countdown overlay (engine B start delay): a big number
 /// centered on the target (region center, else display center) counting down
 /// to 0 before capture starts. Clicking it — or Stop/Abort — cancels (no file).
-/// Styling is unified in a later pass; this is functional.
+/// A deliberate high-contrast dark panel (reads over any backdrop).
 @available(macOS 15.0, *)
 @MainActor
 final class CountdownHUD {
