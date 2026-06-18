@@ -109,7 +109,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsLoupeDescription =>
-      '裁切、模糊、像素化工具的像素放大鏡，在截圖與圖片編輯器中皆可使用。可用方向鍵逐像素微調游標。';
+      '裁切、模糊、像素化工具的像素放大鏡，在擷取畫面與圖片編輯器中皆可使用。可用方向鍵逐像素微調游標。';
 
   @override
   String get settingsLoupeSize => '大小';
@@ -143,7 +143,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsKeepSampling => '繼續取色';
 
   @override
-  String get settingsSectionOverlayHUD => '截圖輔助顯示';
+  String get settingsSectionOverlayHUD => '擷取輔助顯示';
 
   @override
   String get settingsCrosshair => '十字線';
@@ -243,7 +243,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSoundShutter => '快門';
 
   @override
-  String get settingsSoundShutterHint => '在截圖的瞬間播放';
+  String get settingsSoundShutterHint => '在擷取完成時播放';
 
   @override
   String get settingsSoundCompletion => '完成';
@@ -421,10 +421,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFilenameTokenAppDesc => '應用程式名稱（例如 Safari）';
 
   @override
-  String get settingsFilenameTokenDateDesc => '截圖日期，例如 2026-06-03';
+  String get settingsFilenameTokenDateDesc => '擷取日期，例如 2026-06-03';
 
   @override
-  String get settingsFilenameTokenTimeDesc => '截圖時間，例如 15-04-09';
+  String get settingsFilenameTokenTimeDesc => '擷取時間，例如 15-04-09';
 
   @override
   String settingsFilenameNote(String windowToken, String appToken) {
@@ -794,7 +794,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsReservedOpenSettings => '開啟設定';
 
   @override
-  String get settingsReservedHintOverlayEditor => '保留 · 截圖／編輯器';
+  String get settingsReservedHintOverlayEditor => '保留 · 擷取／編輯器';
 
   @override
   String get settingsReservedNudgeCrosshair => '微調十字線';

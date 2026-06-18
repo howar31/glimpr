@@ -281,7 +281,7 @@ abstract class AppLocalizations {
   /// Settings > Capture > Loupe: introductory description
   ///
   /// In en, this message translates to:
-  /// **'Pixel magnifier for crop / blur / pixelate, in the screenshot overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.'**
+  /// **'Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.'**
   String get settingsLoupeDescription;
 
   /// Settings > Capture > Loupe: size slider title
@@ -530,10 +530,10 @@ abstract class AppLocalizations {
   /// **'Shutter'**
   String get settingsSoundShutter;
 
-  /// Settings > Workflow > Sounds: shutter sound toggle hint
+  /// Settings > General > Sounds: shutter sound toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Plays the instant a screenshot is taken'**
+  /// **'Plays when a capture completes'**
   String get settingsSoundShutterHint;
 
   /// Settings > Workflow > Sounds: completion sound toggle title
@@ -887,13 +887,13 @@ abstract class AppLocalizations {
   /// Settings > Output > Filename: description for the {date} token
   ///
   /// In en, this message translates to:
-  /// **'Screenshot date, e.g. 2026-06-03'**
+  /// **'Capture date, e.g. 2026-06-03'**
   String get settingsFilenameTokenDateDesc;
 
   /// Settings > Output > Filename: description for the {time} token
   ///
   /// In en, this message translates to:
-  /// **'Screenshot time, e.g. 15-04-09'**
+  /// **'Capture time, e.g. 15-04-09'**
   String get settingsFilenameTokenTimeDesc;
 
   /// Settings > Output > Filename: note about window/app token behavior
@@ -911,7 +911,7 @@ abstract class AppLocalizations {
   /// Settings > Screenshot > Decoration: interactive-overlay snap toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Shadow + margin on a snapped capture'**
+  /// **'Shadow + margin on a snapped screenshot'**
   String get settingsDecorationSnapHint;
 
   /// Settings > Output > Decoration: freehand crop toggle title

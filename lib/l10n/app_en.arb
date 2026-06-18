@@ -123,7 +123,7 @@
   "@settingsSectionLoupe": {
     "description": "Settings > Capture: Loupe section label"
   },
-  "settingsLoupeDescription": "Pixel magnifier for crop / blur / pixelate, in the screenshot overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.",
+  "settingsLoupeDescription": "Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.",
   "@settingsLoupeDescription": {
     "description": "Settings > Capture > Loupe: introductory description"
   },
@@ -291,9 +291,9 @@
   "@settingsSoundShutter": {
     "description": "Settings > Workflow > Sounds: shutter sound toggle title"
   },
-  "settingsSoundShutterHint": "Plays the instant a screenshot is taken",
+  "settingsSoundShutterHint": "Plays when a capture completes",
   "@settingsSoundShutterHint": {
-    "description": "Settings > Workflow > Sounds: shutter sound toggle hint"
+    "description": "Settings > General > Sounds: shutter sound toggle hint"
   },
   "settingsSoundCompletion": "Completion",
   "@settingsSoundCompletion": {
@@ -404,11 +404,11 @@
   "@settingsFilenameTokenAppDesc": {
     "description": "Settings > Output > Filename: description for the {app} token"
   },
-  "settingsFilenameTokenDateDesc": "Screenshot date, e.g. 2026-06-03",
+  "settingsFilenameTokenDateDesc": "Capture date, e.g. 2026-06-03",
   "@settingsFilenameTokenDateDesc": {
     "description": "Settings > Output > Filename: description for the {date} token"
   },
-  "settingsFilenameTokenTimeDesc": "Screenshot time, e.g. 15-04-09",
+  "settingsFilenameTokenTimeDesc": "Capture time, e.g. 15-04-09",
   "@settingsFilenameTokenTimeDesc": {
     "description": "Settings > Output > Filename: description for the {time} token"
   },
@@ -428,7 +428,7 @@
   "@settingsDecorationSnap": {
     "description": "Settings > Screenshot > Decoration: interactive-overlay snap toggle title (snaps to a window or AX element)"
   },
-  "settingsDecorationSnapHint": "Shadow + margin on a snapped capture",
+  "settingsDecorationSnapHint": "Shadow + margin on a snapped screenshot",
   "@settingsDecorationSnapHint": {
     "description": "Settings > Screenshot > Decoration: interactive-overlay snap toggle hint"
   },

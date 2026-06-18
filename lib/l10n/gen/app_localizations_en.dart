@@ -113,7 +113,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsLoupeDescription =>
-      'Pixel magnifier for crop / blur / pixelate, in the screenshot overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.';
+      'Pixel magnifier for crop / blur / pixelate, in the capture overlay and the Image Editor. Nudge the cursor a pixel at a time with the arrow keys.';
 
   @override
   String get settingsLoupeSize => 'Size';
@@ -254,8 +254,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSoundShutter => 'Shutter';
 
   @override
-  String get settingsSoundShutterHint =>
-      'Plays the instant a screenshot is taken';
+  String get settingsSoundShutterHint => 'Plays when a capture completes';
 
   @override
   String get settingsSoundCompletion => 'Completion';
@@ -438,11 +437,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'The application name (e.g. Safari)';
 
   @override
-  String get settingsFilenameTokenDateDesc =>
-      'Screenshot date, e.g. 2026-06-03';
+  String get settingsFilenameTokenDateDesc => 'Capture date, e.g. 2026-06-03';
 
   @override
-  String get settingsFilenameTokenTimeDesc => 'Screenshot time, e.g. 15-04-09';
+  String get settingsFilenameTokenTimeDesc => 'Capture time, e.g. 15-04-09';
 
   @override
   String settingsFilenameNote(String windowToken, String appToken) {
@@ -454,7 +452,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDecorationSnapHint =>
-      'Shadow + margin on a snapped capture';
+      'Shadow + margin on a snapped screenshot';
 
   @override
   String get settingsDecorationFreehandCrop => 'Freehand crop';
