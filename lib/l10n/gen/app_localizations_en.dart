@@ -686,7 +686,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loupeShortcutAngleKey => 'Shift';
 
   @override
-  String get loupeShortcutAngleDesc => '45° while dragging';
+  String get loupeShortcutSquareDesc => 'square';
+
+  @override
+  String get loupeShortcutCircleDesc => 'circle';
+
+  @override
+  String get loupeShortcut45Desc => '45°';
+
+  @override
+  String get loupeShortcutCopyHexDesc => 'copy HEX';
+
+  @override
+  String get loupeShortcutCopyRgbDesc => 'copy RGB';
+
+  @override
+  String get loupeShortcutCopyHslDesc => 'copy HSL';
 
   @override
   String get settingsCycleLoupeInfo => 'Cycle loupe info';

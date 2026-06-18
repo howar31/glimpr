@@ -1344,12 +1344,12 @@ class _EditorCoreState extends State<EditorCore> {
       return KeyEventResult.handled;
     }
 
-    // Arrow-nudge for the region tools (crop + blur/pixelate) AND the eyedropper:
-    // move the crosshair by ONE PHYSICAL pixel (= 1 / scaleFactor logical points —
-    // a single pixel on Retina, not 2-3) and warp the OS cursor to match so a
-    // later physical move continues from the nudged point. Also nudges the
-    // in-progress region's dragging corner.
-    if (_showsCrosshair || _eyedropper) {
+    // Arrow-nudge for EVERY loupe-enabled tool (+ the eyedropper): move the aim
+    // crosshair by ONE PHYSICAL pixel (= 1 / scaleFactor logical points — a
+    // single pixel on Retina, not 2-3) and warp the OS cursor to match so a
+    // later physical move continues from the nudged point. The precision aim is
+    // as useful for placing a rectangle corner / step badge as for a crop edge.
+    if (_loupeApplies) {
       final step = 1.0 / widget.host.pixelScale;
       Offset? delta;
       if (key == LogicalKeyboardKey.arrowLeft) delta = Offset(-step, 0);
@@ -1361,19 +1361,14 @@ class _EditorCoreState extends State<EditorCore> {
           (_cursor.dx + delta.dx).clamp(0.0, _canvasSize.width),
           (_cursor.dy + delta.dy).clamp(0.0, _canvasSize.height),
         );
-        final s = _dragStart;
-        setState(() {
-          _setCursor(next, 'nudge');
-          if (s != null && c.tool.value == ToolKind.blur) {
-            _preview = BlurDrawable(Rect.fromPoints(s, next), c.style.value);
-          } else if (s != null && c.tool.value == ToolKind.pixelate) {
-            _preview = PixelateDrawable(
-              Rect.fromPoints(s, next),
-              c.style.value,
-            );
-          }
-        });
-        if (c.tool.value == ToolKind.crop && _cropping) _crop.update(next);
+        final dragging =
+            _dragStart != null || _cropping || _editIndex != null;
+        setState(() => _setCursor(next, 'nudge'));
+        // Mid-drag, re-run the tool's own drag logic at the nudged point so the
+        // moving corner/endpoint follows with the correct Shift constraint — one
+        // path for EVERY tool (replaces the old blur/pixelate/crop cases). A pen
+        // stroke simply extends by the nudged point, like any other drag.
+        if (dragging) _applyDrag(next);
         widget.host.cursor.warp(
           widget.host.globalOrigin.dx + next.dx,
           widget.host.globalOrigin.dy + next.dy,
@@ -2764,15 +2759,42 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   /// The SHORTCUTS block (its own left-aligned pill): the aiming-stage shortcuts
-  /// not shown in the toolbar. Nudge + angle always apply; the element-WALK row
-  /// is snap-specific, so it shows only while element snap is active ([snap]).
-  Widget _shortcutsBlock({required bool snap}) {
+  /// that apply to the CURRENT tool/mode, from the single [_shortcutRows] source.
+  Widget _shortcutsBlock({required bool snap}) =>
+      LoupeShortcutsBlock(rows: _shortcutRows(snap: snap));
+
+  /// The aiming-stage shortcut rows for the current tool/mode — the SINGLE place
+  /// that decides row membership (rendered by [_shortcutsBlock]; counted by
+  /// [_loupeBelowReserve]). Order: element-walk (snap only), nudge (every loupe
+  /// tool, see [_onHardwareKey]), then either the eyedropper's copy-colour rows
+  /// or the tool's Shift constraint. [snap] = element snap active now.
+  List<(String, String)> _shortcutRows({required bool snap}) {
     final l = AppLocalizations.of(context);
-    return LoupeShortcutsBlock(rows: [
+    final rows = <(String, String)>[
       if (snap) (l.loupeShortcutWalkKey, l.loupeShortcutWalkDesc),
       (l.loupeShortcutNudgeKey, l.loupeShortcutNudgeDesc),
-      (l.loupeShortcutAngleKey, l.loupeShortcutAngleDesc),
-    ]);
+    ];
+    if (_eyedropper) {
+      // Copy the sampled colour in CSS forms; rebindable, so show the user's
+      // actual binding (skip any the user has cleared).
+      for (final (action, desc) in [
+        (kEditorCopyHexKey, l.loupeShortcutCopyHexDesc),
+        (kEditorCopyRgbKey, l.loupeShortcutCopyRgbDesc),
+        (kEditorCopyHslKey, l.loupeShortcutCopyHslDesc),
+      ]) {
+        final b = widget.editorBindings[action];
+        if (b != null) rows.add((b.label(), desc));
+      }
+    } else {
+      final desc = switch (shiftConstraintFor(c.tool.value)) {
+        ShiftConstraint.square => l.loupeShortcutSquareDesc,
+        ShiftConstraint.circle => l.loupeShortcutCircleDesc,
+        ShiftConstraint.snap45 => l.loupeShortcut45Desc,
+        null => null,
+      };
+      if (desc != null) rows.add((l.loupeShortcutAngleKey, desc));
+    }
+    return rows;
   }
 
   /// Vertical space the visible loupe blocks need (for the edge-flip clamp):
@@ -2784,8 +2806,8 @@ class _EditorCoreState extends State<EditorCore> {
     var r = _kLoupeReadoutReserve;
     if (elementMode && _loupeInfoMode.index >= LoupeInfoMode.level.index) r += 30;
     if (_loupeInfoMode.index >= LoupeInfoMode.shortcuts.index) {
-      // 3 rows (walk + nudge + angle) with snap, else 2 (nudge + angle).
-      r += elementMode ? 56 : 38;
+      // Reserve per actual row (varies by tool/mode): ~18px each + padding.
+      r += _shortcutRows(snap: elementMode).length * 18 + 2;
     }
     return r;
   }

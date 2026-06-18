@@ -53,6 +53,34 @@ bool loupeApplies(ToolKind tool, {required bool eyedropper}) =>
 bool crosshairApplies(ToolKind tool, {required bool eyedropper}) =>
     kCrosshairTools.contains(tool) || eyedropper;
 
+/// How holding Shift constrains a drag for [tool] (null = Shift is a no-op):
+/// box / region tools square the drag, the ellipse becomes a circle, the
+/// two-point tools (line/arrow/highlighter) snap to multiples of 45°. Mirrors
+/// the constraint applied in EditorCore._applyDrag; drives the loupe shortcut
+/// hint so the row names the real constraint instead of always "45°".
+enum ShiftConstraint { square, circle, snap45 }
+
+ShiftConstraint? shiftConstraintFor(ToolKind tool) => switch (tool) {
+      ToolKind.crop ||
+      ToolKind.blur ||
+      ToolKind.pixelate ||
+      ToolKind.rectangle ||
+      ToolKind.magnify ||
+      ToolKind.spotlight =>
+        ShiftConstraint.square,
+      ToolKind.ellipse => ShiftConstraint.circle,
+      ToolKind.line ||
+      ToolKind.arrow ||
+      ToolKind.highlighter =>
+        ShiftConstraint.snap45,
+      ToolKind.pen ||
+      ToolKind.step ||
+      ToolKind.stamp ||
+      ToolKind.text ||
+      ToolKind.paste =>
+        null,
+    };
+
 /// Factory-default style for a tool. Tools share the uniform default except the
 /// highlighter, which defaults to a translucent marker colour so it reads as a
 /// highlighter out of the box — its painter honours the colour's alpha (no

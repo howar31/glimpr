@@ -44,6 +44,48 @@ void main() {
     });
   });
 
+  group('aim-stage shortcut applicability (loupe hint rows)', () {
+    test('arrow-nudge applies to every loupe tool + eyedropper', () {
+      // Part 1: nudge eligibility == loupe applicability (every tool the loupe
+      // can show for nudges now), so the nudge hint shows for all of them.
+      for (final t in ToolKind.values) {
+        final expected = t != ToolKind.text && t != ToolKind.paste;
+        expect(loupeApplies(t, eyedropper: false), expected, reason: 'nudge $t');
+      }
+      expect(loupeApplies(ToolKind.text, eyedropper: true), isTrue);
+    });
+
+    test('shiftConstraintFor reports the per-tool drag constraint', () {
+      // square: box + region tools (and magnify, spotlight)
+      for (final t in [
+        ToolKind.crop,
+        ToolKind.blur,
+        ToolKind.pixelate,
+        ToolKind.rectangle,
+        ToolKind.magnify,
+        ToolKind.spotlight,
+      ]) {
+        expect(shiftConstraintFor(t), ShiftConstraint.square, reason: 'square $t');
+      }
+      // circle: ellipse only
+      expect(shiftConstraintFor(ToolKind.ellipse), ShiftConstraint.circle);
+      // 45°: the two-point tools
+      for (final t in [ToolKind.line, ToolKind.arrow, ToolKind.highlighter]) {
+        expect(shiftConstraintFor(t), ShiftConstraint.snap45, reason: '45 $t');
+      }
+      // none: Shift does nothing on these
+      for (final t in [
+        ToolKind.pen,
+        ToolKind.step,
+        ToolKind.stamp,
+        ToolKind.text,
+        ToolKind.paste,
+      ]) {
+        expect(shiftConstraintFor(t), isNull, reason: 'null $t');
+      }
+    });
+  });
+
   test('switching to an annotation tool enters the annotate phase', () {
     final c = EditorController();
     c.selectTool(ToolKind.rectangle);

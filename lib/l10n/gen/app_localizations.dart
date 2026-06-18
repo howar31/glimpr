@@ -1310,17 +1310,47 @@ abstract class AppLocalizations {
   /// **'nudge'**
   String get loupeShortcutNudgeDesc;
 
-  /// Loupe shortcuts block: the key that snaps a drag to 45 degrees
+  /// Loupe shortcuts block: the Shift key whose drag constraint depends on the tool
   ///
   /// In en, this message translates to:
   /// **'Shift'**
   String get loupeShortcutAngleKey;
 
-  /// Loupe shortcuts block: what Shift does while dragging a line/arrow
+  /// Loupe shortcuts block: Shift squares a box/region drag
   ///
   /// In en, this message translates to:
-  /// **'45° while dragging'**
-  String get loupeShortcutAngleDesc;
+  /// **'square'**
+  String get loupeShortcutSquareDesc;
+
+  /// Loupe shortcuts block: Shift makes the ellipse a circle
+  ///
+  /// In en, this message translates to:
+  /// **'circle'**
+  String get loupeShortcutCircleDesc;
+
+  /// Loupe shortcuts block: Shift snaps a line/arrow drag to 45 degrees
+  ///
+  /// In en, this message translates to:
+  /// **'45°'**
+  String get loupeShortcut45Desc;
+
+  /// Loupe shortcuts block: copy the sampled colour as HEX (eyedropper)
+  ///
+  /// In en, this message translates to:
+  /// **'copy HEX'**
+  String get loupeShortcutCopyHexDesc;
+
+  /// Loupe shortcuts block: copy the sampled colour as RGB (eyedropper)
+  ///
+  /// In en, this message translates to:
+  /// **'copy RGB'**
+  String get loupeShortcutCopyRgbDesc;
+
+  /// Loupe shortcuts block: copy the sampled colour as HSL (eyedropper)
+  ///
+  /// In en, this message translates to:
+  /// **'copy HSL'**
+  String get loupeShortcutCopyHslDesc;
 
   /// Settings > Shortcuts: the fixed key that cycles the loupe info display
   ///

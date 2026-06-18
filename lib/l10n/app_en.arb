@@ -699,11 +699,31 @@
   },
   "loupeShortcutAngleKey": "Shift",
   "@loupeShortcutAngleKey": {
-    "description": "Loupe shortcuts block: the key that snaps a drag to 45 degrees"
+    "description": "Loupe shortcuts block: the Shift key whose drag constraint depends on the tool"
   },
-  "loupeShortcutAngleDesc": "45° while dragging",
-  "@loupeShortcutAngleDesc": {
-    "description": "Loupe shortcuts block: what Shift does while dragging a line/arrow"
+  "loupeShortcutSquareDesc": "square",
+  "@loupeShortcutSquareDesc": {
+    "description": "Loupe shortcuts block: Shift squares a box/region drag"
+  },
+  "loupeShortcutCircleDesc": "circle",
+  "@loupeShortcutCircleDesc": {
+    "description": "Loupe shortcuts block: Shift makes the ellipse a circle"
+  },
+  "loupeShortcut45Desc": "45°",
+  "@loupeShortcut45Desc": {
+    "description": "Loupe shortcuts block: Shift snaps a line/arrow drag to 45 degrees"
+  },
+  "loupeShortcutCopyHexDesc": "copy HEX",
+  "@loupeShortcutCopyHexDesc": {
+    "description": "Loupe shortcuts block: copy the sampled colour as HEX (eyedropper)"
+  },
+  "loupeShortcutCopyRgbDesc": "copy RGB",
+  "@loupeShortcutCopyRgbDesc": {
+    "description": "Loupe shortcuts block: copy the sampled colour as RGB (eyedropper)"
+  },
+  "loupeShortcutCopyHslDesc": "copy HSL",
+  "@loupeShortcutCopyHslDesc": {
+    "description": "Loupe shortcuts block: copy the sampled colour as HSL (eyedropper)"
   },
   "settingsCycleLoupeInfo": "Cycle loupe info",
   "@settingsCycleLoupeInfo": {

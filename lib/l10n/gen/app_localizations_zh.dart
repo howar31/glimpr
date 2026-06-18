@@ -649,7 +649,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get loupeShortcutAngleKey => 'Shift';
 
   @override
-  String get loupeShortcutAngleDesc => '拖曳時 45°';
+  String get loupeShortcutSquareDesc => '正方形';
+
+  @override
+  String get loupeShortcutCircleDesc => '正圓';
+
+  @override
+  String get loupeShortcut45Desc => '45°';
+
+  @override
+  String get loupeShortcutCopyHexDesc => '複製 HEX';
+
+  @override
+  String get loupeShortcutCopyRgbDesc => '複製 RGB';
+
+  @override
+  String get loupeShortcutCopyHslDesc => '複製 HSL';
 
   @override
   String get settingsCycleLoupeInfo => '循環放大鏡資訊';
