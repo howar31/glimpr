@@ -1189,7 +1189,9 @@ class _SettingsAppState extends State<SettingsApp>
   List<Widget> _selectionHudPane(GlimprTokens t) {
     return [
       _h1(_l.settingsPaneSelectionHud, t),
-      SectionLabel(_l.settingsSectionLoupe, icon: Icons.zoom_in),
+      // Match the toolbar loupe toggle (Icons.search); distinct from the Magnify
+      // TOOL (Icons.zoom_in) so the pixel loupe never reads as the magnifier tool.
+      SectionLabel(_l.settingsSectionLoupe, icon: Icons.search),
       GlassCard.padded(child: _loupeBody(t)),
       const SizedBox(height: 8),
       GlassCard.rows([
