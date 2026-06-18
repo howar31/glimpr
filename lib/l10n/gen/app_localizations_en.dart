@@ -155,7 +155,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsCrosshairHint =>
-      'Show the full-screen crosshair lines for the region tools (crop / blur / pixelate). The centre reticle and loupe stay either way.';
+      'Show the full-screen crosshair lines while aiming with most tools and the colour picker; the reticle stays either way. Toggle it live from the toolbar or a shortcut.';
+
+  @override
+  String get settingsLoupeEnable => 'Loupe';
+
+  @override
+  String get settingsLoupeEnableHint =>
+      'Show the pixel loupe while aiming with most tools and the colour picker; the reticle stays either way. Toggle it live from the toolbar or a shortcut.';
 
   @override
   String get settingsAnimateMarchingAnts => 'Animate marching ants';
@@ -786,6 +793,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCmdCopyHsl => 'Copy color as HSL';
 
   @override
+  String get settingsCmdToggleCrosshair => 'Toggle crosshair';
+
+  @override
+  String get settingsCmdToggleCrosshairHint =>
+      'Show or hide the crosshair lines for the current session';
+
+  @override
+  String get settingsCmdToggleLoupe => 'Toggle loupe';
+
+  @override
+  String get settingsCmdToggleLoupeHint =>
+      'Show or hide the pixel loupe for the current session';
+
+  @override
   String get settingsReservedCancelExit => 'Cancel / Exit';
 
   @override
@@ -1045,6 +1066,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolbarRecordMicrophone => 'Microphone (this recording)';
+
+  @override
+  String get toolbarCrosshairShown => 'Crosshair lines: shown';
+
+  @override
+  String get toolbarCrosshairHidden => 'Crosshair lines: hidden';
+
+  @override
+  String get toolbarLoupeShown => 'Pixel loupe: shown';
+
+  @override
+  String get toolbarLoupeHidden => 'Pixel loupe: hidden';
 
   @override
   String get toolbarMousePointerShown => 'Mouse pointer: shown';

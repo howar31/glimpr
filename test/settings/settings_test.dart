@@ -42,6 +42,15 @@ void main() {
     expect((await s.loadCapture()).snapElementMode, isTrue);
   });
 
+  test('hud_loupe round-trips and defaults true', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getHudLoupe(), isTrue); // default on
+    expect((await s.loadHud()).loupe, isTrue);
+    await s.setHudLoupe(false);
+    expect(await s.getHudLoupe(), isFalse);
+    expect((await s.loadHud()).loupe, isFalse);
+  });
+
   test('loadCapture defaults reproduce the original behaviour', () async {
     final cap = await Settings(FakeStore()).loadCapture();
     expect(cap.saveDir, isNull);

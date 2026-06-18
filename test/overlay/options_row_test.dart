@@ -8,7 +8,12 @@ Widget _host(EditorController c) => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
-    body: EditorToolbar(controller: c, onMove: (_) {}, onPtEditingDone: () {}),
+    // The real toolbar lives in a window sized to its content; give it natural
+    // (unbounded) width here too so the tool row never overflows the test surface.
+    body: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: EditorToolbar(controller: c, onMove: (_) {}, onPtEditingDone: () {}),
+    ),
   ),
 );
 
@@ -50,10 +55,13 @@ void main() {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: EditorToolbar(
-              controller: c,
-              onMove: (_) {},
-              onPtEditingDone: () => commits++,
+            body: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: EditorToolbar(
+                controller: c,
+                onMove: (_) {},
+                onPtEditingDone: () => commits++,
+              ),
             ),
           ),
         ),

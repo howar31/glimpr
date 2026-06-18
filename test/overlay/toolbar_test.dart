@@ -25,11 +25,14 @@ Future<EditorController> _pumpToolbar(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
-        body: EditorToolbar(
-          controller: c,
-          onMove: (_) {},
-          onPtEditingDone: () {},
-          editorBindings: bindings,
+        body: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: EditorToolbar(
+            controller: c,
+            onMove: (_) {},
+            onPtEditingDone: () {},
+            editorBindings: bindings,
+          ),
         ),
       ),
     ),
@@ -45,7 +48,8 @@ void main() {
     final c = await _pumpToolbar(tester, kDefaultBindings);
 
     expect(kEditorToolMeta.length, 15);
-    expect(find.byType(IconButton), findsNWidgets(15));
+    // 15 tool buttons + 2 HUD toggles (crosshair / loupe).
+    expect(find.byType(IconButton), findsNWidgets(17));
 
     for (final (kind, _) in kEditorToolMeta) {
       c.selectTool(kind);
@@ -58,9 +62,9 @@ void main() {
       (tester) async {
     await _pumpToolbar(tester, kDefaultBindings);
 
-    // Default tool is Crop => no options row => the 15 Text widgets are exactly
-    // the 15 tool badges (one per tool, all default-bound).
-    expect(find.byType(Text), findsNWidgets(15));
+    // Default tool is Crop => no options row => 15 tool badges + 2 HUD-toggle
+    // badges (crosshair X / loupe Q), all default-bound.
+    expect(find.byType(Text), findsNWidgets(17));
     // Crop's default is bare 'C'; Rectangle's is bare '1'. Both are
     // host-platform-stable (no modifier glyphs).
     expect(find.text('C'), findsOneWidget);
@@ -69,20 +73,22 @@ void main() {
   });
 
   testWidgets('badges track a rebound (custom) binding', (tester) async {
-    // Rebind Crop from bare 'C' to bare 'X'; its badge must follow.
+    // Rebind Crop from bare 'C' to bare 'Y' (not 'X' — that is the crosshair
+    // toggle's default, so the rebound label stays unique); its badge must follow.
     final bindings = {
       ...kDefaultBindings,
       kEditorToolActionKey[ToolKind.crop]!: const HotkeyBinding(
-        physicalKey: PhysicalKeyboardKey.keyX,
-        logicalKey: LogicalKeyboardKey.keyX,
+        physicalKey: PhysicalKeyboardKey.keyY,
+        logicalKey: LogicalKeyboardKey.keyY,
         modifiers: {},
       ),
     };
     await _pumpToolbar(tester, bindings);
 
-    expect(find.text('X'), findsOneWidget); // the rebound label shows
+    expect(find.text('Y'), findsOneWidget); // the rebound label shows
     expect(find.text('C'), findsNothing); // the old label is gone
-    expect(find.byType(Text), findsNWidgets(15)); // still one badge per tool
+    // 15 tool badges + 2 HUD-toggle badges (crosshair X / loupe Q).
+    expect(find.byType(Text), findsNWidgets(17));
   });
 
   testWidgets('an unbound tool shows no badge (button still builds)',
@@ -95,15 +101,15 @@ void main() {
     };
     await _pumpToolbar(tester, bindings);
 
-    expect(find.byType(IconButton), findsNWidgets(15)); // all 15 buttons build
+    expect(find.byType(IconButton), findsNWidgets(17)); // 15 tools + 2 HUD toggles
     expect(find.text('C'), findsNothing); // crop's badge is suppressed
-    expect(find.byType(Text), findsNWidgets(14)); // exactly one fewer badge
+    expect(find.byType(Text), findsNWidgets(16)); // 14 tool + 2 HUD-toggle badges
   });
 
   testWidgets('empty bindings => no badges at all', (tester) async {
     await _pumpToolbar(tester, const {});
 
-    expect(find.byType(IconButton), findsNWidgets(15));
+    expect(find.byType(IconButton), findsNWidgets(17)); // 15 tools + 2 HUD toggles
     expect(find.byType(Text), findsNothing);
   });
 
@@ -133,12 +139,15 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: EditorToolbar(
-            controller: c,
-            onMove: (_) {},
-            onPtEditingDone: () {},
-            editorBindings: kDefaultBindings,
-            pinMode: true,
+          body: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: EditorToolbar(
+              controller: c,
+              onMove: (_) {},
+              onPtEditingDone: () {},
+              editorBindings: kDefaultBindings,
+              pinMode: true,
+            ),
           ),
         ),
       ),

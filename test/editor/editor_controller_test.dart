@@ -15,6 +15,35 @@ void main() {
     c.dispose();
   });
 
+  group('HUD crosshair / loupe applicability + toggles', () {
+    test('loupe + crosshair apply to every tool EXCEPT text and Select', () {
+      for (final t in ToolKind.values) {
+        final expected = t != ToolKind.text && t != ToolKind.paste;
+        expect(loupeApplies(t, eyedropper: false), expected, reason: 'loupe $t');
+        expect(crosshairApplies(t, eyedropper: false), expected,
+            reason: 'crosshair $t');
+      }
+    });
+
+    test('eyedropper mode enables both even on text / Select', () {
+      expect(loupeApplies(ToolKind.text, eyedropper: true), isTrue);
+      expect(crosshairApplies(ToolKind.paste, eyedropper: true), isTrue);
+    });
+
+    test('toggle flips the state, defaults on, and marks user-toggled', () {
+      final c = EditorController();
+      expect(c.crosshairOn.value, isTrue); // persistent default seeds on
+      expect(c.loupeOn.value, isTrue);
+      expect(c.hudUserToggled, isFalse);
+      c.toggleCrosshair();
+      expect(c.crosshairOn.value, isFalse);
+      expect(c.hudUserToggled, isTrue); // host stops re-seeding now
+      c.toggleLoupe();
+      expect(c.loupeOn.value, isFalse);
+      c.dispose();
+    });
+  });
+
   test('switching to an annotation tool enters the annotate phase', () {
     final c = EditorController();
     c.selectTool(ToolKind.rectangle);

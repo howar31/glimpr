@@ -79,6 +79,10 @@ const kEditorSendToBackKey = 'editor.sendToBack';
 const kEditorCopyHexKey = 'editor.copyColorHex';
 const kEditorCopyRgbKey = 'editor.copyColorRgb';
 const kEditorCopyHslKey = 'editor.copyColorHsl';
+// HUD toggles: flip the per-session crosshair-lines / pixel-loupe override.
+// Rebindable; defaults to bare X (crosshair) / Q (loupe). Unbind to disable.
+const kEditorToggleCrosshairKey = 'editor.toggleCrosshair';
+const kEditorToggleLoupeKey = 'editor.toggleLoupe';
 
 /// Maps each editor tool to its action key.
 const kEditorToolActionKey = <ToolKind, String>{
@@ -163,6 +167,11 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
       {HotkeyModifier.shift}),
   kEditorCopyHslKey: _b(PhysicalKeyboardKey.keyL, LogicalKeyboardKey.keyL,
       {HotkeyModifier.shift}),
+  // HUD toggles — bare X (crosshair) / Q (loupe), in the bare-key "while aiming"
+  // family (like the , / . element walk and the / loupe-info cycle). Rebindable.
+  kEditorToggleCrosshairKey:
+      _b(PhysicalKeyboardKey.keyX, LogicalKeyboardKey.keyX),
+  kEditorToggleLoupeKey: _b(PhysicalKeyboardKey.keyQ, LogicalKeyboardKey.keyQ),
   kEditorBringToFrontKey: _b(
       PhysicalKeyboardKey.bracketRight, LogicalKeyboardKey.bracketRight,
       {HotkeyModifier.meta}),
@@ -366,6 +375,8 @@ String? pickEditorAction(
     kEditorCopyHexKey,
     kEditorCopyRgbKey,
     kEditorCopyHslKey,
+    kEditorToggleCrosshairKey,
+    kEditorToggleLoupeKey,
   ];
   for (final k in commands) {
     final b = bindings[k];

@@ -88,7 +88,7 @@ void main() {
     // (a lazy ListView would leave the lower sections unbuilt); enlarge the
     // surface so the whole pane renders for the structural assertions
     // (incl. the Recording shortcuts card above the editor sections).
-    tester.view.physicalSize = const Size(1000, 3600);
+    tester.view.physicalSize = const Size(1000, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -273,7 +273,7 @@ void main() {
       (tester) async {
     // The legend above the cards pushes the capture rows down, so enlarge the
     // surface to keep them (and their reset buttons) on-screen for interaction.
-    tester.view.physicalSize = const Size(1000, 3600);
+    tester.view.physicalSize = const Size(1000, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -306,7 +306,7 @@ void main() {
       (tester) async {
     // The legend above the cards pushes the second capture row down; enlarge the
     // surface so both rows being bound are on-screen for interaction.
-    tester.view.physicalSize = const Size(1000, 3600);
+    tester.view.physicalSize = const Size(1000, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -362,7 +362,7 @@ void main() {
       (tester) async {
     // Editor cards sit below the Capture + Recording cards; enlarge the
     // surface so the TOOLS card is built and on-screen for direct interaction.
-    tester.view.physicalSize = const Size(1000, 3600);
+    tester.view.physicalSize = const Size(1000, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -371,28 +371,28 @@ void main() {
 
     // The TOOLS card is the third GlassCard (Capture, Recording, Tools); its
     // rows take a BARE key (requireModifier: false). Rebind the first tool
-    // row to 'X' (unused by any editor default).
+    // row to 'K' (unused by any editor default — X / Q are the HUD toggles').
     final toolsCard = find.byType(GlassCard).at(2);
     Finder inTools(Finder matching) =>
         find.descendant(of: toolsCard, matching: matching);
     await tester.tap(inTools(find.byType(HotkeyRecorderField)).first);
     await tester.pump();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyX);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyK);
     await tester.pump();
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyX);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyK);
     await tester.pumpAndSettle();
 
     // The bare key is ACCEPTED on an editor row (unlike the global rows): the
     // new cap shows, no modifier warning, and the dirty+valid draft offers a
     // live Apply.
-    expect(inTools(find.widgetWithText(KeyCap, 'X')), findsOneWidget);
+    expect(inTools(find.widgetWithText(KeyCap, 'K')), findsOneWidget);
     expect(inTools(find.text('Needs a modifier')), findsNothing);
     expect(find.widgetWithText(AccentButton, 'Apply'), findsOneWidget);
 
     // Per-row Reset restores the tool's default and the draft is clean again.
     await tester.tap(inTools(find.byTooltip('Reset to default')));
     await tester.pumpAndSettle();
-    expect(inTools(find.widgetWithText(KeyCap, 'X')), findsNothing);
+    expect(inTools(find.widgetWithText(KeyCap, 'K')), findsNothing);
     expect(find.text('Apply'), findsNothing);
   });
 }

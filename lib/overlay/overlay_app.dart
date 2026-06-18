@@ -308,9 +308,11 @@ class _OverlayAppState extends State<OverlayApp> {
         Settings.instance.loadLoupe().then((l) {
           if (mounted) setState(() => _loupe = l);
         });
-        // HUD options (crosshair lines + marching-ants animation).
+        // HUD options (crosshair lines + loupe + marching-ants animation).
         Settings.instance.loadHud().then((h) {
-          if (mounted) setState(() => _hud = h);
+          if (!mounted) return;
+          setState(() => _hud = h);
+          _seedHudToggles(_editor, h);
         });
       },
       onCaptureFailed: (reason, msg) {
@@ -354,8 +356,19 @@ class _OverlayAppState extends State<OverlayApp> {
           _capture = cfg.capture;
           _editorBindings = cfg.bindings;
         });
+        _seedHudToggles(_editor, cfg.hud);
+        _seedHudToggles(_recordEditor, cfg.hud);
       }
     });
+  }
+
+  /// Seed a controller's HUD toggle state from settings, UNLESS the user already
+  /// flipped a toggle this session (don't clobber an in-session override). The
+  /// transient toggle resets naturally when a new controller is created.
+  void _seedHudToggles(EditorController? ed, HudConfig h) {
+    if (ed == null || ed.hudUserToggled) return;
+    ed.crosshairOn.value = h.crosshair;
+    ed.loupeOn.value = h.loupe;
   }
 
   /// Loads the persisted per-tool styles, or null when the store is unavailable
@@ -430,7 +443,9 @@ class _OverlayAppState extends State<OverlayApp> {
       if (mounted) setState(() => _loupe = l);
     });
     Settings.instance.loadHud().then((h) {
-      if (mounted) setState(() => _hud = h);
+      if (!mounted) return;
+      setState(() => _hud = h);
+      _seedHudToggles(_recordEditor, h);
     });
   }
 

@@ -151,7 +151,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         if (mounted) setState(() => _loupe = l);
       }).catchError((_) {});
       Settings.instance.loadHud().then((h) {
-        if (mounted) setState(() => _hud = h);
+        if (!mounted) return;
+        setState(() => _hud = h);
+        _seedHudToggles(h);
       }).catchError((_) {});
     } catch (_) {}
 
@@ -432,6 +434,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       // was disposed above, which disposes its document and clears its listeners,
       // so there is no duplicate subscription.
       _controller!.document.addListener(_markDirty);
+      _seedHudToggles(_hud); // seed from the latest loaded HUD settings
       _dirty = false;
     });
     // M4 anchor: the opened image's first editable frame.
@@ -503,8 +506,19 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           _cap = cfg.capture;
           _bindings = cfg.bindings;
         });
+        _seedHudToggles(cfg.hud);
       }
     }).catchError((_) {});
+  }
+
+  /// Seed the controller's HUD toggle state from settings, UNLESS the user
+  /// already flipped a toggle this session (don't clobber an in-session
+  /// override). Resets naturally when a new image opens (new controller).
+  void _seedHudToggles(HudConfig h) {
+    final ed = _controller;
+    if (ed == null || ed.hudUserToggled) return;
+    ed.crosshairOn.value = h.crosshair;
+    ed.loupeOn.value = h.loupe;
   }
 
   /// Done: run the user-configured after-editor flow (Settings), then CLOSE the

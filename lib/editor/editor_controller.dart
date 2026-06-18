@@ -30,6 +30,29 @@ enum ToolKind {
 
 enum EditorPhase { annotate, crop }
 
+/// Tools that may show the pixel loupe / the full-screen crosshair lines:
+/// everything EXCEPT text + Select. Kept as SEPARATE consts (identical members
+/// today) so the two can diverge later. The eyedropper enables both too — see
+/// [loupeApplies] / [crosshairApplies]. Shared by EditorCore (render + toggle)
+/// and the toolbar (button enabled state) so they never drift.
+const kLoupeTools = <ToolKind>{
+  ToolKind.crop, ToolKind.blur, ToolKind.pixelate, ToolKind.rectangle,
+  ToolKind.ellipse, ToolKind.line, ToolKind.arrow, ToolKind.pen,
+  ToolKind.highlighter, ToolKind.step, ToolKind.stamp, ToolKind.magnify,
+  ToolKind.spotlight,
+};
+const kCrosshairTools = <ToolKind>{
+  ToolKind.crop, ToolKind.blur, ToolKind.pixelate, ToolKind.rectangle,
+  ToolKind.ellipse, ToolKind.line, ToolKind.arrow, ToolKind.pen,
+  ToolKind.highlighter, ToolKind.step, ToolKind.stamp, ToolKind.magnify,
+  ToolKind.spotlight,
+};
+
+bool loupeApplies(ToolKind tool, {required bool eyedropper}) =>
+    kLoupeTools.contains(tool) || eyedropper;
+bool crosshairApplies(ToolKind tool, {required bool eyedropper}) =>
+    kCrosshairTools.contains(tool) || eyedropper;
+
 /// Factory-default style for a tool. Tools share the uniform default except the
 /// highlighter, which defaults to a translucent marker colour so it reads as a
 /// highlighter out of the box — its painter honours the colour's alpha (no
@@ -85,6 +108,30 @@ class EditorController {
   /// per capture from the "capture mouse pointer" setting; flipped by the toolbar
   /// cursor button; read by EditorCore (render) + the export.
   final showCursor = ValueNotifier<bool>(false);
+
+  /// Effective on/off for the full-screen crosshair lines and the pixel loupe.
+  /// Seeded per session from the persistent HudConfig defaults (by the host, like
+  /// [showCursor]), flipped by the toolbar toggle / hotkey, read by EditorCore for
+  /// rendering. A TRANSIENT override: never written back to settings, and reset
+  /// each new capture / editor open (a fresh controller re-seeds from settings).
+  final crosshairOn = ValueNotifier<bool>(true);
+  final loupeOn = ValueNotifier<bool>(true);
+
+  /// Set once the user flips a HUD toggle this session, so the host stops
+  /// re-seeding [crosshairOn]/[loupeOn] from settings — an async load or a
+  /// Settings-close hot-reload must not clobber an in-session override. Resets
+  /// with the controller (a new capture / editor open re-seeds from settings).
+  bool hudUserToggled = false;
+
+  void toggleCrosshair() {
+    hudUserToggled = true;
+    crosshairOn.value = !crosshairOn.value;
+  }
+
+  void toggleLoupe() {
+    hudUserToggled = true;
+    loupeOn.value = !loupeOn.value;
+  }
 
   /// True while THIS core is painting its region scrim (active + in crop + a
   /// selection exists). EditorCore keeps it in sync; the multi-display overlay
@@ -465,5 +512,8 @@ class EditorController {
     refocus.dispose();
     stampImage.dispose();
     stampPick.dispose();
+    showCursor.dispose();
+    crosshairOn.dispose();
+    loupeOn.dispose();
   }
 }

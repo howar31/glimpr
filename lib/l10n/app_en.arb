@@ -175,9 +175,17 @@
   "@settingsCrosshair": {
     "description": "Settings > Capture > Overlay HUD: crosshair toggle title"
   },
-  "settingsCrosshairHint": "Show the full-screen crosshair lines for the region tools (crop / blur / pixelate). The centre reticle and loupe stay either way.",
+  "settingsCrosshairHint": "Show the full-screen crosshair lines while aiming with most tools and the colour picker; the reticle stays either way. Toggle it live from the toolbar or a shortcut.",
   "@settingsCrosshairHint": {
     "description": "Settings > Capture > Overlay HUD: crosshair toggle hint"
+  },
+  "settingsLoupeEnable": "Loupe",
+  "@settingsLoupeEnable": {
+    "description": "Settings > Capture > Overlay HUD: loupe (magnifier) toggle title"
+  },
+  "settingsLoupeEnableHint": "Show the pixel loupe while aiming with most tools and the colour picker; the reticle stays either way. Toggle it live from the toolbar or a shortcut.",
+  "@settingsLoupeEnableHint": {
+    "description": "Settings > Capture > Overlay HUD: loupe toggle hint"
   },
   "settingsAnimateMarchingAnts": "Animate marching ants",
   "@settingsAnimateMarchingAnts": {
@@ -823,6 +831,22 @@
   "@settingsCmdCopyHsl": {
     "description": "Settings > Shortcuts > Commands: Copy color as HSL row title"
   },
+  "settingsCmdToggleCrosshair": "Toggle crosshair",
+  "@settingsCmdToggleCrosshair": {
+    "description": "Settings > Shortcuts > Commands: toggle crosshair lines row title"
+  },
+  "settingsCmdToggleCrosshairHint": "Show or hide the crosshair lines for the current session",
+  "@settingsCmdToggleCrosshairHint": {
+    "description": "Settings > Shortcuts > Commands: toggle crosshair row hint"
+  },
+  "settingsCmdToggleLoupe": "Toggle loupe",
+  "@settingsCmdToggleLoupe": {
+    "description": "Settings > Shortcuts > Commands: toggle pixel loupe row title"
+  },
+  "settingsCmdToggleLoupeHint": "Show or hide the pixel loupe for the current session",
+  "@settingsCmdToggleLoupeHint": {
+    "description": "Settings > Shortcuts > Commands: toggle loupe row hint"
+  },
   "settingsReservedCancelExit": "Cancel / Exit",
   "@settingsReservedCancelExit": {
     "description": "Settings > Shortcuts > Reserved: Cancel/Exit row title"
@@ -1151,6 +1175,22 @@
   "toolbarRecordMicrophone": "Microphone (this recording)",
   "@toolbarRecordMicrophone": {
     "description": "Record-mode toolbar: one-shot microphone override toggle tooltip"
+  },
+  "toolbarCrosshairShown": "Crosshair lines: shown",
+  "@toolbarCrosshairShown": {
+    "description": "Toolbar: crosshair-lines toggle tooltip when on"
+  },
+  "toolbarCrosshairHidden": "Crosshair lines: hidden",
+  "@toolbarCrosshairHidden": {
+    "description": "Toolbar: crosshair-lines toggle tooltip when off"
+  },
+  "toolbarLoupeShown": "Pixel loupe: shown",
+  "@toolbarLoupeShown": {
+    "description": "Toolbar: pixel-loupe toggle tooltip when on"
+  },
+  "toolbarLoupeHidden": "Pixel loupe: hidden",
+  "@toolbarLoupeHidden": {
+    "description": "Toolbar: pixel-loupe toggle tooltip when off"
   },
   "@toolbarPinCaption": {
     "description": "Toolbar: caption below the bar when pin mode is active"

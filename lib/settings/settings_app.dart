@@ -151,6 +151,7 @@ class _SettingsAppState extends State<SettingsApp>
   int _loupeZoom = kLoupeZoomDefault;
   bool _eyedropperKeysCancel = true;
   bool _hudCrosshair = true;
+  bool _hudLoupe = true;
   bool _hudMarchingAnts = true;
   final _filenameController = TextEditingController();
   final _filenameFocus = FocusNode();
@@ -277,6 +278,7 @@ class _SettingsAppState extends State<SettingsApp>
     final loupeZoom = await _s.getLoupeZoom();
     final eyedropperKeys = await _s.getEyedropperToolKeysCancel();
     final hudCrosshair = await _s.getHudCrosshair();
+    final hudLoupe = await _s.getHudLoupe();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final layerCap = await _s.getCaptureLayerCap();
     final snapElementMode = await _s.getSnapElementMode();
@@ -311,6 +313,7 @@ class _SettingsAppState extends State<SettingsApp>
       _loupeZoom = loupeZoom;
       _eyedropperKeysCancel = eyedropperKeys;
       _hudCrosshair = hudCrosshair;
+      _hudLoupe = hudLoupe;
       _hudMarchingAnts = hudMarchingAnts;
       _captureLayerCap = layerCap;
       _snapElementMode = snapElementMode;
@@ -1214,6 +1217,18 @@ class _SettingsAppState extends State<SettingsApp>
             onChanged: (v) async {
               await _s.setHudCrosshair(v);
               if (mounted) setState(() => _hudCrosshair = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsLoupeEnable,
+          hint: _l.settingsLoupeEnableHint,
+          trailing: GlassToggle(
+            value: _hudLoupe,
+            onChanged: (v) async {
+              await _s.setHudLoupe(v);
+              if (mounted) setState(() => _hudLoupe = v);
             },
           ),
         ),
@@ -2283,6 +2298,16 @@ class _SettingsAppState extends State<SettingsApp>
             kEditorCopyHslKey,
             _l.settingsCmdCopyHsl,
             _l.settingsCmdCopyColorHint,
+          ),
+          (
+            kEditorToggleCrosshairKey,
+            _l.settingsCmdToggleCrosshair,
+            _l.settingsCmdToggleCrosshairHint,
+          ),
+          (
+            kEditorToggleLoupeKey,
+            _l.settingsCmdToggleLoupe,
+            _l.settingsCmdToggleLoupeHint,
           ),
         ])
           SettingRow(

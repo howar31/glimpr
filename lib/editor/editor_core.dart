@@ -402,7 +402,7 @@ class _EditorCoreState extends State<EditorCore> {
         e is PointerScrollEvent &&
         _active &&
         !_dragging &&
-        _snapTools.contains(c.tool.value) &&
+        _snapEligible &&
         _hoverElement != null) {
       final dy = e.scrollDelta.dy;
       // Ignore jitter / horizontal-only events, and step at most one level per
@@ -450,7 +450,7 @@ class _EditorCoreState extends State<EditorCore> {
     if (_elementSnapOn &&
         _active &&
         !_dragging &&
-        _snapTools.contains(c.tool.value) &&
+        _snapEligible &&
         _hoverElement != null) {
       _panWalkAccum += e.panDelta.dy;
       if (_panWalkAccum.abs() >= _kPanWalkStep) {
@@ -509,6 +509,37 @@ class _EditorCoreState extends State<EditorCore> {
     ToolKind.ellipse,
     ToolKind.spotlight,
   };
+
+  /// Snap applies for the current tool right now: a snap tool AND not
+  /// colour-sampling. The eyedropper skips the ENTIRE snap pipeline (hover
+  /// resolution, AX query, tree-walk, highlight) — every snap gate routes through
+  /// this single definition.
+  bool get _snapEligible => _snapTools.contains(c.tool.value) && !_eyedropper;
+
+  /// Whether the crosshair / loupe toggle APPLIES to the current tool (toolbar
+  /// button enabled + hotkey acts only then). Eyedropper counts for both. The
+  /// tool sets live in editor_controller.dart so the toolbar shares them.
+  bool get _crosshairApplies =>
+      crosshairApplies(c.tool.value, eyedropper: _eyedropper);
+  bool get _loupeApplies => loupeApplies(c.tool.value, eyedropper: _eyedropper);
+
+  /// Effective on/off (persistent default, overridden per session by the toolbar /
+  /// hotkey — EditorController.crosshairOn / loupeOn).
+  bool get _effCrosshair => c.crosshairOn.value;
+  bool get _effLoupe => c.loupeOn.value;
+
+  /// Flip the per-session crosshair-lines / loupe override (toolbar button +
+  /// hotkey). No-op when the toggle does not apply to the current tool, so the
+  /// greyed button and the hotkey behave identically.
+  void _toggleCrosshair() {
+    if (!_crosshairApplies) return;
+    c.toggleCrosshair();
+  }
+
+  void _toggleLoupe() {
+    if (!_loupeApplies) return;
+    c.toggleLoupe();
+  }
 
   /// A drag / edit gesture is in progress (suppresses the window-snap highlight).
   bool get _dragging => _cropping || _dragStart != null || _editIndex != null;
@@ -654,6 +685,8 @@ class _EditorCoreState extends State<EditorCore> {
     c.eyedropperActive.addListener(_rebuild);
     c.eyedropperActive.addListener(_onEyedropperFlip);
     c.showCursor.addListener(_rebuild);
+    c.crosshairOn.addListener(_rebuild);
+    c.loupeOn.addListener(_rebuild);
     c.refocus.addListener(_onRefocusRequested);
     c.stampPick.addListener(_onStampPick);
     c.tool.addListener(_onToolMaybeStamp);
@@ -689,6 +722,8 @@ class _EditorCoreState extends State<EditorCore> {
     c.eyedropperActive.removeListener(_rebuild);
     c.eyedropperActive.removeListener(_onEyedropperFlip);
     c.showCursor.removeListener(_rebuild);
+    c.crosshairOn.removeListener(_rebuild);
+    c.loupeOn.removeListener(_rebuild);
     c.refocus.removeListener(_onRefocusRequested);
     c.stampPick.removeListener(_onStampPick);
     c.tool.removeListener(_onToolMaybeStamp);
@@ -1135,7 +1170,7 @@ class _EditorCoreState extends State<EditorCore> {
     if (_elementSnapOn &&
         pressed.isEmpty &&
         !_dragging &&
-        _snapTools.contains(c.tool.value) &&
+        _snapEligible &&
         (key == LogicalKeyboardKey.comma || key == LogicalKeyboardKey.period)) {
       // Always CONSUME the key in this mode (no system error beep), even with no
       // element yet under the cursor — the forced query establishes one.
@@ -1153,8 +1188,7 @@ class _EditorCoreState extends State<EditorCore> {
             key == LogicalKeyboardKey.question) &&
         pressed.difference({HotkeyModifier.shift}).isEmpty) {
       setState(() {
-        _loupeInfoMode = LoupeInfoMode
-            .values[(_loupeInfoMode.index + 1) % LoupeInfoMode.values.length];
+        _loupeInfoMode = _nextLoupeMode(_loupeInfoMode);
         _loupeInfoModeUserSet = true;
       });
       // Persist so the choice survives relaunch (the host writes to Settings).
@@ -1221,6 +1255,14 @@ class _EditorCoreState extends State<EditorCore> {
           if (mounted) setState(() => _copiedFormat = null);
         });
       }
+      return KeyEventResult.handled;
+    }
+    if (action == kEditorToggleCrosshairKey) {
+      _toggleCrosshair(); // no-op if the tool doesn't apply
+      return KeyEventResult.handled;
+    }
+    if (action == kEditorToggleLoupeKey) {
+      _toggleLoupe();
       return KeyEventResult.handled;
     }
     if (action == kEditorUndoKey) {
@@ -1756,7 +1798,7 @@ class _EditorCoreState extends State<EditorCore> {
       if (!mounted || !_active) return;
       // Drop a stale reply: the cursor moved on, or snapping no longer applies.
       if ((_cursor - q).distance > 24) return;
-      if (!_snapTools.contains(c.tool.value) ||
+      if (!_snapEligible ||
           _dragging ||
           _overAnnotation(q)) {
         return;
@@ -1793,7 +1835,7 @@ class _EditorCoreState extends State<EditorCore> {
     // while hovering an annotation the tool would engage (then the snap frame is
     // redundant). The full-screen crosshair / reticle still follow the pointer.
     final wantSnap =
-        _snapTools.contains(c.tool.value) && !_dragging && !_overAnnotation(p);
+        _snapEligible && !_dragging && !_overAnnotation(p);
     final hover = wantSnap ? topmostWindowAt(_windows, p) : null;
     setState(() {
       _setCursor(_clampToDisplay(p), 'track');
@@ -2659,21 +2701,39 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   /// The blocks under the loupe glass, per the CUMULATIVE [_loupeInfoMode] cycle
-  /// (`?` / `/`): coordinates always (until hidden), then the element level, then
-  /// the shortcuts, then nothing. The level + shortcuts blocks only apply while
-  /// element snap is active for a snap tool.
+  /// (`?` / `/`): coordinates always (until hidden), then the element level (only
+  /// while element snap is active), then the shortcuts, then nothing.
   List<Widget> _loupeBlocks() {
     if (_loupeInfoMode == LoupeInfoMode.hidden) return const [];
-    final elementMode = _elementSnapOn && _snapTools.contains(c.tool.value);
+    final elementMode = _elementSnapOn && _snapEligible;
     final showLevel =
         elementMode && _loupeInfoMode.index >= LoupeInfoMode.level.index;
-    final showShortcuts =
-        elementMode && _loupeInfoMode.index >= LoupeInfoMode.shortcuts.index;
+    // Shortcuts are NOT snap-gated: nudge / angle always apply; only the element
+    // WALK row needs snap (handled inside _shortcutsBlock).
+    final showShortcuts = _loupeInfoMode.index >= LoupeInfoMode.shortcuts.index;
     return [
       _loupeReadout(),
       if (showLevel) _levelBlock(),
-      if (showShortcuts) _shortcutsBlock(),
+      if (showShortcuts) _shortcutsBlock(snap: elementMode),
     ];
+  }
+
+  /// Whether a loupe-info mode can display its block now — the element LEVEL
+  /// needs active element snap; the others always can. The `/` cycle uses this
+  /// to SKIP a mode that would show nothing (not just render it empty).
+  bool _loupeModeAvailable(LoupeInfoMode m) => switch (m) {
+        LoupeInfoMode.level => _elementSnapOn && _snapEligible,
+        _ => true,
+      };
+
+  /// The next loupe-info mode that can actually display now (skips unavailable).
+  LoupeInfoMode _nextLoupeMode(LoupeInfoMode from) {
+    const all = LoupeInfoMode.values;
+    for (var step = 1; step <= all.length; step++) {
+      final m = all[(from.index + step) % all.length];
+      if (_loupeModeAvailable(m)) return m;
+    }
+    return LoupeInfoMode.coords;
   }
 
   /// The loupe column's children: the glass plus the info blocks, 6px-separated,
@@ -2704,11 +2764,12 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   /// The SHORTCUTS block (its own left-aligned pill): the aiming-stage shortcuts
-  /// not shown in the toolbar — element walk, arrow nudge, Shift angle snap.
-  Widget _shortcutsBlock() {
+  /// not shown in the toolbar. Nudge + angle always apply; the element-WALK row
+  /// is snap-specific, so it shows only while element snap is active ([snap]).
+  Widget _shortcutsBlock({required bool snap}) {
     final l = AppLocalizations.of(context);
     return LoupeShortcutsBlock(rows: [
-      (l.loupeShortcutWalkKey, l.loupeShortcutWalkDesc),
+      if (snap) (l.loupeShortcutWalkKey, l.loupeShortcutWalkDesc),
       (l.loupeShortcutNudgeKey, l.loupeShortcutNudgeDesc),
       (l.loupeShortcutAngleKey, l.loupeShortcutAngleDesc),
     ]);
@@ -2719,11 +2780,12 @@ class _EditorCoreState extends State<EditorCore> {
   /// shortcuts blocks when the cumulative mode reveals them.
   double _loupeBelowReserve() {
     if (_loupeInfoMode == LoupeInfoMode.hidden) return 0;
-    final elementMode = _elementSnapOn && _snapTools.contains(c.tool.value);
+    final elementMode = _elementSnapOn && _snapEligible;
     var r = _kLoupeReadoutReserve;
     if (elementMode && _loupeInfoMode.index >= LoupeInfoMode.level.index) r += 30;
-    if (elementMode && _loupeInfoMode.index >= LoupeInfoMode.shortcuts.index) {
-      r += 56;
+    if (_loupeInfoMode.index >= LoupeInfoMode.shortcuts.index) {
+      // 3 rows (walk + nudge + angle) with snap, else 2 (nudge + angle).
+      r += elementMode ? 56 : 38;
     }
     return r;
   }
@@ -2920,10 +2982,17 @@ class _EditorCoreState extends State<EditorCore> {
         _active &&
         (showsCrosshair || _eyedropper) &&
         (!_interactive || _overCanvas || _dragging || _cropAdjusting);
+    // Crosshair lines + loupe DECOUPLE from showHud: each has its own tool set +
+    // toggle. showHud (region + eyedropper) still drives the centre reticle +
+    // badges. aimVisible = showHud's over-canvas precondition without the tool set.
+    final aimVisible = _active &&
+        (!_interactive || _overCanvas || _dragging || _cropAdjusting);
+    final showCrosshairLines = aimVisible && _crosshairApplies && _effCrosshair;
+    final showLoupe = aimVisible && _loupeApplies && _effLoupe;
     // Window-snap target: the hovered window, or — Crop only — the whole display
     // over bare desktop; null when no snap tool is active or while dragging.
     final snapTarget =
-        (_active && _snapTools.contains(c.tool.value) && !_dragging)
+        (_active && _snapEligible && !_dragging)
         ? (_hoverWindow ??
               // Whole-display crop fallback is an overlay affordance only; the
               // editor's crop is a freeform drag (no window list to snap to).
@@ -3208,7 +3277,7 @@ class _EditorCoreState extends State<EditorCore> {
                 // raster region tools (blur/pixelate), active display only. OVERLAY
                 // only (canvas-space); the editor renders its HUD in the outer
                 // stack (screen-space) so it floats over the whole window.
-                if (showHud && !_interactive && widget.hud.crosshair)
+                if (showCrosshairLines && !_interactive)
                   IgnorePointer(
                     child: CustomPaint(
                       size: _canvasSize,
@@ -3229,9 +3298,8 @@ class _EditorCoreState extends State<EditorCore> {
                       painter: ReticlePainter(_cursor),
                     ),
                   ),
-                // Loupe is bound to the crosshair — shown/hidden together, so it
-                // never flickers off when hovering over an existing region.
-                if (showHud && !_interactive) _overlayLoupe(),
+                // Loupe: its own tool set + toggle (decoupled from the crosshair).
+                if (showLoupe && !_interactive) _overlayLoupe(),
                 // Small reticle for the drawing tools (replaces the system arrow
                 // with a precise inverting cross). Region tools use the crosshair
                 // above. OVERLAY only; the editor renders it in the outer stack.
@@ -3402,7 +3470,7 @@ class _EditorCoreState extends State<EditorCore> {
                 // incl. the checkerboard margin — instead of being clipped to the
                 // image like the annotations. Hidden when the cursor leaves the
                 // image (showHud / _showsReticle gate on _overCanvas).
-                if (showHud && widget.hud.crosshair)
+                if (showCrosshairLines)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: CustomPaint(
@@ -3426,7 +3494,7 @@ class _EditorCoreState extends State<EditorCore> {
                   ),
                 // Eyedropper badge beside the reticle (screen space) — see overlay.
                 if (_eyedropper) _eyedropperBadge(v.toLocal(_cursor)),
-                if (showHud) _editorLoupe(v),
+                if (showLoupe) _editorLoupe(v),
                 // Crop readouts in screen space (constant size under zoom): start
                 // coordinate at the start corner, W×H at the cursor corner.
                 if (_active && inCrop && _crop.rect.value != null)

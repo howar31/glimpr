@@ -150,6 +150,7 @@ class Settings {
   static const _loupeInfoModeKey = 'loupe_info_mode';
   static const _eyedropperToolKeysKey = 'eyedropper_tool_keys_cancel';
   static const _hudCrosshairKey = 'hud_crosshair';
+  static const _hudLoupeKey = 'hud_loupe';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
   static const _captureLayerCapKey = 'capture_layer_cap';
   static const _appLanguageKey = 'app_language';
@@ -505,6 +506,10 @@ class Settings {
       (await store.getBool(_hudCrosshairKey)) ?? true;
   Future<void> setHudCrosshair(bool v) => store.setBool(_hudCrosshairKey, v);
 
+  Future<bool> getHudLoupe() async =>
+      (await store.getBool(_hudLoupeKey)) ?? true;
+  Future<void> setHudLoupe(bool v) => store.setBool(_hudLoupeKey, v);
+
   Future<bool> getHudMarchingAnts() async =>
       (await store.getBool(_hudMarchingAntsKey)) ?? true;
   Future<void> setHudMarchingAnts(bool v) =>
@@ -514,6 +519,7 @@ class Settings {
   /// image editor (per open); hot-reloaded alongside the loupe.
   Future<HudConfig> loadHud() async => HudConfig(
     crosshair: await getHudCrosshair(),
+    loupe: await getHudLoupe(),
     marchingAnts: await getHudMarchingAnts(),
   );
 

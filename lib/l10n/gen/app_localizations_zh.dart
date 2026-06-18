@@ -149,7 +149,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCrosshair => '十字線';
 
   @override
-  String get settingsCrosshairHint => '為區域工具（裁切、模糊、像素化）顯示全螢幕十字線。中央準星與放大鏡不受影響。';
+  String get settingsCrosshairHint =>
+      '用大多數工具與取色器瞄準時顯示全螢幕十字線；準星不受影響。可從工具列或快捷即時切換。';
+
+  @override
+  String get settingsLoupeEnable => '放大鏡';
+
+  @override
+  String get settingsLoupeEnableHint =>
+      '用大多數工具與取色器瞄準時顯示像素放大鏡；準星不受影響。可從工具列或快捷即時切換。';
 
   @override
   String get settingsAnimateMarchingAnts => '虛線框動畫';
@@ -744,6 +752,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCmdCopyHsl => '以 HSL 複製顏色';
 
   @override
+  String get settingsCmdToggleCrosshair => '切換十字線';
+
+  @override
+  String get settingsCmdToggleCrosshairHint => '本次顯示或隱藏十字線';
+
+  @override
+  String get settingsCmdToggleLoupe => '切換放大鏡';
+
+  @override
+  String get settingsCmdToggleLoupeHint => '本次顯示或隱藏像素放大鏡';
+
+  @override
   String get settingsReservedCancelExit => '取消／離開';
 
   @override
@@ -992,6 +1012,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get toolbarRecordMicrophone => '麥克風（僅此次錄影）';
+
+  @override
+  String get toolbarCrosshairShown => '十字線：顯示';
+
+  @override
+  String get toolbarCrosshairHidden => '十字線：隱藏';
+
+  @override
+  String get toolbarLoupeShown => '像素放大鏡：顯示';
+
+  @override
+  String get toolbarLoupeHidden => '像素放大鏡：隱藏';
 
   @override
   String get toolbarMousePointerShown => '滑鼠指標：顯示';

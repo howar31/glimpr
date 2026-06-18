@@ -359,8 +359,20 @@ abstract class AppLocalizations {
   /// Settings > Capture > Overlay HUD: crosshair toggle hint
   ///
   /// In en, this message translates to:
-  /// **'Show the full-screen crosshair lines for the region tools (crop / blur / pixelate). The centre reticle and loupe stay either way.'**
+  /// **'Show the full-screen crosshair lines while aiming with most tools and the colour picker; the reticle stays either way. Toggle it live from the toolbar or a shortcut.'**
   String get settingsCrosshairHint;
+
+  /// Settings > Capture > Overlay HUD: loupe (magnifier) toggle title
+  ///
+  /// In en, this message translates to:
+  /// **'Loupe'**
+  String get settingsLoupeEnable;
+
+  /// Settings > Capture > Overlay HUD: loupe toggle hint
+  ///
+  /// In en, this message translates to:
+  /// **'Show the pixel loupe while aiming with most tools and the colour picker; the reticle stays either way. Toggle it live from the toolbar or a shortcut.'**
+  String get settingsLoupeEnableHint;
 
   /// Settings > Capture > Overlay HUD: marching ants toggle title
   ///
@@ -1496,6 +1508,30 @@ abstract class AppLocalizations {
   /// **'Copy color as HSL'**
   String get settingsCmdCopyHsl;
 
+  /// Settings > Shortcuts > Commands: toggle crosshair lines row title
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle crosshair'**
+  String get settingsCmdToggleCrosshair;
+
+  /// Settings > Shortcuts > Commands: toggle crosshair row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Show or hide the crosshair lines for the current session'**
+  String get settingsCmdToggleCrosshairHint;
+
+  /// Settings > Shortcuts > Commands: toggle pixel loupe row title
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle loupe'**
+  String get settingsCmdToggleLoupe;
+
+  /// Settings > Shortcuts > Commands: toggle loupe row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Show or hide the pixel loupe for the current session'**
+  String get settingsCmdToggleLoupeHint;
+
   /// Settings > Shortcuts > Reserved: Cancel/Exit row title
   ///
   /// In en, this message translates to:
@@ -1993,6 +2029,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Microphone (this recording)'**
   String get toolbarRecordMicrophone;
+
+  /// Toolbar: crosshair-lines toggle tooltip when on
+  ///
+  /// In en, this message translates to:
+  /// **'Crosshair lines: shown'**
+  String get toolbarCrosshairShown;
+
+  /// Toolbar: crosshair-lines toggle tooltip when off
+  ///
+  /// In en, this message translates to:
+  /// **'Crosshair lines: hidden'**
+  String get toolbarCrosshairHidden;
+
+  /// Toolbar: pixel-loupe toggle tooltip when on
+  ///
+  /// In en, this message translates to:
+  /// **'Pixel loupe: shown'**
+  String get toolbarLoupeShown;
+
+  /// Toolbar: pixel-loupe toggle tooltip when off
+  ///
+  /// In en, this message translates to:
+  /// **'Pixel loupe: hidden'**
+  String get toolbarLoupeHidden;
 
   /// Toolbar: cursor-toggle tooltip when the captured cursor layer is visible
   ///

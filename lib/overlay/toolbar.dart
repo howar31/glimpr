@@ -189,6 +189,34 @@ class EditorToolbar extends StatelessWidget {
                 // Mouse-pointer toggle (overlay, when the capture carried a
                 // cursor) — not a tool: shows/hides the captured cursor layer.
                 if (showCursorToggle) _CursorToggle(controller: controller),
+                // Crosshair-lines / pixel-loupe toggles (annotation surfaces only,
+                // not the record-select picker). Greyed + inert for tools the HUD
+                // element doesn't apply to.
+                if (!recordMode) ...[
+                  _HudToggle(
+                    controller: controller,
+                    value: controller.crosshairOn,
+                    applies: crosshairApplies,
+                    onToggle: controller.toggleCrosshair,
+                    icon: Icons.gps_fixed,
+                    shortcut: editorBindings[kEditorToggleCrosshairKey]?.label(),
+                    tooltip: (on) => on
+                        ? l10n.toolbarCrosshairShown
+                        : l10n.toolbarCrosshairHidden,
+                  ),
+                  _HudToggle(
+                    controller: controller,
+                    value: controller.loupeOn,
+                    applies: loupeApplies,
+                    onToggle: controller.toggleLoupe,
+                    // Distinct from the Magnify TOOL (zoom_in); the loupe is the
+                    // jeweller-glass magnifier.
+                    icon: Icons.search,
+                    shortcut: editorBindings[kEditorToggleLoupeKey]?.label(),
+                    tooltip: (on) =>
+                        on ? l10n.toolbarLoupeShown : l10n.toolbarLoupeHidden,
+                  ),
+                ],
                 // Trailing action widgets (e.g. Copy/Save in the image editor),
                 // separated from the tool buttons by a thin vertical divider so
                 // they read as part of the same glass bar.
@@ -381,6 +409,45 @@ class _ToolbarTheme extends InheritedWidget {
       liveBackdrop != oldWidget.liveBackdrop;
 }
 
+/// The bottom-right shortcut badge shared by tool buttons and HUD toggles, so
+/// they read as one unified scheme. A Stack child; crisp 1px outline so the tiny
+/// glyph stays legible on any backdrop.
+class _ShortcutBadge extends StatelessWidget {
+  final String label;
+  final bool on;
+  const _ShortcutBadge({required this.label, required this.on});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return Positioned(
+      right: 2,
+      bottom: 1,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          height: 1,
+          fontWeight: FontWeight.w700,
+          color: on ? _ToolbarTheme.accentOf(context) : p.fg,
+          // Crisp 1px outline (8 zero-blur offsets), overriding the inherited
+          // soft glass shadow which smears at this tiny size.
+          shadows: [
+            Shadow(color: p.badgeOutline, offset: const Offset(0.7, 0)),
+            Shadow(color: p.badgeOutline, offset: const Offset(-0.7, 0)),
+            Shadow(color: p.badgeOutline, offset: const Offset(0, 0.7)),
+            Shadow(color: p.badgeOutline, offset: const Offset(0, -0.7)),
+            Shadow(color: p.badgeOutline, offset: const Offset(0.7, 0.7)),
+            Shadow(color: p.badgeOutline, offset: const Offset(0.7, -0.7)),
+            Shadow(color: p.badgeOutline, offset: const Offset(-0.7, 0.7)),
+            Shadow(color: p.badgeOutline, offset: const Offset(-0.7, -0.7)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A tool icon with a bottom-right shortcut-number badge.
 class _ToolButton extends StatelessWidget {
   final EditorController controller;
@@ -412,56 +479,7 @@ class _ToolButton extends StatelessWidget {
               tooltip: tooltip,
               onPressed: () => controller.selectTool(kind),
             ),
-            if (shortcut != null)
-              Positioned(
-                right: 2,
-                bottom: 1,
-                child: Text(
-                  shortcut!,
-                  style: TextStyle(
-                    fontSize: 10,
-                    height: 1,
-                    fontWeight: FontWeight.w700,
-                    color: on ? _ToolbarTheme.accentOf(context) : p.fg,
-                    // Crisp 1px outline (8 zero-blur offsets), overriding the
-                    // inherited soft glass shadow which smears at this tiny size.
-                    shadows: [
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(0.7, 0),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(-0.7, 0),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(0, 0.7),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(0, -0.7),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(0.7, 0.7),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(0.7, -0.7),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(-0.7, 0.7),
-                      ),
-                      Shadow(
-                        color: p.badgeOutline,
-                        offset: const Offset(-0.7, -0.7),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            if (shortcut != null) _ShortcutBadge(label: shortcut!, on: on),
           ],
         );
       },
@@ -564,6 +582,57 @@ class _RecordToggle extends StatelessWidget {
           onPressed: disabled ? null : () => value.value = !on,
         ),
       ),
+    );
+  }
+}
+
+/// A HUD-toggle button (crosshair lines / pixel loupe): accent when ON, greyed +
+/// non-interactive when the current tool / mode doesn't show that HUD element.
+class _HudToggle extends StatelessWidget {
+  final EditorController controller;
+  final ValueNotifier<bool> value; // crosshairOn / loupeOn
+  final bool Function(ToolKind tool, {required bool eyedropper}) applies;
+  final VoidCallback onToggle;
+  final IconData icon;
+  final String? shortcut; // hotkey badge (from editorBindings); null = unbound
+  final String Function(bool on) tooltip; // state-dependent (shown / hidden)
+  const _HudToggle({
+    required this.controller,
+    required this.value,
+    required this.applies,
+    required this.onToggle,
+    required this.icon,
+    required this.shortcut,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    return AnimatedBuilder(
+      animation: Listenable.merge(
+          [value, controller.tool, controller.eyedropperActive]),
+      builder: (context, _) {
+        final on = value.value;
+        final enabled = applies(controller.tool.value,
+            eyedropper: controller.eyedropperActive.value);
+        return Opacity(
+          opacity: enabled ? 1 : 0.35,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                icon: Icon(icon),
+                color: on && enabled ? _ToolbarTheme.accentOf(context) : p.fg,
+                tooltip: tooltip(on),
+                onPressed: enabled ? onToggle : null,
+              ),
+              if (shortcut != null)
+                _ShortcutBadge(label: shortcut!, on: on && enabled),
+            ],
+          ),
+        );
+      },
     );
   }
 }
