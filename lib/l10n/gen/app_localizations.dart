@@ -1088,6 +1088,12 @@ abstract class AppLocalizations {
   /// **'Frames per second for GIF recordings; higher is smoother but larger'**
   String get settingsRecordingGifFpsHint;
 
+  /// Settings > Recording: caution shown under the Format card when GIF is selected; GIF buffers all frames in memory until finalize, so long recordings risk running out of memory
+  ///
+  /// In en, this message translates to:
+  /// **'GIF holds every frame in memory until it finishes, so a long GIF recording can use several gigabytes and may run out of memory. Keep GIF recordings short.'**
+  String get settingsRecordingGifLengthCaution;
+
   /// Settings > Capture > Screen recording: output format row title
   ///
   /// In en, this message translates to:

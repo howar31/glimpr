@@ -762,6 +762,10 @@ final class OverlayManager {
           }
           result(nil)
         case "dismissOverlay": self.dismiss(); result(nil)
+        // Stop the record-select loupe feed while keeping the window up (the
+        // session beneath a confirmed/cancelled record-select stays visible, so
+        // dismiss() — which would also endLiveSelect — is skipped). Idempotent.
+        case "stopLoupeFeed": self.endLiveSelect(); result(nil)
         // Menu-bar processing pulse — relay to the control engine's status item
         // (the overlay capture lifecycle lives in this engine).
         case "setProcessing":
@@ -1042,6 +1046,7 @@ final class OverlayManager {
       src.start(displayID: id, excludingWindowNumbers: excluded)
       liveSources[id] = src
     }
+    PerfLog.mark("loupeFeedsStart displayCount=\(liveSources.count)")
   }
 
   /// A span×span RGBA patch around a native pixel for [displayID]'s loupe,
@@ -1053,6 +1058,7 @@ final class OverlayManager {
   private func endLiveSelect() {
     guard liveSelectActive else { return }
     liveSelectActive = false
+    PerfLog.mark("loupeFeedsStop displayCount=\(liveSources.count)")
     for (_, s) in liveSources { s.stop() }
     liveSources.removeAll()
   }

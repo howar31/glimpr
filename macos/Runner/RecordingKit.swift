@@ -1414,7 +1414,15 @@ final class GifSink: NSObject, RecordingSinkBase {
     lastAddSeconds = elapsed
     lock.unlock()
 
-    if let cg = downscaled(pb) { gif.add(cg, delay: frameInterval) }
+    // Drain the per-frame Core Image / CGImage temporaries each frame: the
+    // shared sample queue has no implicit autoreleasepool, so CIImage +
+    // createCGImage churn would otherwise pile up until the queue idles. This
+    // trims the transient peak only — NOT the by-design retained-frame growth
+    // (ImageIO holds every frame until finalize, so a long GIF still climbs
+    // ~one RGBA frame per added frame; see the GIF length caveat in Settings).
+    autoreleasepool {
+      if let cg = downscaled(pb) { gif.add(cg, delay: frameInterval) }
+    }
   }
 
   private func downscaled(_ pb: CVPixelBuffer) -> CGImage? {
@@ -1445,6 +1453,7 @@ final class CountdownHUD {
     await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
       continuation = cont
       remaining = seconds
+      PerfLog.mark("countdownStart seconds=\(seconds)")
       present(on: screen, center: center)
       update()
       let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) {
@@ -1474,6 +1483,7 @@ final class CountdownHUD {
     timer?.invalidate(); timer = nil
     window?.orderOut(nil); window = nil
     let c = continuation; continuation = nil
+    if c != nil { PerfLog.mark("countdownEnd proceed=\(proceed)") }
     c?.resume(returning: proceed)
   }
 
@@ -1570,6 +1580,14 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private var maxDuration = 0 // seconds; 0 = off (auto-stop disabled)
   private var countdownHUD: CountdownHUD?
   private let sampleQueue = DispatchQueue(label: "glimpr.record.samples")
+  // I1 perf sampler (gated by the `debugHooks` default): a 1 Hz snapshot of the
+  // process CPU% / RSS / phys-footprint / captured-frame count into the unified
+  // log, so an on-device recording's steady-state cost is measurable alongside
+  // the PerfLog timeline marks. Off entirely unless debugHooks is set; runs from
+  // record start through finalize so a GIF's encode-tail memory is captured too.
+  private var perfSampler: Timer?
+  private var perfPrevCPUns: UInt64 = 0
+  private var perfPrevWall: TimeInterval = 0
   private var events: (String, Any?) -> Void
   /// (active, graceful) — graceful=false on abort/failure so the menu-bar
   /// icon snaps back instead of easing (design: the dropped color confirms
@@ -1846,6 +1864,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
       isRecording = true
       onStateChange?(true, true)
       startTick()
+      if PerfLog.enabled { startPerfSampler() } // I1 sampler: same debug gate
       PerfLog.mark("recordStart mode=\(spec.mode)")
       events("onRecordStarted", [
         "displayId": Int(reportedDisplayID),
@@ -1968,6 +1987,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   }
 
   private func cleanupSession(graceful: Bool = true) {
+    stopPerfSampler()
     tick?.invalidate()
     tick = nil
     followTimer?.invalidate()
@@ -2021,6 +2041,50 @@ final class RecordingController: NSObject, SCStreamDelegate {
     // recover" the readouts showed).
     RunLoop.main.add(t, forMode: .common)
     tick = t
+  }
+
+  // MARK: - I1 perf sampler (debug-gated; see the perf-survey spec)
+
+  /// Cumulative process CPU time (user+system, ns) + resident size + phys
+  /// footprint (bytes) in a single syscall. nil if the call fails.
+  private static func procRusage() -> (cpuNS: UInt64, rss: UInt64, footprint: UInt64)? {
+    var info = rusage_info_current()
+    let kr = withUnsafeMutablePointer(to: &info) { p -> Int32 in
+      p.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+        proc_pid_rusage(getpid(), RUSAGE_INFO_CURRENT, $0)
+      }
+    }
+    guard kr == 0 else { return nil }
+    return (info.ri_user_time + info.ri_system_time,
+            info.ri_resident_size, info.ri_phys_footprint)
+  }
+
+  private func startPerfSampler() {
+    perfPrevWall = ProcessInfo.processInfo.systemUptime
+    perfPrevCPUns = Self.procRusage()?.cpuNS ?? 0
+    let t = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
+      [weak self] _ in
+      Task { @MainActor in
+        guard let self, let r = Self.procRusage() else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let dWall = now - self.perfPrevWall
+        // CPU% is Activity-Monitor-style (100% == one core; can exceed 100).
+        let dCPU = Double(r.cpuNS &- self.perfPrevCPUns) / 1_000_000_000.0
+        let pct = dWall > 0 ? dCPU / dWall * 100.0 : 0
+        self.perfPrevWall = now
+        self.perfPrevCPUns = r.cpuNS
+        PerfLog.mark("recordSample cpu=\(String(format: "%.1f", pct))%"
+          + " rss=\(r.rss / 1_048_576)MB foot=\(r.footprint / 1_048_576)MB"
+          + " frames=\(self.sink?.frameCount ?? 0)")
+      }
+    }
+    RunLoop.main.add(t, forMode: .common)
+    perfSampler = t
+  }
+
+  private func stopPerfSampler() {
+    perfSampler?.invalidate()
+    perfSampler = nil
   }
 
   private static func even(_ v: Int) -> Int { max(2, v - (v % 2)) }
@@ -2173,6 +2237,8 @@ final class RecordingChannel {
   /// Relay a live-select confirm/cancel from an overlay engine to the control
   /// engine's record controller (it owns settings + output naming).
   func notifySelection(_ args: [String: Any]) {
+    PerfLog.mark((args["cancelled"] as? Bool) == true
+      ? "recordSelectCancel" : "recordSelectConfirm")
     channel.invokeMethod("onRecordSelection", arguments: args)
   }
 

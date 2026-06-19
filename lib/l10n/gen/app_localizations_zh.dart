@@ -528,6 +528,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRecordingGifFpsHint => 'GIF 錄影的每秒影格數；越高越流暢，但檔案越大';
 
   @override
+  String get settingsRecordingGifLengthCaution =>
+      'GIF 會把每一影格保留在記憶體中直到結束，因此長時間的 GIF 錄影可能用掉數 GB 並導致記憶體不足，請盡量錄短一點。';
+
+  @override
   String get settingsRecordingFormat => '格式';
 
   @override

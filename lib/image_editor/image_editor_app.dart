@@ -21,6 +21,7 @@ import '../output/flow.dart';
 import '../output/output_naming.dart';
 import '../output/sounds.dart';
 import '../perf/frame_stats.dart';
+import '../perf/perf_gate.dart';
 import '../settings/settings.dart';
 import '../settings/settings_mask.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -120,7 +121,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _frames.attach();
+    // Frame-stat sampling is measurement-only: register the per-frame callback
+    // ONLY under the debug gate (mirrors native PerfLog.enabled). Inert in
+    // normal use; a few early frames during a measurement run are not sampled.
+    perfGateEnabled().then((on) {
+      if (on && mounted) _frames.attach();
+    });
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _perfMark('editorFirstFrame'));
 

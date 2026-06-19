@@ -1420,6 +1420,10 @@ class _SettingsAppState extends State<SettingsApp>
             ),
           ),
         ]),
+        // GIF buffers every frame in memory until finalize (no incremental
+        // flush) — a long GIF can climb into the GBs and run out of memory.
+        // Disclose it under the Format card while GIF is the selected format.
+        if (isGif) _sectionNote(t, _l.settingsRecordingGifLengthCaution),
         const SizedBox(height: 15),
         SectionLabel(_l.settingsSectionBehaviour,
             icon: Icons.videocam_outlined),

@@ -184,6 +184,12 @@ class CaptureBridge {
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
+  /// Stop the record-select loupe's live-pixel SCStreams WITHOUT hiding the
+  /// overlay window — used when a record-select picker is torn down over a
+  /// session beneath (which keeps the window up, so dismissOverlay is skipped).
+  /// Idempotent on the native side; the next record-select restarts the feed.
+  Future<void> stopLoupeFeed() => _channel.invokeMethod('stopLoupeFeed');
+
   /// Hide ONLY this engine's overlay window (a layer pop restored a layer this
   /// display has no frame for). The session itself keeps running.
   Future<void> hideOverlayWindow() => _channel.invokeMethod('hideOverlay');

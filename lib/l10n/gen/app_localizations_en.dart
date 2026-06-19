@@ -554,6 +554,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Frames per second for GIF recordings; higher is smoother but larger';
 
   @override
+  String get settingsRecordingGifLengthCaution =>
+      'GIF holds every frame in memory until it finishes, so a long GIF recording can use several gigabytes and may run out of memory. Keep GIF recordings short.';
+
+  @override
   String get settingsRecordingFormat => 'Format';
 
   @override

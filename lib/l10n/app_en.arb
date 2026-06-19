@@ -548,6 +548,10 @@
   "@settingsRecordingGifFpsHint": {
     "description": "Settings > Recording: GIF frame-rate row hint (GIF section)"
   },
+  "settingsRecordingGifLengthCaution": "GIF holds every frame in memory until it finishes, so a long GIF recording can use several gigabytes and may run out of memory. Keep GIF recordings short.",
+  "@settingsRecordingGifLengthCaution": {
+    "description": "Settings > Recording: caution shown under the Format card when GIF is selected; GIF buffers all frames in memory until finalize, so long recordings risk running out of memory"
+  },
   "settingsRecordingFormat": "Format",
   "@settingsRecordingFormat": {
     "description": "Settings > Capture > Screen recording: output format row title"

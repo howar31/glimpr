@@ -1398,7 +1398,14 @@ final class PinContentView: NSView {
 enum PerfLog {
   static let logger = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "glimpr", category: "perf")
+  /// ALL perf instrumentation is measurement-only and fully inert unless
+  /// `defaults write com.howar31.glimpr debugHooks -bool YES`. Read ONCE at
+  /// first use (toggling needs a relaunch, like the record debug hook + the I1
+  /// sampler). One gate covers every native PerfLog.mark site AND every Dart
+  /// mark (which routes through the `perfMark` channel handlers -> PerfLog.mark).
+  static let enabled = UserDefaults.standard.bool(forKey: "debugHooks")
   static func mark(_ label: String) {
+    guard enabled else { return }
     logger.log("PERF \(label, privacy: .public)")
   }
 }

@@ -165,6 +165,7 @@
   "settingsRecordingResolutionHint": "限制最長邊的像素；過大的錄影會被縮小。僅限影片（GIF 固定 1024 px）",
   "settingsRecordingResolutionNative": "原生",
   "settingsRecordingGifFpsHint": "GIF 錄影的每秒影格數；越高越流暢，但檔案越大",
+  "settingsRecordingGifLengthCaution": "GIF 會把每一影格保留在記憶體中直到結束，因此長時間的 GIF 錄影可能用掉數 GB 並導致記憶體不足，請盡量錄短一點。",
   "settingsRecordingFormat": "格式",
   "settingsRecordingFormatHint": "H.264 與 HEVC 是 mp4 影片，GIF 是無聲動畫圖片",
   "settingsRecordingCountdown": "倒數",

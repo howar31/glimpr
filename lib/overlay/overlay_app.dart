@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/capture_kind.dart';
 import '../perf/frame_stats.dart';
+import '../perf/perf_gate.dart';
 import '../capture/captured_display.dart';
 import '../capture/last_region.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -157,7 +158,12 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   void initState() {
     super.initState();
-    _frames.attach();
+    // Frame-stat sampling is measurement-only: register the per-frame callback
+    // ONLY under the debug gate (mirrors native PerfLog.enabled). Inert in
+    // normal use; a few early frames during a measurement run are not sampled.
+    perfGateEnabled().then((on) {
+      if (on && mounted) _frames.attach();
+    });
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d, pinOnly, liveSelect) async {
         if (liveSelect) {
@@ -458,6 +464,13 @@ class _OverlayAppState extends State<OverlayApp> {
   /// active/interactive state — toolbar, crosshair, loupe, and cursor management
   /// all re-establish (same idea as `_restoreSuspended`'s `_captureSeq++`).
   void _disposeRecordSelect() {
+    // The loupe's live-pixel SCStreams exist only for the record-select picker
+    // (the frozen session beneath magnifies its own image, never this feed).
+    // The picker is gone now, so stop the feed. When a session is beneath,
+    // dismissOverlay() is skipped (the window stays up) and would otherwise be
+    // the only path that stops it -> the feed would leak for the whole
+    // recording. Idempotent natively; the next record-select restarts it.
+    _bridge.stopLoupeFeed();
     _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
