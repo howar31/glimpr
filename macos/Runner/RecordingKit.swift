@@ -1573,6 +1573,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private var chrome: RecordingChrome?
   private var tick: Timer?
   private var followTimer: Timer? // window-mode frame follow (~30 Hz)
+  private var lastFollowRect: NSRect? // B2 hysteresis: last reframed window rect
   private var outputPath: String?
   private var abortRequested = false
   private var paused = false
@@ -2105,6 +2106,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   /// track it (the owner accepts the cost for an accurate recording-range
   /// frame). Stops with the session.
   private func startWindowFollow(windowID: CGWindowID) {
+    lastFollowRect = nil // first tick always reframes (establishes the frame)
     let t = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) {
       [weak self] _ in
       Task { @MainActor in
@@ -2112,10 +2114,23 @@ final class RecordingController: NSObject, SCStreamDelegate {
         // isRecording), so the frame + HUD track the window the whole time.
         guard let self, let chrome = self.chrome,
               let rect = Self.windowCocoaRect(windowID) else { return }
+        // B2 motion hysteresis: the 30 Hz poll otherwise reframes (recompute +
+        // needsDisplay + strip setFrameOrigin + recenter) EVERY tick even for a
+        // stationary window. Skip it when the rect is unchanged (sub-pixel) so
+        // a still window does ~0 reframes/sec; any real move still tracks
+        // exactly (no threshold lag). The poll itself stays 30 Hz so motion is
+        // caught within one frame.
+        if let last = self.lastFollowRect,
+           abs(last.minX - rect.minX) < 0.5, abs(last.minY - rect.minY) < 0.5,
+           abs(last.width - rect.width) < 0.5, abs(last.height - rect.height) < 0.5 {
+          return
+        }
+        self.lastFollowRect = rect
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(rect) })
           ?? NSScreen.main ?? NSScreen.screens[0]
         chrome.reframe(regionGlobalBottomLeft: rect, on: screen)
         self.countdownHUD?.recenter(center: NSPoint(x: rect.midX, y: rect.midY))
+        PerfLog.mark("windowFollowReframe") // debug-gated; stationary -> ~0/sec
       }
     }
     RunLoop.main.add(t, forMode: .common)
