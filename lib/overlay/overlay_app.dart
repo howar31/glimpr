@@ -122,6 +122,10 @@ class _OverlayAppState extends State<OverlayApp> {
       FrameStatsReporter(tag: 'overlay', sink: _perfSink);
   int _broadcastCount = 0;
   Timer? _broadcastRateTimer;
+  // Debug gate (debugHooks): perf measurement MECHANISMS (the frame-stat
+  // callback + the broadcast-rate counter below) run only when set; mark OUTPUT
+  // is also gated natively at PerfLog.mark, so this is belt-and-suspenders.
+  bool _perfEnabled = false;
   // F1-2 throttle state: quiet-window timer + a pending coalesced change.
   Timer? _broadcastTimer;
   bool _broadcastDirty = false;
@@ -162,7 +166,9 @@ class _OverlayAppState extends State<OverlayApp> {
     // ONLY under the debug gate (mirrors native PerfLog.enabled). Inert in
     // normal use; a few early frames during a measurement run are not sampled.
     perfGateEnabled().then((on) {
-      if (on && mounted) _frames.attach();
+      if (!on || !mounted) return;
+      _perfEnabled = true;
+      _frames.attach();
     });
     _bridge.registerOverlayHandlers(
       onCaptureReady: (d, pinOnly, liveSelect) async {
@@ -485,6 +491,14 @@ class _OverlayAppState extends State<OverlayApp> {
   /// active -> suspended: a freeze layer was taken on top. Keep the per-take
   /// overrides; drop the live crop editor/stub (rebuilt fresh on resurface).
   void _suspendRecordSelect() {
+    // Do NOT stop the loupe feed here (unlike _disposeRecordSelect). Suspend is
+    // TEMPORARY: resurface goes through _resurfaceRecordSelect -> _beginRecordSelect,
+    // which rebuilds only the Dart picker UI and does NOT re-trigger the native
+    // beginLiveSelect (that fires only from the record hotkey via CaptureController).
+    // So the native LiveFrameSource feed must keep running across a suspend or the
+    // resurfaced loupe has no pixels (verified: stopping it here blanks the loupe on
+    // resurface). The transient feed cost while a freeze layer sits on top is the
+    // accepted price of an instant resurface.
     _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
@@ -804,13 +818,16 @@ class _OverlayAppState extends State<OverlayApp> {
       ...e.style.value.toJson(),
     });
     // M6: count actual sends per 1s window while they flow — the mark itself
-    // is at most one channel call per second.
-    _broadcastCount++;
-    _broadcastRateTimer ??= Timer(const Duration(seconds: 1), () {
-      _perfSink('broadcastRate n=$_broadcastCount');
-      _broadcastCount = 0;
-      _broadcastRateTimer = null;
-    });
+    // is at most one channel call per second. Debug-gated: the counter + timer
+    // run only under debugHooks (the actual broadcast above is unconditional).
+    if (_perfEnabled) {
+      _broadcastCount++;
+      _broadcastRateTimer ??= Timer(const Duration(seconds: 1), () {
+        _perfSink('broadcastRate n=$_broadcastCount');
+        _broadcastCount = 0;
+        _broadcastRateTimer = null;
+      });
+    }
   }
 
   /// Push the chosen stamp image to the other displays as raw bytes (each decodes
