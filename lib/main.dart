@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:glimpr_pro/glimpr_pro.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'image_editor/image_editor_app.dart';
@@ -25,6 +26,9 @@ Future<void> main() async {
   // Resolve the language choice once per engine boot (restart-effective);
   // every MaterialApp reads the resulting appLocaleOverride.
   await loadAppLocaleOverride();
+  // Resolve Pro entitlement once per engine boot (offline; never blocks boot).
+  // In the OSS build this is the no-op stub — every Pro feature stays locked.
+  await ProRuntime.install();
   final role = await _getRole();
   if (role == 'overlay') {
     runApp(const OverlayApp());

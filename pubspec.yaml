@@ -44,6 +44,10 @@ dependencies:
   shared_preferences: ^2.3.0
   file_selector: ^1.0.0
   simple_icons: ^16.23.0
+  # Pro license gate — public contract + free-build stub. The official (paid)
+  # build swaps this for a same-named private package via pubspec_overrides.yaml.
+  glimpr_pro:
+    path: packages/glimpr_pro
 dev_dependencies:
   flutter_test:
     sdk: flutter

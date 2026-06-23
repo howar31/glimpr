@@ -1,9 +1,60 @@
 import Carbon.HIToolbox
 import Cocoa
 import FlutterMacOS
+import Security
 import ServiceManagement
 import UniformTypeIdentifiers
 import os
+
+/// Keychain-backed storage for the signed Pro license blob. Dumb storage —
+/// verification is Dart-side against the embedded public key. Service-scoped
+/// generic password. NOTE (Phase 8): a Developer ID signing-identity change can
+/// break the item ACL; harden with a Team-ID kSecAttrAccessGroup +
+/// kSecUseDataProtectionKeychain and verify on a notarized build.
+private enum LicenseKeychain {
+  private static let service = "com.howar31.glimpr.license"
+  private static let account = "license"
+
+  static func read() -> String? {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var item: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+      let data = item as? Data,
+      let value = String(data: data, encoding: .utf8)
+    else { return nil }
+    return value
+  }
+
+  static func write(_ value: String) {
+    let data = Data(value.utf8)
+    let base: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+    ]
+    let status = SecItemUpdate(
+      base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+    if status == errSecItemNotFound {
+      var add = base
+      add[kSecValueData as String] = data
+      SecItemAdd(add as CFDictionary, nil)
+    }
+  }
+
+  static func clear() {
+    SecItemDelete([
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+    ] as CFDictionary)
+  }
+}
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureChannel: CaptureChannel?
@@ -12,6 +63,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
   private var loginChannel: FlutterMethodChannel?
+  private var licenseChannel: FlutterMethodChannel?
   private var hotkeyController: HotkeyController?
   private var appearanceObservation: NSKeyValueObservation?
   var overlayManager: OverlayManager?
@@ -163,6 +215,27 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       }
     }
     self.loginChannel = loginChannel
+
+    // Pro license blob storage — Keychain read/write/clear. Dumb storage only;
+    // all verification is Dart-side against the embedded public key, and the
+    // OSS/stub build never invokes this channel. Registered on the control
+    // engine (Settings owns license activation); the overlay/editor engines
+    // currently fall through to "no license" until a Pro feature lives there.
+    let licenseChannel = FlutterMethodChannel(
+      name: "glimpr/license", binaryMessenger: flutterViewController.engine.binaryMessenger)
+    licenseChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "read": result(LicenseKeychain.read())
+      case "write":
+        if let v = call.arguments as? String { LicenseKeychain.write(v) }
+        result(nil)
+      case "clear":
+        LicenseKeychain.clear()
+        result(nil)
+      default: result(FlutterMethodNotImplemented)
+      }
+    }
+    self.licenseChannel = licenseChannel
 
     super.awakeFromNib()
 

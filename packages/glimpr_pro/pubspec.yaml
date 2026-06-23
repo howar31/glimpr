@@ -1,0 +1,11 @@
+name: glimpr_pro
+description: >
+  Public contract + free-build STUB for Glimpr's Pro license gate. Ships in the
+  open-source repo. The real implementation (license verification + Pro feature
+  code) lives in a same-named PRIVATE package, swapped in at build time via
+  pubspec_overrides.yaml. Pure Dart by design — no Pro logic here.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
