@@ -29,6 +29,8 @@ bool FlutterWindow::OnCreate() {
   // Native capture/clipboard channels (in-runner, mirroring macOS).
   capture_channel_ = std::make_unique<CaptureChannel>(
       flutter_controller_->engine()->messenger());
+  clipboard_channel_ = std::make_unique<ClipboardChannel>(
+      flutter_controller_->engine()->messenger());
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
