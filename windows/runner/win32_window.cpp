@@ -134,10 +134,17 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
+  // |size| is the desired CLIENT (content) size (matching macOS setContentSize),
+  // so expand it to the full window size for this monitor's DPI frame.
+  RECT client_rect = {0, 0, Scale(size.width, scale_factor),
+                      Scale(size.height, scale_factor)};
+  AdjustWindowRectExForDpi(&client_rect, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi);
+
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      client_rect.right - client_rect.left,
+      client_rect.bottom - client_rect.top,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
@@ -195,6 +202,20 @@ Win32Window::MessageHandler(HWND hwnd,
       SetWindowPos(hwnd, nullptr, newRectSize->left, newRectSize->top, newWidth,
                    newHeight, SWP_NOZORDER | SWP_NOACTIVATE);
 
+      return 0;
+    }
+    case WM_GETMINMAXINFO: {
+      // Floor the resizable window at the macOS Settings content minimum
+      // (820x700 logical pts), DPI-adjusted to the full window size.
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      UINT dpi = FlutterDesktopGetDpiForMonitor(
+          MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+      double scale = dpi / 96.0;
+      RECT min_client = {0, 0, static_cast<LONG>(820 * scale),
+                         static_cast<LONG>(700 * scale)};
+      AdjustWindowRectExForDpi(&min_client, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi);
+      info->ptMinTrackSize.x = min_client.right - min_client.left;
+      info->ptMinTrackSize.y = min_client.bottom - min_client.top;
       return 0;
     }
     case WM_SIZE: {
