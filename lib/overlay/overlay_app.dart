@@ -11,6 +11,7 @@ import '../capture/last_region.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../theme/glimpr_theme.dart';
 import '../settings/app_locale.dart';
+import '../settings/prefs_cache.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../editor/hud_config.dart';
@@ -298,6 +299,11 @@ class _OverlayAppState extends State<OverlayApp> {
         _attachShared(_editor!); // sync tool/style with the other displays
         // Frozen frame is built; reveal this display's window (no blank flash).
         _bridge.overlayReady();
+        // Windows-only: refresh this resident overlay engine's settings cache so
+        // the prefetch below reads the control engine's latest writes (decoration,
+        // loupe size/zoom, ...). No-op on macOS; runs AFTER overlayReady so the
+        // freeze paint is never delayed. See reloadSettingsForOverlay.
+        await reloadSettingsForOverlay();
         // Prefetch settings off the hot path: the read completes during the
         // user's crop interaction, so _onExport reads _capture synchronously.
         Settings.instance.loadCapture().then((c) {

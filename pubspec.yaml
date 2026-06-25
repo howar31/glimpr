@@ -42,6 +42,12 @@ dependencies:
   path: ^1.9.0
   audioplayers: ^6.7.0
   shared_preferences: ^2.3.0
+  # Referenced directly by lib/settings/prefs_cache.dart to force a per-engine
+  # settings-cache reload on Windows (the resident overlay engine would otherwise
+  # serve a stale cache). Both are already transitive deps of shared_preferences;
+  # declared here so the import is explicit. Windows-only at runtime.
+  shared_preferences_platform_interface: ^2.4.0
+  shared_preferences_windows: ^2.4.0
   file_selector: ^1.0.0
   simple_icons: ^16.23.0
   # Pro license gate — public contract + free-build stub. The official (paid)
