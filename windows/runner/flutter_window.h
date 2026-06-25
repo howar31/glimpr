@@ -35,6 +35,9 @@ class FlutterWindow : public Win32Window {
   // Native channel hosts (in-runner, like macOS).
   std::unique_ptr<CaptureChannel> capture_channel_;
   std::unique_ptr<ClipboardChannel> clipboard_channel_;
+  // The control engine's role channel: answers getRole -> 'control' so Dart's
+  // _getRole resolves on the first try instead of burning the 10x20ms retry.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> role_channel_;
 
   // The per-display freeze-overlay engines + windows (lazy-created on first
   // capture). The macOS OverlayManager analogue.

@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -31,6 +33,21 @@ bool FlutterWindow::OnCreate() {
       flutter_controller_->engine()->messenger());
   clipboard_channel_ = std::make_unique<ClipboardChannel>(
       flutter_controller_->engine()->messenger());
+
+  // This is the CONTROL engine: answer glimpr/role so main.dart mounts the
+  // Settings app and does not waste the 10x20ms _getRole retry on every launch.
+  role_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "glimpr/role",
+      &flutter::StandardMethodCodec::GetInstance());
+  role_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "getRole") {
+          result->Success(flutter::EncodableValue("control"));
+        } else {
+          result->NotImplemented();
+        }
+      });
 
   // The freeze-overlay manager owns the per-display engines (lazy). The control
   // window's HWND is passed so its own window is excluded from window-snap and
