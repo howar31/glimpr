@@ -322,6 +322,18 @@ void OverlayManager::Show(int64_t display_id) {
   const bool activate =
       (display_id == key_display_id_) || key_display_id_ == 0;
   u->window->Show(mi.rcMonitor, activate);
+
+  // If the cursor is ALREADY on this display, claim active now. The user may
+  // have moved here during the capture latency, before this display's editor
+  // existed to receive the active handoff -- the cursor poll sent onActiveDisplay
+  // to a not-yet-mounted EditorCanvas (lost), then its dedup (active == this)
+  // suppressed a resend, so the crosshair would not track until the cursor left
+  // and re-entered. Re-assert now that the window + editor are ready.
+  POINT pt{};
+  GetCursorPos(&pt);
+  if (MonId(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)) == display_id) {
+    SetActiveDisplay(display_id, pt);
+  }
 }
 
 void OverlayManager::Hide(int64_t display_id) {
