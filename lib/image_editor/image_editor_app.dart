@@ -85,7 +85,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
 
   final Map<ToolKind, DrawStyle> _toolStyles = {};
   Timer? _persistTimer; // debounces saving _toolStyles to the shared store
-  Map<String, HotkeyBinding?> _bindings = {...kDefaultBindings};
+  Map<String, HotkeyBinding?> _bindings = {...effectiveDefaultBindings()};
   LoupeConfig _loupe = const LoupeConfig();
   HudConfig _hud = const HudConfig();
   CaptureSettings _cap = CaptureSettings.defaults;

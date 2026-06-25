@@ -26,7 +26,7 @@ class HotkeyService {
       for (final a in kGlobalActions) {
         final b = _bindings.containsKey(a.actionKey)
             ? _bindings[a.actionKey]
-            : kDefaultBindings[a.actionKey];
+            : defaultBindingFor(a.actionKey);
         if (b == null) continue; // disabled
         await registrar.register(a.actionKey, b, () => onAction(a.actionKey));
       }

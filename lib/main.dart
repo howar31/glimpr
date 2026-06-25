@@ -6,6 +6,7 @@ import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
+import 'output/deliver.dart' show effectiveSaveDir;
 import 'output/filename.dart';
 import 'overlay/overlay_app.dart';
 import 'record/record_bridge.dart';
@@ -17,6 +18,7 @@ import 'shortcuts/hotkey_registrar.dart';
 import 'shortcuts/hotkey_service.dart';
 import 'shortcuts/shortcut_actions.dart';
 import 'shortcuts/shortcut_store.dart';
+import 'shortcuts/windows_hotkey_registrar.dart';
 
 /// Every engine runs this same main(). The native side answers `glimpr/role`
 /// with 'overlay' for the per-display overlay engines and 'control' for the
@@ -80,12 +82,18 @@ Future<void> main() async {
         if (recordAvailable) record.toggle(kRecordModeDisplay);
       case kRecordLastRegionKey:
         if (recordAvailable) record.toggle(kRecordModeLastRegion);
+      case 'menu.openSaveFolder':
+        _openSaveFolder();
     }
   }
 
-  // The menu-bar items fire actions over the same channel as the hotkeys; the
-  // fallback keeps them working when an action's shortcut is unbound.
-  final registrar = NativeHotkeyRegistrar()..fallback = dispatchAction;
+  // The menu-bar / tray items fire actions over the same channel as the hotkeys;
+  // the fallback keeps them working when an action's shortcut is unbound. The
+  // registrar is platform-specific: macOS uses Carbon, Windows uses Win32
+  // RegisterHotKey (the macOS one is unchanged from before).
+  final HotkeyRegistrar registrar = Platform.isWindows
+      ? (WindowsHotkeyRegistrar()..fallback = dispatchAction)
+      : (NativeHotkeyRegistrar()..fallback = dispatchAction);
   final hotkeyService = HotkeyService(
     registrar: registrar,
     bindings: bindings,
@@ -113,6 +121,22 @@ Future<void> _pinClipboard() async {
       '${Directory.systemTemp.path}/${screenshotFilename(DateTime.now(), 'png')}');
   await file.writeAsBytes(bytes);
   await CaptureBridge.pinImage(file.path);
+}
+
+/// Open the configured save folder (Windows tray "Open Save Folder"). Reads the
+/// stored save directory (falling back to the platform default the save leg uses)
+/// and reveals it in the file manager.
+Future<void> _openSaveFolder() async {
+  final configured = resolveSaveDir(await Settings.instance.getSaveDirectory());
+  final dir = effectiveSaveDir(configured);
+  try {
+    await dir.create(recursive: true); // ensure it exists before opening
+  } catch (_) {}
+  if (Platform.isWindows) {
+    await Process.run('explorer', [dir.path]);
+  } else {
+    await Process.run('open', [dir.path]);
+  }
 }
 
 /// Resolves this engine's role. The native handler is registered synchronously

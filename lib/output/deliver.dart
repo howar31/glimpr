@@ -47,8 +47,18 @@ Future<void> _defaultSound() =>
 /// The effective output folder: the configured save directory, or the default
 /// the save leg falls back to. Shared with the gallery's "More…" tile so the
 /// folder it opens is exactly where saves land.
-Directory effectiveSaveDir(Directory? configured) =>
-    configured ?? Directory('${Platform.environment['HOME']}/Pictures/Glimpr');
+Directory effectiveSaveDir(Directory? configured) {
+  if (configured != null) return configured;
+  // Windows GUI processes do not get HOME (that is a Unix/msys var); use
+  // USERPROFILE there. macOS/Linux keep HOME and the '/' separator.
+  final home = Platform.isWindows
+      ? (Platform.environment['USERPROFILE'] ??
+          Platform.environment['HOME'] ??
+          '.')
+      : (Platform.environment['HOME'] ?? '.');
+  return Directory(
+      '$home${Platform.pathSeparator}Pictures${Platform.pathSeparator}Glimpr');
+}
 
 /// The effective output directory for a capture: [effectiveSaveDir] with the
 /// rendered [subfolderPattern] appended as a RELATIVE path. An empty rendered

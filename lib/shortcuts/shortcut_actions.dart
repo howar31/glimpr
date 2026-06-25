@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/services.dart';
 import '../editor/editor_controller.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -215,6 +217,85 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kEditorToolActionKey[ToolKind.paste]!:
       _b(PhysicalKeyboardKey.keyV, LogicalKeyboardKey.keyV),
 };
+
+/// Windows-specific default overrides, merged over [kDefaultBindings] on Windows.
+/// Rationale: meta maps to the Win key, and Win+Alt+digit collides with the
+/// taskbar jump-list (and Win-key combos are broadly reserved), so the capture
+/// globals get Ctrl+Alt+Win+digit; the not-yet-built globals are disabled (null);
+/// and the LIVE overlay-editor command keys move meta -> control. No migration
+/// code: changing a default is just changing a default.
+final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
+  // Capture globals: Ctrl+Alt+Win+1..4.
+  kCaptureAreaKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  kCaptureWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  kCaptureScreenKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  kCaptureLastRegionKey: _b(
+      PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  // Deferred globals: disabled until their slice (pin/open-editor = S4, record = S6).
+  kPinAreaKey: null,
+  kPinClipboardKey: null,
+  kOpenEditorKey: null,
+  kOpenEditorClipboardKey: null,
+  kRecordRegionKey: null,
+  kRecordWindowKey: null,
+  kRecordDisplayKey: null,
+  kRecordLastRegionKey: null,
+  // Editor command keys: the overlay editor is LIVE on Windows (S2b), so its
+  // meta-modified commands must be Ctrl-based now (undo/redo/paste/duplicate/
+  // z-order). Modifier-light tool/command keys (C/B/P, digits, Shift+letters,
+  // Delete, Enter) are already cross-platform and stay shared.
+  kEditorUndoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
+      {HotkeyModifier.control}),
+  kEditorRedoKey: _b(PhysicalKeyboardKey.keyZ, LogicalKeyboardKey.keyZ,
+      {HotkeyModifier.control, HotkeyModifier.shift}),
+  kEditorPasteKey: _b(PhysicalKeyboardKey.keyV, LogicalKeyboardKey.keyV,
+      {HotkeyModifier.control}),
+  kEditorDuplicateKey: _b(PhysicalKeyboardKey.keyD, LogicalKeyboardKey.keyD,
+      {HotkeyModifier.control}),
+  kEditorBringToFrontKey: _b(
+      PhysicalKeyboardKey.bracketRight, LogicalKeyboardKey.bracketRight,
+      {HotkeyModifier.control}),
+  kEditorSendToBackKey: _b(
+      PhysicalKeyboardKey.bracketLeft, LogicalKeyboardKey.bracketLeft,
+      {HotkeyModifier.control}),
+};
+
+/// Global actions NOT available on Windows yet (greyed in the tray, hidden in the
+/// Shortcuts pane, disabled as hotkeys). Pin/open-editor land in S4, record in S6.
+const _kWindowsUnavailableGlobals = <String>{
+  kPinAreaKey,
+  kPinClipboardKey,
+  kOpenEditorKey,
+  kOpenEditorClipboardKey,
+  kRecordRegionKey,
+  kRecordWindowKey,
+  kRecordDisplayKey,
+  kRecordLastRegionKey,
+};
+
+/// Whether a Tier-1 global action is available on the current platform. macOS:
+/// always. Windows: everything except the not-yet-built globals.
+bool isGlobalActionAvailable(String actionKey, {bool? isWindows}) =>
+    !(isWindows ?? Platform.isWindows) ||
+    !_kWindowsUnavailableGlobals.contains(actionKey);
+
+/// The effective default bindings for [isWindows]: the macOS map, with the
+/// Windows overrides merged on top when [isWindows]. Pure (testable) function.
+Map<String, HotkeyBinding?> defaultBindingsFor(bool isWindows) => isWindows
+    ? {...kDefaultBindings, ...kWindowsDefaultOverrides}
+    : {...kDefaultBindings};
+
+/// The effective default bindings on THIS platform.
+Map<String, HotkeyBinding?> effectiveDefaultBindings() =>
+    defaultBindingsFor(Platform.isWindows);
+
+/// The platform-effective default binding for [actionKey] (null = disabled).
+HotkeyBinding? defaultBindingFor(String actionKey) =>
+    effectiveDefaultBindings()[actionKey];
 
 /// Keys reserved as WHOLE keys (rejected with any modifier combination). Esc =
 /// safety Cancel/Exit; arrows = crosshair nudge.

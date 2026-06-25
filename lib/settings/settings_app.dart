@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
 
 import 'licenses_page.dart';
-import 'windows_capture_test.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -753,12 +752,6 @@ class _SettingsAppState extends State<SettingsApp>
     final list = ListView(
       padding: const EdgeInsets.fromLTRB(28, _kTitleBarInset, 28, 32),
       children: [
-        // Windows has no hotkeys/tray yet (S3); a temporary trigger to exercise
-        // the native direct-capture path. Gated to Windows so macOS is untouched.
-        if (Platform.isWindows) ...const [
-          WindowsCaptureTest(),
-          SizedBox(height: 16),
-        ],
         ..._pane(t),
       ],
     );
@@ -2061,7 +2054,10 @@ class _SettingsAppState extends State<SettingsApp>
   List<Widget> _advancedPane(GlimprTokens t) {
     return [
       _h1(_l.settingsPaneAdvanced, t),
-      SectionLabel(_l.settingsSectionMultiDisplay, icon: Icons.memory),
+      // Multi-display warm engines: macOS only (the Windows overlay is lazy with
+      // no warm pool), so the whole section is hidden on Windows.
+      if (!Platform.isWindows) ...[
+        SectionLabel(_l.settingsSectionMultiDisplay, icon: Icons.memory),
       GlassCard.padded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2118,6 +2114,7 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 15),
+      ],
       SectionLabel(_l.settingsSectionCaptureLayers, icon: Icons.layers_outlined),
       GlassCard.padded(
         child: Column(
@@ -2232,7 +2229,10 @@ class _SettingsAppState extends State<SettingsApp>
       SectionLabel(_l.settingsPaneCapture, icon: Icons.crop_free),
       GlassCard.rows([
         for (final a in kGlobalActions)
-          if (!kRecordActionKeys.contains(a.actionKey))
+          // Hide globals that are not available on this platform (Windows:
+          // pin / open-editor land in S4, recording in S6).
+          if (!kRecordActionKeys.contains(a.actionKey) &&
+              isGlobalActionAvailable(a.actionKey))
             SettingRow(
               title: globalActionLabel(_l, a.actionKey),
               hint: globalActionHint(_l, a.actionKey),
@@ -2247,24 +2247,27 @@ class _SettingsAppState extends State<SettingsApp>
       ]),
       _sectionNote(t, _l.settingsShortcutsCaptureNote),
       const SizedBox(height: 24),
-      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
-      GlassCard.rows([
-        for (final a in kGlobalActions)
-          if (kRecordActionKeys.contains(a.actionKey))
-            SettingRow(
-              title: globalActionLabel(_l, a.actionKey),
-              hint: globalActionHint(_l, a.actionKey),
-              tag: _scopeChip(_l.scopeGlobal),
-              warning: _bindingWarning(a.actionKey, true, dupes),
-              trailing: _bindingRow(
-                t: t,
-                actionKey: a.actionKey,
-                requireModifier: true,
+      // Recording shortcuts: macOS only for now (Windows recording = S6).
+      if (!Platform.isWindows) ...[
+        SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
+        GlassCard.rows([
+          for (final a in kGlobalActions)
+            if (kRecordActionKeys.contains(a.actionKey))
+              SettingRow(
+                title: globalActionLabel(_l, a.actionKey),
+                hint: globalActionHint(_l, a.actionKey),
+                tag: _scopeChip(_l.scopeGlobal),
+                warning: _bindingWarning(a.actionKey, true, dupes),
+                trailing: _bindingRow(
+                  t: t,
+                  actionKey: a.actionKey,
+                  requireModifier: true,
+                ),
               ),
-            ),
-      ]),
-      _sectionNote(t, _l.settingsShortcutsRecordingNote),
-      const SizedBox(height: 24),
+        ]),
+        _sectionNote(t, _l.settingsShortcutsRecordingNote),
+        const SizedBox(height: 24),
+      ],
       // Tools — tool-selection keys (rebindable), in toolbar order.
       SectionLabel(_l.settingsShortcutsTools, icon: Icons.palette_outlined),
       GlassCard.rows([
@@ -2483,7 +2486,7 @@ class _SettingsAppState extends State<SettingsApp>
   }) {
     final draft = _shortcutsDraft!;
     final binding = draft[actionKey];
-    final isDefault = binding == kDefaultBindings[actionKey];
+    final isDefault = binding == defaultBindingFor(actionKey);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2504,7 +2507,7 @@ class _SettingsAppState extends State<SettingsApp>
           t,
           isDefault: isDefault,
           onReset: () =>
-              setState(() => draft[actionKey] = kDefaultBindings[actionKey]),
+              setState(() => draft[actionKey] = defaultBindingFor(actionKey)),
         ),
       ],
     );

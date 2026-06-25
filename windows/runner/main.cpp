@@ -17,6 +17,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // Single instance: a resident tray app must not run twice (a second tray icon
+  // + a RegisterHotKey collision). If one is already running, ask it to reveal
+  // its Settings window, then exit.
+  HANDLE instance_mutex =
+      ::CreateMutexW(nullptr, TRUE, L"Glimpr_SingleInstance_8F3A");
+  if (instance_mutex && ::GetLastError() == ERROR_ALREADY_EXISTS) {
+    UINT reveal = ::RegisterWindowMessageW(L"GlimprRevealSettings");
+    ::PostMessage(HWND_BROADCAST, reveal, 0, 0);
+    ::CoUninitialize();
+    return EXIT_SUCCESS;
+  }
+
   flutter::DartProject project(L"data");
 
   std::vector<std::string> command_line_arguments =
@@ -32,7 +44,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.Create(L"glimpr", origin, size)) {
     return EXIT_FAILURE;
   }
-  window.SetQuitOnClose(true);
+  // Resident shell: closing the Settings window hides it to the tray; only the
+  // tray "Quit" (FlutterWindow::Quit -> PostQuitMessage) ends the app.
+  window.SetQuitOnClose(false);
 
   ::MSG msg;
   while (::GetMessage(&msg, nullptr, 0, 0)) {

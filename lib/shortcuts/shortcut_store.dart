@@ -37,7 +37,7 @@ class ShortcutStore {
   Future<HotkeyBinding?> bindingFor(String actionKey) async {
     final raw = await _raw();
     if (raw.containsKey(actionKey)) return raw[actionKey];
-    return kDefaultBindings[actionKey];
+    return defaultBindingFor(actionKey);
   }
 
   /// Like bindingFor but does NOT fall back to default — used by tests/UI to
@@ -48,7 +48,7 @@ class ShortcutStore {
   /// Every action's effective binding (defaults merged with stored overrides).
   Future<Map<String, HotkeyBinding?>> all() async {
     final raw = await _raw();
-    final out = <String, HotkeyBinding?>{...kDefaultBindings};
+    final out = <String, HotkeyBinding?>{...effectiveDefaultBindings()};
     out.addAll(raw); // overrides (incl. explicit nulls)
     return out;
   }

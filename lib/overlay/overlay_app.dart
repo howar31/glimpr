@@ -64,7 +64,7 @@ class _OverlayAppState extends State<OverlayApp> {
   // Seeded with the factory defaults so editor shortcuts work the instant the
   // first overlay appears (the async load below only layers in user overrides);
   // ShortcutStore.all() returns the same merged shape.
-  Map<String, HotkeyBinding?> _editorBindings = {...kDefaultBindings};
+  Map<String, HotkeyBinding?> _editorBindings = {...effectiveDefaultBindings()};
   LoupeConfig _loupe = const LoupeConfig();
   HudConfig _hud = const HudConfig();
   // Navigator for the exit-confirmation dialog; re-entrancy guard so a second

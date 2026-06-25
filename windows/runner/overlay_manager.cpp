@@ -554,11 +554,13 @@ void OverlayManager::HandleOverlayCapture(
   }
   if (method == "openSettings") {
     // Simplified vs the macOS suspend-with-mask detour: dismiss the freeze and
-    // raise the control (Settings) window.
+    // raise the control (Settings) window. Route through the same reveal message
+    // the tray / second-instance use so the control window's RevealControlWindow
+    // (show + ForceRedraw + foreground) is the single reveal path.
     DismissAll();
     if (control_hwnd_) {
-      ShowWindow(control_hwnd_, SW_SHOW);
-      SetForegroundWindow(control_hwnd_);
+      static UINT reveal = RegisterWindowMessageW(L"GlimprRevealSettings");
+      PostMessage(control_hwnd_, reveal, 0, 0);
     }
     result->Success();
     return;
