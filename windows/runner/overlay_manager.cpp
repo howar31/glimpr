@@ -454,7 +454,19 @@ void OverlayManager::HandleOverlayCapture(
   const EncodableMap& args = args_ptr ? *args_ptr : empty;
 
   if (method == "overlayReady") {
-    Show(display_id);
+    // Reveal only AFTER the new frozen frame is actually presented, so the window
+    // does not briefly flash the PREVIOUS capture's stale swapchain content (a
+    // frame left dimmed by a crop scrim reads as a dark mask). ForceRedraw
+    // guarantees a frame fires the one-shot next-frame callback.
+    Unit* u = UnitFor(display_id);
+    if (u && u->window && u->window->controller()) {
+      const int64_t id = display_id;
+      u->window->controller()->engine()->SetNextFrameCallback(
+          [this, id]() { Show(id); });
+      u->window->controller()->ForceRedraw();
+    } else {
+      Show(display_id);
+    }
     result->Success();
     return;
   }
