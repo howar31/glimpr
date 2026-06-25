@@ -4,6 +4,7 @@ import '../editor/decoration.dart';
 import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../overlay/export.dart';
+import '../settings/prefs_cache.dart';
 import '../settings/settings.dart';
 import 'capture_bridge.dart';
 import 'capture_kind.dart';
@@ -205,6 +206,11 @@ class DirectCapture {
   }
 
   Future<void> lastRegion() async {
+    // Windows: the overlay engine writes `last_region` after a crop, but this
+    // (control) engine's SharedPreferencesAsync cache is stale and would not see
+    // that write. Reload before reading so we repeat the actual last region.
+    // No-op on macOS. See reloadSettingsCache.
+    await reloadSettingsCache();
     final region = await _regionStore.load();
     if (region == null) return; // nothing stored -> silent no-op
     await _capture(

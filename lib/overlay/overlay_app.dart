@@ -302,8 +302,8 @@ class _OverlayAppState extends State<OverlayApp> {
         // Windows-only: refresh this resident overlay engine's settings cache so
         // the prefetch below reads the control engine's latest writes (decoration,
         // loupe size/zoom, ...). No-op on macOS; runs AFTER overlayReady so the
-        // freeze paint is never delayed. See reloadSettingsForOverlay.
-        await reloadSettingsForOverlay();
+        // freeze paint is never delayed. See reloadSettingsCache.
+        await reloadSettingsCache();
         // Prefetch settings off the hot path: the read completes during the
         // user's crop interaction, so _onExport reads _capture synchronously.
         Settings.instance.loadCapture().then((c) {
