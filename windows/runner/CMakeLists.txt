@@ -9,7 +9,9 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "capture_channel.cpp"
   "clipboard_channel.cpp"
+  "cursor_image.cpp"
   "decoration.cpp"
+  "encode_channel.cpp"
   "flutter_window.cpp"
   "image_codec.cpp"
   "main.cpp"

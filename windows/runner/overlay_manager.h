@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "clipboard_channel.h"
+#include "encode_channel.h"
 #include "overlay_window.h"
 
 // Owns the per-display overlay windows + their Flutter engines and drives the
@@ -50,6 +51,7 @@ class OverlayManager {
     std::unique_ptr<MethodChannel<EncodableValue>> overlay;  // native -> Dart
     std::unique_ptr<MethodChannel<EncodableValue>> fonts;
     std::unique_ptr<ClipboardChannel> clipboard;
+    std::unique_ptr<EncodeChannel> encode;
   };
 
   // ---- lifecycle ----------------------------------------------------------

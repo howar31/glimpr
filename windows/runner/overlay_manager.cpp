@@ -4,11 +4,16 @@
 
 #include <flutter/standard_method_codec.h>
 
+#include <winrt/Windows.Foundation.h>
+
 #include <algorithm>
 #include <cmath>
 #include <set>
 #include <string>
+#include <thread>
 
+#include "cursor_image.h"
+#include "image_codec.h"
 #include "wgc_capturer.h"
 #include "window_enum.h"
 
@@ -216,6 +221,9 @@ void OverlayManager::RegisterUnitChannels(Unit& unit) {
 
   // Reuse the S2a clipboard seam (glimpr/clipboard.writeImage) on this engine.
   unit.clipboard = std::make_unique<ClipboardChannel>(msgr);
+  // Native PNG/JPEG encode + Direct2D decoration for the annotated export (the
+  // overlay composites on this engine), instead of the pure-Dart fallback.
+  unit.encode = std::make_unique<EncodeChannel>(msgr);
 }
 
 // ---- present / show / dismiss --------------------------------------------
@@ -233,22 +241,40 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     return;
   }
 
-  // Capture every monitor, cursor display FIRST so the display the user is
-  // looking at freezes first.
   std::vector<HMONITOR> mons = EnumerateMonitors();
   // Cursor display first (a valid strict-weak-ordering: "is-cursor" sorts ahead
-  // of "is-not"), mirroring the macOS jobs.sort.
+  // of "is-not") so it is PRESENTED first, mirroring the macOS jobs.sort.
   std::stable_sort(mons.begin(), mons.end(),
                    [cursor_id](HMONITOR a, HMONITOR b) {
                      return (MonId(a) == cursor_id) && (MonId(b) != cursor_id);
                    });
-  for (HMONITOR mon : mons) {
-    auto frame = wgc::CaptureMonitor(mon, false);
-    if (!frame) continue;
-    const bool is_cursor = (MonId(mon) == cursor_id);
+
+  // Capture every monitor IN PARALLEL -- each worker has its OWN WinRT MTA + D3D
+  // device + frame pool (no shared state), so a multi-display freeze is not
+  // staggered across displays (mirrors macOS's parallel captureAll). The present
+  // (onCaptureReady) stays on this platform thread, cursor display first.
+  std::vector<std::optional<CaptureFrame>> frames(mons.size());
+  {
+    std::vector<std::thread> workers;
+    workers.reserve(mons.size());
+    for (size_t i = 0; i < mons.size(); ++i) {
+      workers.emplace_back([&frames, &mons, i]() {
+        try {
+          winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        } catch (...) {
+        }
+        frames[i] = wgc::CaptureMonitor(mons[i], false);
+        winrt::uninit_apartment();
+      });
+    }
+    for (auto& t : workers) t.join();
+  }
+  for (size_t i = 0; i < mons.size(); ++i) {
+    if (!frames[i]) continue;
+    const bool is_cursor = (MonId(mons[i]) == cursor_id);
     EncodableMap dict =
-        BuildDisplayDict(mon, std::move(*frame), is_cursor, cursor);
-    PresentFrame(MonId(mon), std::move(dict), pin_only, live_select);
+        BuildDisplayDict(mons[i], std::move(*frames[i]), is_cursor, cursor);
+    PresentFrame(MonId(mons[i]), std::move(dict), pin_only, live_select);
   }
 }
 
@@ -273,10 +299,24 @@ EncodableMap OverlayManager::BuildDisplayDict(HMONITOR mon, CaptureFrame frame,
   d[EncodableValue("scaleFactor")] = EncodableValue(scale);
   d[EncodableValue("isCursorDisplay")] = EncodableValue(is_cursor);
   if (is_cursor) {
-    d[EncodableValue("cursorX")] =
-        EncodableValue((cursor_global.x - mi.rcMonitor.left) / scale);
-    d[EncodableValue("cursorY")] =
-        EncodableValue((cursor_global.y - mi.rcMonitor.top) / scale);
+    const double cursor_x = (cursor_global.x - mi.rcMonitor.left) / scale;
+    const double cursor_y = (cursor_global.y - mi.rcMonitor.top) / scale;
+    d[EncodableValue("cursorX")] = EncodableValue(cursor_x);
+    d[EncodableValue("cursorY")] = EncodableValue(cursor_y);
+    // The OS cursor image for the overlay's toggleable pointer layer: a native-px
+    // PNG + its display-local logical top-left (cursor minus hotspot). The frozen
+    // frame itself is captured WITHOUT the cursor. Absent for unrenderable cursors.
+    if (auto cur = cursorimg::Capture()) {
+      auto png = codec::EncodePng(cur->bgra.data(), cur->width, cur->height,
+                                  cur->width * 4);
+      if (!png.empty()) {
+        d[EncodableValue("cursorImage")] = EncodableValue(std::move(png));
+        d[EncodableValue("cursorLeft")] =
+            EncodableValue(cursor_x - cur->hotspot_x / scale);
+        d[EncodableValue("cursorTop")] =
+            EncodableValue(cursor_y - cur->hotspot_y / scale);
+      }
+    }
   }
   d[EncodableValue("pixelWidth")] = EncodableValue(static_cast<int64_t>(frame.width));
   d[EncodableValue("pixelHeight")] = EncodableValue(static_cast<int64_t>(frame.height));
