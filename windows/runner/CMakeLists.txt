@@ -9,8 +9,10 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "capture_channel.cpp"
   "flutter_window.cpp"
+  "image_codec.cpp"
   "main.cpp"
   "utils.cpp"
+  "wgc_capturer.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
@@ -37,7 +39,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 # Graphics libs for native capture (Windows.Graphics.Capture, D3D11, Direct2D,
 # WIC) and the WinRT umbrella. Added in Phase 6 S2a.
-target_link_libraries(${BINARY_NAME} PRIVATE "d3d11.lib" "dxgi.lib" "d2d1.lib" "windowscodecs.lib" "windowsapp.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "d3d11.lib" "dxgi.lib" "d2d1.lib" "windowscodecs.lib" "windowsapp.lib" "ole32.lib" "shcore.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

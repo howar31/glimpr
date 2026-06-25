@@ -22,6 +22,9 @@ class CaptureChannel {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleCaptureRegion(
+      const flutter::MethodCall<flutter::EncodableValue>& call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 };

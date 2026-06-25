@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
 
 import 'licenses_page.dart';
+import 'windows_capture_test.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -750,7 +752,15 @@ class _SettingsAppState extends State<SettingsApp>
   Widget _content(GlimprTokens t) {
     final list = ListView(
       padding: const EdgeInsets.fromLTRB(28, _kTitleBarInset, 28, 32),
-      children: _pane(t),
+      children: [
+        // Windows has no hotkeys/tray yet (S3); a temporary trigger to exercise
+        // the native direct-capture path. Gated to Windows so macOS is untouched.
+        if (Platform.isWindows) ...const [
+          WindowsCaptureTest(),
+          SizedBox(height: 16),
+        ],
+        ..._pane(t),
+      ],
     );
     // The Shortcuts pane is long; pin its Apply/Revert bar to the bottom so it's
     // always reachable without scrolling to the end of the list.
