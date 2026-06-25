@@ -222,8 +222,18 @@ class _SettingsAppState extends State<SettingsApp>
   }
 
   // The app's marketing + build version, read once from the native bundle.
-  late final Future<String> _appVersionFuture =
-      _roleChannel.invokeMethod<String>('appVersion').then((v) => v ?? '');
+  // Degrades to '' when the native role channel is absent (e.g. Windows before
+  // the resident-shell native layer exists), so the About pane renders blank
+  // instead of surfacing an unhandled MissingPluginException.
+  late final Future<String> _appVersionFuture = _loadAppVersion();
+
+  Future<String> _loadAppVersion() async {
+    try {
+      return await _roleChannel.invokeMethod<String>('appVersion') ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
 
   void _openUrl(String url) =>
       _roleChannel.invokeMethod('openExternalUrl', {'url': url});
