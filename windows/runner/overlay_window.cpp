@@ -16,9 +16,12 @@ const wchar_t* EnsureWindowClass() {
     wc.lpfnWndProc = OverlayWindow::WndProc;
     wc.hInstance = GetModuleHandle(nullptr);
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    // Opaque black backing so any frame painted before Flutter's first raster is
-    // black, never a white flash (we only Show after overlayReady anyway).
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    // NO background brush (like the standard Flutter window): a brush would make
+    // SW_SHOW erase the client area (to black) for a frame before DWM composites
+    // the swapchain -> a visible flash. With no brush the window reveals straight
+    // to the already-rendered frozen frame (we Show only after the next-frame
+    // callback, so the swapchain is current).
+    wc.hbrBackground = nullptr;
     wc.lpszClassName = kOverlayClassName;
     RegisterClassW(&wc);
     g_class_registered = true;
@@ -76,10 +79,17 @@ void OverlayWindow::Show(const RECT& monitor_px, bool activate) {
   if (!hwnd_) return;
   const int w = monitor_px.right - monitor_px.left;
   const int h = monitor_px.bottom - monitor_px.top;
+  // Match the child to the monitor BEFORE revealing the window (a post-show
+  // child resize would repaint = flash). The child was already sized at Create;
+  // resize only on a real change (e.g. a re-homed display of a different size).
+  if (child_) {
+    RECT cc{};
+    GetClientRect(hwnd_, &cc);
+    if (cc.right != w || cc.bottom != h) MoveWindow(child_, 0, 0, w, h, FALSE);
+  }
   UINT flags = SWP_SHOWWINDOW;
   if (!activate) flags |= SWP_NOACTIVATE;
   SetWindowPos(hwnd_, HWND_TOPMOST, monitor_px.left, monitor_px.top, w, h, flags);
-  if (child_) MoveWindow(child_, 0, 0, w, h, TRUE);
   visible_ = true;
   if (activate) SetForeground();
 }
