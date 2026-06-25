@@ -83,7 +83,6 @@ RECT VisibleBounds(HWND hwnd) {
 struct EnumCtx {
   RECT monitor;        // physical
   double scale;
-  HWND control;
   const std::vector<HWND>* overlays;
   EncodableList* out;  // front-to-back (EnumWindows order)
 };
@@ -92,7 +91,8 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
   auto* ctx = reinterpret_cast<EnumCtx*>(lp);
   if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
   if (IsCloaked(hwnd)) return TRUE;
-  if (hwnd == ctx->control) return TRUE;
+  // Only our own freeze overlays are excluded; glimpr's normal windows
+  // (Settings / editor) are snappable, matching macOS.
   if (std::find(ctx->overlays->begin(), ctx->overlays->end(), hwnd) !=
       ctx->overlays->end()) {
     return TRUE;
@@ -128,13 +128,13 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
 
 namespace win_enum {
 
-EncodableList SnappableWindows(HMONITOR mon, HWND control,
+EncodableList SnappableWindows(HMONITOR mon,
                                const std::vector<HWND>& overlays) {
   MONITORINFO mi{};
   mi.cbSize = sizeof(MONITORINFO);
   if (!GetMonitorInfo(mon, &mi)) return {};
   EncodableList out;
-  EnumCtx ctx{mi.rcMonitor, MonitorScale(mon), control, &overlays, &out};
+  EnumCtx ctx{mi.rcMonitor, MonitorScale(mon), &overlays, &out};
   EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
   return out;
 }

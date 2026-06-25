@@ -15,8 +15,10 @@ namespace win_enum {
 
 // Visible, non-minimized, non-cloaked top-level windows intersecting [mon],
 // front-to-back, as display-local LOGICAL rects { x, y, w, h, title, app,
-// windowNumber }. [control] + [overlays] (our own HWNDs) are excluded.
-flutter::EncodableList SnappableWindows(HMONITOR mon, HWND control,
+// windowNumber }. Only the freeze [overlays] (our top-most covers) are excluded;
+// glimpr's OWN normal windows (Settings / editor) ARE snappable, matching macOS
+// snappableWindows.
+flutter::EncodableList SnappableWindows(HMONITOR mon,
                                         const std::vector<HWND>& overlays);
 
 }  // namespace win_enum

@@ -282,7 +282,7 @@ EncodableMap OverlayManager::BuildDisplayDict(HMONITOR mon, CaptureFrame frame,
   d[EncodableValue("pixelHeight")] = EncodableValue(static_cast<int64_t>(frame.height));
   d[EncodableValue("rowBytes")] = EncodableValue(static_cast<int64_t>(frame.stride));
   d[EncodableValue("windows")] =
-      EncodableValue(win_enum::SnappableWindows(mon, control_hwnd_, OverlayHwnds()));
+      EncodableValue(win_enum::SnappableWindows(mon, OverlayHwnds()));
   // Move the BGRA buffer into the reply (never copied).
   d[EncodableValue("rawBytes")] = EncodableValue(std::move(frame.bgra));
   return d;
