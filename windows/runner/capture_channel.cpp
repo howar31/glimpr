@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "decoration.h"
 #include "image_codec.h"
 #include "wgc_capturer.h"
 
@@ -165,6 +166,26 @@ CaptureFrame CropFrame(const CaptureFrame& f, long px, long py, long pw,
   return out;
 }
 
+const EncodableMap* GetMap(const EncodableMap& map, const char* key) {
+  if (const auto* v = Find(map, key)) {
+    if (auto p = std::get_if<EncodableMap>(v)) return p;
+  }
+  return nullptr;
+}
+
+deco::DecoSpec ParseDecoSpec(const EncodableMap& m) {
+  deco::DecoSpec s;
+  s.margin = GetDouble(m, "margin", 0);
+  s.cornerRadius = GetDouble(m, "cornerRadius", 0);
+  s.shadowBlur = GetDouble(m, "shadowBlur", 0);
+  s.shadowDx = GetDouble(m, "shadowDx", 0);
+  s.shadowDy = GetDouble(m, "shadowDy", 0);
+  if (auto c = GetInt64(m, "shadowColor")) s.shadowArgb = static_cast<uint32_t>(*c);
+  if (auto f = GetInt64(m, "fill")) s.fillArgb = static_cast<uint32_t>(*f);
+  s.shapeFromAlpha = GetBool(m, "shapeFromAlpha", false);
+  return s;
+}
+
 }  // namespace
 
 CaptureChannel::CaptureChannel(flutter::BinaryMessenger* messenger) {
@@ -240,61 +261,53 @@ void CaptureChannel::HandleCaptureRegion(
     return;
   }
 
-  // Encode the whole frame, or a crop of the requested display-local logical
-  // rect (converted to physical pixels). Echo the captured rect back in
-  // logical points; left/top is the monitor's global logical origin.
-  const uint8_t* enc_data = frame->bgra.data();
-  uint32_t enc_w = frame->width;
-  uint32_t enc_h = frame->height;
-  uint32_t enc_stride = frame->stride;
-  std::vector<uint8_t> cropped;
+  // The captured region: the whole frame, or a crop of the requested
+  // display-local logical rect (converted to physical pixels). Echo the rect
+  // back in logical points; left/top is the monitor's global logical origin.
+  CaptureFrame work;
   double reply_x = 0.0;
   double reply_y = 0.0;
   double reply_w = frame->width / scale;
   double reply_h = frame->height / scale;
-
   if (HasKey(map, "w") && HasKey(map, "h")) {
     const double rx = GetDouble(map, "x", 0.0);
     const double ry = GetDouble(map, "y", 0.0);
     const double rw = GetDouble(map, "w", 0.0);
     const double rh = GetDouble(map, "h", 0.0);
-    long px = std::lround(rx * scale);
-    long py = std::lround(ry * scale);
-    long pw = std::lround(rw * scale);
-    long ph = std::lround(rh * scale);
-    if (px < 0) px = 0;
-    if (py < 0) py = 0;
-    if (px > static_cast<long>(frame->width)) px = frame->width;
-    if (py > static_cast<long>(frame->height)) py = frame->height;
-    if (pw > static_cast<long>(frame->width) - px)
-      pw = static_cast<long>(frame->width) - px;
-    if (ph > static_cast<long>(frame->height) - py)
-      ph = static_cast<long>(frame->height) - py;
-    if (pw > 0 && ph > 0) {
-      const uint32_t cw = static_cast<uint32_t>(pw);
-      const uint32_t ch = static_cast<uint32_t>(ph);
-      cropped.resize(static_cast<size_t>(cw) * 4 * ch);
-      for (uint32_t row = 0; row < ch; ++row) {
-        const uint8_t* src = frame->bgra.data() +
-                             static_cast<size_t>(py + row) * frame->stride +
-                             static_cast<size_t>(px) * 4;
-        std::memcpy(cropped.data() + static_cast<size_t>(row) * cw * 4, src,
-                    static_cast<size_t>(cw) * 4);
-      }
-      enc_data = cropped.data();
-      enc_w = cw;
-      enc_h = ch;
-      enc_stride = cw * 4;
+    work = CropFrame(*frame, std::lround(rx * scale), std::lround(ry * scale),
+                     std::lround(rw * scale), std::lround(rh * scale));
+    if (!work.bgra.empty()) {
       reply_x = rx;
       reply_y = ry;
       reply_w = rw;
       reply_h = rh;
     }
   }
+  if (work.bgra.empty()) work = std::move(*frame);
+
+  // Optional native decoration; also encode the plain rendition for the pin leg.
+  std::optional<CaptureFrame> decorated;
+  std::vector<uint8_t> plain_bytes;
+  const CaptureFrame* to_encode = &work;
+  if (const auto* dmap = GetMap(map, "decoration")) {
+    decorated = deco::Decorate(work, ParseDecoSpec(*dmap), scale);
+    if (decorated) {
+      to_encode = &*decorated;
+      if (GetBool(map, "alsoPlain", false)) {
+        plain_bytes =
+            jpeg ? codec::EncodeJpeg(work.bgra.data(), work.width, work.height,
+                                     work.stride, quality)
+                 : codec::EncodePng(work.bgra.data(), work.width, work.height,
+                                    work.stride);
+      }
+    }
+  }
 
   std::vector<uint8_t> bytes =
-      jpeg ? codec::EncodeJpeg(enc_data, enc_w, enc_h, enc_stride, quality)
-           : codec::EncodePng(enc_data, enc_w, enc_h, enc_stride);
+      jpeg ? codec::EncodeJpeg(to_encode->bgra.data(), to_encode->width,
+                               to_encode->height, to_encode->stride, quality)
+           : codec::EncodePng(to_encode->bgra.data(), to_encode->width,
+                              to_encode->height, to_encode->stride);
   if (bytes.empty()) {
     result->Success(EncodableValue());
     return;
@@ -314,6 +327,9 @@ void CaptureChannel::HandleCaptureRegion(
   reply[EncodableValue("left")] = EncodableValue(left);
   reply[EncodableValue("top")] = EncodableValue(top);
   reply[EncodableValue("scaleFactor")] = EncodableValue(scale);
+  if (!plain_bytes.empty()) {
+    reply[EncodableValue("plainBytes")] = EncodableValue(std::move(plain_bytes));
+  }
   result->Success(EncodableValue(std::move(reply)));
 }
 
@@ -390,16 +406,40 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     return;
   }
 
+  // Optional native decoration (window silhouette via shapeFromAlpha); the pin
+  // leg consumes the plain rendition when requested.
+  std::optional<CaptureFrame> decorated;
+  std::vector<uint8_t> plain_bytes;
+  const CaptureFrame* to_encode = &*frame;
+  if (const auto* dmap = GetMap(map, "decoration")) {
+    const double scale =
+        MonitorScale(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+    decorated = deco::Decorate(*frame, ParseDecoSpec(*dmap), scale);
+    if (decorated) {
+      to_encode = &*decorated;
+      if (GetBool(map, "alsoPlain", false)) {
+        plain_bytes =
+            jpeg ? codec::EncodeJpeg(frame->bgra.data(), frame->width,
+                                     frame->height, frame->stride, quality)
+                 : codec::EncodePng(frame->bgra.data(), frame->width,
+                                    frame->height, frame->stride);
+      }
+    }
+  }
+
   std::vector<uint8_t> bytes =
-      jpeg ? codec::EncodeJpeg(frame->bgra.data(), frame->width, frame->height,
-                               frame->stride, quality)
-           : codec::EncodePng(frame->bgra.data(), frame->width, frame->height,
-                               frame->stride);
+      jpeg ? codec::EncodeJpeg(to_encode->bgra.data(), to_encode->width,
+                               to_encode->height, to_encode->stride, quality)
+           : codec::EncodePng(to_encode->bgra.data(), to_encode->width,
+                              to_encode->height, to_encode->stride);
   if (bytes.empty()) {
     result->Success(EncodableValue());
     return;
   }
   EncodableMap reply;
   reply[EncodableValue("bytes")] = EncodableValue(std::move(bytes));
+  if (!plain_bytes.empty()) {
+    reply[EncodableValue("plainBytes")] = EncodableValue(std::move(plain_bytes));
+  }
   result->Success(EncodableValue(std::move(reply)));
 }
