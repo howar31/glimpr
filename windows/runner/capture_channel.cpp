@@ -1,6 +1,7 @@
 #include "capture_channel.h"
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <shellscalingapi.h>
 
 #include <flutter/standard_method_codec.h>
@@ -346,8 +347,13 @@ void CaptureChannel::HandleFocusedWindow(
   MONITORINFO mi{};
   mi.cbSize = sizeof(MONITORINFO);
   GetMonitorInfo(mon, &mi);
+  // Visible bounds (exclude the invisible resize border + DWM shadow), so the
+  // rect-crop fallback and the saved last-region match what the user sees.
   RECT rc{};
-  GetWindowRect(hwnd, &rc);
+  if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
+                                   sizeof(rc)))) {
+    GetWindowRect(hwnd, &rc);
+  }
 
   EncodableMap reply;
   reply[EncodableValue("displayId")] =
@@ -384,20 +390,38 @@ void CaptureChannel::HandleCaptureWindowDelivered(
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
 
+  // Visible window bounds: the extended frame bounds exclude the invisible
+  // resize border and the DWM drop shadow that WGC would otherwise capture as
+  // transparent padding around the window.
+  RECT wr{}, efb{};
+  GetWindowRect(hwnd, &wr);
+  if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb,
+                                   sizeof(efb)))) {
+    efb = wr;
+  }
+
   std::optional<CaptureFrame> frame = wgc::CaptureWindow(hwnd, show_cursor);
-  if (!frame) {
-    // Fallback: capture the window's monitor and crop to the window rect.
+  if (frame) {
+    // WGC captures the full window rect; trim to the visible extended bounds.
+    const long il = efb.left - wr.left;
+    const long it = efb.top - wr.top;
+    const long vw = efb.right - efb.left;
+    const long vh = efb.bottom - efb.top;
+    if (il > 0 || it > 0 || static_cast<uint32_t>(vw) < frame->width ||
+        static_cast<uint32_t>(vh) < frame->height) {
+      CaptureFrame trimmed = CropFrame(*frame, il, it, vw, vh);
+      if (!trimmed.bgra.empty()) frame = std::move(trimmed);
+    }
+  } else {
+    // Fallback: capture the window's monitor and crop to the visible bounds.
     HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     if (auto monframe = wgc::CaptureMonitor(mon, show_cursor)) {
       MONITORINFO mi{};
       mi.cbSize = sizeof(MONITORINFO);
       GetMonitorInfo(mon, &mi);
-      RECT rc{};
-      GetWindowRect(hwnd, &rc);
-      CaptureFrame cropped =
-          CropFrame(*monframe, rc.left - mi.rcMonitor.left,
-                    rc.top - mi.rcMonitor.top, rc.right - rc.left,
-                    rc.bottom - rc.top);
+      CaptureFrame cropped = CropFrame(
+          *monframe, efb.left - mi.rcMonitor.left, efb.top - mi.rcMonitor.top,
+          efb.right - efb.left, efb.bottom - efb.top);
       if (!cropped.bgra.empty()) frame = std::move(cropped);
     }
   }
