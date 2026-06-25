@@ -390,29 +390,17 @@ void CaptureChannel::HandleCaptureWindowDelivered(
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
 
-  // Visible window bounds: the extended frame bounds exclude the invisible
-  // resize border and the DWM drop shadow that WGC would otherwise capture as
-  // transparent padding around the window.
-  RECT wr{}, efb{};
-  GetWindowRect(hwnd, &wr);
-  if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb,
-                                   sizeof(efb)))) {
-    efb = wr;
-  }
-
+  // WGC's window capture already returns exactly the visible window (its frame
+  // size equals DWMWA_EXTENDED_FRAME_BOUNDS), with the real rounded corners
+  // transparent (faithful capture) -- so it is used as-is. The extended frame
+  // bounds are only needed by the rect-crop fallback below.
   std::optional<CaptureFrame> frame = wgc::CaptureWindow(hwnd, show_cursor);
-  if (frame) {
-    // WGC captures the full window rect; trim to the visible extended bounds.
-    const long il = efb.left - wr.left;
-    const long it = efb.top - wr.top;
-    const long vw = efb.right - efb.left;
-    const long vh = efb.bottom - efb.top;
-    if (il > 0 || it > 0 || static_cast<uint32_t>(vw) < frame->width ||
-        static_cast<uint32_t>(vh) < frame->height) {
-      CaptureFrame trimmed = CropFrame(*frame, il, it, vw, vh);
-      if (!trimmed.bgra.empty()) frame = std::move(trimmed);
+  if (!frame) {
+    RECT efb{};
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb,
+                                     sizeof(efb)))) {
+      GetWindowRect(hwnd, &efb);
     }
-  } else {
     // Fallback: capture the window's monitor and crop to the visible bounds.
     HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     if (auto monframe = wgc::CaptureMonitor(mon, show_cursor)) {
