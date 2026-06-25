@@ -32,6 +32,13 @@ bool FlutterWindow::OnCreate() {
   clipboard_channel_ = std::make_unique<ClipboardChannel>(
       flutter_controller_->engine()->messenger());
 
+  // The freeze-overlay manager owns the per-display engines (lazy). The control
+  // window's HWND is passed so its own window is excluded from window-snap and
+  // the overlay's openSettings can raise it.
+  overlay_manager_ =
+      std::make_unique<OverlayManager>(project_, GetHandle());
+  capture_channel_->SetOverlayManager(overlay_manager_.get());
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

@@ -15,6 +15,7 @@
 
 #include "decoration.h"
 #include "image_codec.h"
+#include "overlay_manager.h"
 #include "wgc_capturer.h"
 
 namespace {
@@ -215,6 +216,17 @@ void CaptureChannel::HandleMethodCall(
   }
   if (call.method_name() == "captureWindowDelivered") {
     HandleCaptureWindowDelivered(call, std::move(result));
+    return;
+  }
+  if (call.method_name() == "beginCapture") {
+    const EncodableMap empty;
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const EncodableMap& map = args ? *args : empty;
+    if (overlay_manager_) {
+      overlay_manager_->BeginCapture(GetBool(map, "pinOnly", false),
+                                     GetBool(map, "liveSelect", false));
+    }
+    result->Success();
     return;
   }
   result->NotImplemented();

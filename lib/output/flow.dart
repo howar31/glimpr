@@ -204,7 +204,13 @@ Future<FlowResult> runFlow({
 }
 
 Future<void> _revealInFinder(String path) async {
-  await Process.run('open', ['-R', path]);
+  // Reveal the saved file in the OS file manager, selected. macOS uses
+  // `open -R`; Windows uses Explorer's /select switch.
+  if (Platform.isWindows) {
+    await Process.run('explorer', ['/select,$path']);
+  } else {
+    await Process.run('open', ['-R', path]);
+  }
 }
 
 /// Temp file for opening an UNSAVED result in the editor. Extension follows the

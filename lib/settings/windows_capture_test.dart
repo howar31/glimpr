@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../capture/capture_bridge.dart';
 import '../capture/direct_capture.dart';
 
-/// Temporary Windows-only capture trigger (Phase 6 S2a). Windows has no global
-/// hotkeys or system tray yet (those land in S3), so these buttons invoke the
-/// direct-capture modes to exercise the native capture path. Removed when S3
-/// brings the tray + global hotkeys.
+/// Temporary Windows-only capture trigger (Phase 6 S2a + S2b). Windows has no
+/// global hotkeys or system tray yet (those land in S3), so these buttons
+/// invoke the native capture paths directly: the S2a direct modes and the S2b
+/// interactive freeze overlay. Removed when S3 brings the tray + global hotkeys.
 class WindowsCaptureTest extends StatelessWidget {
   const WindowsCaptureTest({super.key});
 
@@ -34,6 +35,9 @@ class WindowsCaptureTest extends StatelessWidget {
                 ElevatedButton(
                     onPressed: () => direct.lastRegion(),
                     child: const Text('Capture last region')),
+                FilledButton(
+                    onPressed: () => CaptureBridge().beginCapture(),
+                    child: const Text('Overlay capture (freeze)')),
               ],
             ),
           ],

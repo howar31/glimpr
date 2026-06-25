@@ -8,6 +8,7 @@
 
 #include "capture_channel.h"
 #include "clipboard_channel.h"
+#include "overlay_manager.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -34,6 +35,10 @@ class FlutterWindow : public Win32Window {
   // Native channel hosts (in-runner, like macOS).
   std::unique_ptr<CaptureChannel> capture_channel_;
   std::unique_ptr<ClipboardChannel> clipboard_channel_;
+
+  // The per-display freeze-overlay engines + windows (lazy-created on first
+  // capture). The macOS OverlayManager analogue.
+  std::unique_ptr<OverlayManager> overlay_manager_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
