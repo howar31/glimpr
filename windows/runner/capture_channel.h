@@ -25,6 +25,12 @@ class CaptureChannel {
   void HandleCaptureRegion(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleFocusedWindow(
+      const flutter::MethodCall<flutter::EncodableValue>& call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleCaptureWindowDelivered(
+      const flutter::MethodCall<flutter::EncodableValue>& call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 };
