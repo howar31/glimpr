@@ -903,8 +903,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         ),
         child: Row(
           children: [
-            // Left inset to clear the macOS traffic-light buttons.
-            const SizedBox(width: 78),
+            // Left inset to clear the macOS traffic-light buttons; Windows uses
+            // a standard caption window (controls live in the OS title bar), so
+            // only a small gutter is needed there.
+            SizedBox(width: Platform.isWindows ? 12 : 78),
             // Back to the gallery landing — navigation lives top-left next to
             // the window controls (macOS back idiom), NOT in the bottom action
             // pill. Editor state only; the landing has nowhere to go back to.

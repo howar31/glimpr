@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "clipboard_channel.cpp"
   "cursor_image.cpp"
   "decoration.cpp"
+  "editor_window.cpp"
   "encode_channel.cpp"
   "flutter_window.cpp"
   "hotkey_host.cpp"

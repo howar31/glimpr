@@ -173,6 +173,12 @@ bool FlutterWindow::OnCreate() {
           RelaunchApp();
           Quit();
           result->Success();
+        } else if (m == "openImageEditor") {
+          if (editor_window_) editor_window_->RevealEditor();
+          result->Success();
+        } else if (m == "openImageEditorClipboard") {
+          if (editor_window_) editor_window_->LoadClipboard();
+          result->Success();
         } else {
           result->NotImplemented();
         }
@@ -207,6 +213,10 @@ bool FlutterWindow::OnCreate() {
   overlay_manager_ = std::make_unique<OverlayManager>(project_, GetHandle());
   capture_channel_->SetOverlayManager(overlay_manager_.get());
 
+  // The standalone Image Editor (its own engine + window). Warm-built on the
+  // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).
+  editor_window_ = std::make_unique<EditorWindow>(project_, GetHandle());
+
   // System tray (the menu-bar analogue). Live items fire through the same Dart
   // dispatcher as the hotkeys; Settings / About / Quit are native callbacks.
   tray_icon_ = std::make_unique<TrayIcon>(
@@ -224,7 +234,8 @@ bool FlutterWindow::OnCreate() {
   reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");
 
   // Deferred background warm-up: a short while after launch, pre-build the
-  // overlay engines so the first capture is instant (without slowing launch).
+  // overlay engines (instant first capture) and the editor engine (instant first
+  // editor open), off the launch critical path.
   SetTimer(GetHandle(), kWarmupTimerId, kWarmupDelayMs, nullptr);
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
@@ -274,6 +285,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
     KillTimer(GetHandle(), kWarmupTimerId);  // one-shot
     if (overlay_manager_) overlay_manager_->WarmUp();
+    if (editor_window_) editor_window_->WarmUp();  // instant first editor open
     return 0;
   }
   if (message == WM_CLOSE) {

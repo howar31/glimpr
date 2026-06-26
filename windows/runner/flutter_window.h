@@ -8,6 +8,7 @@
 
 #include "capture_channel.h"
 #include "clipboard_channel.h"
+#include "editor_window.h"
 #include "hotkey_host.h"
 #include "overlay_manager.h"
 #include "tray_icon.h"
@@ -63,6 +64,10 @@ class FlutterWindow : public Win32Window {
   // The per-display freeze-overlay engines + windows (lazy-created on first
   // capture). The macOS OverlayManager analogue.
   std::unique_ptr<OverlayManager> overlay_manager_;
+
+  // The standalone Image Editor engine + window (warm-built shortly after launch;
+  // revealed on demand). The macOS warm editor window analogue.
+  std::unique_ptr<EditorWindow> editor_window_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
