@@ -30,8 +30,16 @@ class TrayIcon {
   TrayIcon(const TrayIcon&) = delete;
   TrayIcon& operator=(const TrayIcon&) = delete;
 
+  // Single-click timer id (set on owner_; routed back via WM_TIMER). A left
+  // single-click pops the menu only after one double-click interval, so a
+  // double-click (reveal Settings) wins instead of also opening the menu.
+  static constexpr UINT_PTR kClickTimerId = 0xA001;
+
   // Routed from FlutterWindow::MessageHandler (uCallbackMessage WM_GLIMPR_TRAY).
   void OnTrayMessage(WPARAM wparam, LPARAM lparam);
+  // Routed from FlutterWindow::MessageHandler (WM_TIMER, wparam == kClickTimerId):
+  // the pending left single-click resolved (no double-click arrived) -> pop menu.
+  void OnSingleClickTimer();
   void Remove();
 
  private:
@@ -42,6 +50,7 @@ class TrayIcon {
   HotkeyHost* hotkeys_ = nullptr;  // not owned
   Callbacks cb_;
   bool added_ = false;
+  bool suppress_next_up_ = false;  // ignore the trailing up of a double-click
 };
 
 #endif  // RUNNER_TRAY_ICON_H_
