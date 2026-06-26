@@ -654,7 +654,11 @@ class _SettingsAppState extends State<SettingsApp>
         tokens: tokens,
         child: CallbackShortcuts(
           bindings: {
-            const SingleActivator(LogicalKeyboardKey.keyW, meta: true): _close,
+            // Close the Settings window: Ctrl+W on Windows, Cmd-W on macOS.
+            // (meta = the Win key on Windows, and Win+W is a reserved system
+            // shortcut that never reaches the app, so Windows binds Ctrl+W.)
+            SingleActivator(LogicalKeyboardKey.keyW,
+                meta: !Platform.isWindows, control: Platform.isWindows): _close,
           },
           child: Focus(
             autofocus: true,
