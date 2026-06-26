@@ -450,12 +450,14 @@ class _SettingsAppState extends State<SettingsApp>
           hint: _l.settingsFlowOpenInEditorHint,
           trailing: toggle(FlowAction.openEditor),
         ),
-      SettingRow(
-        divider: true,
-        title: _l.settingsFlowShareSheet,
-        hint: _l.settingsFlowShareSheetHint,
-        trailing: toggle(FlowAction.shareSheet),
-      ),
+      // Share is macOS-only (no system share surface wired on Windows v1).
+      if (!Platform.isWindows)
+        SettingRow(
+          divider: true,
+          title: _l.settingsFlowShareSheet,
+          hint: _l.settingsFlowShareSheetHint,
+          trailing: toggle(FlowAction.shareSheet),
+        ),
       SettingRow(
         divider: true,
         title: _l.settingsFlowPinToScreen,

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import '../l10n/gen/app_localizations.dart';
 import '../settings/app_locale.dart';
+import '../settings/prefs_cache.dart';
 import '../editor/draw_style.dart';
 import '../editor/document.dart';
 import '../editor/editor_controller.dart';
@@ -382,6 +383,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     if (store == null) return;
     List<String> list;
     try {
+      // Windows: each engine caches SharedPreferences per-instance, so a recent
+      // written by the capture/overlay engine is invisible here until we drop the
+      // cache. No-op on macOS (process-wide NSUserDefaults). The S2b gotcha.
+      await reloadSettingsCache();
       list = pruneMissing(await store.load(), (p) => File(p).existsSync());
     } catch (_) {
       return;
@@ -1218,7 +1223,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                   {FlowAction.save, FlowAction.copyPath}),
               _oneOff(t, _l.editorMenuShowInFinder, Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
-              _oneOff(t, _l.editorMenuShare, Icons.ios_share, {FlowAction.shareSheet}),
+              // Share is macOS-only (no system share surface wired on Windows v1).
+              if (!Platform.isWindows)
+                _oneOff(t, _l.editorMenuShare, Icons.ios_share,
+                    {FlowAction.shareSheet}),
               _oneOff(t, _l.editorMenuPinToScreen, Icons.push_pin_outlined,
                   {FlowAction.pin}),
             ],
@@ -1706,7 +1714,9 @@ class _RecentTileState extends State<_RecentTile> {
         const PopupMenuDivider(height: 8),
         _menuItem(t, l.editorContextCopyImage, Icons.copy_outlined, widget.onCopy),
         _menuItem(t, l.editorContextCopyPath, Icons.link, widget.onCopyPath),
-        _menuItem(t, l.editorContextShare, Icons.ios_share, widget.onShare),
+        // Share is macOS-only (no system share surface wired on Windows v1).
+        if (!Platform.isWindows)
+          _menuItem(t, l.editorContextShare, Icons.ios_share, widget.onShare),
         _menuItem(t, l.editorContextPinToScreen, Icons.push_pin_outlined, widget.onPin),
         _menuItem(t, l.editorContextShowInFinder, Icons.folder_outlined, widget.onReveal),
         const PopupMenuDivider(height: 8),
