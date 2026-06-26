@@ -239,7 +239,19 @@ bool FlutterWindow::OnCreate() {
             role_channel_->InvokeMethod("showAbout", nullptr);
           },
           [this]() { Quit(); },
+          [this](const std::string& path) {
+            if (editor_window_) editor_window_->OpenWithPath(path);
+          },
+          [this]() {
+            if (editor_window_) editor_window_->ClearRecent();
+          },
       });
+  // The warm editor engine pushes its recent-images list to the tray "Open
+  // Recent" submenu (it boots ~2s after launch, so recents populate before the
+  // editor window is ever revealed).
+  editor_window_->SetRecentImagesCallback([this](std::vector<std::string> p) {
+    if (tray_icon_) tray_icon_->SetRecentImages(std::move(p));
+  });
 
   // A second instance posts this to reveal the running one's Settings.
   reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");

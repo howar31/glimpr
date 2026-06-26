@@ -4,6 +4,8 @@
 #include <windows.h>
 
 #include <functional>
+#include <string>
+#include <vector>
 
 #include "hotkey_host.h"
 
@@ -21,6 +23,9 @@ class TrayIcon {
     std::function<void()> on_reveal_settings;
     std::function<void()> on_about;
     std::function<void()> on_quit;
+    // Open Recent submenu: reveal the editor on the chosen path; clear the list.
+    std::function<void(const std::string&)> on_open_recent;
+    std::function<void()> on_clear_recent;
   };
 
   TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,
@@ -39,6 +44,10 @@ class TrayIcon {
   void OnThemeChanged();
   void Remove();
 
+  // The "Open Recent" submenu source: the editor engine pushes its recent-images
+  // list here (basename shown; full path kept for the callback). Newest first.
+  void SetRecentImages(std::vector<std::string> paths);
+
  private:
   void ShowMenu();
   void OnCommand(UINT command_id);
@@ -53,6 +62,7 @@ class TrayIcon {
   Callbacks cb_;
   bool added_ = false;
   HICON icon_ = nullptr;  // current tray HICON (DestroyIcon on replace / remove)
+  std::vector<std::string> recent_;  // Open Recent submenu (full paths, newest first)
 };
 
 #endif  // RUNNER_TRAY_ICON_H_

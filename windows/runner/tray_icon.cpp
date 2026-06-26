@@ -14,18 +14,49 @@ enum TrayCommand : UINT {
   kCmdCaptureWindow,
   kCmdCaptureDisplay,
   kCmdCaptureLast,
+  kCmdPinScreenshot,
+  kCmdPinClipboard,
+  kCmdOpenEditor,
+  kCmdOpenEditorClipboard,
+  kCmdClearRecent,
   kCmdOpenSaveFolder,
   kCmdAbout,
   kCmdSettings,
   kCmdQuit,
 };
 
+// Open Recent submenu item ids occupy [kCmdRecentBase, kCmdRecentBase + N).
+constexpr UINT kCmdRecentBase = 2000;
+
 // Action keys (must match lib/shortcuts/shortcut_actions.dart).
 constexpr char kActCaptureArea[] = "global.captureArea";
 constexpr char kActCaptureWindow[] = "global.captureWindow";
 constexpr char kActCaptureScreen[] = "global.captureScreen";
 constexpr char kActCaptureLast[] = "global.captureLastRegion";
+constexpr char kActPinArea[] = "global.pinArea";
+constexpr char kActPinClipboard[] = "global.pinClipboard";
+constexpr char kActOpenEditor[] = "global.openEditor";
+constexpr char kActOpenEditorClipboard[] = "global.openEditorClipboard";
 constexpr char kActOpenSaveFolder[] = "menu.openSaveFolder";
+
+// UTF-8 -> UTF-16 (recent filenames may be non-ASCII, unlike the ASCII menu
+// labels). The naive widening in AppendItem is ASCII-only, so recents convert
+// properly here.
+std::wstring Utf8ToWide(const std::string& s) {
+  if (s.empty()) return {};
+  int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()),
+                              nullptr, 0);
+  std::wstring w(static_cast<size_t>(n), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()),
+                      w.data(), n);
+  return w;
+}
+
+std::wstring Basename(const std::string& path) {
+  std::wstring w = Utf8ToWide(path);
+  size_t slash = w.find_last_of(L"\\/");
+  return slash == std::wstring::npos ? w : w.substr(slash + 1);
+}
 
 // Whether the Windows taskbar / tray uses the LIGHT theme (so the mark must be
 // DARK to read). SystemUsesLightTheme governs the taskbar (distinct from
@@ -145,9 +176,11 @@ void TrayIcon::ShowMenu() {
   AppendItem(menu, kCmdCaptureLast, "Screenshot Last Region",
              hotkeys_->AcceleratorLabel(kActCaptureLast), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  // Deferred: pin (S4).
-  AppendItem(menu, 0, "Pin Screenshot", "", false);
-  AppendItem(menu, 0, "Pin Clipboard", "", false);
+  // Pin to screen (S4).
+  AppendItem(menu, kCmdPinScreenshot, "Pin Screenshot",
+             hotkeys_->AcceleratorLabel(kActPinArea), true);
+  AppendItem(menu, kCmdPinClipboard, "Pin Clipboard",
+             hotkeys_->AcceleratorLabel(kActPinClipboard), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Deferred: recording (S6).
   AppendItem(menu, 0, "Record Region", "", false);
@@ -155,10 +188,25 @@ void TrayIcon::ShowMenu() {
   AppendItem(menu, 0, "Record Display", "", false);
   AppendItem(menu, 0, "Record Last Region", "", false);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  // Deferred: editor / recent (S4); live: open save folder.
-  AppendItem(menu, 0, "Open Image Editor", "", false);
-  AppendItem(menu, 0, "Open Image Editor with Clipboard", "", false);
-  AppendItem(menu, 0, "Open Recent", "", false);
+  // Image editor + Open Recent (S4); live: open save folder.
+  AppendItem(menu, kCmdOpenEditor, "Open Image Editor",
+             hotkeys_->AcceleratorLabel(kActOpenEditor), true);
+  AppendItem(menu, kCmdOpenEditorClipboard, "Open Image Editor with Clipboard",
+             hotkeys_->AcceleratorLabel(kActOpenEditorClipboard), true);
+  if (recent_.empty()) {
+    AppendItem(menu, 0, "Open Recent", "", false);  // greyed when empty
+  } else {
+    HMENU recent = CreatePopupMenu();
+    const size_t n = recent_.size();
+    for (size_t i = 0; i < n; ++i) {
+      AppendMenuW(recent, MF_STRING, kCmdRecentBase + static_cast<UINT>(i),
+                  Basename(recent_[i]).c_str());
+    }
+    AppendMenuW(recent, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(recent, MF_STRING, kCmdClearRecent, L"Clear Recent");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
+                L"Open Recent");
+  }
   AppendItem(menu, kCmdOpenSaveFolder, "Open Save Folder", "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendItem(menu, kCmdAbout, "About Glimpr", "", true);
@@ -181,15 +229,32 @@ void TrayIcon::ShowMenu() {
 }
 
 void TrayIcon::OnCommand(UINT command_id) {
+  // Open Recent submenu items occupy a contiguous range.
+  if (command_id >= kCmdRecentBase &&
+      command_id < kCmdRecentBase + recent_.size()) {
+    if (cb_.on_open_recent) cb_.on_open_recent(recent_[command_id - kCmdRecentBase]);
+    return;
+  }
   switch (command_id) {
     case kCmdCaptureRegion: hotkeys_->FireAction(kActCaptureArea); break;
     case kCmdCaptureWindow: hotkeys_->FireAction(kActCaptureWindow); break;
     case kCmdCaptureDisplay: hotkeys_->FireAction(kActCaptureScreen); break;
     case kCmdCaptureLast: hotkeys_->FireAction(kActCaptureLast); break;
+    case kCmdPinScreenshot: hotkeys_->FireAction(kActPinArea); break;
+    case kCmdPinClipboard: hotkeys_->FireAction(kActPinClipboard); break;
+    case kCmdOpenEditor: hotkeys_->FireAction(kActOpenEditor); break;
+    case kCmdOpenEditorClipboard:
+      hotkeys_->FireAction(kActOpenEditorClipboard);
+      break;
+    case kCmdClearRecent: if (cb_.on_clear_recent) cb_.on_clear_recent(); break;
     case kCmdOpenSaveFolder: hotkeys_->FireAction(kActOpenSaveFolder); break;
     case kCmdAbout: if (cb_.on_about) cb_.on_about(); break;
     case kCmdSettings: if (cb_.on_reveal_settings) cb_.on_reveal_settings(); break;
     case kCmdQuit: if (cb_.on_quit) cb_.on_quit(); break;
     default: break;
   }
+}
+
+void TrayIcon::SetRecentImages(std::vector<std::string> paths) {
+  recent_ = std::move(paths);
 }
