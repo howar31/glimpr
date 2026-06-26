@@ -37,6 +37,14 @@ class OverlayManager {
   // recording picker) is deferred to S6 and ignored.
   void BeginCapture(bool pin_only, bool live_select);
 
+  // Pre-create the per-display overlay engines/windows ahead of the first
+  // capture so that capture is instant (the engine boot is the cold-start cost).
+  // Driven by FlutterWindow on a deferred post-launch timer (off the launch
+  // critical path). Idempotent + cheap to call again (engines already built are
+  // reused); a capture during the delay just lazy-creates them itself, and the
+  // two never race (both run on the UI thread).
+  void WarmUp();
+
  private:
   using EncodableValue = flutter::EncodableValue;
   using EncodableMap = flutter::EncodableMap;

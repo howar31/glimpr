@@ -16,6 +16,12 @@ using flutter::EncodableMap;
 using flutter::EncodableValue;
 
 namespace {
+// Deferred overlay warm-up: pre-create the per-display overlay engines this long
+// after launch (off the launch critical path) so the first capture is instant.
+// A capture during the delay just lazy-creates them itself (no regression).
+constexpr UINT_PTR kWarmupTimerId = 0xB001;
+constexpr UINT kWarmupDelayMs = 2000;
+
 // The running executable's full path.
 std::wstring ExePath() {
   wchar_t buf[MAX_PATH];
@@ -217,6 +223,10 @@ bool FlutterWindow::OnCreate() {
   // A second instance posts this to reveal the running one's Settings.
   reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");
 
+  // Deferred background warm-up: a short while after launch, pre-build the
+  // overlay engines so the first capture is instant (without slowing launch).
+  SetTimer(GetHandle(), kWarmupTimerId, kWarmupDelayMs, nullptr);
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   // Resident shell: start HIDDEN in the tray (no window at launch, mirroring the
@@ -259,6 +269,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
   if (message == WM_GLIMPR_TRAY && tray_icon_) {
     tray_icon_->OnTrayMessage(wparam, lparam);
+    return 0;
+  }
+  if (message == WM_TIMER && wparam == kWarmupTimerId) {
+    KillTimer(GetHandle(), kWarmupTimerId);  // one-shot
+    if (overlay_manager_) overlay_manager_->WarmUp();
     return 0;
   }
   if (message == WM_CLOSE) {

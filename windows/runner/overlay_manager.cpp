@@ -294,6 +294,15 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   }
 }
 
+void OverlayManager::WarmUp() {
+  // Build the per-display engines now (hidden, resident-warm) so the first
+  // capture skips the engine-boot cold start. SyncUnitsToScreens is the same
+  // lazy-create path BeginCapture uses, so this is purely a head start: an
+  // already-built unit is reused, and a capture racing this just finds the
+  // engines ready (or builds them itself -- both on the UI thread, no overlap).
+  SyncUnitsToScreens();
+}
+
 EncodableMap OverlayManager::BuildDisplayDict(HMONITOR mon, CaptureFrame frame,
                                               bool is_cursor,
                                               POINT cursor_global) {
