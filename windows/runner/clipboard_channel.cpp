@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "image_codec.h"
+
 namespace {
 
 using flutter::EncodableMap;
@@ -117,6 +119,89 @@ bool WriteImageToClipboard(const uint8_t* data, size_t len) {
   return ok;
 }
 
+// Wrap a packed DIB (BITMAPINFOHEADER/BITMAPV5HEADER + optional masks + color
+// table + pixels, as held by CF_DIB/CF_DIBV5) in a 14-byte BITMAPFILEHEADER so
+// the WIC BMP decoder can read it. The file header is built by hand (the
+// BITMAPFILEHEADER struct pads to 16 bytes).
+bool BuildBmpFromDib(const uint8_t* dib, size_t dib_size,
+                     std::vector<uint8_t>& out) {
+  if (dib_size < 40) return false;  // smaller than a BITMAPINFOHEADER
+  uint32_t bi_size = 0, bi_compression = 0, bi_clr_used = 0;
+  uint16_t bi_bit_count = 0;
+  std::memcpy(&bi_size, dib + 0, 4);
+  std::memcpy(&bi_bit_count, dib + 14, 2);
+  std::memcpy(&bi_compression, dib + 16, 4);
+  std::memcpy(&bi_clr_used, dib + 32, 4);
+
+  uint32_t color_table = 0;
+  if (bi_bit_count <= 8) {
+    const uint32_t n = bi_clr_used ? bi_clr_used : (1u << bi_bit_count);
+    color_table = n * 4;
+  }
+  // BI_BITFIELDS (3) on a v3 header stores 3 DWORD masks after the header; a v5
+  // header (>= 56 bytes) carries the masks inside the header itself.
+  uint32_t masks = (bi_compression == 3 /*BI_BITFIELDS*/ && bi_size == 40)
+                       ? 12u
+                       : 0u;
+  const uint32_t off_bits = 14 + bi_size + color_table + masks;
+
+  out.resize(14 + dib_size);
+  out[0] = 'B';
+  out[1] = 'M';
+  const uint32_t bf_size = static_cast<uint32_t>(14 + dib_size);
+  std::memcpy(&out[2], &bf_size, 4);
+  const uint32_t reserved = 0;
+  std::memcpy(&out[6], &reserved, 4);
+  std::memcpy(&out[10], &off_bits, 4);
+  std::memcpy(&out[14], dib, dib_size);
+  return true;
+}
+
+// The clipboard's image as PNG bytes: prefer the registered "PNG" format
+// (lossless, alpha-preserving), else a DIB re-encoded through WIC. Empty = no
+// image. Assumes the clipboard is already open.
+std::vector<uint8_t> ReadImageFromOpenClipboard() {
+  std::vector<uint8_t> out;
+
+  UINT cf_png = RegisterClipboardFormatW(L"PNG");
+  if (cf_png && IsClipboardFormatAvailable(cf_png)) {
+    if (HANDLE h = GetClipboardData(cf_png)) {
+      if (void* p = GlobalLock(h)) {
+        const SIZE_T n = GlobalSize(h);
+        const auto* b = static_cast<const uint8_t*>(p);
+        out.assign(b, b + n);
+        GlobalUnlock(h);
+      }
+    }
+  }
+
+  if (out.empty()) {
+    UINT fmt = 0;
+    if (IsClipboardFormatAvailable(CF_DIBV5)) {
+      fmt = CF_DIBV5;
+    } else if (IsClipboardFormatAvailable(CF_DIB)) {
+      fmt = CF_DIB;
+    }
+    if (fmt) {
+      if (HANDLE h = GetClipboardData(fmt)) {
+        if (void* p = GlobalLock(h)) {
+          const SIZE_T dib_size = GlobalSize(h);
+          std::vector<uint8_t> bmp;
+          if (BuildBmpFromDib(static_cast<const uint8_t*>(p), dib_size, bmp)) {
+            std::vector<uint8_t> bgra;
+            uint32_t w = 0, hh = 0;
+            if (DecodeToBgra(bmp.data(), bmp.size(), bgra, w, hh) && w && hh) {
+              out = codec::EncodePng(bgra.data(), w, hh, w * 4);
+            }
+          }
+          GlobalUnlock(h);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 ClipboardChannel::ClipboardChannel(flutter::BinaryMessenger* messenger) {
@@ -152,6 +237,19 @@ void ClipboardChannel::HandleMethodCall(
       result->Success(EncodableValue());
     } else {
       result->Error("clipboard_failed", "could not write image to clipboard");
+    }
+    return;
+  }
+  if (call.method_name() == "readImage") {
+    std::vector<uint8_t> png;
+    if (OpenClipboard(nullptr)) {
+      png = ReadImageFromOpenClipboard();
+      CloseClipboard();
+    }
+    if (png.empty()) {
+      result->Success(EncodableValue());  // null -> Dart clipboardReadImage null
+    } else {
+      result->Success(EncodableValue(std::move(png)));
     }
     return;
   }
