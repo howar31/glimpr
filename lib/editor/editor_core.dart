@@ -1201,10 +1201,11 @@ class _EditorCoreState extends State<EditorCore> {
       widget.host.openSettings();
       return KeyEventResult.handled;
     }
-    // Viewport zoom shortcuts (image editor only): Cmd+1 = fit, Cmd+2 = 100%.
+    // Viewport zoom shortcuts (image editor only): Cmd+1 = fit, Cmd+2 = 100%
+    // (Ctrl+1 / Ctrl+2 on Windows — the command modifier is platform-aware).
     if (_interactive &&
         pressed.length == 1 &&
-        pressed.contains(HotkeyModifier.meta)) {
+        pressed.contains(editorCommandModifier())) {
       if (key == LogicalKeyboardKey.digit1) {
         _refitViewport();
         return KeyEventResult.handled;

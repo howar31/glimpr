@@ -65,6 +65,22 @@ void main() {
     expect(isOpenSettingsChord(keyA, {HotkeyModifier.meta}), isFalse);
   });
 
+  test('isOpenSettingsChord is Ctrl+comma on Windows, Cmd+comma on macOS', () {
+    final comma = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.comma,
+      logicalKey: LogicalKeyboardKey.comma,
+      timeStamp: Duration.zero,
+    );
+    expect(isOpenSettingsChord(comma, {HotkeyModifier.control}, isWindows: true),
+        isTrue);
+    expect(isOpenSettingsChord(comma, {HotkeyModifier.meta}, isWindows: true),
+        isFalse);
+    expect(isOpenSettingsChord(comma, {HotkeyModifier.meta}, isWindows: false),
+        isTrue);
+    expect(isOpenSettingsChord(comma, {HotkeyModifier.control}, isWindows: false),
+        isFalse);
+  });
+
   test('open-editor defaults: empty = Cmd+Opt+9, clipboard = Cmd+Opt+0', () {
     final empty = kDefaultBindings[kOpenEditorKey]!;
     expect(empty.logicalKey, LogicalKeyboardKey.digit9);
@@ -95,6 +111,29 @@ void main() {
       expect(isEditorReservedCombo(LogicalKeyboardKey.comma, meta), isTrue);
       expect(isEditorReservedCombo(LogicalKeyboardKey.digit1, meta), isTrue);
       expect(isEditorReservedCombo(LogicalKeyboardKey.digit2, meta), isTrue);
+    });
+
+    test('Windows reserves those chords under Ctrl instead of meta', () {
+      const ctrl = {HotkeyModifier.control};
+      // Ctrl+W / Ctrl+, / Ctrl+1 / Ctrl+2 are the Windows-conventional combos.
+      expect(isEditorReservedCombo(LogicalKeyboardKey.keyW, ctrl, isWindows: true),
+          isTrue);
+      expect(
+          isEditorReservedCombo(LogicalKeyboardKey.comma, ctrl, isWindows: true),
+          isTrue);
+      expect(
+          isEditorReservedCombo(LogicalKeyboardKey.digit1, ctrl, isWindows: true),
+          isTrue);
+      // The meta combos are NOT reserved on Windows (Win+W is an OS shortcut).
+      expect(isEditorReservedCombo(LogicalKeyboardKey.keyW, meta, isWindows: true),
+          isFalse);
+      // macOS keeps meta; Ctrl is free there.
+      expect(
+          isEditorReservedCombo(LogicalKeyboardKey.keyW, meta, isWindows: false),
+          isTrue);
+      expect(
+          isEditorReservedCombo(LogicalKeyboardKey.keyW, ctrl, isWindows: false),
+          isFalse);
     });
 
     test('keeps esc / arrows whole-key reserved', () {

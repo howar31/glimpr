@@ -765,7 +765,24 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         // guide — Apple liquid glass). The editor CANVAS supplies its own
         // opaque checkerboard worktable; the title bar + landing read as
         // glass chrome over the vibrancy, matching the Settings window.
-        child: Scaffold(
+        //
+        // Windows: an ancestor Ctrl+W closes the editor (macOS uses the native
+        // ⌘W window intercept). canRequestFocus:false so it never steals focus;
+        // key events bubble up here from the focused canvas/landing, which
+        // ignore Ctrl+W, so this is a safe last-resort handler in both states.
+        child: Focus(
+          canRequestFocus: false,
+          onKeyEvent: (node, e) {
+            if (Platform.isWindows &&
+                e is KeyDownEvent &&
+                HardwareKeyboard.instance.isControlPressed &&
+                e.logicalKey == LogicalKeyboardKey.keyW) {
+              _requestClose();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Scaffold(
           backgroundColor: Colors.transparent,
           // A 44px Flutter title bar runs across the top in BOTH states (the OS
           // title is hidden + transparent), with the state content filling below.
@@ -847,6 +864,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             },
           ),
         ),
+        ),
       ),
     );
   }
@@ -913,15 +931,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     return Focus(
       autofocus: true,
       onKeyEvent: (node, e) {
+        // The command modifier is platform-aware: ⌘ on macOS, Ctrl on Windows.
+        final cmd = Platform.isWindows
+            ? HardwareKeyboard.instance.isControlPressed
+            : HardwareKeyboard.instance.isMetaPressed;
         if (e is KeyDownEvent &&
-            HardwareKeyboard.instance.isMetaPressed &&
+            cmd &&
             e.logicalKey == LogicalKeyboardKey.comma) {
           _openSettings(); // ⌘, works on the landing too (EditorCore unmounted)
           return KeyEventResult.handled;
         }
-        if (e is KeyDownEvent &&
-            HardwareKeyboard.instance.isMetaPressed &&
-            e.logicalKey == LogicalKeyboardKey.keyV) {
+        if (e is KeyDownEvent && cmd && e.logicalKey == LogicalKeyboardKey.keyV) {
           _pasteLoad();
           return KeyEventResult.handled;
         }

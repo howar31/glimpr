@@ -302,6 +302,15 @@ Map<String, HotkeyBinding?> effectiveDefaultBindings() =>
 HotkeyBinding? defaultBindingFor(String actionKey) =>
     effectiveDefaultBindings()[actionKey];
 
+/// The "command" modifier for the editor's FIXED chords (close / open-settings /
+/// fit / zoom): meta on macOS, control on Windows (where meta is the Win key and
+/// Win+W/Win+, are OS shortcuts). Pure (testable) — pass [isWindows] to override
+/// the host platform.
+HotkeyModifier editorCommandModifier({bool? isWindows}) =>
+    (isWindows ?? Platform.isWindows)
+        ? HotkeyModifier.control
+        : HotkeyModifier.meta;
+
 /// Keys reserved as WHOLE keys (rejected with any modifier combination). Esc =
 /// safety Cancel/Exit; arrows = crosshair nudge.
 final kEditorReservedKeys = <LogicalKeyboardKey>{
@@ -322,18 +331,22 @@ final kEditorReservedKeys = <LogicalKeyboardKey>{
 /// NOTE: Shift+/ reports the logical key `question` (NOT slash+Shift), so the
 /// loupe-cycle key is reserved under BOTH `slash` and `question` to match what
 /// the recorder actually captures.
-final _kEditorReservedCombos = <(LogicalKeyboardKey, Set<HotkeyModifier>)>[
-  (LogicalKeyboardKey.comma, const {}),
-  (LogicalKeyboardKey.period, const {}),
-  (LogicalKeyboardKey.slash, const {}),
-  (LogicalKeyboardKey.slash, const {HotkeyModifier.shift}),
-  (LogicalKeyboardKey.question, const {}),
-  (LogicalKeyboardKey.question, const {HotkeyModifier.shift}),
-  (LogicalKeyboardKey.keyW, const {HotkeyModifier.meta}),
-  (LogicalKeyboardKey.comma, const {HotkeyModifier.meta}),
-  (LogicalKeyboardKey.digit1, const {HotkeyModifier.meta}),
-  (LogicalKeyboardKey.digit2, const {HotkeyModifier.meta}),
-];
+List<(LogicalKeyboardKey, Set<HotkeyModifier>)> _editorReservedCombos(
+    bool isWindows) {
+  final cmd = editorCommandModifier(isWindows: isWindows);
+  return [
+    (LogicalKeyboardKey.comma, const {}),
+    (LogicalKeyboardKey.period, const {}),
+    (LogicalKeyboardKey.slash, const {}),
+    (LogicalKeyboardKey.slash, const {HotkeyModifier.shift}),
+    (LogicalKeyboardKey.question, const {}),
+    (LogicalKeyboardKey.question, const {HotkeyModifier.shift}),
+    (LogicalKeyboardKey.keyW, {cmd}),
+    (LogicalKeyboardKey.comma, {cmd}),
+    (LogicalKeyboardKey.digit1, {cmd}),
+    (LogicalKeyboardKey.digit2, {cmd}),
+  ];
+}
 
 /// Whether binding [key] with [modifiers] would collide with a fixed editor or
 /// system shortcut, so the recorder rejects it on every binding row. Whole-key
@@ -341,10 +354,11 @@ final _kEditorReservedCombos = <(LogicalKeyboardKey, Set<HotkeyModifier>)>[
 /// exact combo, so the bare 1/2 tools and ⌘. / ⌘/ stay bindable.
 bool isEditorReservedCombo(
   LogicalKeyboardKey key,
-  Set<HotkeyModifier> modifiers,
-) {
+  Set<HotkeyModifier> modifiers, {
+  bool? isWindows,
+}) {
   if (kEditorReservedKeys.contains(key)) return true;
-  for (final (k, mods) in _kEditorReservedCombos) {
+  for (final (k, mods) in _editorReservedCombos(isWindows ?? Platform.isWindows)) {
     if (k == key &&
         mods.length == modifiers.length &&
         mods.containsAll(modifiers)) {
@@ -430,14 +444,15 @@ const kGlobalActions = <GlobalAction>[
   ),
 ];
 
-/// The FIXED (reserved, not rebindable) Open-Settings chord: ⌘, (the macOS
-/// Preferences convention). True only for a key-down of comma with EXACTLY the
-/// meta modifier held.
-bool isOpenSettingsChord(KeyEvent e, Set<HotkeyModifier> pressed) =>
+/// The FIXED (reserved, not rebindable) Open-Settings chord: ⌘, on macOS, Ctrl+,
+/// on Windows (the platform Preferences/Settings convention). True only for a
+/// key-down of comma with EXACTLY the command modifier held.
+bool isOpenSettingsChord(KeyEvent e, Set<HotkeyModifier> pressed,
+        {bool? isWindows}) =>
     e is KeyDownEvent &&
     e.logicalKey == LogicalKeyboardKey.comma &&
     pressed.length == 1 &&
-    pressed.contains(HotkeyModifier.meta);
+    pressed.contains(editorCommandModifier(isWindows: isWindows));
 
 /// Pure Tier-2 dispatch: given a key-down event, the currently-pressed modifier
 /// set, and the effective editor bindings, return the matching editor action key
