@@ -800,7 +800,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                 children: [
                   Column(
                     children: [
-                      _titleBar(tokens),
+                      // The Flutter title bar is macOS-only (its frameless
+                      // .fullSizeContentView chrome). Windows keeps the standard
+                      // OS caption, so the content fills from the top and Home
+                      // becomes a floating button over the canvas (below).
+                      if (!Platform.isWindows) _titleBar(tokens),
                       Expanded(
                         child:
                             (image == null || bytes == null || controller == null)
@@ -809,6 +813,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                       ),
                     ],
                   ),
+                  // Windows: a floating glass Home button at the canvas top-left
+                  // while editing (the landing/gallery is itself "home").
+                  if (Platform.isWindows && image != null)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: _FloatingHomeButton(onTap: _backToLanding),
+                    ),
                   // Toast: a top-centred glass pill just below the title bar —
                   // away from the bottom toolbar pill (the old floating SnackBar
                   // covered it). Non-interactive; fades + slides in/out.
@@ -903,10 +915,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         ),
         child: Row(
           children: [
-            // Left inset to clear the macOS traffic-light buttons; Windows uses
-            // a standard caption window (controls live in the OS title bar), so
-            // only a small gutter is needed there.
-            SizedBox(width: Platform.isWindows ? 12 : 78),
+            // Left inset to clear the macOS traffic-light buttons. (This bar is
+            // macOS-only — Windows uses the OS caption + a floating Home button.)
+            const SizedBox(width: 78),
             // Back to the gallery landing — navigation lives top-left next to
             // the window controls (macOS back idiom), NOT in the bottom action
             // pill. Editor state only; the landing has nowhere to go back to.
@@ -1390,6 +1401,63 @@ class _DashedRRectPainter extends CustomPainter {
 /// The title-bar back-to-gallery control: a chevron + house pair on ONE hover
 /// surface, sized for the 32px bar. Reads as navigation (Photos-style back),
 /// distinct from the bottom pill's actions.
+/// Windows-only floating Home button: the macOS title-bar Home, restyled as a
+/// standalone glass pill that floats over the canvas (Windows has no Flutter
+/// title bar to host it). Same chevron+home glyphs + tooltip + hover.
+class _FloatingHomeButton extends StatefulWidget {
+  const _FloatingHomeButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_FloatingHomeButton> createState() => _FloatingHomeButtonState();
+}
+
+class _FloatingHomeButtonState extends State<_FloatingHomeButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final l = AppLocalizations.of(context);
+    final color = _hover ? t.fg1 : t.fg2;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: l.editorGalleryHome,
+          waitDuration: const Duration(milliseconds: 400),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+            decoration: BoxDecoration(
+              color: t.hudBg,
+              borderRadius: BorderRadius.circular(GlimprTokens.radiusBar),
+              border: Border.all(color: t.hudBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: t.isDark
+                      ? const Color(0x66000000)
+                      : const Color(0x2E0F172A),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.chevron_left, size: 16, color: color),
+                Icon(Icons.home_outlined, size: 15, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TitleBarHome extends StatefulWidget {
   const _TitleBarHome({required this.onTap});
   final VoidCallback onTap;
