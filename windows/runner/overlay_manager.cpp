@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "cursor_image.h"
+#include "editor_window.h"
 #include "image_codec.h"
 #include "wgc_capturer.h"
 #include "window_enum.h"
@@ -586,6 +587,23 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();
     return;
   }
+  if (method == "openInEditor") {
+    // The overlay flow's open-in-editor leg: reveal the editor + load the file.
+    if (const auto* path = Find(args, "path")) {
+      if (const auto* p = std::get_if<std::string>(path)) {
+        if (editor_window_) editor_window_->OpenWithPath(*p);
+      }
+    }
+    result->Success();
+    return;
+  }
+  if (method == "recentChanged") {
+    // An overlay capture saved a file into the shared recent store -> tell the
+    // editor engine to reload + re-push its list to the tray submenu.
+    if (editor_window_) editor_window_->RefreshRecent();
+    result->Success();
+    return;
+  }
   if (method == "openSettings") {
     // Simplified vs the macOS suspend-with-mask detour: dismiss the freeze and
     // raise the control (Settings) window. Route through the same reveal message
@@ -619,9 +637,8 @@ void OverlayManager::HandleOverlayCapture(
     return;
   }
   if (method == "requestAccessibility" || method == "setProcessing" ||
-      method == "perfMark" || method == "openInEditor" ||
-      method == "shareSheet" || method == "pinImage" ||
-      method == "recentChanged" || method == "recordSelection" ||
+      method == "perfMark" || method == "shareSheet" ||
+      method == "pinImage" || method == "recordSelection" ||
       method == "recordSelectHotkey" || method == "stopLoupeFeed") {
     result->Success();
     return;

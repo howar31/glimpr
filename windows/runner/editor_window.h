@@ -46,6 +46,11 @@ class EditorWindow : public Win32Window {
       std::function<void(std::vector<std::string>)> cb);
   // Ask the editor Dart to clear its recent list (tray "Clear Recent").
   void ClearRecent();
+  // Ask the editor Dart to reload + re-push its recent list. Fanned out by the
+  // capture/overlay engines after they save a file (native-mediated broadcast);
+  // dropped harmlessly if the editor engine isn't built yet (its editorReady
+  // refresh covers that case).
+  void RefreshRecent();
   // Route the editor's pin flow leg to the shared pin manager (Task 7).
   void SetPinManager(PinManager* pm) { pin_manager_ = pm; }
 

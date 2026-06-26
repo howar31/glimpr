@@ -8,6 +8,7 @@
 #include <memory>
 
 class OverlayManager;
+class EditorWindow;
 
 // Hosts the "glimpr/capture" method channel: native direct screen capture
 // (display / window / region) returning encoded image bytes to Dart, plus the
@@ -25,6 +26,10 @@ class CaptureChannel {
   // by FlutterWindow after the OverlayManager is constructed).
   void SetOverlayManager(OverlayManager* manager) { overlay_manager_ = manager; }
 
+  // The standalone editor the direct-capture flow's open-in-editor leg reveals,
+  // and the target of the recents-changed relay (set once by FlutterWindow).
+  void SetEditorWindow(EditorWindow* editor) { editor_window_ = editor; }
+
  private:
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -41,6 +46,7 @@ class CaptureChannel {
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   OverlayManager* overlay_manager_ = nullptr;  // not owned
+  EditorWindow* editor_window_ = nullptr;      // not owned
 };
 
 #endif  // RUNNER_CAPTURE_CHANNEL_H_

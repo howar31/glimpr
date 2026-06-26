@@ -71,6 +71,10 @@ void EditorWindow::ClearRecent() {
   if (editor_channel_) editor_channel_->InvokeMethod("clearRecent", nullptr);
 }
 
+void EditorWindow::RefreshRecent() {
+  if (editor_channel_) editor_channel_->InvokeMethod("refreshRecent", nullptr);
+}
+
 void EditorWindow::SetRecentImagesCallback(
     std::function<void(std::vector<std::string>)> cb) {
   recent_cb_ = std::move(cb);

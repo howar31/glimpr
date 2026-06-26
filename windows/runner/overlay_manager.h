@@ -45,6 +45,10 @@ class OverlayManager {
   // two never race (both run on the UI thread).
   void WarmUp();
 
+  // The standalone editor the overlay flow's open-in-editor leg reveals, and the
+  // target of the recents-changed relay (set once by FlutterWindow).
+  void SetEditorWindow(class EditorWindow* editor) { editor_window_ = editor; }
+
  private:
   using EncodableValue = flutter::EncodableValue;
   using EncodableMap = flutter::EncodableMap;
@@ -109,6 +113,7 @@ class OverlayManager {
 
   flutter::DartProject project_;
   HWND control_hwnd_ = nullptr;
+  class EditorWindow* editor_window_ = nullptr;  // not owned
   std::map<int64_t, Unit> units_;
 
   int64_t key_display_id_ = 0;     // cursor display at capture (takes focus)

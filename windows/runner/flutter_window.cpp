@@ -216,6 +216,10 @@ bool FlutterWindow::OnCreate() {
   // The standalone Image Editor (its own engine + window). Warm-built on the
   // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).
   editor_window_ = std::make_unique<EditorWindow>(project_, GetHandle());
+  // The capture flow's open-in-editor leg + recents relay reach the editor from
+  // both the direct-capture (control) and overlay engines.
+  capture_channel_->SetEditorWindow(editor_window_.get());
+  overlay_manager_->SetEditorWindow(editor_window_.get());
 
   // System tray (the menu-bar analogue). Live items fire through the same Dart
   // dispatcher as the hotkeys; Settings / About / Quit are native callbacks.

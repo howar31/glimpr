@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "decoration.h"
+#include "editor_window.h"
 #include "image_codec.h"
 #include "overlay_manager.h"
 #include "wgc_capturer.h"
@@ -226,6 +227,27 @@ void CaptureChannel::HandleMethodCall(
       overlay_manager_->BeginCapture(GetBool(map, "pinOnly", false),
                                      GetBool(map, "liveSelect", false));
     }
+    result->Success();
+    return;
+  }
+  if (call.method_name() == "openInEditor") {
+    // The direct-capture flow's open-in-editor leg: reveal the editor + load the
+    // saved/temp file.
+    const EncodableMap empty;
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const EncodableMap& map = args ? *args : empty;
+    if (const auto* v = Find(map, "path")) {
+      if (const auto* path = std::get_if<std::string>(v)) {
+        if (editor_window_) editor_window_->OpenWithPath(*path);
+      }
+    }
+    result->Success();
+    return;
+  }
+  if (call.method_name() == "recentChanged") {
+    // A direct capture saved a file into the shared recent store -> tell the
+    // editor engine to reload + re-push its list to the tray submenu.
+    if (editor_window_) editor_window_->RefreshRecent();
     result->Success();
     return;
   }
