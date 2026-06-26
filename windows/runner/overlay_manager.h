@@ -108,6 +108,15 @@ class OverlayManager {
   int64_t drawing_lock_id_ = 0;    // non-zero while a draw/crop drag is locked
   bool cursor_hidden_ = false;
   UINT_PTR cursor_timer_ = 0;
+  // Capture serialization: true from a capture's present until ALL its presented
+  // displays are shown. A re-trigger while true is DROPPED, so the async present
+  // -> overlayReady -> Show chains never overlap (mirrors macOS, where
+  // triggerCapture is serialized on the main actor; rapid overlap was the crash).
+  // Deliberate layer-stacking still works: once the overlay is fully up the guard
+  // clears and a re-press stacks/replaces normally. pending_shows_ counts the
+  // displays still awaiting Show (each presented display's overlayReady fires once).
+  bool presenting_ = false;
+  int pending_shows_ = 0;
 
   static OverlayManager* instance_;  // single owner; routes the timer callback
 };

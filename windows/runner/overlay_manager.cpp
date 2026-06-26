@@ -229,6 +229,13 @@ void OverlayManager::RegisterUnitChannels(Unit& unit) {
 // ---- present / show / dismiss --------------------------------------------
 
 void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
+  if (presenting_) {
+    // A previous capture's present -> overlayReady -> Show chain is still in
+    // flight; dropping this re-trigger keeps the chains from overlapping (the
+    // rapid-mash crash). Cleared when every presented display is shown (Show)
+    // or the overlay is dismissed.
+    return;
+  }
   SyncUnitsToScreens();
   POINT cursor{};
   GetCursorPos(&cursor);
@@ -269,12 +276,21 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     }
     for (auto& t : workers) t.join();
   }
+  int presented = 0;
   for (size_t i = 0; i < mons.size(); ++i) {
     if (!frames[i]) continue;
     const bool is_cursor = (MonId(mons[i]) == cursor_id);
     EncodableMap dict =
         BuildDisplayDict(mons[i], std::move(*frames[i]), is_cursor, cursor);
     PresentFrame(MonId(mons[i]), std::move(dict), pin_only, live_select);
+    ++presented;
+  }
+  // Block re-triggers until every presented display has been shown (or the
+  // overlay is dismissed) so the async reveal chains never overlap. Nothing
+  // presented (capture fully failed) -> no chain, so do not arm the guard.
+  if (presented > 0) {
+    presenting_ = true;
+    pending_shows_ = presented;
   }
 }
 
@@ -362,6 +378,13 @@ void OverlayManager::Show(int64_t display_id) {
   const bool activate =
       (display_id == key_display_id_) || key_display_id_ == 0;
   u->window->Show(mi.rcMonitor, activate);
+  // One presented display shown; when the last one is up the capture chain has
+  // settled -> release the guard so the next trigger (deliberate layer-stack /
+  // re-capture) can proceed without overlapping this chain.
+  if (presenting_ && --pending_shows_ <= 0) {
+    presenting_ = false;
+    pending_shows_ = 0;
+  }
 
   // If the cursor is ALREADY on this display, claim active now. The user may
   // have moved here during the capture latency, before this display's editor
@@ -382,6 +405,8 @@ void OverlayManager::Hide(int64_t display_id) {
 }
 
 void OverlayManager::DismissAll() {
+  presenting_ = false;  // session ended -> release the capture-serialization guard
+  pending_shows_ = 0;
   StopCursorTracking();
   SetCursorHidden(false);
   SetDrawingLock(0);
