@@ -3,6 +3,11 @@
 // Used by Runner.rc
 //
 #define IDI_APP_ICON                    101
+// System-tray viewfinder MARK (mac menu-bar parity), theme-tinted: a white mark
+// on a dark taskbar, a dark mark on a light one. Distinct from the app/taskbar
+// tile (IDI_APP_ICON).
+#define IDI_TRAY_WHITE                  102
+#define IDI_TRAY_DARK                   103
 
 // Next default values for new objects
 //

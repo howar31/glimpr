@@ -27,6 +27,24 @@ constexpr char kActCaptureScreen[] = "global.captureScreen";
 constexpr char kActCaptureLast[] = "global.captureLastRegion";
 constexpr char kActOpenSaveFolder[] = "menu.openSaveFolder";
 
+// Whether the Windows taskbar / tray uses the LIGHT theme (so the mark must be
+// DARK to read). SystemUsesLightTheme governs the taskbar (distinct from
+// AppsUseLightTheme). Defaults to dark taskbar (white mark) when unreadable.
+bool TaskbarUsesLightTheme() {
+  HKEY key;
+  if (RegOpenKeyExW(
+          HKEY_CURRENT_USER,
+          L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+          0, KEY_READ, &key) != ERROR_SUCCESS) {
+    return false;
+  }
+  DWORD value = 0, size = sizeof(value), type = 0;
+  LONG r = RegQueryValueExW(key, L"SystemUsesLightTheme", nullptr, &type,
+                            reinterpret_cast<LPBYTE>(&value), &size);
+  RegCloseKey(key);
+  return r == ERROR_SUCCESS && type == REG_DWORD && value != 0;
+}
+
 // Append an ASCII label (+ optional accelerator after a tab) as a wide menu
 // item. Labels are ASCII (cp950 build), so a plain widening is safe.
 void AppendItem(HMENU menu, UINT id, const std::string& label,
@@ -44,19 +62,48 @@ void AppendItem(HMENU menu, UINT id, const std::string& label,
 
 TrayIcon::TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,
                    Callbacks callbacks)
-    : owner_(owner), hotkeys_(hotkeys), cb_(std::move(callbacks)) {
+    : owner_(owner), instance_(instance), hotkeys_(hotkeys),
+      cb_(std::move(callbacks)) {
+  icon_ = LoadThemeIcon();
   NOTIFYICONDATAW nid = {};
   nid.cbSize = sizeof(nid);
   nid.hWnd = owner_;
   nid.uID = 1;
   nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
   nid.uCallbackMessage = WM_GLIMPR_TRAY;
-  nid.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_APP_ICON));
+  nid.hIcon = icon_;
   wcscpy_s(nid.szTip, L"Glimpr");
   added_ = Shell_NotifyIconW(NIM_ADD, &nid) == TRUE;
 }
 
-TrayIcon::~TrayIcon() { Remove(); }
+TrayIcon::~TrayIcon() {
+  Remove();
+  if (icon_) DestroyIcon(icon_);
+}
+
+// The viewfinder mark tinted for the current taskbar theme, at small-icon size.
+HICON TrayIcon::LoadThemeIcon() const {
+  const int id = TaskbarUsesLightTheme() ? IDI_TRAY_DARK : IDI_TRAY_WHITE;
+  return static_cast<HICON>(LoadImageW(
+      instance_, MAKEINTRESOURCEW(id), IMAGE_ICON,
+      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+      LR_DEFAULTCOLOR));
+}
+
+void TrayIcon::OnThemeChanged() {
+  if (!added_) return;
+  HICON next = LoadThemeIcon();
+  if (!next) return;
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = owner_;
+  nid.uID = 1;
+  nid.uFlags = NIF_ICON;
+  nid.hIcon = next;
+  Shell_NotifyIconW(NIM_MODIFY, &nid);
+  if (icon_) DestroyIcon(icon_);
+  icon_ = next;
+}
 
 void TrayIcon::Remove() {
   if (!added_) return;

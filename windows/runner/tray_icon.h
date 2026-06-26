@@ -34,16 +34,25 @@ class TrayIcon {
   // Right-click pops the menu; double-click opens Settings; left single-click
   // does nothing (owner choice) -> no single/double-click conflict, no timer.
   void OnTrayMessage(WPARAM wparam, LPARAM lparam);
+  // Routed from FlutterWindow::MessageHandler (WM_SETTINGCHANGE / ImmersiveColorSet):
+  // re-tint the tray mark when the taskbar flips between light and dark.
+  void OnThemeChanged();
   void Remove();
 
  private:
   void ShowMenu();
   void OnCommand(UINT command_id);
+  // The viewfinder mark tinted for the CURRENT taskbar theme (white mark on a
+  // dark taskbar, dark mark on a light one), at the small-icon size. Caller owns
+  // the returned HICON (DestroyIcon).
+  HICON LoadThemeIcon() const;
 
   HWND owner_ = nullptr;
+  HINSTANCE instance_ = nullptr;
   HotkeyHost* hotkeys_ = nullptr;  // not owned
   Callbacks cb_;
   bool added_ = false;
+  HICON icon_ = nullptr;  // current tray HICON (DestroyIcon on replace / remove)
 };
 
 #endif  // RUNNER_TRAY_ICON_H_

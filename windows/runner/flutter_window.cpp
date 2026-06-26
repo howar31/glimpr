@@ -269,6 +269,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     RevealControlWindow();  // a second instance asked us to show Settings
     return 0;
   }
+  // Taskbar light/dark flip -> re-tint the tray mark. Non-consuming: Flutter
+  // still receives WM_SETTINGCHANGE to update its own theme.
+  if (message == WM_SETTINGCHANGE && tray_icon_ && lparam &&
+      lstrcmpiW(reinterpret_cast<const wchar_t*>(lparam),
+                L"ImmersiveColorSet") == 0) {
+    tray_icon_->OnThemeChanged();
+  }
 
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
