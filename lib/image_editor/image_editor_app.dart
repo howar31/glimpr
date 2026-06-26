@@ -73,6 +73,9 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   bool _dirty = false;
   bool _closePending = false;
   bool _confirming = false;
+  // Windows: the localized OS-caption title last pushed to native (the editor
+  // has no Flutter title bar there, so the caption must follow app_language).
+  String? _sentWindowTitle;
   // Top-centred toast pill (see _toast): the message, its visibility (drives
   // the fade/slide), and the auto-dismiss + post-fade clear timers.
   String? _toastMsg;
@@ -502,6 +505,18 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     } catch (_) {}
   }
 
+  /// Windows only: push the localized editor title to the native OS caption (no
+  /// Flutter title bar there). Sent once per locale; restart-effective anyway.
+  void _syncWindowTitle() {
+    if (!Platform.isWindows) return;
+    final title = _l.editorTitleBar;
+    if (title == _sentWindowTitle) return;
+    _sentWindowTitle = title;
+    try {
+      _channel.invokeMethod('setWindowTitle', title);
+    } catch (_) {}
+  }
+
   /// Hot-reload the WHOLE config bundle ([Settings.loadAppConfig]: loupe + HUD +
   /// capture/output + editor bindings) on a Settings-close / window-key — a new
   /// config setting hot-reloads here for free just by joining AppConfig.
@@ -796,6 +811,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               // Resolve localizations from a context that is inside the
               // MaterialApp's Localizations scope (not the outer context).
               _l = AppLocalizations.of(ctx);
+              _syncWindowTitle();
               return Stack(
                 children: [
                   Column(

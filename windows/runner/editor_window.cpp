@@ -174,6 +174,21 @@ bool EditorWindow::OnCreate() {
             PostMessage(control_hwnd_, reveal, 0, 0);
           }
           result->Success();
+        } else if (m == "setWindowTitle") {
+          // The editor Dart pushes its localized title (app_language) so the OS
+          // caption follows the language setting; native owns no l10n strings.
+          if (const auto* s = std::get_if<std::string>(call.arguments())) {
+            if (GetHandle() && !s->empty()) {
+              int n = MultiByteToWideChar(CP_UTF8, 0, s->c_str(),
+                                          static_cast<int>(s->size()), nullptr,
+                                          0);
+              std::wstring w(static_cast<size_t>(n), L'\0');
+              MultiByteToWideChar(CP_UTF8, 0, s->c_str(),
+                                  static_cast<int>(s->size()), w.data(), n);
+              SetWindowTextW(GetHandle(), w.c_str());
+            }
+          }
+          result->Success();
         } else if (m == "titleBarDoubleClick") {
           result->Success();  // the standard caption bar handles maximize itself
         } else {
