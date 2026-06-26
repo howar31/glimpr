@@ -71,32 +71,16 @@ void TrayIcon::Remove() {
 void TrayIcon::OnTrayMessage(WPARAM /*wparam*/, LPARAM lparam) {
   switch (LOWORD(lparam)) {
     case WM_RBUTTONUP:
-      // Right-click is unambiguous: pop the menu immediately.
-      ShowMenu();
-      break;
-    case WM_LBUTTONUP:
-      if (suppress_next_up_) {
-        // The trailing up of a double-click -> do not re-arm the menu timer.
-        suppress_next_up_ = false;
-      } else {
-        // Defer: a double-click (reveal Settings) must win over the single-click
-        // menu, so wait one double-click interval before popping the menu.
-        SetTimer(owner_, kClickTimerId, GetDoubleClickTime(), nullptr);
-      }
+      ShowMenu();  // right-click pops the menu
       break;
     case WM_LBUTTONDBLCLK:
-      KillTimer(owner_, kClickTimerId);
-      suppress_next_up_ = true;  // the up that trails this dbl-click re-arms; skip
-      if (cb_.on_reveal_settings) cb_.on_reveal_settings();
+      if (cb_.on_reveal_settings) cb_.on_reveal_settings();  // double-click -> Settings
       break;
+    // Left single-click does nothing (owner choice): no menu, no Settings, so
+    // there is no single/double-click conflict.
     default:
       break;
   }
-}
-
-void TrayIcon::OnSingleClickTimer() {
-  KillTimer(owner_, kClickTimerId);
-  ShowMenu();
 }
 
 void TrayIcon::ShowMenu() {

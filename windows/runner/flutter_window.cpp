@@ -261,10 +261,6 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     tray_icon_->OnTrayMessage(wparam, lparam);
     return 0;
   }
-  if (message == WM_TIMER && wparam == TrayIcon::kClickTimerId && tray_icon_) {
-    tray_icon_->OnSingleClickTimer();
-    return 0;
-  }
   if (message == WM_CLOSE) {
     ShowWindow(GetHandle(), SW_HIDE);  // close = hide to tray; do not destroy
     return 0;
