@@ -235,11 +235,19 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
   kCaptureLastRegionKey: _b(
       PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
       {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
-  // Deferred globals: disabled until their slice (pin/open-editor = S4, record = S6).
-  kPinAreaKey: null,
-  kPinClipboardKey: null,
-  kOpenEditorKey: null,
-  kOpenEditorClipboardKey: null,
+  // Pin / open-editor globals (S4): Ctrl+Alt+Win+5/6/9/0, mirroring macOS
+  // ⌘⌥5/6/9/0. NOTE: only 1-4 were field-tested for OS collision; 5/6/9/0 are
+  // unverified (rebindable, so the user can clear any that collide).
+  kPinAreaKey: _b(PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  kPinClipboardKey: _b(PhysicalKeyboardKey.digit6, LogicalKeyboardKey.digit6,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  kOpenEditorKey: _b(PhysicalKeyboardKey.digit9, LogicalKeyboardKey.digit9,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  kOpenEditorClipboardKey: _b(
+      PhysicalKeyboardKey.digit0, LogicalKeyboardKey.digit0,
+      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  // Deferred globals: disabled until their slice (record = S6).
   kRecordRegionKey: null,
   kRecordWindowKey: null,
   kRecordDisplayKey: null,
@@ -265,12 +273,9 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
 };
 
 /// Global actions NOT available on Windows yet (greyed in the tray, hidden in the
-/// Shortcuts pane, disabled as hotkeys). Pin/open-editor land in S4, record in S6.
+/// Shortcuts pane, disabled as hotkeys). Pin + open-editor went live in S4;
+/// recording lands in S6.
 const _kWindowsUnavailableGlobals = <String>{
-  kPinAreaKey,
-  kPinClipboardKey,
-  kOpenEditorKey,
-  kOpenEditorClipboardKey,
   kRecordRegionKey,
   kRecordWindowKey,
   kRecordDisplayKey,

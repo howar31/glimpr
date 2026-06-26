@@ -25,12 +25,23 @@ void main() {
     expect(w[kCaptureAreaKey]!.label(TargetPlatform.windows), 'Ctrl+Alt+Win+1');
   });
 
-  test('deferred globals (pin / open-editor / record) are disabled on Windows', () {
+  test('Windows binds pin/open-editor globals to Ctrl+Alt+Win+5/6/9/0; record disabled', () {
     final w = defaultBindingsFor(true);
-    expect(w[kPinAreaKey], isNull);
-    expect(w[kPinClipboardKey], isNull);
-    expect(w[kOpenEditorKey], isNull);
-    expect(w[kOpenEditorClipboardKey], isNull);
+    const ctrlAltWin = {
+      HotkeyModifier.control,
+      HotkeyModifier.alt,
+      HotkeyModifier.meta,
+    };
+    // Pin / open-editor land in S4 (mirror macOS ⌘⌥5/6/9/0).
+    expect(w[kPinAreaKey]!.physicalKey, PhysicalKeyboardKey.digit5);
+    expect(w[kPinAreaKey]!.modifiers, ctrlAltWin);
+    expect(w[kPinClipboardKey]!.physicalKey, PhysicalKeyboardKey.digit6);
+    expect(w[kPinClipboardKey]!.modifiers, ctrlAltWin);
+    expect(w[kOpenEditorKey]!.physicalKey, PhysicalKeyboardKey.digit9);
+    expect(w[kOpenEditorKey]!.modifiers, ctrlAltWin);
+    expect(w[kOpenEditorClipboardKey]!.physicalKey, PhysicalKeyboardKey.digit0);
+    expect(w[kOpenEditorClipboardKey]!.modifiers, ctrlAltWin);
+    // Record globals stay disabled until S6.
     expect(w[kRecordRegionKey], isNull);
     expect(w[kRecordWindowKey], isNull);
     expect(w[kRecordDisplayKey], isNull);
@@ -57,9 +68,13 @@ void main() {
     expect(w[kEditorCopyHexKey], kDefaultBindings[kEditorCopyHexKey]);
   });
 
-  test('availability: capture globals available, deferred unavailable on Windows', () {
+  test('availability: capture + pin + open-editor available, record unavailable on Windows', () {
     expect(isGlobalActionAvailable(kCaptureAreaKey, isWindows: true), isTrue);
-    expect(isGlobalActionAvailable(kPinAreaKey, isWindows: true), isFalse);
+    expect(isGlobalActionAvailable(kPinAreaKey, isWindows: true), isTrue);
+    expect(isGlobalActionAvailable(kPinClipboardKey, isWindows: true), isTrue);
+    expect(isGlobalActionAvailable(kOpenEditorKey, isWindows: true), isTrue);
+    expect(
+        isGlobalActionAvailable(kOpenEditorClipboardKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: true), isFalse);
     // Everything is available on macOS.
     expect(isGlobalActionAvailable(kPinAreaKey, isWindows: false), isTrue);
