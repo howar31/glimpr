@@ -7,6 +7,8 @@
 
 #include <utility>
 
+#include "pin_window.h"
+
 using flutter::EncodableList;
 using flutter::EncodableMap;
 using flutter::EncodableValue;
@@ -152,8 +154,17 @@ bool EditorWindow::OnCreate() {
           if (recent_cb_) recent_cb_(list);
           result->Success();
         } else if (m == "pinImage") {
-          // Task 7 routes this to the shared pin manager; until then, accept it
-          // so the editor's pin flow leg succeeds (no-op).
+          // The editor's pin flow leg: float the image centered (no rect).
+          if (pin_manager_) {
+            if (const auto* a = std::get_if<EncodableMap>(call.arguments())) {
+              auto it = a->find(EncodableValue(std::string("path")));
+              if (it != a->end()) {
+                if (const auto* p = std::get_if<std::string>(&it->second)) {
+                  pin_manager_->Pin(*p, std::nullopt);
+                }
+              }
+            }
+          }
           result->Success();
         } else if (m == "shareSheet") {
           result->Success();  // Windows v1: no system share surface

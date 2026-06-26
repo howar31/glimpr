@@ -221,6 +221,13 @@ bool FlutterWindow::OnCreate() {
   capture_channel_->SetEditorWindow(editor_window_.get());
   overlay_manager_->SetEditorWindow(editor_window_.get());
 
+  // The shared pin manager: the pin flow leg reaches it from the control, overlay
+  // and editor engines.
+  pin_manager_ = std::make_unique<PinManager>();
+  capture_channel_->SetPinManager(pin_manager_.get());
+  overlay_manager_->SetPinManager(pin_manager_.get());
+  editor_window_->SetPinManager(pin_manager_.get());
+
   // System tray (the menu-bar analogue). Live items fire through the same Dart
   // dispatcher as the hotkeys; Settings / About / Quit are native callbacks.
   tray_icon_ = std::make_unique<TrayIcon>(

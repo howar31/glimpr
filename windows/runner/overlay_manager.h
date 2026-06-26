@@ -49,6 +49,9 @@ class OverlayManager {
   // target of the recents-changed relay (set once by FlutterWindow).
   void SetEditorWindow(class EditorWindow* editor) { editor_window_ = editor; }
 
+  // The shared pin manager the overlay flow's pin leg uses (set by FlutterWindow).
+  void SetPinManager(class PinManager* pins) { pin_manager_ = pins; }
+
  private:
   using EncodableValue = flutter::EncodableValue;
   using EncodableMap = flutter::EncodableMap;
@@ -114,6 +117,7 @@ class OverlayManager {
   flutter::DartProject project_;
   HWND control_hwnd_ = nullptr;
   class EditorWindow* editor_window_ = nullptr;  // not owned
+  class PinManager* pin_manager_ = nullptr;      // not owned
   std::map<int64_t, Unit> units_;
 
   int64_t key_display_id_ = 0;     // cursor display at capture (takes focus)

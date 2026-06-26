@@ -11,6 +11,7 @@
 #include "editor_window.h"
 #include "hotkey_host.h"
 #include "overlay_manager.h"
+#include "pin_window.h"
 #include "tray_icon.h"
 #include "win32_window.h"
 
@@ -68,6 +69,9 @@ class FlutterWindow : public Win32Window {
   // The standalone Image Editor engine + window (warm-built shortly after launch;
   // revealed on demand). The macOS warm editor window analogue.
   std::unique_ptr<EditorWindow> editor_window_;
+
+  // The live floating pins (pin-to-screen). The macOS PinPanel set analogue.
+  std::unique_ptr<PinManager> pin_manager_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

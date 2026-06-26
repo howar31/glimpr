@@ -9,6 +9,7 @@
 
 class OverlayManager;
 class EditorWindow;
+class PinManager;
 
 // Hosts the "glimpr/capture" method channel: native direct screen capture
 // (display / window / region) returning encoded image bytes to Dart, plus the
@@ -30,6 +31,9 @@ class CaptureChannel {
   // and the target of the recents-changed relay (set once by FlutterWindow).
   void SetEditorWindow(EditorWindow* editor) { editor_window_ = editor; }
 
+  // The shared pin manager the direct-capture flow's pin leg uses.
+  void SetPinManager(PinManager* pins) { pin_manager_ = pins; }
+
  private:
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -47,6 +51,7 @@ class CaptureChannel {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   OverlayManager* overlay_manager_ = nullptr;  // not owned
   EditorWindow* editor_window_ = nullptr;      // not owned
+  PinManager* pin_manager_ = nullptr;          // not owned
 };
 
 #endif  // RUNNER_CAPTURE_CHANNEL_H_

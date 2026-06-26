@@ -15,6 +15,7 @@
 #include "cursor_image.h"
 #include "editor_window.h"
 #include "image_codec.h"
+#include "pin_window.h"
 #include "wgc_capturer.h"
 #include "window_enum.h"
 
@@ -604,6 +605,27 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();
     return;
   }
+  if (method == "pinImage") {
+    // The overlay flow's pin leg: float [path] in place over the captured region
+    // (x/y/w/h global logical) when present, else centered.
+    std::string path = GetString(args, "path");
+    if (!path.empty() && pin_manager_) {
+      std::optional<RECT> place;
+      if (Find(args, "w") && Find(args, "h")) {
+        const double x = GetDouble(args, "x", 0.0);
+        const double y = GetDouble(args, "y", 0.0);
+        const double w = GetDouble(args, "w", 0.0);
+        const double h = GetDouble(args, "h", 0.0);
+        place = RECT{static_cast<LONG>(std::lround(x)),
+                     static_cast<LONG>(std::lround(y)),
+                     static_cast<LONG>(std::lround(x + w)),
+                     static_cast<LONG>(std::lround(y + h))};
+      }
+      pin_manager_->Pin(path, place);
+    }
+    result->Success();
+    return;
+  }
   if (method == "openSettings") {
     // Simplified vs the macOS suspend-with-mask detour: dismiss the freeze and
     // raise the control (Settings) window. Route through the same reveal message
@@ -638,8 +660,8 @@ void OverlayManager::HandleOverlayCapture(
   }
   if (method == "requestAccessibility" || method == "setProcessing" ||
       method == "perfMark" || method == "shareSheet" ||
-      method == "pinImage" || method == "recordSelection" ||
-      method == "recordSelectHotkey" || method == "stopLoupeFeed") {
+      method == "recordSelection" || method == "recordSelectHotkey" ||
+      method == "stopLoupeFeed") {
     result->Success();
     return;
   }

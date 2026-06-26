@@ -19,6 +19,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "overlay_manager.cpp"
   "overlay_window.cpp"
+  "pin_window.cpp"
   "tray_icon.cpp"
   "utils.cpp"
   "wgc_capturer.cpp"
@@ -53,6 +54,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE "d3d11.lib" "dxgi.lib" "d2d1.lib" "
 # Resident shell (Phase 6 S3): tray + ShellExecute (shell32), VERSIONINFO
 # (version), launch-at-login registry (advapi32).
 target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib" "version.lib" "advapi32.lib")
+# Pin-to-screen (Phase 6 S4): layered-window blit (gdi32) + the Save As dialog
+# (comdlg32).
+target_link_libraries(${BINARY_NAME} PRIVATE "gdi32.lib" "comdlg32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

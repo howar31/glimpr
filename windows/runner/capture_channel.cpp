@@ -17,6 +17,7 @@
 #include "editor_window.h"
 #include "image_codec.h"
 #include "overlay_manager.h"
+#include "pin_window.h"
 #include "wgc_capturer.h"
 
 namespace {
@@ -248,6 +249,33 @@ void CaptureChannel::HandleMethodCall(
     // A direct capture saved a file into the shared recent store -> tell the
     // editor engine to reload + re-push its list to the tray submenu.
     if (editor_window_) editor_window_->RefreshRecent();
+    result->Success();
+    return;
+  }
+  if (call.method_name() == "pinImage") {
+    // The capture flow's pin leg: float [path] as a pin, in place over the
+    // captured region when x/y/w/h are present, else centered.
+    const EncodableMap empty;
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const EncodableMap& map = args ? *args : empty;
+    std::string path;
+    if (const auto* v = Find(map, "path")) {
+      if (const auto* p = std::get_if<std::string>(v)) path = *p;
+    }
+    if (!path.empty() && pin_manager_) {
+      std::optional<RECT> place;
+      if (HasKey(map, "w") && HasKey(map, "h")) {
+        const double x = GetDouble(map, "x", 0.0);
+        const double y = GetDouble(map, "y", 0.0);
+        const double w = GetDouble(map, "w", 0.0);
+        const double h = GetDouble(map, "h", 0.0);
+        place = RECT{static_cast<LONG>(std::lround(x)),
+                     static_cast<LONG>(std::lround(y)),
+                     static_cast<LONG>(std::lround(x + w)),
+                     static_cast<LONG>(std::lround(y + h))};
+      }
+      pin_manager_->Pin(path, place);
+    }
     result->Success();
     return;
   }
