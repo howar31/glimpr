@@ -101,19 +101,6 @@ void RecordChannel::HandleMethodCall(
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     const EncodableMap& m = args ? *args : empty;
 
-    // GIF and the audio/region/window legs land in later sub-slices; S6a records
-    // the display to an H.264 mp4. (Unreachable in S6a -- the hotkeys/menu are
-    // still gated -- but fail clearly rather than silently mis-record.)
-    if (GetBool(m, "gif", false)) {
-      result->Success();
-      Emit("onRecordFailed",
-           EncodableValue(EncodableMap{
-               {EncodableValue("message"),
-                EncodableValue(std::string("GIF recording not yet available "
-                                           "on Windows"))}}));
-      return;
-    }
-
     Recorder::Spec spec;
     const std::string mode = GetString(m, "mode", "display");
     spec.mode = mode == "window" ? Recorder::Mode::kWindow
@@ -131,6 +118,8 @@ void RecordChannel::HandleMethodCall(
     }
     spec.fps = GetInt(m, "fps", 30);
     spec.hevc = GetBool(m, "hevc", false);
+    spec.gif = GetBool(m, "gif", false);
+    spec.gif_fps = GetInt(m, "gifFps", 15);
     spec.show_cursor = GetBool(m, "showsCursor", true);
     spec.video_quality = GetString(m, "videoQuality", "high");
     spec.max_long_side = GetInt(m, "maxLongSide", 0);

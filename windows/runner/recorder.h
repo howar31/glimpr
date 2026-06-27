@@ -33,6 +33,8 @@ class Recorder {
     double x = 0, y = 0, w = 0, h = 0;  // display-local logical pts (region mode)
     int fps = 30;
     bool hevc = false;
+    bool gif = false;     // direct GIF (WIC) instead of mp4; no audio
+    int gif_fps = 15;     // GIF frame rate (throttle + per-frame delay)
     bool show_cursor = true;
     std::string video_quality = "high";  // low|medium|high -> bitrate bpp tier
     int max_long_side = 0;               // px, 0 = native (mp4 cap)

@@ -22,6 +22,7 @@ add_executable(${BINARY_NAME} WIN32
   "pin_window.cpp"
   "record_audio.cpp"
   "record_channel.cpp"
+  "record_gif.cpp"
   "recorder.cpp"
   "tray_icon.cpp"
   "utils.cpp"

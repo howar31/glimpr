@@ -1,6 +1,7 @@
 #include "recorder.h"
 
 #include "record_audio.h"
+#include "record_gif.h"
 
 #include <d3d11.h>
 #include <dwmapi.h>
@@ -115,6 +116,11 @@ struct Recorder::Impl {
   DWORD video_stream = 0;
   uint32_t out_w = 0, out_h = 0;  // encoded (possibly capped) pixels
   LONGLONG frame_interval = 0;    // 100ns per target frame (fps throttle/dur)
+
+  // ---- encode (GIF via WIC, the alternative to the mp4 path) -------------
+  bool gif = false;
+  std::unique_ptr<GifSink> gif_sink;
+  uint32_t gif_delay_cs = 0;  // per-frame delay (centiseconds) at the GIF fps
 
   // ---- timeline / pause --------------------------------------------------
   std::atomic<LONGLONG> session_start{-1};  // first frame ts (100ns)
@@ -311,6 +317,24 @@ void Recorder::Impl::EncoderLoop() {
     LONGLONG start = session_start.load();
     HRESULT hr = S_OK;
 
+    if (pick == kVideo && gif) {
+      // GIF path: append the (cropped) frame with a fixed per-frame delay.
+      if (!gif_sink ||
+          !gif_sink->AddFrame(vf.bgra.data(), cap_w, cap_h, cap_w * 4,
+                              gif_delay_cs)) {
+        {
+          std::lock_guard<std::mutex> lock(error_mutex);
+          async_error = "gif encode failed";
+        }
+        failed = true;
+        if (async_target) {
+          PostMessage(async_target, async_msg, Recorder::kAsyncFailed, 0);
+        }
+        break;
+      }
+      continue;  // GIF has no Media Foundation sample
+    }
+
     if (pick == kVideo) {
       if (start < 0) start = vf.ts100ns;
       LONGLONG pts = vf.ts100ns - start - paused_accum.load();
@@ -448,6 +472,8 @@ void Recorder::Impl::Cleanup() {
   device = nullptr;
   item = nullptr;
   writer = nullptr;
+  gif_sink.reset();
+  gif = false;
   {
     std::lock_guard<std::mutex> lock(queue_mutex);
     queue.clear();
@@ -608,16 +634,33 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   impl_->out_h = out_h;
 
   const int fps = (std::max)(1, spec.fps);
-  impl_->frame_interval = 10000000LL / fps;
+  const int gfps = (std::max)(1, spec.gif_fps);
+  impl_->gif = spec.gif;
+  // GIF throttles to its own (coarser) rate; mp4 keeps the requested fps.
+  impl_->frame_interval = spec.gif ? (10000000LL / gfps) : (10000000LL / fps);
+  impl_->gif_delay_cs =
+      spec.gif ? static_cast<uint32_t>((100 + gfps / 2) / gfps) : 0;
 
-  // ---- WASAPI audio sources ----------------------------------------------
+  // Widen the (Dart-built, ASCII/path-safe) output path once, for either encoder.
+  {
+    int n = MultiByteToWideChar(CP_UTF8, 0, spec.output_path.c_str(), -1,
+                                nullptr, 0);
+    impl_->output_path_w.clear();
+    if (n > 0) {
+      std::wstring w(static_cast<size_t>(n - 1), L'\0');
+      MultiByteToWideChar(CP_UTF8, 0, spec.output_path.c_str(), -1, w.data(), n);
+      impl_->output_path_w = std::move(w);
+    }
+  }
+
+  // ---- WASAPI audio sources (mp4 only; GIF has no audio) -----------------
   // Started BEFORE the writer's audio streams so only sources that actually open
   // get an mp4 audio track (no empty-track finalize). Packets accumulate in the
   // bounded queues until the encoder thread starts draining them; while paused
   // they are dropped (the span is excluded). Two separate tracks when both are
   // on (mergeAudio is handled in a later sub-slice).
   Impl* impl = impl_.get();
-  if (spec.system_audio) {
+  if (!spec.gif && spec.system_audio) {
     impl_->sys_cap = std::make_unique<WasapiCapture>();
     impl_->audio_sys.active = impl_->sys_cap->Start(
         WasapiCapture::Kind::kLoopback, [impl](const AudioPacket& p) {
@@ -631,7 +674,7 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
         });
     if (!impl_->audio_sys.active) impl_->sys_cap.reset();
   }
-  if (spec.microphone) {
+  if (!spec.gif && spec.microphone) {
     impl_->mic_cap = std::make_unique<WasapiCapture>();
     impl_->audio_mic.active = impl_->mic_cap->Start(
         WasapiCapture::Kind::kMicrophone, [impl](const AudioPacket& p) {
@@ -646,29 +689,25 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     if (!impl_->audio_mic.active) impl_->mic_cap.reset();
   }
 
-  // ---- Media Foundation sink writer --------------------------------------
-  if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) return fail("MFStartup");
-  impl_->mf_started = true;
-
-  impl_->output_path_w.assign(spec.output_path.begin(), spec.output_path.end());
-  // (Output path is built by Dart and is ASCII/path-safe; widen byte-wise.)
-  {
-    int n = MultiByteToWideChar(CP_UTF8, 0, spec.output_path.c_str(), -1,
-                                nullptr, 0);
-    if (n > 0) {
-      std::wstring w(static_cast<size_t>(n - 1), L'\0');
-      MultiByteToWideChar(CP_UTF8, 0, spec.output_path.c_str(), -1, w.data(), n);
-      impl_->output_path_w = std::move(w);
+  // ---- GIF (WIC) encoder, or the Media Foundation sink writer (mp4) ------
+  if (spec.gif) {
+    impl_->gif_sink = std::make_unique<GifSink>();
+    if (!impl_->gif_sink->Open(impl_->output_path_w, 1024)) {
+      return fail("gif open");
     }
   }
-
+  // The entire Media Foundation path below is mp4 (H.264 / HEVC) only. `writer`
+  // stays null for GIF; every statement up to BeginWriting is guarded by !gif.
   winrt::com_ptr<IMFSinkWriter> writer;
-  if (FAILED(MFCreateSinkWriterFromURL(impl_->output_path_w.c_str(), nullptr,
-                                       nullptr, writer.put()))) {
-    return fail("MFCreateSinkWriterFromURL");
-  }
+  if (!spec.gif) {
+    if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) return fail("MFStartup");
+    impl_->mf_started = true;
+    if (FAILED(MFCreateSinkWriterFromURL(impl_->output_path_w.c_str(), nullptr,
+                                         nullptr, writer.put()))) {
+      return fail("MFCreateSinkWriterFromURL");
+    }
 
-  const double bpp = BppFor(spec.video_quality);
+    const double bpp = BppFor(spec.video_quality);
   UINT32 bitrate = static_cast<UINT32>(
       (std::max)(500000.0, static_cast<double>(out_w) * out_h * fps * bpp));
 
@@ -746,8 +785,9 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     }
   }
 
-  if (FAILED(writer->BeginWriting())) return fail("BeginWriting");
-  impl_->writer = writer;
+    if (FAILED(writer->BeginWriting())) return fail("BeginWriting");
+    impl_->writer = writer;
+  }  // end of the mp4-only Media Foundation setup
 
   // ---- arm the frame callback + start the encoder + the capture ---------
   impl_->frame_token = impl_->pool.FrameArrived(
@@ -822,6 +862,11 @@ bool Recorder::Stop(std::string* out_path, std::string* error) {
   if (impl_->failed) {
     ok = false;
     if (error) *error = "encode failed";
+  } else if (impl_->gif) {
+    if (!impl_->gif_sink || !impl_->gif_sink->Finish()) {
+      ok = false;
+      if (error) *error = "gif finalize failed";
+    }
   } else if (impl_->writer) {
     HRESULT hr = impl_->writer->Finalize();
     if (FAILED(hr)) {
