@@ -59,8 +59,14 @@ class SettingsApp extends StatefulWidget {
   State<SettingsApp> createState() => _SettingsAppState();
 }
 
-// Reserved at the top for the transparent title bar / traffic lights.
+// Reserved at the top for the transparent title bar / traffic lights (macOS
+// frameless .fullSizeContentView). Windows has a standard OS caption above the
+// client area, so it only needs a small breathing inset, not the traffic-light
+// clearance.
 const _kTitleBarInset = 52.0;
+const _kTitleBarInsetWin = 16.0;
+double get _titleBarInset =>
+    Platform.isWindows ? _kTitleBarInsetWin : _kTitleBarInset;
 
 // Side of the square Loupe preview frame. A loupe larger than this is scaled
 // down to fit (and flagged), so the section never reflows while dragging.
@@ -720,8 +726,9 @@ class _SettingsAppState extends State<SettingsApp>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Traffic-light zone (real macOS controls overlay this area).
-          const SizedBox(height: _kTitleBarInset),
+          // Traffic-light zone (real macOS controls overlay this area); a small
+          // breathing inset on Windows (the OS caption is above the client area).
+          SizedBox(height: _titleBarInset),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
             child: const Lockup(),
@@ -760,7 +767,7 @@ class _SettingsAppState extends State<SettingsApp>
 
   Widget _content(GlimprTokens t) {
     final list = ListView(
-      padding: const EdgeInsets.fromLTRB(28, _kTitleBarInset, 28, 32),
+      padding: EdgeInsets.fromLTRB(28, _titleBarInset, 28, 32),
       children: [
         ..._pane(t),
       ],
