@@ -36,7 +36,7 @@ class RecordChrome {
   // strip below-center, plus a red border around the rect when [border] (region /
   // window modes), plus a dim scrim over every OTHER display when [scrim].
   void Show(int64_t display_id, double x, double y, double w, double h,
-            bool border, bool scrim, Callbacks cb);
+            bool border, bool scrim, int max_duration_sec, Callbacks cb);
   // Reflect a pause/resume (button label + freeze the timer).
   void SetPaused(bool paused);
   // Show a pre-recording countdown HUD centred on the target ([x,y,w,h] display-
@@ -72,6 +72,11 @@ class RecordChrome {
   bool paused_ = false;
   int hover_ = 0;  // hovered button (0 none)
   bool tracking_leave_ = false;
+  int max_duration_sec_ = 0;     // > 0 draws the auto-stop progress rail
+  bool dragging_ = false;        // the strip is being dragged
+  POINT drag_off_{};             // cursor-screen - window-origin at drag start
+  bool abort_armed_ = false;     // Abort is in its confirm step
+  ULONGLONG abort_arm_ms_ = 0;   // when Abort was armed (auto-disarms after 3s)
 
   RECT stop_rc_{}, pause_rc_{}, abort_rc_{};  // physical px, client coords
 

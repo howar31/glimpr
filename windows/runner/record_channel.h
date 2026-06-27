@@ -54,7 +54,8 @@ class RecordChannel {
   // Show the recording chrome for the started recording + wire its Stop/Pause/
   // Abort buttons back to this channel. [border] draws the recorded-rect outline
   // (region/window modes); [scrim] dims the other displays.
-  void ShowChrome(const Recorder::StartedInfo& info, bool border, bool scrim);
+  void ShowChrome(const Recorder::StartedInfo& info, bool border, bool scrim,
+                  int max_duration_sec);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<Recorder> recorder_;

@@ -213,13 +213,18 @@ void RecordChrome::Layout() {
 }
 
 void RecordChrome::Show(int64_t display_id, double x, double y, double w,
-                        double h, bool border, bool scrim, Callbacks cb) {
+                        double h, bool border, bool scrim, int max_duration_sec,
+                        Callbacks cb) {
   Hide();
   cb_ = std::move(cb);
   paused_ = false;
   paused_at_ = 0;
   paused_total_ = 0;
   hover_ = 0;
+  max_duration_sec_ = max_duration_sec;
+  dragging_ = false;
+  abort_armed_ = false;
+  abort_arm_ms_ = 0;
   start_ms_ = GetTickCount64();
 
   HMONITOR mon = reinterpret_cast<HMONITOR>(static_cast<intptr_t>(display_id));
@@ -505,11 +510,33 @@ LRESULT RecordChrome::MessageHandler(HWND hwnd, UINT msg, WPARAM wp,
   switch (msg) {
     case WM_TIMER:
       if (wp == kTickTimer) {
+        if (abort_armed_ && GetTickCount64() - abort_arm_ms_ > 3000) {
+          abort_armed_ = false;  // auto-disarm after 3s
+        }
         Render();
         return 0;
       }
       break;
+    case WM_LBUTTONDOWN: {
+      POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+      if (HitTest(p) == 0) {  // press on the bar body -> drag the strip
+        POINT c{};
+        GetCursorPos(&c);
+        drag_off_ = {c.x - win_x_, c.y - win_y_};
+        dragging_ = true;
+        SetCapture(hwnd);
+      }
+      return 0;
+    }
     case WM_MOUSEMOVE: {
+      if (dragging_) {
+        POINT c{};
+        GetCursorPos(&c);
+        win_x_ = c.x - drag_off_.x;
+        win_y_ = c.y - drag_off_.y;
+        Render();  // UpdateLayeredWindow repositions to the new origin
+        return 0;
+      }
       POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
       const int h = HitTest(p);
       if (h != hover_) {
@@ -531,15 +558,32 @@ LRESULT RecordChrome::MessageHandler(HWND hwnd, UINT msg, WPARAM wp,
       }
       return 0;
     case WM_LBUTTONUP: {
+      if (dragging_) {
+        dragging_ = false;
+        ReleaseCapture();
+        return 0;
+      }
       POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
       const int h = HitTest(p);
-      // Copy the callback before any potential teardown the callback triggers.
+      if (h == 3) {  // Abort = two-step: arm, then confirm within 3s
+        if (!abort_armed_) {
+          abort_armed_ = true;
+          abort_arm_ms_ = GetTickCount64();
+          Render();
+        } else {
+          abort_armed_ = false;
+          if (cb_.on_abort) cb_.on_abort();
+        }
+        return 0;
+      }
+      if (abort_armed_) {  // any other click disarms a pending Abort
+        abort_armed_ = false;
+        Render();
+      }
       if (h == 1) {
         if (cb_.on_stop) cb_.on_stop();
       } else if (h == 2) {
         if (cb_.on_pause_toggle) cb_.on_pause_toggle();
-      } else if (h == 3) {
-        if (cb_.on_abort) cb_.on_abort();
       }
       return 0;
     }
@@ -588,6 +632,24 @@ void RecordChrome::Render() {
     fill(D2D1::RectF(0, 0, static_cast<float>(W), static_cast<float>(H)), rad,
          D2D1::ColorF(0x0F172A, 0.96f));
 
+    // Auto-stop progress rail along the bottom edge.
+    if (max_duration_sec_ > 0) {
+      double frac = static_cast<double>(secs) / max_duration_sec_;
+      if (frac < 0) frac = 0;
+      if (frac > 1) frac = 1;
+      const float ph = S(3);
+      const float y0 = static_cast<float>(H) - ph;
+      brush->SetColor(D2D1::ColorF(0xFF453A, 0.16f));
+      dc_->FillRectangle(
+          D2D1::RectF(rad, y0, static_cast<float>(W) - rad, static_cast<float>(H)),
+          brush.get());
+      brush->SetColor(D2D1::ColorF(0xFF453A, 0.9f));
+      const float x1 =
+          rad + static_cast<float>((static_cast<double>(W) - 2 * rad) * frac);
+      dc_->FillRectangle(D2D1::RectF(rad, y0, x1, static_cast<float>(H)),
+                         brush.get());
+    }
+
     // Recording-red dot (left).
     const float cy = H / 2.0f;
     const float dotx = S(kPad) + S(5);
@@ -623,7 +685,8 @@ void RecordChrome::Render() {
                     label_fmt_.get(), r, brush.get());
     };
     draw_btn(pause_rc_, paused_ ? L"Resume" : L"Pause", false, hover_ == 2);
-    draw_btn(abort_rc_, L"Abort", false, hover_ == 3);
+    draw_btn(abort_rc_, abort_armed_ ? L"Confirm?" : L"Abort", abort_armed_,
+             hover_ == 3);
     draw_btn(stop_rc_, L"Stop", true, hover_ == 1);
 
     winrt::check_hresult(dc_->EndDraw());

@@ -215,7 +215,8 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
              {EncodableValue("y"), EncodableValue(info.y)},
              {EncodableValue("w"), EncodableValue(info.w)},
              {EncodableValue("h"), EncodableValue(info.h)}}));
-    ShowChrome(info, spec.mode != Recorder::Mode::kDisplay, show_scrim);
+    ShowChrome(info, spec.mode != Recorder::Mode::kDisplay, show_scrim,
+               spec.max_duration_sec);
   } else {
     Emit("onRecordFailed",
          EncodableValue(EncodableMap{
@@ -224,9 +225,10 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
 }
 
 void RecordChannel::ShowChrome(const Recorder::StartedInfo& info, bool border,
-                               bool scrim) {
+                               bool scrim, int max_duration_sec) {
   if (!chrome_) return;
   chrome_->Show(info.display_id, info.x, info.y, info.w, info.h, border, scrim,
+                max_duration_sec,
                 RecordChrome::Callbacks{
                     [this]() { FinishActive(); },
                     [this]() {
