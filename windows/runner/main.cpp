@@ -41,7 +41,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initial CONTENT size, matching the macOS Settings window (820x700 pts).
   // Win32Window::Create treats this as the client area and adds the DPI frame.
   Win32Window::Size size(820, 700);
-  if (!window.Create(L"glimpr", origin, size)) {
+  if (!window.Create(L"Glimpr", origin, size)) {
     return EXIT_FAILURE;
   }
   // Resident shell: closing the Settings window hides it to the tray; only the
