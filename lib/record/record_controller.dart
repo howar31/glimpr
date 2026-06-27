@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show Rect;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:path/path.dart' as p;
 import '../capture/capture_bridge.dart';
 import '../capture/direct_capture.dart'
     show
@@ -52,7 +53,7 @@ class RecordController {
         _showError = showError ?? ((m) => CaptureBridge().showError(m)),
         _copyText =
             copyTextFn ?? ((t) => Clipboard.setData(ClipboardData(text: t))),
-        _reveal = revealFn ?? _revealInFinder,
+        _reveal = revealFn ?? revealInFileManager,
         _share = shareFn ?? CaptureBridge.shareSheet,
         _beginLiveSelect = beginLiveSelect ??
             (() => CaptureBridge().beginCapture(liveSelect: true)),
@@ -222,7 +223,7 @@ class RecordController {
     await naming.dir.create(recursive: true);
     await _bridge.start(
       mode: mode,
-      outputPath: '${naming.dir.path}/${naming.fileName}',
+      outputPath: p.join(naming.dir.path, naming.fileName),
       displayId: displayId,
       rect: rect,
       windowId: windowId,
@@ -288,7 +289,7 @@ class RecordController {
       await naming.dir.create(recursive: true);
       await _bridge.start(
         mode: mode,
-        outputPath: '${naming.dir.path}/${naming.fileName}',
+        outputPath: p.join(naming.dir.path, naming.fileName),
         displayId: displayId,
         rect: rect,
         // The live-select toolbar's one-shot overrides win over the settings.
@@ -307,7 +308,9 @@ class RecordController {
         // Output quality controls: settings-only (no per-take toolbar override).
         videoQuality: rec.videoQuality.name,
         maxLongSide: rec.maxLongSide,
-        gifFps: rec.gifFps,
+        // GIF frame rate IS a per-take toolbar override (like fps), reflecting
+        // the persisted gifFps when untouched.
+        gifFps: (a['gifFps'] as num?)?.toInt() ?? rec.gifFps,
       );
     } catch (e) {
       _phase = RecordPhase.idle;
@@ -341,7 +344,9 @@ class RecordController {
         await _reveal(path);
       } catch (_) {}
     }
-    if (flow.contains(FlowAction.shareSheet)) {
+    // Share is macOS-only (no system share surface on Windows v1); the toggle is
+    // hidden there, but guard the action too so a stale setting can't invoke it.
+    if (!Platform.isWindows && flow.contains(FlowAction.shareSheet)) {
       try {
         await _share(path);
       } catch (_) {}
@@ -359,7 +364,4 @@ class RecordController {
     _inLiveSelect = false;
   }
 
-  static Future<void> _revealInFinder(String path) async {
-    await Process.run('open', ['-R', path]);
-  }
 }

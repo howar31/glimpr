@@ -2096,6 +2096,48 @@ abstract class AppLocalizations {
   /// **'Frame rate (this recording)'**
   String get toolbarRecordFps;
 
+  /// Recording control strip: the Finish (stop + save) button
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get recordStripFinish;
+
+  /// Recording control strip: the Pause button
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get recordStripPause;
+
+  /// Recording control strip: the Resume button (while paused)
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get recordStripResume;
+
+  /// Recording control strip: the Abort (discard) button
+  ///
+  /// In en, this message translates to:
+  /// **'Abort'**
+  String get recordStripAbort;
+
+  /// Recording control strip: the armed Abort confirm label
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm?'**
+  String get recordStripConfirm;
+
+  /// Recording control strip: GIF frame-count unit suffix (e.g. '120 frames')
+  ///
+  /// In en, this message translates to:
+  /// **'frames'**
+  String get recordStripFrames;
+
+  /// Pre-recording countdown HUD: hint to click to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Click to cancel'**
+  String get recordCountdownCancel;
+
   /// Record-mode toolbar: one-shot cursor override toggle tooltip
   ///
   /// In en, this message translates to:

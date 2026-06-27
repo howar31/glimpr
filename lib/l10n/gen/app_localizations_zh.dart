@@ -1048,6 +1048,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolbarRecordFps => '影格率（僅此次錄影）';
 
   @override
+  String get recordStripFinish => '完成';
+
+  @override
+  String get recordStripPause => '暫停';
+
+  @override
+  String get recordStripResume => '繼續';
+
+  @override
+  String get recordStripAbort => '中止';
+
+  @override
+  String get recordStripConfirm => '確認？';
+
+  @override
+  String get recordStripFrames => '幀';
+
+  @override
+  String get recordCountdownCancel => '點按取消';
+
+  @override
   String get toolbarRecordCursor => '顯示游標（僅此次錄影）';
 
   @override

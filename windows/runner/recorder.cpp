@@ -43,6 +43,25 @@ double BppFor(const std::string& q) {
 
 uint32_t EvenDown(uint32_t v) { return v & ~1u; }
 
+// QueryPerformanceCounter as 100ns ticks. ONE clock shared by the video capture
+// (WGC) and the audio capture (WASAPI) so their timestamps are comparable: WGC
+// SystemRelativeTime and WASAPI u64QPCPosition are on DIFFERENT epochs, and
+// subtracting one from the other produced a giant-negative audio pts -> clamped
+// to 0 -> the whole audio track crammed at pts~0 ("mic only plays ~1 second").
+LONGLONG Qpc100ns() {
+  static const LONGLONG freq = [] {
+    LARGE_INTEGER f{};
+    QueryPerformanceFrequency(&f);
+    return f.QuadPart ? f.QuadPart : 10000000LL;
+  }();
+  LARGE_INTEGER c{};
+  QueryPerformanceCounter(&c);
+  // Split seconds + remainder so QuadPart * 1e7 cannot overflow int64 (QuadPart
+  // is ~1e12 on a machine up for a day; *1e7 would exceed int64 max).
+  return (c.QuadPart / freq) * 10000000LL +
+         (c.QuadPart % freq) * 10000000LL / freq;
+}
+
 double MonScale(HMONITOR mon) {
   UINT dx_ = 96, dy_ = 96;
   if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx_, &dy_))) dx_ = 96;
@@ -95,6 +114,134 @@ struct AudioStream {
   LONGLONG last_pts = -1;
 };
 
+// Live PCM mixer (the mergeAudio path): sums the system + mic streams onto ONE
+// AAC track. Mirrors the macOS AudioMixer (RecordingKit.swift): both sources
+// arrive already 48 kHz / stereo / s16 (WASAPI AUTOCONVERTPCM handles the device
+// mix format AND the mono-mic -> stereo upmix, so no converter is needed here,
+// unlike macOS) and already PTS-rebased to the session start (minus paused
+// spans), so this only aligns by frame index and adds. Driven inline on the SOLE
+// encoder thread -- single owner, no locks. A frame-indexed int32 accumulator
+// (int32 so summing two s16 cannot overflow before the clamp) holds pending
+// samples; each Add flushes up to the lower of the two sources' high-water marks
+// (with a 0.3 s silence-gap fallback so a quiet/idle source cannot stall the
+// flush -- WASAPI may deliver nothing during pure silence). The clamped s16
+// result is written to the merged AAC sink stream.
+class AudioMixer {
+ public:
+  enum class Source { kSystem, kMic };
+
+  // |writer| + |stream| identify the single merged AAC sink stream. |writer| is
+  // owned by the Recorder (released after the mixer is reset), held raw here.
+  AudioMixer(IMFSinkWriter* writer, DWORD stream)
+      : writer_(writer), stream_(stream) {}
+
+  // Mix one source packet (interleaved s16: L,R,L,R...). |pts100ns| is its
+  // rebased presentation time (>= 0). Returns the WriteSample HRESULT of the
+  // flush it triggers (S_OK if nothing was flushed).
+  HRESULT Add(Source src, const int16_t* samples, size_t frame_count,
+              LONGLONG pts100ns) {
+    if (frame_count == 0) return S_OK;
+    // Rebased pts (100ns) -> 48 kHz frame index, rounded. Split seconds +
+    // remainder so the multiply cannot overflow int64 (same idiom as Qpc100ns).
+    const int64_t start_frame =
+        (pts100ns / 10000000LL) * kSampleRate +
+        ((pts100ns % 10000000LL) * kSampleRate + 5000000LL) / 10000000LL;
+    MixIn(samples, frame_count, start_frame);
+    const int64_t end_frame = start_frame + static_cast<int64_t>(frame_count);
+    if (src == Source::kSystem) {
+      sys_hwm_ = (std::max)(sys_hwm_, end_frame);
+    } else {
+      mic_hwm_ = (std::max)(mic_hwm_, end_frame);
+    }
+    return Flush(false);
+  }
+
+  // Flush any buffered audio still in the accumulator (the tail past the lower
+  // high-water mark) before the writer finalizes. Mirrors macOS mixer.finish().
+  HRESULT Finish() { return Flush(true); }
+
+ private:
+  void MixIn(const int16_t* in, size_t frames, int64_t start_frame) {
+    if (base_frame_ < 0) base_frame_ = start_frame;
+    const int64_t need_end = start_frame + static_cast<int64_t>(frames);
+    const int64_t cur_end = base_frame_ + static_cast<int64_t>(acc_l_.size());
+    if (need_end > cur_end) {
+      const size_t add = static_cast<size_t>(need_end - cur_end);
+      acc_l_.insert(acc_l_.end(), add, 0);
+      acc_r_.insert(acc_r_.end(), add, 0);
+    }
+    const int64_t offset = start_frame - base_frame_;
+    if (offset < 0) return;  // a few ms before base: drop (sub-buffer)
+    for (size_t i = 0; i < frames; ++i) {
+      acc_l_[static_cast<size_t>(offset) + i] += in[i * 2];
+      acc_r_[static_cast<size_t>(offset) + i] += in[i * 2 + 1];
+    }
+  }
+
+  HRESULT Flush(bool final_flush) {
+    if (base_frame_ < 0 || acc_l_.empty()) return S_OK;
+    int64_t watermark;
+    if (final_flush) {
+      watermark = base_frame_ + static_cast<int64_t>(acc_l_.size());
+    } else {
+      int64_t w = (std::min)(sys_hwm_, mic_hwm_);
+      const int64_t hi = (std::max)(sys_hwm_, mic_hwm_);
+      if (hi - w > kLagFrames) w = hi - kLagFrames;  // silence-gap safety
+      watermark = w;
+    }
+    const int64_t count = watermark - base_frame_;
+    if (count <= 0) return S_OK;
+
+    const DWORD bytes =
+        static_cast<DWORD>(count * kChannels * sizeof(int16_t));
+    winrt::com_ptr<IMFMediaBuffer> buf;
+    if (FAILED(MFCreateMemoryBuffer(bytes, buf.put()))) return S_OK;
+    BYTE* dst = nullptr;
+    if (FAILED(buf->Lock(&dst, nullptr, nullptr))) return S_OK;
+    auto* out = reinterpret_cast<int16_t*>(dst);
+    for (int64_t i = 0; i < count; ++i) {
+      out[i * 2] = ClampS16(acc_l_[static_cast<size_t>(i)]);
+      out[i * 2 + 1] = ClampS16(acc_r_[static_cast<size_t>(i)]);
+    }
+    buf->Unlock();
+    buf->SetCurrentLength(bytes);
+
+    LONGLONG pts = base_frame_ * 10000000LL / kSampleRate;
+    if (pts <= last_pts_) pts = last_pts_ + 1;  // monotonic guard (defensive)
+    last_pts_ = pts;
+    const LONGLONG dur = count * 10000000LL / kSampleRate;
+
+    winrt::com_ptr<IMFSample> sample;
+    if (FAILED(MFCreateSample(sample.put()))) return S_OK;
+    sample->AddBuffer(buf.get());
+    sample->SetSampleTime(pts);
+    sample->SetSampleDuration(dur);
+    const HRESULT hr = writer_->WriteSample(stream_, sample.get());
+
+    acc_l_.erase(acc_l_.begin(), acc_l_.begin() + static_cast<size_t>(count));
+    acc_r_.erase(acc_r_.begin(), acc_r_.begin() + static_cast<size_t>(count));
+    base_frame_ = watermark;
+    return hr;
+  }
+
+  static int16_t ClampS16(int32_t v) {
+    if (v > 32767) return 32767;
+    if (v < -32768) return -32768;
+    return static_cast<int16_t>(v);
+  }
+
+  static constexpr int64_t kSampleRate = 48000;
+  static constexpr int kChannels = 2;
+  static constexpr int64_t kLagFrames = 48000 * 3 / 10;  // 0.3 s
+
+  IMFSinkWriter* writer_;
+  DWORD stream_;
+  std::vector<int32_t> acc_l_, acc_r_;  // frame-indexed; acc_l_[0] == base_frame_
+  int64_t base_frame_ = -1;             // -1 until the first sample lands
+  int64_t sys_hwm_ = 0, mic_hwm_ = 0;   // highest frame delivered by each source
+  LONGLONG last_pts_ = -1;              // monotonic guard for emitted samples
+};
+
 }  // namespace
 
 struct Recorder::Impl {
@@ -121,6 +268,7 @@ struct Recorder::Impl {
   bool gif = false;
   std::unique_ptr<GifSink> gif_sink;
   uint32_t gif_delay_cs = 0;  // per-frame delay (centiseconds) at the GIF fps
+  std::atomic<uint32_t> gif_frames{0};  // appended GIF frames (strip readout)
 
   // ---- timeline / pause --------------------------------------------------
   std::atomic<LONGLONG> session_start{-1};  // first frame ts (100ns)
@@ -147,12 +295,16 @@ struct Recorder::Impl {
   // ---- audio (WASAPI -> AAC stream(s)) -----------------------------------
   // The encoder thread is the SOLE sink-writer writer: WASAPI capture threads
   // only push packets into these queues (guarded by queue_mutex), and the encoder
-  // drains video + audio in timestamp order. Two-track when both sources are on
-  // (mergeAudio is handled in a later sub-slice).
+  // drains video + audio in timestamp order. Two separate tracks when both
+  // sources are on, UNLESS merge_audio -- then both route through `mixer` onto one
+  // merged AAC track (Windows media players play only the first audio track, so a
+  // two-track file would silence the mic; macOS players mix both).
   std::unique_ptr<WasapiCapture> sys_cap;
   std::unique_ptr<WasapiCapture> mic_cap;
   AudioStream audio_sys;
   AudioStream audio_mic;
+  bool merge_audio = false;           // gated: merge && both sources opened
+  std::unique_ptr<AudioMixer> mixer;  // the single merged AAC sink (merge path)
 
   // ---- async error -------------------------------------------------------
   HWND async_target = nullptr;
@@ -166,6 +318,11 @@ struct Recorder::Impl {
   void EncoderLoop();
   void AutoStopLoop();
   void OnFrameArrived();
+  // Stop + join the capture sources (audio threads + the WGC frame pool) so no
+  // more samples enqueue. MUST run BEFORE joining the encoder, else a live source
+  // (esp. the mic, which always produces) keeps refilling the queue and the
+  // encoder's all-empty exit condition is never met -> a hang on stop/abort.
+  void StopSources();
   void Cleanup();
 };
 
@@ -188,7 +345,9 @@ void Recorder::Impl::OnFrameArrived() {
     std::lock_guard<std::mutex> lock(readback_mutex);
     auto frame = pool.TryGetNextFrame();
     if (!frame) return;
-    ts = frame.SystemRelativeTime().count();
+    // Timestamp on the SHARED QPC clock (NOT WGC SystemRelativeTime, which is a
+    // different epoch than the audio clock) so video + audio interleave + sync.
+    ts = Qpc100ns();
 
     // While paused, still drain the frame (releasing it back to the pool) but do
     // not read it back or enqueue it -- the paused span is excluded from output.
@@ -332,6 +491,7 @@ void Recorder::Impl::EncoderLoop() {
         }
         break;
       }
+      gif_frames.fetch_add(1, std::memory_order_relaxed);
       continue;  // GIF has no Media Foundation sample
     }
 
@@ -361,34 +521,49 @@ void Recorder::Impl::EncoderLoop() {
       sample->SetSampleDuration(frame_interval);
       hr = writer->WriteSample(video_stream, sample.get());
     } else {
-      AudioStream& as = (pick == kSys) ? audio_sys : audio_mic;
-      if (start < 0) start = ap.qpc100ns;
+      // Audio + video now share ONE clock (QPC), rebased to the first video frame
+      // (session_start, set in OnFrameArrived). Drop audio captured BEFORE the
+      // first frame (pre-roll) rather than clamping it to 0 -- clamping crammed
+      // the whole track at pts~0 (the "mic only plays ~1 second" bug).
+      if (start < 0) continue;  // no video frame yet -> drop pre-roll audio
       LONGLONG pts = ap.qpc100ns - start - paused_accum.load();
-      if (pts < 0) pts = 0;
-      if (pts <= as.last_pts) pts = as.last_pts + 1;
-      as.last_pts = pts;
+      if (pts < 0) continue;    // captured before the first frame -> drop
 
-      const DWORD bytes =
-          static_cast<DWORD>(ap.samples.size() * sizeof(int16_t));
       const LONGLONG frames =
           static_cast<LONGLONG>(ap.samples.size() / WasapiCapture::kChannels);
-      const LONGLONG dur =
-          frames * 10000000LL / static_cast<LONGLONG>(WasapiCapture::kSampleRate);
 
-      winrt::com_ptr<IMFMediaBuffer> buf;
-      if (FAILED(MFCreateMemoryBuffer(bytes, buf.put()))) continue;
-      BYTE* dst = nullptr;
-      if (FAILED(buf->Lock(&dst, nullptr, nullptr))) continue;
-      std::memcpy(dst, ap.samples.data(), bytes);
-      buf->Unlock();
-      buf->SetCurrentLength(bytes);
+      if (merge_audio) {
+        // Merge path: feed the mixer, which sums system + mic PTS-aligned onto
+        // the ONE merged AAC stream and writes it itself.
+        hr = mixer->Add(pick == kSys ? AudioMixer::Source::kSystem
+                                      : AudioMixer::Source::kMic,
+                        ap.samples.data(), static_cast<size_t>(frames), pts);
+      } else {
+        // Two-track (or single-source) path: write this source's own AAC stream.
+        AudioStream& as = (pick == kSys) ? audio_sys : audio_mic;
+        if (pts <= as.last_pts) pts = as.last_pts + 1;
+        as.last_pts = pts;
 
-      winrt::com_ptr<IMFSample> sample;
-      if (FAILED(MFCreateSample(sample.put()))) continue;
-      sample->AddBuffer(buf.get());
-      sample->SetSampleTime(pts);
-      sample->SetSampleDuration(dur);
-      hr = writer->WriteSample(as.mf_index, sample.get());
+        const DWORD bytes =
+            static_cast<DWORD>(ap.samples.size() * sizeof(int16_t));
+        const LONGLONG dur = frames * 10000000LL /
+                             static_cast<LONGLONG>(WasapiCapture::kSampleRate);
+
+        winrt::com_ptr<IMFMediaBuffer> buf;
+        if (FAILED(MFCreateMemoryBuffer(bytes, buf.put()))) continue;
+        BYTE* dst = nullptr;
+        if (FAILED(buf->Lock(&dst, nullptr, nullptr))) continue;
+        std::memcpy(dst, ap.samples.data(), bytes);
+        buf->Unlock();
+        buf->SetCurrentLength(bytes);
+
+        winrt::com_ptr<IMFSample> sample;
+        if (FAILED(MFCreateSample(sample.put()))) continue;
+        sample->AddBuffer(buf.get());
+        sample->SetSampleTime(pts);
+        sample->SetSampleDuration(dur);
+        hr = writer->WriteSample(as.mf_index, sample.get());
+      }
     }
 
     if (FAILED(hr)) {
@@ -403,6 +578,12 @@ void Recorder::Impl::EncoderLoop() {
       break;
     }
   }
+  // Flush the merge mixer's buffered tail (audio past the lower high-water mark,
+  // held back during the run) onto the merged AAC track before the writer
+  // finalizes. Runs on this (encoder) thread so the mixer's WriteSample stays on
+  // the sole writer. Skip on a failed encode -- the file is discarded anyway.
+  // Mirrors macOS RecordingWriter.finish() -> mixer.finish().
+  if (merge_audio && mixer && !failed.load()) mixer->Finish();
 }
 
 void Recorder::Impl::AutoStopLoop() {
@@ -427,8 +608,9 @@ void Recorder::Impl::AutoStopLoop() {
   }
 }
 
-void Recorder::Impl::Cleanup() {
-  // Stop the audio sources first so no more packets are enqueued.
+void Recorder::Impl::StopSources() {
+  // Stop the audio sources first so no more packets are enqueued (each Stop()
+  // joins its capture thread).
   if (sys_cap) {
     sys_cap->Stop();
     sys_cap.reset();
@@ -461,6 +643,10 @@ void Recorder::Impl::Cleanup() {
     }
     pool = nullptr;
   }
+}
+
+void Recorder::Impl::Cleanup() {
+  StopSources();  // idempotent; ensures no source outlives the encoder join
   // Drain + join the worker threads.
   stop_requested = true;
   queue_cv.notify_all();
@@ -471,6 +657,8 @@ void Recorder::Impl::Cleanup() {
   context = nullptr;
   device = nullptr;
   item = nullptr;
+  mixer.reset();  // holds writer raw -> release before the writer
+  merge_audio = false;
   writer = nullptr;
   gif_sink.reset();
   gif = false;
@@ -503,6 +691,7 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   impl_->max_duration_sec = (std::max)(0, spec.max_duration_sec);
   impl_->stop_requested = false;
   impl_->failed = false;
+  impl_->gif_frames = 0;
   impl_->async_target = async_target;
   impl_->async_msg = async_msg;
   {
@@ -513,6 +702,8 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   impl_->audio_sys.last_pts = -1;
   impl_->audio_mic.active = false;
   impl_->audio_mic.last_pts = -1;
+  impl_->merge_audio = false;
+  impl_->mixer.reset();
   {
     std::lock_guard<std::mutex> lock(impl_->queue_mutex);
     impl_->audio_sys.queue.clear();
@@ -658,17 +849,19 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   // get an mp4 audio track (no empty-track finalize). Packets accumulate in the
   // bounded queues until the encoder thread starts draining them; while paused
   // they are dropped (the span is excluded). Two separate tracks when both are
-  // on (mergeAudio is handled in a later sub-slice).
+  // on, unless mergeAudio sums them onto one (resolved at stream setup below).
   Impl* impl = impl_.get();
   if (!spec.gif && spec.system_audio) {
     impl_->sys_cap = std::make_unique<WasapiCapture>();
     impl_->audio_sys.active = impl_->sys_cap->Start(
         WasapiCapture::Kind::kLoopback, [impl](const AudioPacket& p) {
-          if (impl->paused.load()) return;
+          if (impl->paused.load() || impl->stop_requested.load()) return;
           {
             std::lock_guard<std::mutex> lock(impl->queue_mutex);
-            if (impl->audio_sys.queue.size() < 128)
+            // Bound memory: drop if the encoder falls far behind (silent).
+            if (impl->audio_sys.queue.size() < 128) {
               impl->audio_sys.queue.push_back(p);
+            }
           }
           impl->queue_cv.notify_one();
         });
@@ -678,11 +871,13 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     impl_->mic_cap = std::make_unique<WasapiCapture>();
     impl_->audio_mic.active = impl_->mic_cap->Start(
         WasapiCapture::Kind::kMicrophone, [impl](const AudioPacket& p) {
-          if (impl->paused.load()) return;
+          if (impl->paused.load() || impl->stop_requested.load()) return;
           {
             std::lock_guard<std::mutex> lock(impl->queue_mutex);
-            if (impl->audio_mic.queue.size() < 128)
+            // Bound memory: drop if the encoder falls far behind (silent).
+            if (impl->audio_mic.queue.size() < 128) {
               impl->audio_mic.queue.push_back(p);
+            }
           }
           impl->queue_cv.notify_one();
         });
@@ -702,8 +897,25 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   if (!spec.gif) {
     if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) return fail("MFStartup");
     impl_->mf_started = true;
+    winrt::com_ptr<IMFAttributes> sw_attrs;
+    if (SUCCEEDED(MFCreateAttributes(sw_attrs.put(), 2))) {
+      // Disable inter-stream WriteSample throttling. At stop we stop the video
+      // and drain the BUFFERED audio, whose timestamps then run AHEAD of the
+      // (now stopped) video. With throttling on (the default) the sink writer
+      // blocks each such WriteSample ~1 second waiting for the video to catch up
+      // -- the finish/abort HANG (worst with system+mic, the largest audio
+      // backlog) -- and the file never finalizes (corrupt). Proven by the
+      // stop-path trace: each drained SYS-audio WriteSample took ~1000 ms.
+      sw_attrs->SetUINT32(MF_SINK_WRITER_DISABLE_THROTTLING, TRUE);
+      // HEVC has no SOFTWARE encoder MFT on Windows (unlike H.264); allow the
+      // GPU hardware encoder MFT or AddStream(HEVC) fails (recording never
+      // starts). H.264 keeps its software encoder.
+      if (spec.hevc) {
+        sw_attrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+      }
+    }
     if (FAILED(MFCreateSinkWriterFromURL(impl_->output_path_w.c_str(), nullptr,
-                                         nullptr, writer.put()))) {
+                                         sw_attrs.get(), writer.put()))) {
       return fail("MFCreateSinkWriterFromURL");
     }
 
@@ -722,7 +934,15 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   MFSetAttributeSize(out_type.get(), MF_MT_FRAME_SIZE, out_w, out_h);
   MFSetAttributeRatio(out_type.get(), MF_MT_FRAME_RATE, fps, 1);
   MFSetAttributeRatio(out_type.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-  if (FAILED(writer->AddStream(out_type.get(), &impl_->video_stream))) {
+  HRESULT add_hr = writer->AddStream(out_type.get(), &impl_->video_stream);
+  if (FAILED(add_hr) && spec.hevc) {
+    // No HEVC encoder on this machine (no GPU HEVC MFT / HEVC Video Extension
+    // not installed): fall back to H.264 so recording still works (both are mp4)
+    // instead of silently doing nothing.
+    out_type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+    add_hr = writer->AddStream(out_type.get(), &impl_->video_stream);
+  }
+  if (FAILED(add_hr)) {
     return fail("AddStream");
   }
 
@@ -770,18 +990,33 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     *out_index = idx;
     return true;
   };
-  if (impl_->audio_sys.active && !add_audio(&impl_->audio_sys.mf_index)) {
-    impl_->audio_sys.active = false;
-    if (impl_->sys_cap) {
-      impl_->sys_cap->Stop();
-      impl_->sys_cap.reset();
+  // Merge path mirrors macOS: engage only when the user enabled mergeAudio AND
+  // both sources actually opened. One merged AAC stream fed by the mixer; the
+  // separate per-source tracks (and the encoder's two-track write) are bypassed.
+  // If only one source opened there is nothing to mix -> fall through to the
+  // single-track path. If adding the merged stream fails, fall back to two
+  // tracks rather than dropping audio entirely.
+  if (spec.merge_audio && impl_->audio_sys.active && impl_->audio_mic.active) {
+    DWORD merged_index = 0;
+    if (add_audio(&merged_index)) {
+      impl_->merge_audio = true;
+      impl_->mixer = std::make_unique<AudioMixer>(writer.get(), merged_index);
     }
   }
-  if (impl_->audio_mic.active && !add_audio(&impl_->audio_mic.mf_index)) {
-    impl_->audio_mic.active = false;
-    if (impl_->mic_cap) {
-      impl_->mic_cap->Stop();
-      impl_->mic_cap.reset();
+  if (!impl_->merge_audio) {
+    if (impl_->audio_sys.active && !add_audio(&impl_->audio_sys.mf_index)) {
+      impl_->audio_sys.active = false;
+      if (impl_->sys_cap) {
+        impl_->sys_cap->Stop();
+        impl_->sys_cap.reset();
+      }
+    }
+    if (impl_->audio_mic.active && !add_audio(&impl_->audio_mic.mf_index)) {
+      impl_->audio_mic.active = false;
+      if (impl_->mic_cap) {
+        impl_->mic_cap->Stop();
+        impl_->mic_cap.reset();
+      }
     }
   }
 
@@ -839,21 +1074,10 @@ bool Recorder::Stop(std::string* out_path, std::string* error) {
   }
   active_ = false;
 
-  // Stop the source + drain the encoder before finalizing.
-  if (impl_->frame_token) {
-    try {
-      impl_->pool.FrameArrived(impl_->frame_token);
-    } catch (...) {
-    }
-    impl_->frame_token = {};
-  }
-  if (impl_->session) {
-    try {
-      impl_->session.Close();
-    } catch (...) {
-    }
-    impl_->session = nullptr;
-  }
+  // Stop ALL sources (audio threads + WGC pool) BEFORE draining the encoder --
+  // otherwise a still-running source (the mic always produces) keeps refilling
+  // the queue and the encoder's all-empty exit is never reached -> a hang.
+  impl_->StopSources();
   impl_->stop_requested = true;
   impl_->queue_cv.notify_all();
   if (impl_->encoder.joinable()) impl_->encoder.join();
@@ -919,3 +1143,7 @@ void Recorder::Resume() {
 }
 
 bool Recorder::paused() const { return impl_->paused.load(); }
+
+int Recorder::GifFrameCount() const {
+  return impl_->gif ? static_cast<int>(impl_->gif_frames.load()) : 0;
+}

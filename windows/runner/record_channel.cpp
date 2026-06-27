@@ -128,6 +128,7 @@ void RecordChannel::HandleMethodCall(
     spec.max_duration_sec = GetInt(m, "maxDuration", 0);
     spec.system_audio = GetBool(m, "systemAudio", false);
     spec.microphone = GetBool(m, "microphone", false);
+    spec.merge_audio = GetBool(m, "mergeAudio", false);
 
     const int countdown = GetInt(m, "countdown", 0);
     const bool show_scrim = GetBool(m, "showScrim", true);
@@ -136,10 +137,14 @@ void RecordChannel::HandleMethodCall(
     if (countdown > 0 && chrome_) {
       pending_spec_ = spec;
       pending_scrim_ = show_scrim;
+      const bool cd_border = spec.mode != Recorder::Mode::kDisplay;
       chrome_->ShowCountdown(
-          spec.display_id, spec.x, spec.y, spec.w, spec.h, countdown,
-          [this]() { DoStart(pending_spec_, pending_scrim_); },
-          [this]() { Emit("onRecordAborted"); });
+          spec.display_id, spec.x, spec.y, spec.w, spec.h, countdown, cd_border,
+          show_scrim, [this]() { DoStart(pending_spec_, pending_scrim_); },
+          [this]() {
+            if (chrome_) chrome_->Hide();  // tear the countdown frame on cancel
+            Emit("onRecordAborted");
+          });
     } else {
       DoStart(spec, show_scrim);
     }
@@ -183,6 +188,38 @@ void RecordChannel::HandleMethodCall(
     return;
   }
 
+  if (method == "setRecordLabels") {
+    // Localized strip / countdown labels pushed once from Dart at boot (the
+    // runner C++ is ASCII-only, so Dart owns l10n). Stored on the chrome; used
+    // (and the buttons sized) on the next Show.
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    if (args && chrome_) {
+      auto W = [](const std::string& s) -> std::wstring {
+        if (s.empty()) return std::wstring();
+        int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+        if (n <= 0) return std::wstring();
+        std::wstring w(static_cast<size_t>(n - 1), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n);
+        return w;
+      };
+      RecordChrome::Labels lbl;  // English defaults
+      auto get = [&](const char* k, const std::wstring& dflt) {
+        const std::string s = GetString(*args, k, "");
+        return s.empty() ? dflt : W(s);
+      };
+      lbl.finish = get("finish", lbl.finish);
+      lbl.pause = get("pause", lbl.pause);
+      lbl.resume = get("resume", lbl.resume);
+      lbl.abort = get("abort", lbl.abort);
+      lbl.confirm = get("confirm", lbl.confirm);
+      lbl.frames = get("frames", lbl.frames);
+      lbl.countdown_cancel = get("countdownCancel", lbl.countdown_cancel);
+      chrome_->SetLabels(lbl);
+    }
+    result->Success();
+    return;
+  }
+
   result->NotImplemented();
 }
 
@@ -216,7 +253,7 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
              {EncodableValue("w"), EncodableValue(info.w)},
              {EncodableValue("h"), EncodableValue(info.h)}}));
     ShowChrome(info, spec.mode != Recorder::Mode::kDisplay, show_scrim,
-               spec.max_duration_sec);
+               spec.max_duration_sec, spec.output_path, spec.gif);
   } else {
     Emit("onRecordFailed",
          EncodableValue(EncodableMap{
@@ -225,10 +262,12 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
 }
 
 void RecordChannel::ShowChrome(const Recorder::StartedInfo& info, bool border,
-                               bool scrim, int max_duration_sec) {
+                               bool scrim, int max_duration_sec,
+                               const std::string& output_path, bool gif) {
   if (!chrome_) return;
   chrome_->Show(info.display_id, info.x, info.y, info.w, info.h, border, scrim,
-                max_duration_sec,
+                max_duration_sec, gif, output_path,
+                [this]() { return recorder_->GifFrameCount(); },
                 RecordChrome::Callbacks{
                     [this]() { FinishActive(); },
                     [this]() {

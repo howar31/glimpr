@@ -127,6 +127,19 @@ Future<void> main() async {
       'settings': l.traySettings,
       'quit': l.trayQuit,
     }).catchError((_) {});
+    // Push the localized recording-strip / countdown labels to native for the
+    // same reason: the runner C++ is ASCII-only (cp950), so Dart owns l10n and
+    // the native chrome sizes its buttons to the longest label per language.
+    const MethodChannel('glimpr/record')
+        .invokeMethod('setRecordLabels', <String, String>{
+      'finish': l.recordStripFinish,
+      'pause': l.recordStripPause,
+      'resume': l.recordStripResume,
+      'abort': l.recordStripAbort,
+      'confirm': l.recordStripConfirm,
+      'frames': l.recordStripFrames,
+      'countdownCancel': l.recordCountdownCancel,
+    }).catchError((_) {});
   }
 
   runApp(SettingsApp(settings: Settings.instance, hotkeyService: hotkeyService));

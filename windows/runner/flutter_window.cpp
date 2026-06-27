@@ -13,6 +13,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "win_reveal.h"
 
 using flutter::EncodableMap;
 using flutter::EncodableValue;
@@ -236,6 +237,16 @@ bool FlutterWindow::OnCreate() {
             }
           }
           if (tray_icon_) tray_icon_->SetLabels(std::move(labels));
+          result->Success();
+        } else if (m == "revealInExplorer") {
+          if (const auto* args = std::get_if<EncodableMap>(call.arguments())) {
+            auto it = args->find(EncodableValue(std::string("path")));
+            if (it != args->end()) {
+              if (const auto* p = std::get_if<std::string>(&it->second)) {
+                RevealInExplorer(*p);
+              }
+            }
+          }
           result->Success();
         } else {
           result->NotImplemented();

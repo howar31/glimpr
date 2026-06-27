@@ -41,6 +41,7 @@ class Recorder {
     int max_duration_sec = 0;            // auto-stop after N unpaused seconds (0 = off)
     bool system_audio = false;           // WASAPI loopback (default render endpoint)
     bool microphone = false;             // WASAPI capture (default capture endpoint)
+    bool merge_audio = false;            // sum system + mic into ONE AAC track (both-on only)
   };
 
   // The recorded rect reported back to Dart as onRecordStarted (display-local
@@ -80,6 +81,11 @@ class Recorder {
 
   bool active() const { return active_; }
   bool paused() const;
+
+  // Frames appended to the GIF so far (the strip readout; GIF buffers until
+  // finalize so its on-disk size is 0 mid-record). 0 for the mp4 path. Reads an
+  // atomic written by the encoder thread; safe to call from the platform thread.
+  int GifFrameCount() const;
 
   // The last fatal error captured by the encoder worker (for the async-failed
   // path). Empty if none.

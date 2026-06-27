@@ -33,23 +33,46 @@ const GUID kCLSID_GaussianBlur = {
     0x1feb6d69, 0x2fe6, 0x4ac9, {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
 
 constexpr UINT_PTR kTickTimer = 0xC001;
-constexpr UINT kTickMs = 500;
+constexpr UINT kTickMs = 50;       // ~20 fps: smooth dot breath (idle while paused)
+constexpr UINT kDetailMs = 500;    // size/frames readout poll throttle
 constexpr UINT_PTR kCdTimer = 0xC002;
 constexpr int kCdPanel = 132;  // countdown HUD square (logical points)
 
-// Strip size + paddings, in LOGICAL points (scaled by the monitor scale).
-constexpr int kStripW = 320;
+// Strip height + paddings, in LOGICAL points (scaled by the monitor scale). The
+// strip WIDTH and the per-button widths are computed at Show time from the
+// measured columns / localized labels (macOS sizes each button to its longest
+// label state).
 constexpr int kStripH = 46;
 constexpr int kPad = 14;
-constexpr int kBtnW = 60;
 constexpr int kBtnH = 30;
-constexpr int kBtnGap = 8;
+constexpr int kBtnGap = 10;    // gap between Pause / Abort / Finish (macOS)
+constexpr int kBtnPadGhost = 14;  // h-padding inside a ghost button (Pause/Abort)
+constexpr int kBtnPadAccent = 16; // h-padding inside the Finish accent button
 constexpr int kGapBelow = 10;  // gap below the recorded rect
 
 double MonScale(HMONITOR mon) {
   UINT dx = 96, dy = 96;
   if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy))) dx = 96;
   return dx / 96.0;
+}
+
+// The app-content theme (mirrors the editor/overlay windows + tray): HKCU
+// Personalize\AppsUseLightTheme. True = light. The strip follows it like the
+// macOS strip follows the system appearance; the scrims/border/countdown stay
+// dark in both (matching macOS RecordingDesign).
+bool AppUsesLightTheme() {
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(
+          HKEY_CURRENT_USER,
+          L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0,
+          KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+    return false;  // default dark
+  }
+  DWORD value = 0, size = sizeof(value), type = 0;
+  const LONG r = RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, &type,
+                                  reinterpret_cast<LPBYTE>(&value), &size);
+  RegCloseKey(key);
+  return r == ERROR_SUCCESS && type == REG_DWORD && value != 0;
 }
 
 // A layered, click-through, top-most, capture-excluded overlay at [x,y,w,h]
@@ -200,45 +223,103 @@ bool RecordChrome::EnsureGraphics() {
         timer_fmt_.put()));
     timer_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     timer_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-    const float ls = static_cast<float>(14.0 * scale_);
+    // Single-line readouts: NEVER wrap. The rect is the full strip height, so any
+    // string a hair wider than its reserved column would otherwise wrap to a
+    // second line (the "00:04 line-wrap"). Clip instead (the columns reserve the
+    // worst-case width, so nothing actually clips).
+    timer_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    const float ls = static_cast<float>(13.5 * scale_);  // macOS StripButton font
     winrt::check_hresult(dwrite_->CreateTextFormat(
         L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ls, L"",
         label_fmt_.put()));
     label_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     label_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    label_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    // Same font, LEADING-aligned: the Finish button's label sits right of its
+    // stop-square glyph (the pair centered as a group).
+    winrt::check_hresult(dwrite_->CreateTextFormat(
+        L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ls, L"",
+        btn_lead_fmt_.put()));
+    btn_lead_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    btn_lead_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    btn_lead_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+    // The file-size / frame-count readout (macOS strip's dim sizeLabel): a touch
+    // smaller than the timer, right-aligned so the value hugs the divider.
+    const float ss = static_cast<float>(13.5 * scale_);
+    winrt::check_hresult(dwrite_->CreateTextFormat(
+        L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ss, L"",
+        size_fmt_.put()));
+    size_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    size_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+    size_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     return true;
   } catch (...) {
     return false;
   }
 }
 
+float RecordChrome::MeasureWidth(IDWriteTextFormat* fmt, const wchar_t* s) {
+  if (!dwrite_ || !fmt || !s) return 0.0f;
+  com_ptr<IDWriteTextLayout> layout;
+  if (FAILED(dwrite_->CreateTextLayout(s, static_cast<UINT32>(wcslen(s)), fmt,
+                                       4096.0f, 256.0f, layout.put()))) {
+    return 0.0f;
+  }
+  DWRITE_TEXT_METRICS m{};
+  if (FAILED(layout->GetMetrics(&m))) return 0.0f;
+  return m.widthIncludingTrailingWhitespace;
+}
+
 void RecordChrome::Layout() {
   auto S = [this](int v) { return static_cast<int>(std::lround(v * scale_)); };
-  const int top = (win_h_ - S(kBtnH)) / 2;
-  const int bw = S(kBtnW), bh = S(kBtnH), gap = S(kBtnGap), pad = S(kPad);
+  const int bh = S(kBtnH);
+  const int top = (win_h_ - bh) / 2;
+  const int gap = S(kBtnGap), pad = S(kPad);
+  // Right-aligned: Finish (widest, accent), Abort, Pause -- each its own width.
   int right = win_w_ - pad;
-  stop_rc_ = {right - bw, top, right, top + bh};
+  stop_rc_ = {right - stop_w_, top, right, top + bh};
   right = stop_rc_.left - gap;
-  abort_rc_ = {right - bw, top, right, top + bh};
+  abort_rc_ = {right - abort_w_, top, right, top + bh};
   right = abort_rc_.left - gap;
-  pause_rc_ = {right - bw, top, right, top + bh};
+  pause_rc_ = {right - pause_w_, top, right, top + bh};
 }
 
 void RecordChrome::Show(int64_t display_id, double x, double y, double w,
                         double h, bool border, bool scrim, int max_duration_sec,
-                        Callbacks cb) {
-  Hide();
+                        bool gif, const std::string& output_path,
+                        std::function<int()> frame_count, Callbacks cb) {
+  TearStrip();  // tear only the strip + countdown HUD; KEEP the frame if it is
+                // already up from the countdown (seamless countdown -> record)
   cb_ = std::move(cb);
   paused_ = false;
   paused_at_ = 0;
   paused_total_ = 0;
   hover_ = 0;
   max_duration_sec_ = max_duration_sec;
+  gif_ = gif;
+  frame_count_ = std::move(frame_count);
   dragging_ = false;
   abort_armed_ = false;
   abort_arm_ms_ = 0;
   start_ms_ = GetTickCount64();
+  light_ = AppUsesLightTheme();
+  last_detail_.clear();
+  last_detail_ms_ = 0;
+
+  // Widen the (UTF-8) output path once for the mp4 on-disk size poll.
+  out_path_w_.clear();
+  if (!output_path.empty()) {
+    int n = MultiByteToWideChar(CP_UTF8, 0, output_path.c_str(), -1, nullptr, 0);
+    if (n > 0) {
+      out_path_w_.resize(static_cast<size_t>(n - 1), L'\0');
+      MultiByteToWideChar(CP_UTF8, 0, output_path.c_str(), -1, out_path_w_.data(),
+                          n);
+    }
+  }
 
   HMONITOR mon = reinterpret_cast<HMONITOR>(static_cast<intptr_t>(display_id));
   MONITORINFO mi{};
@@ -252,7 +333,42 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   scale_ = MonScale(mon);
   auto S = [this](double v) { return static_cast<int>(std::lround(v * scale_)); };
 
-  win_w_ = S(kStripW);
+  // The D2D/DWrite graphics (text formats) must exist before measuring the
+  // readout columns; it has no window dependency.
+  if (!EnsureGraphics()) {
+    Hide();
+    return;
+  }
+
+  // Reserve the timer + size-readout columns (physical px) from their worst-case
+  // strings, like the macOS strip: the size value grows (MB / 5-digit frame
+  // count) and the timer gains "/ total" under auto-stop. Then size the strip to
+  // fit dot + timer + size + divider + Pause + Abort + Stop.
+  const wchar_t* timer_seed = max_duration_sec_ > 0 ? L"00:00 / 00:00" : L"00:00";
+  timer_w_ = static_cast<int>(
+      std::ceil(MeasureWidth(timer_fmt_.get(), timer_seed)));
+  const std::wstring frames_seed = L"99999 " + labels_.frames;
+  size_w_ = static_cast<int>(std::ceil((std::max)(
+      MeasureWidth(size_fmt_.get(), L"9999.9 MB"),
+      MeasureWidth(size_fmt_.get(), frames_seed.c_str()))));
+  timer_x_ = S(kPad) + S(20);
+  size_x_ = timer_x_ + timer_w_ + S(12);
+  div_x_ = size_x_ + size_w_ + S(12);
+  // Each button fits the wider of its two label states (Pause/Resume,
+  // Abort/Confirm?), like macOS; Finish adds the stop-square glyph span.
+  auto ghost_w = [&](const std::wstring& a, const std::wstring& b) {
+    const float w = (std::max)(MeasureWidth(label_fmt_.get(), a.c_str()),
+                               MeasureWidth(label_fmt_.get(), b.c_str()));
+    return S(kBtnPadGhost) * 2 + static_cast<int>(std::ceil(w));
+  };
+  pause_w_ = ghost_w(labels_.pause, labels_.resume);
+  abort_w_ = ghost_w(labels_.abort, labels_.confirm);
+  const int glyph_span = S(12) + S(7);  // stop-square box + gap to the label
+  stop_w_ = S(kBtnPadAccent) * 2 + glyph_span +
+            static_cast<int>(
+                std::ceil(MeasureWidth(label_fmt_.get(), labels_.finish.c_str())));
+  const int btn_cluster = pause_w_ + abort_w_ + stop_w_ + S(kBtnGap) * 2;
+  win_w_ = div_x_ + (std::max)(1, S(1)) + S(14) + btn_cluster + S(kPad);
   win_h_ = S(kStripH);
 
   // Target rect in physical px (display-local logical -> monitor-global).
@@ -274,6 +390,12 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   if (win_y_ + win_h_ > mi.rcMonitor.bottom)
     win_y_ = mi.rcMonitor.bottom - win_h_;
 
+  // Show the recorded-rect frame (border + outside-rect scrim + other-display
+  // scrims) BEFORE the strip so they stack BENEATH it. No-op when the frame is
+  // already up from the countdown (frame_up_), so it stays seamless across the
+  // countdown -> recording transition (macOS shows the frame during countdown).
+  CreateFrameOverlays(mon, mi, x, y, w, h, border, scrim);
+
   EnsureClass();
 
   hwnd_ = CreateWindowExW(
@@ -284,14 +406,44 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   // Keep the strip out of the recording (Win10 2004+; older OS shows it).
   SetWindowDisplayAffinity(hwnd_, WDA_EXCLUDEFROMCAPTURE);
 
-  if (!EnsureGraphics()) {
-    Hide();
-    return;
-  }
   Layout();
   ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
   Render();
   SetTimer(hwnd_, kTickTimer, kTickMs, nullptr);
+}
+
+void RecordChrome::CreateFrameOverlays(HMONITOR mon, const MONITORINFO& mi,
+                                       double x, double y, double w, double h,
+                                       bool border, bool scrim) {
+  if (frame_up_) return;  // already shown (e.g. created for the countdown)
+  frame_up_ = true;
+  auto S = [this](double v) { return static_cast<int>(std::lround(v * scale_)); };
+  const int tx = mi.rcMonitor.left + S(x);
+  const int ty = mi.rcMonitor.top + S(y);
+  const int tw = S(w);
+  const int th = S(h);
+
+  // Region/window modes: dim everything OUTSIDE the recorded rect on the
+  // RECORDING display too (macOS RecordingFrameView punches the rect out of a
+  // full-display dim). Created first so it stacks beneath the strip + border;
+  // click-through + capture-excluded. The red border on top covers the cut edge.
+  if (border && scrim) {
+    const int hx = S(x), hy = S(y), hw = tw, hh = th;
+    auto punch = [hx, hy, hw, hh](uint8_t* p, int W, int H) {
+      for (int py = 0; py < H; ++py) {
+        const bool row_in = py >= hy && py < hy + hh;
+        for (int px = 0; px < W; ++px) {
+          const bool in_hole = row_in && px >= hx && px < hx + hw;
+          p[(static_cast<size_t>(py) * W + px) * 4 + 3] = in_hole ? 0 : 0x66;
+        }
+      }
+    };
+    std::function<void(uint8_t*, int, int)> fill = punch;
+    HWND s = CreateFilledOverlay(mi.rcMonitor.left, mi.rcMonitor.top,
+                                 mi.rcMonitor.right - mi.rcMonitor.left,
+                                 mi.rcMonitor.bottom - mi.rcMonitor.top, fill);
+    if (s) scrim_hwnds_.push_back(s);
+  }
 
   // Red rounded edge + glow + viewfinder corner brackets around the recorded
   // rect (region / window modes), faithful to the macOS RecordingFrameView.
@@ -324,14 +476,10 @@ void RecordChrome::SetPaused(bool paused) {
 }
 
 void RecordChrome::ShowCountdown(int64_t display_id, double x, double y,
-                                 double w, double h, int seconds,
-                                 std::function<void()> on_done,
+                                 double w, double h, int seconds, bool border,
+                                 bool scrim, std::function<void()> on_done,
                                  std::function<void()> on_cancel) {
-  if (cd_hwnd_) {
-    KillTimer(cd_hwnd_, kCdTimer);
-    DestroyWindow(cd_hwnd_);
-    cd_hwnd_ = nullptr;
-  }
+  Hide();  // clean slate (clears frame_up_); the frame is (re)created below
   cd_done_ = std::move(on_done);
   cd_cancel_ = std::move(on_cancel);
   cd_remaining_ = (std::max)(1, seconds);
@@ -347,6 +495,9 @@ void RecordChrome::ShowCountdown(int64_t display_id, double x, double y,
   }
   scale_ = MonScale(mon);
   auto S = [this](double v) { return static_cast<int>(std::lround(v * scale_)); };
+  // Show the recorded-rect frame (border + scrims) NOW so it is visible during
+  // the countdown (macOS parity); it persists into recording (frame_up_).
+  CreateFrameOverlays(mon, mi, x, y, w, h, border, scrim);
   cd_w_ = S(kCdPanel);
   cd_h_ = S(kCdPanel);
   int cx, cy;
@@ -423,8 +574,9 @@ void RecordChrome::RenderCountdown() {
                               static_cast<float>(H) * 0.82f),
                   brush.get());
     brush->SetColor(D2D1::ColorF(0xFFFFFF, 0.55f));
-    const wchar_t* hint = L"Click to cancel";
-    dc_->DrawText(hint, static_cast<UINT32>(wcslen(hint)), label_fmt_.get(),
+    const std::wstring& hint = labels_.countdown_cancel;
+    dc_->DrawText(hint.c_str(), static_cast<UINT32>(hint.size()),
+                  label_fmt_.get(),
                   D2D1::RectF(0, static_cast<float>(H) * 0.78f,
                               static_cast<float>(W), static_cast<float>(H)),
                   brush.get());
@@ -509,13 +661,16 @@ void RecordChrome::ShowBorder(int rx, int ry, int rw, int rh) {
     dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 0.55f), edge.put());
     dc_->DrawRoundedRectangle(rr, edge.get(), S(1));
 
-    // Viewfinder corner brackets: 22pt arms, 3pt stroke, round join/caps (the
-    // round join gives the rounded outer corner the macOS bracket has).
+    // Viewfinder corner brackets, faithful to macOS RecordingFrameView: 22pt
+    // arms, 3pt stroke, BUTT caps, and a 4.5pt rounded elbow drawn as an explicit
+    // arc (the earlier round line-join only rounded by stroke/2 = 1.5pt, which
+    // read as "slightly off").
     const float arm = S(22);
+    const float r = S(4.5);
     D2D1_STROKE_STYLE_PROPERTIES sp{};
-    sp.startCap = D2D1_CAP_STYLE_ROUND;
-    sp.endCap = D2D1_CAP_STYLE_ROUND;
-    sp.dashCap = D2D1_CAP_STYLE_ROUND;
+    sp.startCap = D2D1_CAP_STYLE_FLAT;
+    sp.endCap = D2D1_CAP_STYLE_FLAT;
+    sp.dashCap = D2D1_CAP_STYLE_FLAT;
     sp.lineJoin = D2D1_LINE_JOIN_ROUND;
     sp.miterLimit = 10.0f;
     sp.dashStyle = D2D1_DASH_STYLE_SOLID;
@@ -527,17 +682,30 @@ void RecordChrome::ShowBorder(int rx, int ry, int rw, int rh) {
     if (SUCCEEDED(factory_->CreatePathGeometry(geom.put()))) {
       winrt::com_ptr<ID2D1GeometrySink> sink;
       if (SUCCEEDED(geom->Open(sink.put()))) {
-        auto corner = [&](float ax, float ay, float cx, float cy, float ex,
-                          float ey) {
-          sink->BeginFigure(D2D1::Point2F(ax, ay), D2D1_FIGURE_BEGIN_HOLLOW);
-          sink->AddLine(D2D1::Point2F(cx, cy));
-          sink->AddLine(D2D1::Point2F(ex, ey));
+        // arm0 -line-> a0 -arc(r)-> a1 -line-> arm1; the arc is tangent to both
+        // arms (radius perpendicular to each), so the elbow is a smooth round.
+        auto bracket = [&](D2D1_POINT_2F arm0, D2D1_POINT_2F a0,
+                           D2D1_POINT_2F a1, D2D1_POINT_2F arm1,
+                           D2D1_SWEEP_DIRECTION sweep) {
+          sink->BeginFigure(arm0, D2D1_FIGURE_BEGIN_HOLLOW);
+          sink->AddLine(a0);
+          sink->AddArc(D2D1::ArcSegment(a1, D2D1::SizeF(r, r), 0.0f, sweep,
+                                        D2D1_ARC_SIZE_SMALL));
+          sink->AddLine(arm1);
           sink->EndFigure(D2D1_FIGURE_END_OPEN);
         };
-        corner(Lx + arm, Ty, Lx, Ty, Lx, Ty + arm);  // top-left
-        corner(Rx - arm, Ty, Rx, Ty, Rx, Ty + arm);  // top-right
-        corner(Rx, By - arm, Rx, By, Rx - arm, By);  // bottom-right
-        corner(Lx, By - arm, Lx, By, Lx + arm, By);  // bottom-left
+        bracket(D2D1::Point2F(Lx + arm, Ty), D2D1::Point2F(Lx + r, Ty),
+                D2D1::Point2F(Lx, Ty + r), D2D1::Point2F(Lx, Ty + arm),
+                D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE);  // top-left
+        bracket(D2D1::Point2F(Rx - arm, Ty), D2D1::Point2F(Rx - r, Ty),
+                D2D1::Point2F(Rx, Ty + r), D2D1::Point2F(Rx, Ty + arm),
+                D2D1_SWEEP_DIRECTION_CLOCKWISE);  // top-right
+        bracket(D2D1::Point2F(Rx, By - arm), D2D1::Point2F(Rx, By - r),
+                D2D1::Point2F(Rx - r, By), D2D1::Point2F(Rx - arm, By),
+                D2D1_SWEEP_DIRECTION_CLOCKWISE);  // bottom-right
+        bracket(D2D1::Point2F(Lx, By - arm), D2D1::Point2F(Lx, By - r),
+                D2D1::Point2F(Lx + r, By), D2D1::Point2F(Lx + arm, By),
+                D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE);  // bottom-left
         sink->Close();
         dc_->DrawGeometry(geom.get(), rb.get(), S(3), ss.get());
       }
@@ -550,7 +718,9 @@ void RecordChrome::ShowBorder(int rx, int ry, int rw, int rh) {
   }
 }
 
-void RecordChrome::Hide() {
+void RecordChrome::TearStrip() {
+  // Tear ONLY the strip + countdown HUD windows; leaves the frame overlays
+  // (border + scrims) intact so the countdown -> recording transition is seamless.
   if (cd_hwnd_) {
     KillTimer(cd_hwnd_, kCdTimer);
     DestroyWindow(cd_hwnd_);
@@ -563,6 +733,10 @@ void RecordChrome::Hide() {
     DestroyWindow(hwnd_);
     hwnd_ = nullptr;
   }
+}
+
+void RecordChrome::Hide() {
+  TearStrip();
   if (border_hwnd_) {
     DestroyWindow(border_hwnd_);
     border_hwnd_ = nullptr;
@@ -571,6 +745,7 @@ void RecordChrome::Hide() {
     if (s) DestroyWindow(s);
   }
   scrim_hwnds_.clear();
+  frame_up_ = false;
 }
 
 int RecordChrome::HitTest(POINT p) const {
@@ -607,8 +782,12 @@ LRESULT RecordChrome::MessageHandler(HWND hwnd, UINT msg, WPARAM wp,
       if (wp == kTickTimer) {
         if (abort_armed_ && GetTickCount64() - abort_arm_ms_ > 3000) {
           abort_armed_ = false;  // auto-disarm after 3s
+          Render();
+        } else if (!paused_) {
+          // Breathing render (~20 fps) + the 2 Hz size/timer refresh inside it.
+          // Skipped while paused (static dim dot, frozen timer) to stay idle.
+          Render();
         }
-        Render();
         return 0;
       }
       break;
@@ -701,8 +880,47 @@ void RecordChrome::Render() {
   ULONGLONG el = now - start_ms_ - paused_total_;
   if (paused_ && paused_at_) el -= (now - paused_at_);
   const long long secs = static_cast<long long>(el / 1000);
-  wchar_t timer[16];
-  swprintf_s(timer, L"%02lld:%02lld", secs / 60, secs % 60);
+  wchar_t timer[24];
+  if (max_duration_sec_ > 0) {  // "elapsed / total" under auto-stop (macOS parity)
+    const long long tot = max_duration_sec_;
+    swprintf_s(timer, L"%02lld:%02lld / %02lld:%02lld", secs / 60, secs % 60,
+               tot / 60, tot % 60);
+  } else {
+    swprintf_s(timer, L"%02lld:%02lld", secs / 60, secs % 60);
+  }
+
+  // Theme palette (macOS strip follows the system appearance; the recording red
+  // is constant in both). fg1 = timer, fg3 = size readout.
+  const D2D1_COLOR_F barColor = light_ ? D2D1::ColorF(0xF7F8FB, 0.96f)
+                                       : D2D1::ColorF(0x1A1E28, 0.96f);
+  const D2D1_COLOR_F fg1 = light_ ? D2D1::ColorF(0x14223B, 1.0f)
+                                  : D2D1::ColorF(0xFFFFFF, 0.96f);
+  const D2D1_COLOR_F fg3 = light_ ? D2D1::ColorF(0x64748B, 1.0f)
+                                  : D2D1::ColorF(0xFFFFFF, 0.46f);
+  const D2D1_COLOR_F divColor = light_ ? D2D1::ColorF(0x0F172A, 0.10f)
+                                       : D2D1::ColorF(0xFFFFFF, 0.14f);
+
+  // Refresh the size/frames readout at most every kDetailMs (the on-disk poll /
+  // frame-count read), independent of the ~20 fps breathing render.
+  if (last_detail_.empty() || (now - last_detail_ms_) >= kDetailMs) {
+    if (gif_) {
+      const int frames = frame_count_ ? frame_count_() : 0;
+      last_detail_ = std::to_wstring(frames) + L" " + labels_.frames;
+    } else {
+      ULONGLONG bytes = 0;
+      WIN32_FILE_ATTRIBUTE_DATA fad{};
+      if (!out_path_w_.empty() &&
+          GetFileAttributesExW(out_path_w_.c_str(), GetFileExInfoStandard,
+                               &fad)) {
+        bytes = (static_cast<ULONGLONG>(fad.nFileSizeHigh) << 32) |
+                fad.nFileSizeLow;
+      }
+      wchar_t mb[24];
+      swprintf_s(mb, L"%.1f MB", static_cast<double>(bytes) / 1048576.0);
+      last_detail_ = mb;
+    }
+    last_detail_ms_ = now;
+  }
 
   try {
     const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -722,10 +940,10 @@ void RecordChrome::Render() {
       dc_->FillRoundedRectangle(D2D1::RoundedRect(r, rad, rad), brush.get());
     };
 
-    // Near-solid dark bar.
+    // Near-solid themed bar.
     const float rad = S(11);
     fill(D2D1::RectF(0, 0, static_cast<float>(W), static_cast<float>(H)), rad,
-         D2D1::ColorF(0x0F172A, 0.96f));
+         barColor);
 
     // Auto-stop progress rail along the bottom edge.
     if (max_duration_sec_ > 0) {
@@ -745,44 +963,145 @@ void RecordChrome::Render() {
                          brush.get());
     }
 
-    // Recording-red dot (left).
+    // Breathing recording dot (macOS RecordingDotView): a calm glow swelling
+    // over ~1.7 s; steady + dim while paused (the breath render is skipped then).
     const float cy = H / 2.0f;
     const float dotx = S(kPad) + S(5);
+    double e = 0.0;
+    if (!paused_) {
+      const double t = static_cast<double>((now - start_ms_) % 1700) / 1700.0;
+      const double tri = t < 0.5 ? t * 2.0 : 2.0 - t * 2.0;  // 0..1..0
+      e = tri * tri * (3.0 - 2.0 * tri);                     // smoothstep ease
+    }
+    if (e > 0.01) {  // soft radial glow halo
+      const float gr = S(5) + S(1.5) + static_cast<float>(e) * S(4.5);
+      D2D1_GRADIENT_STOP gg[2] = {
+          {0.0f, D2D1::ColorF(0xFF453A, static_cast<float>(e) * 0.55f)},
+          {1.0f, D2D1::ColorF(0xFF453A, 0.0f)}};
+      com_ptr<ID2D1GradientStopCollection> gc;
+      if (SUCCEEDED(dc_->CreateGradientStopCollection(gg, 2, gc.put()))) {
+        com_ptr<ID2D1RadialGradientBrush> rb;
+        if (SUCCEEDED(dc_->CreateRadialGradientBrush(
+                D2D1::RadialGradientBrushProperties(D2D1::Point2F(dotx, cy),
+                                                    D2D1::Point2F(0, 0), gr, gr),
+                gc.get(), rb.put()))) {
+          dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotx, cy), gr, gr),
+                           rb.get());
+        }
+      }
+    }
     brush->SetColor(D2D1::ColorF(0xFF453A, paused_ ? 0.45f : 1.0f));
     dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotx, cy), S(5), S(5)),
                      brush.get());
 
-    // Timer text.
-    brush->SetColor(D2D1::ColorF(0xFFFFFF, 0.92f));
-    const D2D1_RECT_F trc =
-        D2D1::RectF(S(kPad) + S(20), 0, S(kPad) + S(20) + S(64),
-                    static_cast<float>(H));
+    // Timer text (fg1).
+    brush->SetColor(fg1);
     dc_->DrawText(timer, static_cast<UINT32>(wcslen(timer)), timer_fmt_.get(),
-                  trc, brush.get());
+                  D2D1::RectF(static_cast<float>(timer_x_), 0,
+                              static_cast<float>(timer_x_ + timer_w_),
+                              static_cast<float>(H)),
+                  brush.get());
 
-    // Buttons.
-    auto draw_btn = [&](const RECT& rc, const wchar_t* label, bool red,
-                        bool hover) {
+    // File-size (mp4) / frame-count (GIF) readout (fg3), right-aligned.
+    brush->SetColor(fg3);
+    dc_->DrawText(last_detail_.c_str(),
+                  static_cast<UINT32>(last_detail_.size()), size_fmt_.get(),
+                  D2D1::RectF(static_cast<float>(size_x_), 0,
+                              static_cast<float>(size_x_ + size_w_),
+                              static_cast<float>(H)),
+                  brush.get());
+
+    // Hairline divider between the readouts and the buttons (macOS sep).
+    brush->SetColor(divColor);
+    const float dvx = static_cast<float>(div_x_);
+    dc_->FillRectangle(
+        D2D1::RectF(dvx, cy - S(11), dvx + (std::max)(1.0f, S(1)), cy + S(11)),
+        brush.get());
+
+    // Ghost buttons (Pause/Resume, Abort): borderless; hover/emphasis paint a
+    // faint wash; the armed Abort shows a red "Confirm?" label; the paused
+    // Resume reads as the primary action (full-strength fg1 + faint always-on
+    // wash), neutral so it never collides with the red Finish.
+    auto draw_ghost = [&](const RECT& rc, const std::wstring& label, bool hover,
+                          bool armed, bool emphasized) {
       const D2D1_RECT_F r = D2D1::RectF(
           static_cast<float>(rc.left), static_cast<float>(rc.top),
           static_cast<float>(rc.right), static_cast<float>(rc.bottom));
-      const float br = S(7);
-      if (red) {
-        fill(r, br, D2D1::ColorF(0xFF453A, hover ? 1.0f : 0.92f));
-      } else if (hover) {
-        fill(r, br, D2D1::ColorF(0xFFFFFF, 0.12f));
-      } else {
-        fill(r, br, D2D1::ColorF(0xFFFFFF, 0.06f));
+      const float br = S(9);
+      const float washA = armed ? 0.0f
+                          : hover ? (emphasized ? 0.07f : 0.05f)
+                                  : (emphasized ? 0.05f : 0.0f);
+      if (washA > 0) {
+        brush->SetColor(light_ ? D2D1::ColorF(0x0F172A, washA)
+                               : D2D1::ColorF(0xFFFFFF, washA));
+        dc_->FillRoundedRectangle(D2D1::RoundedRect(r, br, br), brush.get());
       }
-      brush->SetColor(red ? D2D1::ColorF(0xFFFFFF, 1.0f)
-                          : D2D1::ColorF(0xFFFFFF, hover ? 0.95f : 0.75f));
-      dc_->DrawText(label, static_cast<UINT32>(wcslen(label)),
+      D2D1_COLOR_F fg;
+      if (armed) {
+        fg = D2D1::ColorF(0xFF453A, 1.0f);  // danger confirm
+      } else if (emphasized) {
+        fg = fg1;
+      } else if (light_) {
+        fg = hover ? D2D1::ColorF(0x475569, 1.0f) : D2D1::ColorF(0x64748B, 1.0f);
+      } else {
+        fg = D2D1::ColorF(0xFFFFFF, hover ? 0.66f : 0.46f);
+      }
+      brush->SetColor(fg);
+      dc_->DrawText(label.c_str(), static_cast<UINT32>(label.size()),
                     label_fmt_.get(), r, brush.get());
     };
-    draw_btn(pause_rc_, paused_ ? L"Resume" : L"Pause", false, hover_ == 2);
-    draw_btn(abort_rc_, abort_armed_ ? L"Confirm?" : L"Abort", abort_armed_,
-             hover_ == 3);
-    draw_btn(stop_rc_, L"Stop", true, hover_ == 1);
+
+    // Finish (accent): a 135deg recording-red gradient + a stop-square glyph
+    // before the label, the pair centered as a group; a faint white hover wash.
+    auto draw_finish = [&](const RECT& rc, bool hover) {
+      const D2D1_RECT_F r = D2D1::RectF(
+          static_cast<float>(rc.left), static_cast<float>(rc.top),
+          static_cast<float>(rc.right), static_cast<float>(rc.bottom));
+      const float br = S(9);
+      D2D1_GRADIENT_STOP gs[2] = {{0.0f, D2D1::ColorF(0xFF453A, 1.0f)},
+                                  {1.0f, D2D1::ColorF(0xFF6A60, 1.0f)}};
+      com_ptr<ID2D1GradientStopCollection> coll;
+      if (SUCCEEDED(dc_->CreateGradientStopCollection(gs, 2, coll.put()))) {
+        com_ptr<ID2D1LinearGradientBrush> lg;
+        if (SUCCEEDED(dc_->CreateLinearGradientBrush(
+                D2D1::LinearGradientBrushProperties(
+                    D2D1::Point2F(r.left, r.top),
+                    D2D1::Point2F(r.right, r.bottom)),
+                coll.get(), lg.put()))) {
+          com_ptr<ID2D1RoundedRectangleGeometry> geo;
+          if (SUCCEEDED(factory_->CreateRoundedRectangleGeometry(
+                  D2D1::RoundedRect(r, br, br), geo.put()))) {
+            dc_->FillGeometry(geo.get(), lg.get());
+          }
+        }
+      }
+      if (hover) {
+        brush->SetColor(D2D1::ColorF(0xFFFFFF, 0.12f));
+        dc_->FillRoundedRectangle(D2D1::RoundedRect(r, br, br), brush.get());
+      }
+      // Glyph (white rounded square) + label, centered as a group.
+      const float lw = MeasureWidth(label_fmt_.get(), labels_.finish.c_str());
+      const float gbox = S(12), ggap = S(7), sq = S(7);
+      const float contentW = gbox + ggap + lw;
+      const float sx = r.left + ((r.right - r.left) - contentW) / 2.0f;
+      const float sqx = sx + (gbox - sq) / 2.0f;
+      brush->SetColor(D2D1::ColorF(0xFFFFFF, 1.0f));
+      dc_->FillRoundedRectangle(
+          D2D1::RoundedRect(D2D1::RectF(sqx, cy - sq / 2, sqx + sq, cy + sq / 2),
+                            S(2), S(2)),
+          brush.get());
+      dc_->DrawText(labels_.finish.c_str(),
+                    static_cast<UINT32>(labels_.finish.size()),
+                    btn_lead_fmt_.get(),
+                    D2D1::RectF(sx + gbox + ggap, r.top, r.right, r.bottom),
+                    brush.get());
+    };
+
+    draw_ghost(pause_rc_, paused_ ? labels_.resume : labels_.pause, hover_ == 2,
+               false, paused_);
+    draw_ghost(abort_rc_, abort_armed_ ? labels_.confirm : labels_.abort,
+               hover_ == 3, abort_armed_, false);
+    draw_finish(stop_rc_, hover_ == 1);
 
     winrt::check_hresult(dc_->EndDraw());
     PresentLayered(hwnd_, target.get(), win_x_, win_y_, W, H);

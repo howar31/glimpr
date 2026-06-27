@@ -1536,12 +1536,14 @@ class _SettingsAppState extends State<SettingsApp>
                 : _l.settingsFlowShowInFinderHint,
             trailing: _recordingFlowToggle(FlowAction.showInFinder),
           ),
-          SettingRow(
-            divider: true,
-            title: _l.settingsFlowShareSheet,
-            hint: _l.settingsFlowShareSheetHint,
-            trailing: _recordingFlowToggle(FlowAction.shareSheet),
-          ),
+          // Share is macOS-only (no system share surface wired on Windows v1).
+          if (!Platform.isWindows)
+            SettingRow(
+              divider: true,
+              title: _l.settingsFlowShareSheet,
+              hint: _l.settingsFlowShareSheetHint,
+              trailing: _recordingFlowToggle(FlowAction.shareSheet),
+            ),
         ]),
       ],
     ];

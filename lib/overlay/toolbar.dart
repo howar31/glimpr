@@ -501,6 +501,7 @@ class RecordOverrides {
     required bool hevc,
     required bool gif,
     required int fps,
+    required int gifFps,
     required int maxDuration,
   })  : showCursor = ValueNotifier(showCursor),
         systemAudio = ValueNotifier(systemAudio),
@@ -508,6 +509,7 @@ class RecordOverrides {
         hevc = ValueNotifier(hevc),
         gif = ValueNotifier(gif),
         fps = ValueNotifier(fps),
+        gifFps = ValueNotifier(gifFps),
         maxDuration = ValueNotifier(maxDuration);
 
   final ValueNotifier<bool> showCursor;
@@ -515,7 +517,8 @@ class RecordOverrides {
   final ValueNotifier<bool> microphone;
   final ValueNotifier<bool> hevc; // false = H.264
   final ValueNotifier<bool> gif; // true = direct GIF (no mp4, no audio)
-  final ValueNotifier<int> fps; // 30 | 60
+  final ValueNotifier<int> fps; // 30 | 60 (mp4 frame rate)
+  final ValueNotifier<int> gifFps; // 10 | 15 | 20 | 25 (GIF frame rate)
   final ValueNotifier<int> maxDuration; // seconds; 0 = off (one-shot)
 
   /// Seed every override from the recording settings ONCE, at record-select
@@ -530,6 +533,7 @@ class RecordOverrides {
     hevc.value = r.hevc;
     gif.value = r.isGif;
     fps.value = r.fps;
+    gifFps.value = r.gifFps;
     maxDuration.value = r.maxDuration;
   }
 
@@ -540,6 +544,7 @@ class RecordOverrides {
     hevc.dispose();
     gif.dispose();
     fps.dispose();
+    gifFps.dispose();
     maxDuration.dispose();
   }
 }
@@ -1117,16 +1122,24 @@ class _OptionsRowState extends State<_OptionsRow> {
     }
     _closePopover();
     final o = widget.recordOverrides!;
+    // GIF carries its own frame-rate set (10/15/20/25); mp4 uses 30/60.
+    final gif = o.gif.value;
     _showPopover(
       _OpenPopover.recordFps,
       _barLink,
       width: 150,
       child: ChoiceListPopover<int>(
-        selected: o.fps.value,
-        options: const [(30, '30 fps'), (60, '60 fps')],
+        selected: gif ? o.gifFps.value : o.fps.value,
+        options: gif
+            ? const [(10, '10 fps'), (15, '15 fps'), (20, '20 fps'), (25, '25 fps')]
+            : const [(30, '30 fps'), (60, '60 fps')],
         accent: GlimprTokens.recordingAccent,
         onSelected: (v) {
-          o.fps.value = v;
+          if (gif) {
+            o.gifFps.value = v;
+          } else {
+            o.fps.value = v;
+          }
           _closePopover();
           setState(() {});
         },
@@ -1278,8 +1291,8 @@ class _OptionsRowState extends State<_OptionsRow> {
         child: _Bar(
           height: _Bar.heightSub,
           child: ListenableBuilder(
-            listenable:
-                Listenable.merge([overrides.hevc, overrides.gif, overrides.fps]),
+            listenable: Listenable.merge(
+                [overrides.hevc, overrides.gif, overrides.fps, overrides.gifFps]),
             builder: (_, _) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1292,20 +1305,16 @@ class _OptionsRowState extends State<_OptionsRow> {
                   onTap: _openRecordCodecPopover,
                 ),
                 const SizedBox(width: 8),
-                // Frame rate does not apply to GIF (fixed 15 fps) -> disabled.
-                Opacity(
-                  opacity: overrides.gif.value ? 0.35 : 1,
-                  child: IgnorePointer(
-                    ignoring: overrides.gif.value,
-                    child: _TextureButton(
-                      key: const ValueKey('record-fps-picker'),
-                      label: overrides.gif.value
-                          ? '15 fps'
-                          : '${overrides.fps.value} fps',
-                      tooltip: l10n.toolbarRecordFps,
-                      onTap: _openRecordFpsPopover,
-                    ),
-                  ),
+                // Frame rate: mp4 uses fps (30/60); GIF has its OWN rate
+                // (gifFps 10/15/20/25). Both are per-take editable and reflect
+                // the persisted setting (no hardcoded value, never disabled).
+                _TextureButton(
+                  key: const ValueKey('record-fps-picker'),
+                  label: overrides.gif.value
+                      ? '${overrides.gifFps.value} fps'
+                      : '${overrides.fps.value} fps',
+                  tooltip: l10n.toolbarRecordFps,
+                  onTap: _openRecordFpsPopover,
                 ),
               ],
             ),

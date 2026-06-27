@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, MethodChannel;
 import '../capture/capture_bridge.dart';
 import 'deliver.dart';
 import 'filename.dart';
@@ -136,7 +137,7 @@ Future<FlowResult> runFlow({
 
   final copyText =
       copyTextFn ?? (t) => Clipboard.setData(ClipboardData(text: t));
-  final reveal = revealFn ?? _revealInFinder;
+  final reveal = revealFn ?? revealInFileManager;
   final openEditor = openEditorFn ?? CaptureBridge.openInEditor;
   final share = shareFn ?? CaptureBridge.shareSheet;
   final pin = pinFn ?? ((p) => CaptureBridge.pinImage(p));
@@ -193,7 +194,9 @@ Future<FlowResult> runFlow({
       extra['openEditor'] = '$e';
     }
   }
-  if (actions.contains(FlowAction.shareSheet)) {
+  // Share is macOS-only (no system share surface on Windows v1); the toggles are
+  // hidden there, but guard the action so a stale setting can't invoke it.
+  if (!Platform.isWindows && actions.contains(FlowAction.shareSheet)) {
     try {
       await share(await ensureFile());
     } catch (e) {
@@ -203,11 +206,18 @@ Future<FlowResult> runFlow({
   return FlowResult(delivery, extra);
 }
 
-Future<void> _revealInFinder(String path) async {
-  // Reveal the saved file in the OS file manager, selected. macOS uses
-  // `open -R`; Windows uses Explorer's /select switch.
+/// Reveal a saved file in the OS file manager, with the file SELECTED. Shared by
+/// every surface (screenshots, recording, editor) so there is ONE platform-aware
+/// implementation. On Windows this routes to the native Shell API
+/// (SHOpenFolderAndSelectItems) -- robust for paths with spaces and repeated
+/// calls, unlike `explorer /select,<path>` which misparses a quoted space-
+/// containing arg and falls back to the default folder. macOS uses `open -R`.
+Future<void> revealInFileManager(String path) async {
   if (Platform.isWindows) {
-    await Process.run('explorer', ['/select,$path']);
+    try {
+      await const MethodChannel('glimpr/role')
+          .invokeMethod('revealInExplorer', {'path': path});
+    } catch (_) {}
   } else {
     await Process.run('open', ['-R', path]);
   }

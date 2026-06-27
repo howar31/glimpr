@@ -42,6 +42,7 @@ class CaptureBridge {
     bool? hevc,
     bool? gif,
     int? fps,
+    int? gifFps,
     int? maxDuration,
     bool cancelled = false,
   }) =>
@@ -58,6 +59,7 @@ class CaptureBridge {
         'hevc': ?hevc,
         'gif': ?gif,
         'fps': ?fps,
+        'gifFps': ?gifFps,
         'maxDuration': ?maxDuration,
         'cancelled': cancelled,
       });

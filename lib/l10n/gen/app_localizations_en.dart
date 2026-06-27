@@ -1101,6 +1101,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolbarRecordFps => 'Frame rate (this recording)';
 
   @override
+  String get recordStripFinish => 'Finish';
+
+  @override
+  String get recordStripPause => 'Pause';
+
+  @override
+  String get recordStripResume => 'Resume';
+
+  @override
+  String get recordStripAbort => 'Abort';
+
+  @override
+  String get recordStripConfirm => 'Confirm?';
+
+  @override
+  String get recordStripFrames => 'frames';
+
+  @override
+  String get recordCountdownCancel => 'Click to cancel';
+
+  @override
   String get toolbarRecordCursor => 'Show cursor (this recording)';
 
   @override

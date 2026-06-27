@@ -8,6 +8,7 @@
 #include <flutter/method_channel.h>
 
 #include <memory>
+#include <string>
 
 #include "record_chrome.h"
 #include "recorder.h"
@@ -53,9 +54,11 @@ class RecordChannel {
   void DoStart(const Recorder::Spec& spec, bool show_scrim);
   // Show the recording chrome for the started recording + wire its Stop/Pause/
   // Abort buttons back to this channel. [border] draws the recorded-rect outline
-  // (region/window modes); [scrim] dims the other displays.
+  // (region/window modes); [scrim] dims the other displays AND the area outside
+  // the rect on the recording display. [output_path]/[gif] drive the strip's
+  // file-size / frame-count readout.
   void ShowChrome(const Recorder::StartedInfo& info, bool border, bool scrim,
-                  int max_duration_sec);
+                  int max_duration_sec, const std::string& output_path, bool gif);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<Recorder> recorder_;

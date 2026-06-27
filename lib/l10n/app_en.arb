@@ -1220,6 +1220,34 @@
   "@toolbarRecordFps": {
     "description": "Record-mode toolbar: one-shot frame-rate chip tooltip"
   },
+  "recordStripFinish": "Finish",
+  "@recordStripFinish": {
+    "description": "Recording control strip: the Finish (stop + save) button"
+  },
+  "recordStripPause": "Pause",
+  "@recordStripPause": {
+    "description": "Recording control strip: the Pause button"
+  },
+  "recordStripResume": "Resume",
+  "@recordStripResume": {
+    "description": "Recording control strip: the Resume button (while paused)"
+  },
+  "recordStripAbort": "Abort",
+  "@recordStripAbort": {
+    "description": "Recording control strip: the Abort (discard) button"
+  },
+  "recordStripConfirm": "Confirm?",
+  "@recordStripConfirm": {
+    "description": "Recording control strip: the armed Abort confirm label"
+  },
+  "recordStripFrames": "frames",
+  "@recordStripFrames": {
+    "description": "Recording control strip: GIF frame-count unit suffix (e.g. '120 frames')"
+  },
+  "recordCountdownCancel": "Click to cancel",
+  "@recordCountdownCancel": {
+    "description": "Pre-recording countdown HUD: hint to click to cancel"
+  },
   "toolbarRecordCursor": "Show cursor (this recording)",
   "@toolbarRecordCursor": {
     "description": "Record-mode toolbar: one-shot cursor override toggle tooltip"

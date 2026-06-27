@@ -29,6 +29,7 @@ add_executable(${BINARY_NAME} WIN32
   "utils.cpp"
   "wgc_capturer.cpp"
   "win32_window.cpp"
+  "win_reveal.cpp"
   "window_enum.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"

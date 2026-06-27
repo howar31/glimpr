@@ -17,6 +17,7 @@
 #include "image_codec.h"
 #include "pin_window.h"
 #include "wgc_capturer.h"
+#include "win_reveal.h"
 #include "window_enum.h"
 
 namespace {
@@ -194,6 +195,17 @@ void OverlayManager::RegisterUnitChannels(Unit& unit) {
       [](const auto& call, auto result) {
         if (call.method_name() == "getRole") {
           result->Success(EncodableValue("overlay"));
+        } else if (call.method_name() == "revealInExplorer") {
+          if (const auto* a =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            auto it = a->find(flutter::EncodableValue(std::string("path")));
+            if (it != a->end()) {
+              if (const auto* p = std::get_if<std::string>(&it->second)) {
+                RevealInExplorer(*p);
+              }
+            }
+          }
+          result->Success();
         } else {
           result->NotImplemented();
         }

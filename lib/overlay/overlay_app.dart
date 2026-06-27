@@ -453,8 +453,27 @@ class _OverlayAppState extends State<OverlayApp> {
         hevc: false,
         gif: false,
         fps: 30,
+        gifFps: 15,
         maxDuration: 0);
     _recordOverrides = overrides;
+    setState(() {
+      _recordDisplay = d;
+      _lastKnownDisplay = d;
+      _recordStub = base;
+      _recordEditor = EditorController(toolStyles: {});
+      _rs = RecordSelectState.active;
+      _captureSeq++;
+    });
+    _recordEditor!.cropScrimActive.addListener(_broadcastCropScrim);
+    _bridge.overlayReady(); // reveal this engine's window (no blank flash)
+    // Windows-only: refresh THIS resident overlay engine's settings cache before
+    // seeding the record-select toolbar (codec/fps/cursor/audio/mic) + loupe/HUD/
+    // capture, so it reflects the control engine's LATEST writes rather than this
+    // engine's stale per-instance cache — changing a Recording setting then opening
+    // the picker must show the new value. No-op on macOS; runs AFTER overlayReady
+    // so the reveal is never delayed. See reloadSettingsCache.
+    await reloadSettingsCache();
+    if (!mounted || _recordOverrides != overrides) return;
     Settings.instance.loadRecording().then((r) {
       if (!mounted || _recordOverrides != overrides) return;
       overrides.seed(r);
@@ -466,16 +485,6 @@ class _OverlayAppState extends State<OverlayApp> {
     Settings.instance.loadCapture().then((c) {
       if (mounted) setState(() => _capture = c);
     });
-    setState(() {
-      _recordDisplay = d;
-      _lastKnownDisplay = d;
-      _recordStub = base;
-      _recordEditor = EditorController(toolStyles: {});
-      _rs = RecordSelectState.active;
-      _captureSeq++;
-    });
-    _recordEditor!.cropScrimActive.addListener(_broadcastCropScrim);
-    _bridge.overlayReady(); // reveal this engine's window (no blank flash)
     Settings.instance.loadLoupe().then((l) {
       if (mounted) setState(() => _loupe = l);
     });
@@ -585,6 +594,7 @@ class _OverlayAppState extends State<OverlayApp> {
         hevc: o?.hevc.value,
         gif: o?.gif.value,
         fps: o?.fps.value,
+        gifFps: o?.gifFps.value,
         maxDuration: o?.maxDuration.value,
       );
     } catch (_) {}
