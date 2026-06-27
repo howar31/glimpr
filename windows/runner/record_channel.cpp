@@ -63,7 +63,9 @@ bool HasKey(const EncodableMap& map, const char* key) {
 
 RecordChannel::RecordChannel(flutter::BinaryMessenger* messenger,
                              HWND control_hwnd)
-    : recorder_(std::make_unique<Recorder>()), control_hwnd_(control_hwnd) {
+    : recorder_(std::make_unique<Recorder>()),
+      chrome_(std::make_unique<RecordChrome>()),
+      control_hwnd_(control_hwnd) {
   channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
       messenger, "glimpr/record",
       &flutter::StandardMethodCodec::GetInstance());
@@ -140,6 +142,7 @@ void RecordChannel::HandleMethodCall(
                {EncodableValue("y"), EncodableValue(info.y)},
                {EncodableValue("w"), EncodableValue(info.w)},
                {EncodableValue("h"), EncodableValue(info.h)}}));
+      ShowChrome(info);
     } else {
       Emit("onRecordFailed",
            EncodableValue(EncodableMap{
@@ -159,6 +162,7 @@ void RecordChannel::HandleMethodCall(
       recorder_->Abort();
       Emit("onRecordAborted");
     }
+    if (chrome_) chrome_->Hide();
     result->Success();
     return;
   }
@@ -167,6 +171,7 @@ void RecordChannel::HandleMethodCall(
     if (recorder_->active() && !recorder_->paused()) {
       recorder_->Pause();
       Emit("onRecordPaused");
+      if (chrome_) chrome_->SetPaused(true);
     }
     result->Success();
     return;
@@ -176,6 +181,7 @@ void RecordChannel::HandleMethodCall(
     if (recorder_->active() && recorder_->paused()) {
       recorder_->Resume();
       Emit("onRecordResumed");
+      if (chrome_) chrome_->SetPaused(false);
     }
     result->Success();
     return;
@@ -186,6 +192,7 @@ void RecordChannel::HandleMethodCall(
 
 void RecordChannel::FinishActive() {
   if (!recorder_->active()) return;
+  if (chrome_) chrome_->Hide();  // the strip is in the recording's chrome; drop it first
   Emit("onRecordStopping");
   std::string path, error;
   if (recorder_->Stop(&path, &error)) {
@@ -199,6 +206,32 @@ void RecordChannel::FinishActive() {
   }
 }
 
+void RecordChannel::ShowChrome(const Recorder::StartedInfo& info) {
+  if (!chrome_) return;
+  chrome_->Show(info.display_id, info.x, info.y, info.w, info.h,
+                RecordChrome::Callbacks{
+                    [this]() { FinishActive(); },
+                    [this]() {
+                      if (!recorder_->active()) return;
+                      if (recorder_->paused()) {
+                        recorder_->Resume();
+                        Emit("onRecordResumed");
+                      } else {
+                        recorder_->Pause();
+                        Emit("onRecordPaused");
+                      }
+                      if (chrome_) chrome_->SetPaused(recorder_->paused());
+                    },
+                    [this]() {
+                      if (recorder_->active()) {
+                        recorder_->Abort();
+                        Emit("onRecordAborted");
+                      }
+                      if (chrome_) chrome_->Hide();
+                    },
+                });
+}
+
 void RecordChannel::RelaySelection(EncodableValue args) {
   Emit("onRecordSelection", std::move(args));
 }
@@ -208,6 +241,7 @@ void RecordChannel::OnNativeEvent(uint32_t code) {
     std::string error = recorder_->TakeAsyncError();
     if (error.empty()) error = "recording failed";
     if (recorder_->active()) recorder_->Abort();  // discard the partial file
+    if (chrome_) chrome_->Hide();
     Emit("onRecordFailed",
          EncodableValue(flutter::EncodableMap{
              {flutter::EncodableValue("message"),

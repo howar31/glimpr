@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "record_chrome.h"
 #include "recorder.h"
 
 // The window message a background recorder thread posts to the control window to
@@ -47,9 +48,13 @@ class RecordChannel {
   void FinishActive();
   void Emit(const char* method);
   void Emit(const char* method, flutter::EncodableValue args);
+  // Show the recording control strip for the started recording + wire its
+  // Stop/Pause/Abort buttons back to this channel.
+  void ShowChrome(const Recorder::StartedInfo& info);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<Recorder> recorder_;
+  std::unique_ptr<RecordChrome> chrome_;
   HWND control_hwnd_ = nullptr;
 };
 

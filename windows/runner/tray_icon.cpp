@@ -16,6 +16,10 @@ enum TrayCommand : UINT {
   kCmdCaptureLast,
   kCmdPinScreenshot,
   kCmdPinClipboard,
+  kCmdRecordRegion,
+  kCmdRecordWindow,
+  kCmdRecordDisplay,
+  kCmdRecordLast,
   kCmdOpenEditor,
   kCmdOpenEditorClipboard,
   kCmdClearRecent,
@@ -35,6 +39,10 @@ constexpr char kActCaptureScreen[] = "global.captureScreen";
 constexpr char kActCaptureLast[] = "global.captureLastRegion";
 constexpr char kActPinArea[] = "global.pinArea";
 constexpr char kActPinClipboard[] = "global.pinClipboard";
+constexpr char kActRecordRegion[] = "global.recordRegion";
+constexpr char kActRecordWindow[] = "global.recordWindow";
+constexpr char kActRecordDisplay[] = "global.recordDisplay";
+constexpr char kActRecordLast[] = "global.recordLastRegion";
 constexpr char kActOpenEditor[] = "global.openEditor";
 constexpr char kActOpenEditorClipboard[] = "global.openEditorClipboard";
 constexpr char kActOpenSaveFolder[] = "menu.openSaveFolder";
@@ -189,11 +197,16 @@ void TrayIcon::ShowMenu() {
   AppendItem(menu, kCmdPinClipboard, L("pinClipboard", "Pin Clipboard"),
              hotkeys_->AcceleratorLabel(kActPinClipboard), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  // Deferred: recording (S6).
-  AppendItem(menu, 0, L("recordRegion", "Record Region"), "", false);
-  AppendItem(menu, 0, L("recordWindow", "Record Window"), "", false);
-  AppendItem(menu, 0, L("recordDisplay", "Record Display"), "", false);
-  AppendItem(menu, 0, L("recordLast", "Record Last Region"), "", false);
+  // Recording (S6). Each item toggles its mode (start when idle, stop the active
+  // recording otherwise), routed through the same Dart dispatcher as the hotkeys.
+  AppendItem(menu, kCmdRecordRegion, L("recordRegion", "Record Region"),
+             hotkeys_->AcceleratorLabel(kActRecordRegion), true);
+  AppendItem(menu, kCmdRecordWindow, L("recordWindow", "Record Window"),
+             hotkeys_->AcceleratorLabel(kActRecordWindow), true);
+  AppendItem(menu, kCmdRecordDisplay, L("recordDisplay", "Record Display"),
+             hotkeys_->AcceleratorLabel(kActRecordDisplay), true);
+  AppendItem(menu, kCmdRecordLast, L("recordLast", "Record Last Region"),
+             hotkeys_->AcceleratorLabel(kActRecordLast), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Image editor + Open Recent (S4); live: open save folder.
   AppendItem(menu, kCmdOpenEditor, L("openEditor", "Open Image Editor"),
@@ -252,6 +265,10 @@ void TrayIcon::OnCommand(UINT command_id) {
     case kCmdCaptureLast: hotkeys_->FireAction(kActCaptureLast); break;
     case kCmdPinScreenshot: hotkeys_->FireAction(kActPinArea); break;
     case kCmdPinClipboard: hotkeys_->FireAction(kActPinClipboard); break;
+    case kCmdRecordRegion: hotkeys_->FireAction(kActRecordRegion); break;
+    case kCmdRecordWindow: hotkeys_->FireAction(kActRecordWindow); break;
+    case kCmdRecordDisplay: hotkeys_->FireAction(kActRecordDisplay); break;
+    case kCmdRecordLast: hotkeys_->FireAction(kActRecordLast); break;
     case kCmdOpenEditor: hotkeys_->FireAction(kActOpenEditor); break;
     case kCmdOpenEditorClipboard:
       hotkeys_->FireAction(kActOpenEditorClipboard);

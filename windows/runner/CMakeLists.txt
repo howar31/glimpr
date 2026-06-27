@@ -22,6 +22,7 @@ add_executable(${BINARY_NAME} WIN32
   "pin_window.cpp"
   "record_audio.cpp"
   "record_channel.cpp"
+  "record_chrome.cpp"
   "record_gif.cpp"
   "recorder.cpp"
   "tray_icon.cpp"
@@ -65,6 +66,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE "gdi32.lib" "comdlg32.lib")
 # mfreadwrite) and the MF format/attribute GUIDs (mfuuid). WASAPI audio capture
 # (mmdevapi) for the loopback + microphone endpoints.
 target_link_libraries(${BINARY_NAME} PRIVATE "mfplat.lib" "mfreadwrite.lib" "mfuuid.lib" "mmdevapi.lib")
+# Recording control strip (Phase 6 S6g): DirectWrite for the timer/button text
+# (d2d1 + dwmapi already linked).
+target_link_libraries(${BINARY_NAME} PRIVATE "dwrite.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
