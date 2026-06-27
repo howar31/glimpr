@@ -91,6 +91,30 @@
   "@settingsRestartNowConfirm": {
     "description": "Settings > General/Advanced: restart button confirm label (second click)"
   },
+  "trayOpenRecent": "Open Recent",
+  "@trayOpenRecent": {
+    "description": "Windows system-tray menu: Open Recent submenu title"
+  },
+  "trayClearRecent": "Clear Recent",
+  "@trayClearRecent": {
+    "description": "Windows system-tray menu: clear the recent-images list"
+  },
+  "trayOpenSaveFolder": "Open Save Folder",
+  "@trayOpenSaveFolder": {
+    "description": "Windows system-tray menu: open the save folder"
+  },
+  "trayAbout": "About Glimpr",
+  "@trayAbout": {
+    "description": "Windows system-tray menu: About item"
+  },
+  "traySettings": "Settings...",
+  "@traySettings": {
+    "description": "Windows system-tray menu: Settings item"
+  },
+  "trayQuit": "Quit Glimpr",
+  "@trayQuit": {
+    "description": "Windows system-tray menu: Quit item"
+  },
   "settingsSectionBehaviour": "Behaviour",
   "@settingsSectionBehaviour": {
     "description": "Settings > Capture: Behaviour section label"

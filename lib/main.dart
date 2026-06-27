@@ -100,6 +100,35 @@ Future<void> main() async {
     onAction: dispatchAction,
   );
   await hotkeyService.start();
+
+  // Windows: push the localized tray-menu labels to native. The runner C++ is
+  // ASCII-only (cp950), so it cannot hold the zh strings — Dart owns l10n and
+  // sends them. Global-action items reuse the Shortcuts-pane action labels;
+  // menu-only items use dedicated keys. Sent once at boot (restart-effective).
+  if (Platform.isWindows) {
+    final l = appL10n;
+    control.invokeMethod('setTrayLabels', <String, String>{
+      'captureArea': globalActionLabel(l, kCaptureAreaKey),
+      'captureWindow': globalActionLabel(l, kCaptureWindowKey),
+      'captureScreen': globalActionLabel(l, kCaptureScreenKey),
+      'captureLast': globalActionLabel(l, kCaptureLastRegionKey),
+      'pinArea': globalActionLabel(l, kPinAreaKey),
+      'pinClipboard': globalActionLabel(l, kPinClipboardKey),
+      'recordRegion': globalActionLabel(l, kRecordRegionKey),
+      'recordWindow': globalActionLabel(l, kRecordWindowKey),
+      'recordDisplay': globalActionLabel(l, kRecordDisplayKey),
+      'recordLast': globalActionLabel(l, kRecordLastRegionKey),
+      'openEditor': globalActionLabel(l, kOpenEditorKey),
+      'openEditorClipboard': globalActionLabel(l, kOpenEditorClipboardKey),
+      'openRecent': l.trayOpenRecent,
+      'clearRecent': l.trayClearRecent,
+      'openSaveFolder': l.trayOpenSaveFolder,
+      'about': l.trayAbout,
+      'settings': l.traySettings,
+      'quit': l.trayQuit,
+    }).catchError((_) {});
+  }
+
   runApp(SettingsApp(settings: Settings.instance, hotkeyService: hotkeyService));
 }
 

@@ -82,6 +82,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRestartNowConfirm => '再按一次以重新啟動 Glimpr';
 
   @override
+  String get trayOpenRecent => '開啟最近項目';
+
+  @override
+  String get trayClearRecent => '清除最近項目';
+
+  @override
+  String get trayOpenSaveFolder => '開啟儲存資料夾';
+
+  @override
+  String get trayAbout => '關於 Glimpr';
+
+  @override
+  String get traySettings => '設定…';
+
+  @override
+  String get trayQuit => '結束 Glimpr';
+
+  @override
   String get settingsSectionBehaviour => '行為';
 
   @override

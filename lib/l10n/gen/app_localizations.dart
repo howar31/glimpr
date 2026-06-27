@@ -230,6 +230,42 @@ abstract class AppLocalizations {
   /// **'Click again to restart Glimpr'**
   String get settingsRestartNowConfirm;
 
+  /// Windows system-tray menu: Open Recent submenu title
+  ///
+  /// In en, this message translates to:
+  /// **'Open Recent'**
+  String get trayOpenRecent;
+
+  /// Windows system-tray menu: clear the recent-images list
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Recent'**
+  String get trayClearRecent;
+
+  /// Windows system-tray menu: open the save folder
+  ///
+  /// In en, this message translates to:
+  /// **'Open Save Folder'**
+  String get trayOpenSaveFolder;
+
+  /// Windows system-tray menu: About item
+  ///
+  /// In en, this message translates to:
+  /// **'About Glimpr'**
+  String get trayAbout;
+
+  /// Windows system-tray menu: Settings item
+  ///
+  /// In en, this message translates to:
+  /// **'Settings...'**
+  String get traySettings;
+
+  /// Windows system-tray menu: Quit item
+  ///
+  /// In en, this message translates to:
+  /// **'Quit Glimpr'**
+  String get trayQuit;
+
   /// Settings > Capture: Behaviour section label
   ///
   /// In en, this message translates to:

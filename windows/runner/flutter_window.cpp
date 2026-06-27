@@ -3,6 +3,7 @@
 #include <shellapi.h>
 
 #include <cstdio>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -57,9 +58,11 @@ void RelaunchApp() {
   DWORD pid = GetCurrentProcessId();
   std::wstring exe = ExePath();
   wchar_t cmd[1024];
+  // `ping -n 2 127.0.0.1` is a ~1s delay that works with no console; `timeout`
+  // aborts when stdin is redirected (CREATE_NO_WINDOW) and would busy-loop.
   swprintf_s(cmd,
     L"cmd.exe /c \":loop & tasklist /FI \\\"PID eq %lu\\\" | find \\\"%lu\\\" "
-    L">nul && (timeout /t 1 /nobreak >nul & goto loop) & start \\\"\\\" "
+    L">nul && (ping -n 2 127.0.0.1 >nul & goto loop) & start \\\"\\\" "
     L"\\\"%ls\\\"\"",
     pid, pid, exe.c_str());
   STARTUPINFOW si = {};
@@ -171,13 +174,31 @@ bool FlutterWindow::OnCreate() {
           result->Success();
         } else if (m == "relaunch") {
           RelaunchApp();
-          Quit();
+          if (tray_icon_) tray_icon_->Remove();
           result->Success();
+          // Force-exit: PostQuitMessage relies on a clean message-loop teardown,
+          // but tearing down the overlay + editor Flutter engines on the way out
+          // can hang, leaving the relaunch watcher waiting forever. ExitProcess
+          // guarantees the old process dies so the watcher restarts us.
+          ExitProcess(0);
         } else if (m == "openImageEditor") {
           if (editor_window_) editor_window_->RevealEditor();
           result->Success();
         } else if (m == "openImageEditorClipboard") {
           if (editor_window_) editor_window_->LoadClipboard();
+          result->Success();
+        } else if (m == "setTrayLabels") {
+          // The control engine's Dart pushes the localized tray-menu labels
+          // (the runner C++ is ASCII-only, so it cannot hold the zh strings).
+          std::map<std::string, std::string> labels;
+          if (const auto* map = std::get_if<EncodableMap>(call.arguments())) {
+            for (const auto& kv : *map) {
+              const auto* k = std::get_if<std::string>(&kv.first);
+              const auto* v = std::get_if<std::string>(&kv.second);
+              if (k && v) labels[*k] = *v;
+            }
+          }
+          if (tray_icon_) tray_icon_->SetLabels(std::move(labels));
           result->Success();
         } else {
           result->NotImplemented();

@@ -85,6 +85,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRestartNowConfirm => 'Click again to restart Glimpr';
 
   @override
+  String get trayOpenRecent => 'Open Recent';
+
+  @override
+  String get trayClearRecent => 'Clear Recent';
+
+  @override
+  String get trayOpenSaveFolder => 'Open Save Folder';
+
+  @override
+  String get trayAbout => 'About Glimpr';
+
+  @override
+  String get traySettings => 'Settings...';
+
+  @override
+  String get trayQuit => 'Quit Glimpr';
+
+  @override
   String get settingsSectionBehaviour => 'Behaviour';
 
   @override

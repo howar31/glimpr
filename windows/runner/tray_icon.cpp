@@ -76,8 +76,8 @@ bool TaskbarUsesLightTheme() {
   return r == ERROR_SUCCESS && type == REG_DWORD && value != 0;
 }
 
-// Append an ASCII label (+ optional accelerator after a tab) as a wide menu
-// item. Labels are ASCII (cp950 build), so a plain widening is safe.
+// Append a UTF-8 label (+ optional ASCII accelerator after a tab) as a wide menu
+// item. Labels are localized (pushed from Dart), so widen via UTF-8.
 void AppendItem(HMENU menu, UINT id, const std::string& label,
                 const std::string& accel, bool enabled) {
   std::string text = label;
@@ -85,7 +85,7 @@ void AppendItem(HMENU menu, UINT id, const std::string& label,
     text += "\t";
     text += accel;
   }
-  std::wstring wide(text.begin(), text.end());
+  std::wstring wide = Utf8ToWide(text);
   UINT flags = MF_STRING | (enabled ? MF_ENABLED : MF_GRAYED);
   AppendMenuW(menu, flags, id, wide.c_str());
 }
@@ -162,39 +162,47 @@ void TrayIcon::OnTrayMessage(WPARAM /*wparam*/, LPARAM lparam) {
 }
 
 void TrayIcon::ShowMenu() {
+  // Localized label lookup (UTF-8, pushed from Dart); English fallback until the
+  // push arrives.
+  auto L = [this](const char* id, const char* fallback) -> std::string {
+    auto it = labels_.find(id);
+    return it != labels_.end() ? it->second : std::string(fallback);
+  };
+
   HMENU menu = CreatePopupMenu();
-  // Header (disabled).
+  // Header (disabled). Brand name, never translated.
   AppendItem(menu, 0, "Glimpr", "", false);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Live screenshot actions, with accelerator hints from the bound hotkeys.
-  AppendItem(menu, kCmdCaptureRegion, "Screenshot Region",
+  AppendItem(menu, kCmdCaptureRegion, L("captureArea", "Screenshot Region"),
              hotkeys_->AcceleratorLabel(kActCaptureArea), true);
-  AppendItem(menu, kCmdCaptureWindow, "Screenshot Window",
+  AppendItem(menu, kCmdCaptureWindow, L("captureWindow", "Screenshot Window"),
              hotkeys_->AcceleratorLabel(kActCaptureWindow), true);
-  AppendItem(menu, kCmdCaptureDisplay, "Screenshot Display",
+  AppendItem(menu, kCmdCaptureDisplay, L("captureScreen", "Screenshot Display"),
              hotkeys_->AcceleratorLabel(kActCaptureScreen), true);
-  AppendItem(menu, kCmdCaptureLast, "Screenshot Last Region",
+  AppendItem(menu, kCmdCaptureLast, L("captureLast", "Screenshot Last Region"),
              hotkeys_->AcceleratorLabel(kActCaptureLast), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Pin to screen (S4).
-  AppendItem(menu, kCmdPinScreenshot, "Pin Screenshot",
+  AppendItem(menu, kCmdPinScreenshot, L("pinArea", "Pin Screenshot"),
              hotkeys_->AcceleratorLabel(kActPinArea), true);
-  AppendItem(menu, kCmdPinClipboard, "Pin Clipboard",
+  AppendItem(menu, kCmdPinClipboard, L("pinClipboard", "Pin Clipboard"),
              hotkeys_->AcceleratorLabel(kActPinClipboard), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Deferred: recording (S6).
-  AppendItem(menu, 0, "Record Region", "", false);
-  AppendItem(menu, 0, "Record Window", "", false);
-  AppendItem(menu, 0, "Record Display", "", false);
-  AppendItem(menu, 0, "Record Last Region", "", false);
+  AppendItem(menu, 0, L("recordRegion", "Record Region"), "", false);
+  AppendItem(menu, 0, L("recordWindow", "Record Window"), "", false);
+  AppendItem(menu, 0, L("recordDisplay", "Record Display"), "", false);
+  AppendItem(menu, 0, L("recordLast", "Record Last Region"), "", false);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Image editor + Open Recent (S4); live: open save folder.
-  AppendItem(menu, kCmdOpenEditor, "Open Image Editor",
+  AppendItem(menu, kCmdOpenEditor, L("openEditor", "Open Image Editor"),
              hotkeys_->AcceleratorLabel(kActOpenEditor), true);
-  AppendItem(menu, kCmdOpenEditorClipboard, "Open Image Editor with Clipboard",
+  AppendItem(menu, kCmdOpenEditorClipboard,
+             L("openEditorClipboard", "Open Image Editor with Clipboard"),
              hotkeys_->AcceleratorLabel(kActOpenEditorClipboard), true);
   if (recent_.empty()) {
-    AppendItem(menu, 0, "Open Recent", "", false);  // greyed when empty
+    AppendItem(menu, 0, L("openRecent", "Open Recent"), "", false);  // greyed
   } else {
     HMENU recent = CreatePopupMenu();
     const size_t n = recent_.size();
@@ -203,16 +211,18 @@ void TrayIcon::ShowMenu() {
                   Basename(recent_[i]).c_str());
     }
     AppendMenuW(recent, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(recent, MF_STRING, kCmdClearRecent, L"Clear Recent");
+    AppendMenuW(recent, MF_STRING, kCmdClearRecent,
+                Utf8ToWide(L("clearRecent", "Clear Recent")).c_str());
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
-                L"Open Recent");
+                Utf8ToWide(L("openRecent", "Open Recent")).c_str());
   }
-  AppendItem(menu, kCmdOpenSaveFolder, "Open Save Folder", "", true);
+  AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
+             "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  AppendItem(menu, kCmdAbout, "About Glimpr", "", true);
-  AppendItem(menu, kCmdSettings, "Settings...", "", true);
+  AppendItem(menu, kCmdAbout, L("about", "About Glimpr"), "", true);
+  AppendItem(menu, kCmdSettings, L("settings", "Settings..."), "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  AppendItem(menu, kCmdQuit, "Quit Glimpr", "", true);
+  AppendItem(menu, kCmdQuit, L("quit", "Quit Glimpr"), "", true);
 
   POINT pt;
   GetCursorPos(&pt);
@@ -257,4 +267,8 @@ void TrayIcon::OnCommand(UINT command_id) {
 
 void TrayIcon::SetRecentImages(std::vector<std::string> paths) {
   recent_ = std::move(paths);
+}
+
+void TrayIcon::SetLabels(std::map<std::string, std::string> labels) {
+  labels_ = std::move(labels);
 }

@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,11 @@ class TrayIcon {
   // list here (basename shown; full path kept for the callback). Newest first.
   void SetRecentImages(std::vector<std::string> paths);
 
+  // Localized menu labels (UTF-8), pushed by the control engine's Dart (the
+  // runner C++ is ASCII-only, so it cannot hold the zh strings). Keyed by a
+  // stable id; ShowMenu falls back to the English default when a key is absent.
+  void SetLabels(std::map<std::string, std::string> labels);
+
  private:
   void ShowMenu();
   void OnCommand(UINT command_id);
@@ -63,6 +69,7 @@ class TrayIcon {
   bool added_ = false;
   HICON icon_ = nullptr;  // current tray HICON (DestroyIcon on replace / remove)
   std::vector<std::string> recent_;  // Open Recent submenu (full paths, newest first)
+  std::map<std::string, std::string> labels_;  // localized menu labels (UTF-8)
 };
 
 #endif  // RUNNER_TRAY_ICON_H_
