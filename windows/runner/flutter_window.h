@@ -57,6 +57,9 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> role_channel_;
   // Launch-at-login (HKCU Run key).
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> login_channel_;
+  // Pro license blob storage (Credential Manager). Dumb read/write/clear; all
+  // verification is Dart-side. Only the private/Pro build invokes it.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> license_channel_;
 
   // Global hotkeys + the system tray (the resident shell).
   std::unique_ptr<HotkeyHost> hotkey_host_;

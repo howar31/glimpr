@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <shellapi.h>
+#include <wincred.h>
 
 #include <cstdio>
 #include <map>
@@ -106,6 +107,44 @@ void SetLaunchAtLogin(bool enable) {
     RegDeleteValueW(key, kRunValue);
   }
   RegCloseKey(key);
+}
+
+// Pro license blob storage -- the Windows Credential Manager (the "Credential
+// Locker"), the analogue of the macOS Keychain generic-password item. Dumb
+// storage only: all verification is Dart-side against the embedded public key,
+// and the OSS/stub build never invokes the channel (the gate ships dormant).
+// Stored as a per-user generic credential keyed by a fixed target name; the
+// blob is the UTF-8 license string (a signed entitlement, a few hundred bytes,
+// well under CRED_MAX_CREDENTIAL_BLOB_SIZE). Persisted LOCAL_MACHINE so it
+// survives logoff/reboot for this user without roaming.
+constexpr wchar_t kLicenseTarget[] = L"com.howar31.glimpr.license";
+constexpr wchar_t kLicenseUser[] = L"license";
+
+std::optional<std::string> LicenseRead() {
+  PCREDENTIALW cred = nullptr;
+  if (!CredReadW(kLicenseTarget, CRED_TYPE_GENERIC, 0, &cred) || !cred) {
+    return std::nullopt;
+  }
+  std::string value(reinterpret_cast<const char*>(cred->CredentialBlob),
+                    cred->CredentialBlobSize);
+  CredFree(cred);
+  return value;
+}
+
+void LicenseWrite(const std::string& value) {
+  CREDENTIALW cred = {};
+  cred.Type = CRED_TYPE_GENERIC;
+  cred.TargetName = const_cast<wchar_t*>(kLicenseTarget);
+  cred.UserName = const_cast<wchar_t*>(kLicenseUser);
+  cred.CredentialBlob =
+      reinterpret_cast<LPBYTE>(const_cast<char*>(value.data()));
+  cred.CredentialBlobSize = static_cast<DWORD>(value.size());
+  cred.Persist = CRED_PERSIST_LOCAL_MACHINE;
+  CredWriteW(&cred, 0);
+}
+
+void LicenseClear() {
+  CredDeleteW(kLicenseTarget, CRED_TYPE_GENERIC, 0);  // ERROR_NOT_FOUND is fine
 }
 }  // namespace
 
@@ -218,6 +257,37 @@ bool FlutterWindow::OnCreate() {
           if (const auto* b = std::get_if<bool>(call.arguments())) enable = *b;
           SetLaunchAtLogin(enable);
           result->Success(EncodableValue(IsLaunchAtLogin()));
+        } else {
+          result->NotImplemented();
+        }
+      });
+
+  // Pro license blob storage -- Credential Manager read/write/clear (the macOS
+  // Keychain analogue). Dumb storage only; all verification is Dart-side against
+  // the embedded public key, and the OSS/stub build never invokes this channel.
+  // Control engine only (Settings owns license activation); the overlay/editor
+  // engines fall through to "no license" until a Pro feature lives there.
+  license_channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
+      messenger, "glimpr/license",
+      &flutter::StandardMethodCodec::GetInstance());
+  license_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+        const auto& m = call.method_name();
+        if (m == "read") {
+          if (auto v = LicenseRead()) {
+            result->Success(EncodableValue(*v));
+          } else {
+            result->Success();  // no license stored -> Dart null
+          }
+        } else if (m == "write") {
+          if (const auto* v = std::get_if<std::string>(call.arguments())) {
+            LicenseWrite(*v);
+          }
+          result->Success();
+        } else if (m == "clear") {
+          LicenseClear();
+          result->Success();
         } else {
           result->NotImplemented();
         }
