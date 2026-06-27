@@ -26,6 +26,8 @@ using winrt::com_ptr;
 constexpr wchar_t kClass[] = L"GlimprRecordChrome";
 constexpr UINT_PTR kTickTimer = 0xC001;
 constexpr UINT kTickMs = 500;
+constexpr UINT_PTR kCdTimer = 0xC002;
+constexpr int kCdPanel = 132;  // countdown HUD square (logical points)
 
 // Strip size + paddings, in LOGICAL points (scaled by the monitor scale).
 constexpr int kStripW = 320;
@@ -136,6 +138,18 @@ com_ptr<ID3D11Device> CreateD3D() {
 RecordChrome::RecordChrome() {}
 RecordChrome::~RecordChrome() { Hide(); }
 
+void RecordChrome::EnsureClass() {
+  static bool reg = false;
+  if (reg) return;
+  WNDCLASSW wc{};
+  wc.lpfnWndProc = &RecordChrome::WndProc;
+  wc.hInstance = GetModuleHandleW(nullptr);
+  wc.lpszClassName = kClass;
+  wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+  RegisterClassW(&wc);
+  reg = true;
+}
+
 LRESULT CALLBACK RecordChrome::WndProc(HWND hwnd, UINT msg, WPARAM wp,
                                        LPARAM lp) noexcept {
   if (msg == WM_NCCREATE) {
@@ -242,16 +256,7 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   if (win_y_ + win_h_ > mi.rcMonitor.bottom)
     win_y_ = mi.rcMonitor.bottom - win_h_;
 
-  static bool registered = false;
-  if (!registered) {
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = &RecordChrome::WndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = kClass;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    RegisterClassW(&wc);
-    registered = true;
-  }
+  EnsureClass();
 
   hwnd_ = CreateWindowExW(
       WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -315,7 +320,144 @@ void RecordChrome::SetPaused(bool paused) {
   Render();
 }
 
+void RecordChrome::ShowCountdown(int64_t display_id, double x, double y,
+                                 double w, double h, int seconds,
+                                 std::function<void()> on_done,
+                                 std::function<void()> on_cancel) {
+  if (cd_hwnd_) {
+    KillTimer(cd_hwnd_, kCdTimer);
+    DestroyWindow(cd_hwnd_);
+    cd_hwnd_ = nullptr;
+  }
+  cd_done_ = std::move(on_done);
+  cd_cancel_ = std::move(on_cancel);
+  cd_remaining_ = (std::max)(1, seconds);
+
+  HMONITOR mon = reinterpret_cast<HMONITOR>(static_cast<intptr_t>(display_id));
+  MONITORINFO mi{};
+  mi.cbSize = sizeof(MONITORINFO);
+  if (!GetMonitorInfo(mon, &mi)) {
+    POINT pt{};
+    GetCursorPos(&pt);
+    mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    GetMonitorInfo(mon, &mi);
+  }
+  scale_ = MonScale(mon);
+  auto S = [this](double v) { return static_cast<int>(std::lround(v * scale_)); };
+  cd_w_ = S(kCdPanel);
+  cd_h_ = S(kCdPanel);
+  int cx, cy;
+  if (w > 0 && h > 0) {  // centre on the region; else on the monitor
+    cx = mi.rcMonitor.left + S(x + w / 2.0);
+    cy = mi.rcMonitor.top + S(y + h / 2.0);
+  } else {
+    cx = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
+    cy = (mi.rcMonitor.top + mi.rcMonitor.bottom) / 2;
+  }
+  cd_x_ = cx - cd_w_ / 2;
+  cd_y_ = cy - cd_h_ / 2;
+
+  if (!EnsureGraphics()) {
+    FinishCountdown(true);  // no graphics -> just proceed to record
+    return;
+  }
+  // The big number format, re-created at the current scale.
+  cd_fmt_ = nullptr;
+  const float cs = static_cast<float>(60.0 * scale_);
+  if (FAILED(dwrite_->CreateTextFormat(
+          L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD,
+          DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, cs, L"",
+          cd_fmt_.put()))) {
+    FinishCountdown(true);
+    return;
+  }
+  cd_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+  cd_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+  EnsureClass();
+  cd_hwnd_ = CreateWindowExW(
+      WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+      kClass, L"", WS_POPUP, cd_x_, cd_y_, cd_w_, cd_h_, nullptr, nullptr,
+      GetModuleHandleW(nullptr), this);
+  if (!cd_hwnd_) {
+    FinishCountdown(true);
+    return;
+  }
+  SetWindowDisplayAffinity(cd_hwnd_, WDA_EXCLUDEFROMCAPTURE);
+  ShowWindow(cd_hwnd_, SW_SHOWNOACTIVATE);
+  RenderCountdown();
+  SetTimer(cd_hwnd_, kCdTimer, 1000, nullptr);
+}
+
+void RecordChrome::RenderCountdown() {
+  if (!cd_hwnd_ || !dc_ || !cd_fmt_) return;
+  const UINT W = static_cast<UINT>(cd_w_), H = static_cast<UINT>(cd_h_);
+  if (W == 0 || H == 0) return;
+  wchar_t num[8];
+  swprintf_s(num, L"%d", cd_remaining_);
+  try {
+    const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                      D2D1_ALPHA_MODE_PREMULTIPLIED);
+    const auto tp = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf);
+    com_ptr<ID2D1Bitmap1> target;
+    winrt::check_hresult(
+        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, tp, target.put()));
+    dc_->SetTarget(target.get());
+    dc_->BeginDraw();
+    dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
+    com_ptr<ID2D1SolidColorBrush> brush;
+    dc_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0), brush.put());
+    brush->SetColor(D2D1::ColorF(0x0F172A, 0.92f));
+    const float rad = static_cast<float>(20.0 * scale_);
+    dc_->FillRoundedRectangle(
+        D2D1::RoundedRect(
+            D2D1::RectF(0, 0, static_cast<float>(W), static_cast<float>(H)), rad,
+            rad),
+        brush.get());
+    brush->SetColor(D2D1::ColorF(0xFFFFFF, 0.95f));
+    dc_->DrawText(num, static_cast<UINT32>(wcslen(num)), cd_fmt_.get(),
+                  D2D1::RectF(0, 0, static_cast<float>(W),
+                              static_cast<float>(H) * 0.82f),
+                  brush.get());
+    brush->SetColor(D2D1::ColorF(0xFFFFFF, 0.55f));
+    const wchar_t* hint = L"Click to cancel";
+    dc_->DrawText(hint, static_cast<UINT32>(wcslen(hint)), label_fmt_.get(),
+                  D2D1::RectF(0, static_cast<float>(H) * 0.78f,
+                              static_cast<float>(W), static_cast<float>(H)),
+                  brush.get());
+    winrt::check_hresult(dc_->EndDraw());
+    PresentLayered(cd_hwnd_, target.get(), cd_x_, cd_y_, W, H);
+    dc_->SetTarget(nullptr);
+  } catch (...) {
+    if (dc_) dc_->SetTarget(nullptr);
+  }
+}
+
+void RecordChrome::FinishCountdown(bool done) {
+  if (cd_hwnd_) {
+    KillTimer(cd_hwnd_, kCdTimer);
+    DestroyWindow(cd_hwnd_);
+    cd_hwnd_ = nullptr;
+  }
+  auto done_cb = std::move(cd_done_);
+  auto cancel_cb = std::move(cd_cancel_);
+  cd_done_ = nullptr;
+  cd_cancel_ = nullptr;
+  if (done) {
+    if (done_cb) done_cb();
+  } else if (cancel_cb) {
+    cancel_cb();
+  }
+}
+
 void RecordChrome::Hide() {
+  if (cd_hwnd_) {
+    KillTimer(cd_hwnd_, kCdTimer);
+    DestroyWindow(cd_hwnd_);
+    cd_hwnd_ = nullptr;
+    cd_done_ = nullptr;
+    cd_cancel_ = nullptr;
+  }
   if (hwnd_) {
     KillTimer(hwnd_, kTickTimer);
     DestroyWindow(hwnd_);
@@ -343,6 +485,23 @@ int RecordChrome::HitTest(POINT p) const {
 
 LRESULT RecordChrome::MessageHandler(HWND hwnd, UINT msg, WPARAM wp,
                                      LPARAM lp) noexcept {
+  // The countdown HUD shares this handler (routed by the same `this`); a tick
+  // decrements it, a click cancels it.
+  if (hwnd == cd_hwnd_) {
+    if (msg == WM_TIMER && wp == kCdTimer) {
+      if (--cd_remaining_ <= 0) {
+        FinishCountdown(true);
+      } else {
+        RenderCountdown();
+      }
+      return 0;
+    }
+    if (msg == WM_LBUTTONUP) {
+      FinishCountdown(false);
+      return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+  }
   switch (msg) {
     case WM_TIMER:
       if (wp == kTickTimer) {
@@ -468,53 +627,59 @@ void RecordChrome::Render() {
     draw_btn(stop_rc_, L"Stop", true, hover_ == 1);
 
     winrt::check_hresult(dc_->EndDraw());
-
-    // Readback -> top-down 32bpp DIB -> UpdateLayeredWindow.
-    const auto rp = D2D1::BitmapProperties1(
-        D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf);
-    com_ptr<ID2D1Bitmap1> readback;
-    winrt::check_hresult(
-        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, rp, readback.put()));
-    D2D1_POINT_2U dst = D2D1::Point2U(0, 0);
-    D2D1_RECT_U src = D2D1::RectU(0, 0, W, H);
-    winrt::check_hresult(readback->CopyFromBitmap(&dst, target.get(), &src));
-    D2D1_MAPPED_RECT mapped{};
-    winrt::check_hresult(readback->Map(D2D1_MAP_OPTIONS_READ, &mapped));
-
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = static_cast<LONG>(W);
-    bmi.bmiHeader.biHeight = -static_cast<LONG>(H);  // top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    HDC screen = GetDC(nullptr);
-    void* bits = nullptr;
-    HBITMAP dib =
-        CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (dib && bits) {
-      for (UINT row = 0; row < H; ++row) {
-        std::memcpy(
-            static_cast<uint8_t*>(bits) + static_cast<size_t>(row) * W * 4,
-            mapped.bits + static_cast<size_t>(row) * mapped.pitch,
-            static_cast<size_t>(W) * 4);
-      }
-      HDC mem = CreateCompatibleDC(screen);
-      HBITMAP old = static_cast<HBITMAP>(SelectObject(mem, dib));
-      POINT src_pt = {0, 0};
-      SIZE size = {static_cast<LONG>(W), static_cast<LONG>(H)};
-      POINT dst_pt = {win_x_, win_y_};
-      BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-      UpdateLayeredWindow(hwnd_, screen, &dst_pt, &size, mem, &src_pt, 0, &bf,
-                          ULW_ALPHA);
-      SelectObject(mem, old);
-      DeleteDC(mem);
-    }
-    if (dib) DeleteObject(dib);
-    ReleaseDC(nullptr, screen);
-    readback->Unmap();
+    PresentLayered(hwnd_, target.get(), win_x_, win_y_, W, H);
     dc_->SetTarget(nullptr);
   } catch (...) {
     if (dc_) dc_->SetTarget(nullptr);
   }
+}
+
+void RecordChrome::PresentLayered(HWND hwnd, ID2D1Bitmap1* target, int x, int y,
+                                  UINT W, UINT H) {
+  const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                    D2D1_ALPHA_MODE_PREMULTIPLIED);
+  const auto rp = D2D1::BitmapProperties1(
+      D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf);
+  com_ptr<ID2D1Bitmap1> readback;
+  if (FAILED(dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, rp,
+                               readback.put()))) {
+    return;
+  }
+  D2D1_POINT_2U dst = D2D1::Point2U(0, 0);
+  D2D1_RECT_U src = D2D1::RectU(0, 0, W, H);
+  if (FAILED(readback->CopyFromBitmap(&dst, target, &src))) return;
+  D2D1_MAPPED_RECT mapped{};
+  if (FAILED(readback->Map(D2D1_MAP_OPTIONS_READ, &mapped))) return;
+
+  BITMAPINFO bmi{};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = static_cast<LONG>(W);
+  bmi.bmiHeader.biHeight = -static_cast<LONG>(H);  // top-down
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+  HDC screen = GetDC(nullptr);
+  void* bits = nullptr;
+  HBITMAP dib =
+      CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (dib && bits) {
+    for (UINT row = 0; row < H; ++row) {
+      std::memcpy(static_cast<uint8_t*>(bits) + static_cast<size_t>(row) * W * 4,
+                  mapped.bits + static_cast<size_t>(row) * mapped.pitch,
+                  static_cast<size_t>(W) * 4);
+    }
+    HDC mem = CreateCompatibleDC(screen);
+    HBITMAP old = static_cast<HBITMAP>(SelectObject(mem, dib));
+    POINT src_pt = {0, 0};
+    SIZE size = {static_cast<LONG>(W), static_cast<LONG>(H)};
+    POINT dst_pt = {x, y};
+    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(hwnd, screen, &dst_pt, &size, mem, &src_pt, 0, &bf,
+                        ULW_ALPHA);
+    SelectObject(mem, old);
+    DeleteDC(mem);
+  }
+  if (dib) DeleteObject(dib);
+  ReleaseDC(nullptr, screen);
+  readback->Unmap();
 }

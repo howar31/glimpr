@@ -129,26 +129,21 @@ void RecordChannel::HandleMethodCall(
     spec.system_audio = GetBool(m, "systemAudio", false);
     spec.microphone = GetBool(m, "microphone", false);
 
-    Recorder::StartedInfo info;
-    std::string error;
-    const bool ok = recorder_->Start(spec, control_hwnd_, WM_GLIMPR_RECORD,
-                                     &info, &error);
-    result->Success();
-    if (ok) {
-      Emit("onRecordStarted",
-           EncodableValue(EncodableMap{
-               {EncodableValue("displayId"), EncodableValue(info.display_id)},
-               {EncodableValue("x"), EncodableValue(info.x)},
-               {EncodableValue("y"), EncodableValue(info.y)},
-               {EncodableValue("w"), EncodableValue(info.w)},
-               {EncodableValue("h"), EncodableValue(info.h)}}));
-      ShowChrome(info, spec.mode != Recorder::Mode::kDisplay,
-                 GetBool(m, "showScrim", true));
+    const int countdown = GetInt(m, "countdown", 0);
+    const bool show_scrim = GetBool(m, "showScrim", true);
+    // A countdown shows a HUD first, then starts on completion (or aborts on a
+    // click); otherwise start immediately.
+    if (countdown > 0 && chrome_) {
+      pending_spec_ = spec;
+      pending_scrim_ = show_scrim;
+      chrome_->ShowCountdown(
+          spec.display_id, spec.x, spec.y, spec.w, spec.h, countdown,
+          [this]() { DoStart(pending_spec_, pending_scrim_); },
+          [this]() { Emit("onRecordAborted"); });
     } else {
-      Emit("onRecordFailed",
-           EncodableValue(EncodableMap{
-               {EncodableValue("message"), EncodableValue(error)}}));
+      DoStart(spec, show_scrim);
     }
+    result->Success();
     return;
   }
 
@@ -200,6 +195,27 @@ void RecordChannel::FinishActive() {
     Emit("onRecordFinished",
          EncodableValue(EncodableMap{
              {EncodableValue("path"), EncodableValue(path)}}));
+  } else {
+    Emit("onRecordFailed",
+         EncodableValue(EncodableMap{
+             {EncodableValue("message"), EncodableValue(error)}}));
+  }
+}
+
+void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
+  Recorder::StartedInfo info;
+  std::string error;
+  const bool ok =
+      recorder_->Start(spec, control_hwnd_, WM_GLIMPR_RECORD, &info, &error);
+  if (ok) {
+    Emit("onRecordStarted",
+         EncodableValue(EncodableMap{
+             {EncodableValue("displayId"), EncodableValue(info.display_id)},
+             {EncodableValue("x"), EncodableValue(info.x)},
+             {EncodableValue("y"), EncodableValue(info.y)},
+             {EncodableValue("w"), EncodableValue(info.w)},
+             {EncodableValue("h"), EncodableValue(info.h)}}));
+    ShowChrome(info, spec.mode != Recorder::Mode::kDisplay, show_scrim);
   } else {
     Emit("onRecordFailed",
          EncodableValue(EncodableMap{

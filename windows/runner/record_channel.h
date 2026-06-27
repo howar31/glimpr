@@ -48,6 +48,9 @@ class RecordChannel {
   void FinishActive();
   void Emit(const char* method);
   void Emit(const char* method, flutter::EncodableValue args);
+  // Actually start the recorder (after any countdown) + emit onRecordStarted +
+  // show the chrome, or emit onRecordFailed.
+  void DoStart(const Recorder::Spec& spec, bool show_scrim);
   // Show the recording chrome for the started recording + wire its Stop/Pause/
   // Abort buttons back to this channel. [border] draws the recorded-rect outline
   // (region/window modes); [scrim] dims the other displays.
@@ -57,6 +60,10 @@ class RecordChannel {
   std::unique_ptr<Recorder> recorder_;
   std::unique_ptr<RecordChrome> chrome_;
   HWND control_hwnd_ = nullptr;
+
+  // Held across a countdown: the spec to start when the countdown completes.
+  Recorder::Spec pending_spec_;
+  bool pending_scrim_ = true;
 };
 
 #endif  // RUNNER_RECORD_CHANNEL_H_

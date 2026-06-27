@@ -39,15 +39,27 @@ class RecordChrome {
             bool border, bool scrim, Callbacks cb);
   // Reflect a pause/resume (button label + freeze the timer).
   void SetPaused(bool paused);
-  // Tear the strip down (stop / abort / finish / failure).
+  // Show a pre-recording countdown HUD centred on the target ([x,y,w,h] display-
+  // local logical; the monitor centre when w/h are 0). Calls [on_done] when it
+  // reaches 0 or [on_cancel] on a click. Shown before the recording starts.
+  void ShowCountdown(int64_t display_id, double x, double y, double w, double h,
+                     int seconds, std::function<void()> on_done,
+                     std::function<void()> on_cancel);
+  // Tear the strip + border + scrims + countdown down.
   void Hide();
 
  private:
   static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM) noexcept;
+  static void EnsureClass();  // register the shared window class once
   LRESULT MessageHandler(HWND, UINT, WPARAM, LPARAM) noexcept;
   bool EnsureGraphics();
   void Layout();   // compute the button rects from the strip size
   void Render();
+  void RenderCountdown();
+  void FinishCountdown(bool done);  // true = reached 0, false = cancelled
+  // Blit a finished D2D target bitmap to a layered window at (x,y).
+  void PresentLayered(HWND hwnd, ID2D1Bitmap1* target, int x, int y, UINT W,
+                      UINT H);
   int HitTest(POINT client) const;  // 0 none, 1 stop, 2 pause, 3 abort
 
   HWND hwnd_ = nullptr;
@@ -66,12 +78,19 @@ class RecordChrome {
   HWND border_hwnd_ = nullptr;        // red outline around the recorded rect
   std::vector<HWND> scrim_hwnds_;     // dim overlays on the OTHER displays
 
+  HWND cd_hwnd_ = nullptr;            // countdown HUD window
+  int cd_remaining_ = 0;
+  int cd_x_ = 0, cd_y_ = 0, cd_w_ = 0, cd_h_ = 0;  // physical px
+  std::function<void()> cd_done_;
+  std::function<void()> cd_cancel_;
+
   winrt::com_ptr<ID2D1Factory1> factory_;
   winrt::com_ptr<ID2D1Device> device_;
   winrt::com_ptr<ID2D1DeviceContext> dc_;
   winrt::com_ptr<IDWriteFactory> dwrite_;
   winrt::com_ptr<IDWriteTextFormat> timer_fmt_;
   winrt::com_ptr<IDWriteTextFormat> label_fmt_;
+  winrt::com_ptr<IDWriteTextFormat> cd_fmt_;  // big countdown number
 };
 
 #endif  // RUNNER_RECORD_CHROME_H_
