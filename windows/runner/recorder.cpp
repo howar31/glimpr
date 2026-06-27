@@ -3,6 +3,7 @@
 #include "record_audio.h"
 
 #include <d3d11.h>
+#include <dwmapi.h>
 #include <dxgi.h>
 #include <mfapi.h>
 #include <mferror.h>
@@ -18,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <condition_variable>
 #include <cstring>
 #include <deque>
@@ -103,7 +105,9 @@ struct Recorder::Impl {
   cap::Direct3D11CaptureFramePool pool{nullptr};
   cap::GraphicsCaptureSession session{nullptr};
   winrt::event_token frame_token{};
-  uint32_t cap_w = 0, cap_h = 0;  // capture (source) pixels
+  uint32_t cap_w = 0, cap_h = 0;          // encode-input (cropped) pixels
+  uint32_t crop_x = 0, crop_y = 0;        // crop offset into the source frame (px)
+  uint32_t staging_w = 0, staging_h = 0;  // current staging size (= source frame)
 
   // ---- encode (Media Foundation IMFSinkWriter) ---------------------------
   bool mf_started = false;
@@ -199,19 +203,51 @@ void Recorder::Impl::OnFrameArrived() {
     }
     D3D11_TEXTURE2D_DESC desc{};
     texture->GetDesc(&desc);
-    if (desc.Width != cap_w || desc.Height != cap_h || !staging) return;
+
+    // (Re)create the staging texture to match the live frame size -- it can
+    // change if a recorded window is resized mid-recording.
+    if (!staging || staging_w != desc.Width || staging_h != desc.Height) {
+      staging = nullptr;
+      D3D11_TEXTURE2D_DESC sd{};
+      sd.Width = desc.Width;
+      sd.Height = desc.Height;
+      sd.MipLevels = 1;
+      sd.ArraySize = 1;
+      sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+      sd.SampleDesc.Count = 1;
+      sd.Usage = D3D11_USAGE_STAGING;
+      sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+      if (FAILED(device->CreateTexture2D(&sd, nullptr, staging.put()))) return;
+      staging_w = desc.Width;
+      staging_h = desc.Height;
+    }
 
     context->CopyResource(staging.get(), texture.get());
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (FAILED(context->Map(staging.get(), 0, D3D11_MAP_READ, 0, &mapped))) {
       return;
     }
+    // Copy the crop window [crop_x, crop_y, cap_w x cap_h] from the source into a
+    // tightly-packed, encode-sized buffer (zero-filled; anything outside the
+    // source -- e.g. a shrunk window -- stays black).
     const uint32_t stride = cap_w * 4;
-    buffer.resize(static_cast<size_t>(stride) * cap_h);
+    buffer.assign(static_cast<size_t>(stride) * cap_h, 0);
     const auto* src = static_cast<const uint8_t*>(mapped.pData);
-    for (uint32_t y = 0; y < cap_h; ++y) {
-      std::memcpy(buffer.data() + static_cast<size_t>(y) * stride,
-                  src + static_cast<size_t>(y) * mapped.RowPitch, stride);
+    uint32_t copy_w = cap_w;
+    if (crop_x >= desc.Width) {
+      copy_w = 0;
+    } else if (crop_x + copy_w > desc.Width) {
+      copy_w = desc.Width - crop_x;
+    }
+    if (copy_w > 0) {
+      for (uint32_t y = 0; y < cap_h; ++y) {
+        const uint32_t sy = crop_y + y;
+        if (sy >= desc.Height) break;  // below the source -> leave black
+        std::memcpy(buffer.data() + static_cast<size_t>(y) * stride,
+                    src + static_cast<size_t>(sy) * mapped.RowPitch +
+                        static_cast<size_t>(crop_x) * 4,
+                    static_cast<size_t>(copy_w) * 4);
+      }
     }
     context->Unmap(staging.get(), 0);
   }
@@ -457,18 +493,26 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     impl_->audio_mic.queue.clear();
   }
 
-  // ---- resolve the capture source (S6a: display only) --------------------
+  // ---- resolve the capture source (display / region / window) ------------
   HMONITOR mon = nullptr;
-  if (spec.display_id != 0) {
-    mon = reinterpret_cast<HMONITOR>(static_cast<intptr_t>(spec.display_id));
-    MONITORINFO check{};
-    check.cbSize = sizeof(MONITORINFO);
-    if (!GetMonitorInfo(mon, &check)) mon = nullptr;
-  }
-  if (!mon) {
-    POINT pt{};
-    GetCursorPos(&pt);
-    mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+  HWND hwnd = nullptr;
+  const bool window_mode = spec.mode == Mode::kWindow && spec.window_id != 0;
+  if (window_mode) {
+    hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(spec.window_id));
+    if (!IsWindow(hwnd)) return fail("no window");
+    mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+  } else {
+    if (spec.display_id != 0) {
+      mon = reinterpret_cast<HMONITOR>(static_cast<intptr_t>(spec.display_id));
+      MONITORINFO check{};
+      check.cbSize = sizeof(MONITORINFO);
+      if (!GetMonitorInfo(mon, &check)) mon = nullptr;
+    }
+    if (!mon) {
+      POINT pt{};
+      GetCursorPos(&pt);
+      mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    }
   }
   if (!mon) return fail("no monitor");
   MONITORINFO mi{};
@@ -476,7 +520,11 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   GetMonitorInfo(mon, &mi);
   const double scale = MonScale(mon);
 
+  // A region crop applies only when a rect was given (region / lastRegion).
+  const bool region = !window_mode && spec.w > 0 && spec.h > 0;
+
   // ---- D3D + capture item ------------------------------------------------
+  uint32_t src_w = 0, src_h = 0;
   try {
     impl_->device = CreateD3DDevice();
     if (!impl_->device) return fail("no d3d device");
@@ -485,28 +533,49 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
 
     auto interop = GetInterop();
     const winrt::guid iid = winrt::guid_of<cap::GraphicsCaptureItem>();
-    winrt::check_hresult(interop->CreateForMonitor(
-        mon, reinterpret_cast<GUID const&>(iid), winrt::put_abi(impl_->item)));
+    if (window_mode) {
+      winrt::check_hresult(interop->CreateForWindow(
+          hwnd, reinterpret_cast<GUID const&>(iid),
+          winrt::put_abi(impl_->item)));
+    } else {
+      winrt::check_hresult(interop->CreateForMonitor(
+          mon, reinterpret_cast<GUID const&>(iid),
+          winrt::put_abi(impl_->item)));
+    }
 
     auto size = impl_->item.Size();
-    impl_->cap_w = static_cast<uint32_t>(size.Width);
-    impl_->cap_h = static_cast<uint32_t>(size.Height);
-    if (impl_->cap_w == 0 || impl_->cap_h == 0) return fail("empty capture size");
+    src_w = static_cast<uint32_t>(size.Width);
+    src_h = static_cast<uint32_t>(size.Height);
+    if (src_w == 0 || src_h == 0) return fail("empty capture size");
 
-    // Reused staging texture for the per-frame CPU readback.
-    D3D11_TEXTURE2D_DESC sd{};
-    sd.Width = impl_->cap_w;
-    sd.Height = impl_->cap_h;
-    sd.MipLevels = 1;
-    sd.ArraySize = 1;
-    sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    sd.SampleDesc.Count = 1;
-    sd.Usage = D3D11_USAGE_STAGING;
-    sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    if (FAILED(impl_->device->CreateTexture2D(&sd, nullptr,
-                                              impl_->staging.put()))) {
-      return fail("staging texture");
+    // Encode-input window: the full source (display/window), or the requested
+    // region (display-local logical points -> source pixels).
+    impl_->crop_x = 0;
+    impl_->crop_y = 0;
+    impl_->cap_w = src_w;
+    impl_->cap_h = src_h;
+    if (region) {
+      long cx = std::lround(spec.x * scale);
+      long cy = std::lround(spec.y * scale);
+      long cw = std::lround(spec.w * scale);
+      long ch = std::lround(spec.h * scale);
+      if (cx < 0) cx = 0;
+      if (cy < 0) cy = 0;
+      if (cw > static_cast<long>(src_w) - cx) cw = static_cast<long>(src_w) - cx;
+      if (ch > static_cast<long>(src_h) - cy) ch = static_cast<long>(src_h) - cy;
+      if (cw >= 2 && ch >= 2) {
+        impl_->crop_x = static_cast<uint32_t>(cx);
+        impl_->crop_y = static_cast<uint32_t>(cy);
+        impl_->cap_w = static_cast<uint32_t>(cw);
+        impl_->cap_h = static_cast<uint32_t>(ch);
+      }
     }
+
+    // The staging texture is (re)created lazily in OnFrameArrived to match the
+    // live frame size (so a window resized mid-recording is handled).
+    impl_->staging = nullptr;
+    impl_->staging_w = 0;
+    impl_->staging_h = 0;
 
     impl_->pool = cap::Direct3D11CaptureFramePool::CreateFreeThreaded(
         rtDevice, dx::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, size);
@@ -697,10 +766,28 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   active_ = true;
   if (out) {
     out->display_id = static_cast<int64_t>(reinterpret_cast<intptr_t>(mon));
-    out->x = 0.0;
-    out->y = 0.0;
-    out->w = impl_->cap_w / scale;
-    out->h = impl_->cap_h / scale;
+    if (window_mode) {
+      // The window's visible bounds at start, display-local logical points.
+      RECT rc{};
+      if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
+                                       sizeof(rc)))) {
+        GetWindowRect(hwnd, &rc);
+      }
+      out->x = (rc.left - mi.rcMonitor.left) / scale;
+      out->y = (rc.top - mi.rcMonitor.top) / scale;
+      out->w = (rc.right - rc.left) / scale;
+      out->h = (rc.bottom - rc.top) / scale;
+    } else if (region) {
+      out->x = spec.x;
+      out->y = spec.y;
+      out->w = spec.w;
+      out->h = spec.h;
+    } else {
+      out->x = 0.0;
+      out->y = 0.0;
+      out->w = src_w / scale;
+      out->h = src_h / scale;
+    }
   }
   return true;
 }
