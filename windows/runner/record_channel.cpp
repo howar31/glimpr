@@ -199,6 +199,10 @@ void RecordChannel::FinishActive() {
   }
 }
 
+void RecordChannel::RelaySelection(EncodableValue args) {
+  Emit("onRecordSelection", std::move(args));
+}
+
 void RecordChannel::OnNativeEvent(uint32_t code) {
   if (code == Recorder::kAsyncFailed) {
     std::string error = recorder_->TakeAsyncError();

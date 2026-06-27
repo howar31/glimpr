@@ -250,18 +250,32 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
   // Recording (S6): Ctrl+Alt+Win+Shift+digit -- a collision-free combo parallel
   // to the capture globals (Ctrl+Alt+Win+digit), the way macOS recording
   // (Ctrl+Cmd+digit) differs from capture (Cmd+Alt+digit) by its modifier set.
-  // S6b wires the DISPLAY vertical end-to-end (it starts native recording with
-  // no overlay); region/window/last-region stay disabled until their native
-  // modes land (S6e/S6f).
-  kRecordRegionKey: null,
-  kRecordWindowKey: null,
+  // region 1 / window 2 / display 3 / last-region 4, mirroring the macOS order.
+  kRecordRegionKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1, {
+    HotkeyModifier.control,
+    HotkeyModifier.alt,
+    HotkeyModifier.meta,
+    HotkeyModifier.shift,
+  }),
+  kRecordWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2, {
+    HotkeyModifier.control,
+    HotkeyModifier.alt,
+    HotkeyModifier.meta,
+    HotkeyModifier.shift,
+  }),
   kRecordDisplayKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3, {
     HotkeyModifier.control,
     HotkeyModifier.alt,
     HotkeyModifier.meta,
     HotkeyModifier.shift,
   }),
-  kRecordLastRegionKey: null,
+  kRecordLastRegionKey: _b(
+      PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4, {
+    HotkeyModifier.control,
+    HotkeyModifier.alt,
+    HotkeyModifier.meta,
+    HotkeyModifier.shift,
+  }),
   // Editor command keys: the overlay editor is LIVE on Windows (S2b), so its
   // meta-modified commands must be Ctrl-based now (undo/redo/paste/duplicate/
   // z-order). Modifier-light tool/command keys (C/B/P, digits, Shift+letters,
@@ -286,12 +300,7 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
 /// Shortcuts pane, disabled as hotkeys). Pin + open-editor went live in S4;
 /// recording lands in S6.
 const _kWindowsUnavailableGlobals = <String>{
-  // Record Display is wired end-to-end (S6b); region / window / last-region land
-  // in S6e/S6f (they need the record-select overlay / focused-window / stored
-  // region paths).
-  kRecordRegionKey,
-  kRecordWindowKey,
-  kRecordLastRegionKey,
+  // All recording modes are wired on Windows now (S6); nothing is unavailable.
 };
 
 /// Whether a Tier-1 global action is available on the current platform. macOS:

@@ -8,6 +8,7 @@
 #include <flutter/method_channel.h>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -51,6 +52,13 @@ class OverlayManager {
 
   // The shared pin manager the overlay flow's pin leg uses (set by FlutterWindow).
   void SetPinManager(class PinManager* pins) { pin_manager_ = pins; }
+
+  // Relay a record-select confirm/cancel from an overlay engine to the control
+  // engine's record channel (set once by FlutterWindow). The picker confirm/
+  // cancel reaches the control RecordController via this hop.
+  void SetRecordRelay(std::function<void(flutter::EncodableValue)> relay) {
+    record_relay_ = std::move(relay);
+  }
 
  private:
   using EncodableValue = flutter::EncodableValue;
@@ -118,6 +126,7 @@ class OverlayManager {
   HWND control_hwnd_ = nullptr;
   class EditorWindow* editor_window_ = nullptr;  // not owned
   class PinManager* pin_manager_ = nullptr;      // not owned
+  std::function<void(flutter::EncodableValue)> record_relay_;  // -> control record channel
   std::map<int64_t, Unit> units_;
 
   int64_t key_display_id_ = 0;     // cursor display at capture (takes focus)

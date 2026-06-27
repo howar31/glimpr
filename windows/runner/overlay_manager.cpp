@@ -245,10 +245,11 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   const int64_t cursor_id = MonId(cursor_mon);
   PresentBegin(cursor_id);
 
-  if (live_select) {
-    // Recording live-select picker is deferred to S6; nothing to present.
-    return;
-  }
+  // Record-select (live_select) reuses the SAME frozen multi-display present as a
+  // screenshot: the Windows overlay is opaque, so the region picker sits over the
+  // frozen capture (a frozen-screenshot region picker; the crop UI + loupe behave
+  // exactly like the screenshot overlay). The live_select flag flows to Dart via
+  // PresentFrame -> onCaptureReady, which routes to the record-select picker.
 
   std::vector<HMONITOR> mons = EnumerateMonitors();
   // Cursor display first (a valid strict-weak-ordering: "is-cursor" sorts ahead
@@ -658,10 +659,20 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();  // null -> Dart falls back (rect snap / blank loupe)
     return;
   }
+  if (method == "recordSelection") {
+    // Relay the record-select confirm/cancel to the control engine's record
+    // channel (-> Dart onRecordSelection -> RecordController). Same UI thread,
+    // so the cross-engine hop is a direct call.
+    if (record_relay_) {
+      const auto* a = std::get_if<EncodableMap>(call.arguments());
+      record_relay_(a ? EncodableValue(*a) : EncodableValue());
+    }
+    result->Success();
+    return;
+  }
   if (method == "requestAccessibility" || method == "setProcessing" ||
       method == "perfMark" || method == "shareSheet" ||
-      method == "recordSelection" || method == "recordSelectHotkey" ||
-      method == "stopLoupeFeed") {
+      method == "recordSelectHotkey" || method == "stopLoupeFeed") {
     result->Success();
     return;
   }

@@ -25,7 +25,7 @@ void main() {
     expect(w[kCaptureAreaKey]!.label(TargetPlatform.windows), 'Ctrl+Alt+Win+1');
   });
 
-  test('Windows binds pin/open-editor globals to Ctrl+Alt+Win+5/6/9/0; record display bound', () {
+  test('Windows binds pin/open-editor globals to Ctrl+Alt+Win+5/6/9/0; record modes bound', () {
     final w = defaultBindingsFor(true);
     const ctrlAltWin = {
       HotkeyModifier.control,
@@ -41,18 +41,21 @@ void main() {
     expect(w[kOpenEditorKey]!.modifiers, ctrlAltWin);
     expect(w[kOpenEditorClipboardKey]!.physicalKey, PhysicalKeyboardKey.digit0);
     expect(w[kOpenEditorClipboardKey]!.modifiers, ctrlAltWin);
-    // Record Display is wired end-to-end in S6b (Ctrl+Alt+Win+Shift+3); the
-    // other record modes stay disabled until S6e/S6f.
-    expect(w[kRecordRegionKey], isNull);
-    expect(w[kRecordWindowKey], isNull);
-    expect(w[kRecordDisplayKey]!.physicalKey, PhysicalKeyboardKey.digit3);
-    expect(w[kRecordDisplayKey]!.modifiers, {
+    // All record modes are wired on Windows (S6): Ctrl+Alt+Win+Shift+1/2/3/4.
+    const ctrlAltWinShift = {
       HotkeyModifier.control,
       HotkeyModifier.alt,
       HotkeyModifier.meta,
       HotkeyModifier.shift,
-    });
-    expect(w[kRecordLastRegionKey], isNull);
+    };
+    expect(w[kRecordRegionKey]!.physicalKey, PhysicalKeyboardKey.digit1);
+    expect(w[kRecordRegionKey]!.modifiers, ctrlAltWinShift);
+    expect(w[kRecordWindowKey]!.physicalKey, PhysicalKeyboardKey.digit2);
+    expect(w[kRecordWindowKey]!.modifiers, ctrlAltWinShift);
+    expect(w[kRecordDisplayKey]!.physicalKey, PhysicalKeyboardKey.digit3);
+    expect(w[kRecordDisplayKey]!.modifiers, ctrlAltWinShift);
+    expect(w[kRecordLastRegionKey]!.physicalKey, PhysicalKeyboardKey.digit4);
+    expect(w[kRecordLastRegionKey]!.modifiers, ctrlAltWinShift);
   });
 
   test('editor command keys are Ctrl-based on Windows (overlay editor is live)', () {
@@ -75,19 +78,19 @@ void main() {
     expect(w[kEditorCopyHexKey], kDefaultBindings[kEditorCopyHexKey]);
   });
 
-  test('availability: capture + pin + open-editor + record-display available on Windows', () {
+  test('availability: capture + pin + open-editor + all record modes available on Windows', () {
     expect(isGlobalActionAvailable(kCaptureAreaKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kPinAreaKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kPinClipboardKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kOpenEditorKey, isWindows: true), isTrue);
     expect(
         isGlobalActionAvailable(kOpenEditorClipboardKey, isWindows: true), isTrue);
-    // Record Display is wired (S6b); the other record modes are not yet.
+    // All recording modes are wired on Windows (S6).
     expect(isGlobalActionAvailable(kRecordDisplayKey, isWindows: true), isTrue);
-    expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: true), isFalse);
-    expect(isGlobalActionAvailable(kRecordWindowKey, isWindows: true), isFalse);
+    expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: true), isTrue);
+    expect(isGlobalActionAvailable(kRecordWindowKey, isWindows: true), isTrue);
     expect(
-        isGlobalActionAvailable(kRecordLastRegionKey, isWindows: true), isFalse);
+        isGlobalActionAvailable(kRecordLastRegionKey, isWindows: true), isTrue);
     // Everything is available on macOS.
     expect(isGlobalActionAvailable(kPinAreaKey, isWindows: false), isTrue);
     expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: false), isTrue);

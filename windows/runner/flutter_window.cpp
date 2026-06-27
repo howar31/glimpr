@@ -307,6 +307,11 @@ bool FlutterWindow::OnCreate() {
   // the overlay's openSettings can raise it.
   overlay_manager_ = std::make_unique<OverlayManager>(project_, GetHandle());
   capture_channel_->SetOverlayManager(overlay_manager_.get());
+  // The record-select picker lives on an overlay engine; its confirm/cancel
+  // relays to the control engine's record channel (-> Dart RecordController).
+  overlay_manager_->SetRecordRelay([this](flutter::EncodableValue args) {
+    if (record_channel_) record_channel_->RelaySelection(std::move(args));
+  });
 
   // The standalone Image Editor (its own engine + window). Warm-built on the
   // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).

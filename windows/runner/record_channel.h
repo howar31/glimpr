@@ -33,6 +33,10 @@ class RecordChannel {
   // platform thread, so it may safely emit Dart events.
   void OnNativeEvent(uint32_t code);
 
+  // Relay an overlay engine's record-select confirm/cancel to this control
+  // engine's Dart (emits onRecordSelection -> RecordController). Platform thread.
+  void RelaySelection(flutter::EncodableValue args);
+
  private:
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
