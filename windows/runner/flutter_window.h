@@ -12,6 +12,7 @@
 #include "hotkey_host.h"
 #include "overlay_manager.h"
 #include "pin_window.h"
+#include "record_channel.h"
 #include "tray_icon.h"
 #include "win32_window.h"
 
@@ -60,6 +61,9 @@ class FlutterWindow : public Win32Window {
   // Pro license blob storage (Credential Manager). Dumb read/write/clear; all
   // verification is Dart-side. Only the private/Pro build invokes it.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> license_channel_;
+  // Screen recording (glimpr/record): WGC continuous capture + Media Foundation
+  // encode. Control engine only (mirrors the macOS RecordingChannel).
+  std::unique_ptr<RecordChannel> record_channel_;
 
   // Global hotkeys + the system tray (the resident shell).
   std::unique_ptr<HotkeyHost> hotkey_host_;

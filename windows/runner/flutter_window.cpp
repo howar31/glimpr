@@ -293,6 +293,12 @@ bool FlutterWindow::OnCreate() {
         }
       });
 
+  // Screen recording (glimpr/record): WGC continuous capture -> Media Foundation
+  // sink writer. Control engine only, like the macOS RecordingChannel. The HWND
+  // is the async-event target (a background encoder failure posts WM_GLIMPR_RECORD
+  // back here so the Dart event is emitted on the platform thread).
+  record_channel_ = std::make_unique<RecordChannel>(messenger, GetHandle());
+
   // Global hotkeys (Win32 RegisterHotKey, fired via WM_HOTKEY to this window).
   hotkey_host_ = std::make_unique<HotkeyHost>(messenger, GetHandle());
 
@@ -392,6 +398,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
   if (message == WM_GLIMPR_TRAY && tray_icon_) {
     tray_icon_->OnTrayMessage(wparam, lparam);
+    return 0;
+  }
+  if (message == WM_GLIMPR_RECORD && record_channel_) {
+    // A background recorder thread marshalled an async event (e.g. an encode
+    // failure) back to the platform thread so the Dart event is safe to emit.
+    record_channel_->OnNativeEvent(static_cast<uint32_t>(wparam));
     return 0;
   }
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
