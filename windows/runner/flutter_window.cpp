@@ -52,25 +52,23 @@ std::string AppVersionString() {
   return out;
 }
 
-// Wait for THIS pid to exit, then start a fresh instance (the single-instance
-// mutex would reject an immediate relaunch). Mirrors the macOS sh-watcher.
+// Spawn a detached watcher that, after a short delay (long enough for this
+// force-exited process to die + release the single-instance mutex), starts a
+// fresh instance. cmd.exe resolves from System32 (powershell.exe lives in a
+// System32 SUBDIR that CreateProcessW does not search, so it may fail to spawn);
+// `ping` is a console-less delay; `start` launches the exe. NO goto/labels --
+// they do not work in a `cmd /c` one-liner, so the previous loop never fired.
 void RelaunchApp() {
-  DWORD pid = GetCurrentProcessId();
   std::wstring exe = ExePath();
   wchar_t cmd[1024];
-  // `ping -n 2 127.0.0.1` is a ~1s delay that works with no console; `timeout`
-  // aborts when stdin is redirected (CREATE_NO_WINDOW) and would busy-loop.
   swprintf_s(cmd,
-    L"cmd.exe /c \":loop & tasklist /FI \\\"PID eq %lu\\\" | find \\\"%lu\\\" "
-    L">nul && (ping -n 2 127.0.0.1 >nul & goto loop) & start \\\"\\\" "
-    L"\\\"%ls\\\"\"",
-    pid, pid, exe.c_str());
+    L"cmd.exe /c \"ping -n 3 127.0.0.1 >nul & start \"\" \"%ls\"\"",
+    exe.c_str());
   STARTUPINFOW si = {};
   si.cb = sizeof(si);
   PROCESS_INFORMATION pi = {};
-  if (CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE,
-                     CREATE_NO_WINDOW | DETACHED_PROCESS, nullptr, nullptr,
-                     &si, &pi)) {
+  if (CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                     nullptr, nullptr, &si, &pi)) {
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
   }
