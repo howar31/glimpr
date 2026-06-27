@@ -135,6 +135,8 @@ void RecordChannel::HandleMethodCall(
     spec.video_quality = GetString(m, "videoQuality", "high");
     spec.max_long_side = GetInt(m, "maxLongSide", 0);
     spec.max_duration_sec = GetInt(m, "maxDuration", 0);
+    spec.system_audio = GetBool(m, "systemAudio", false);
+    spec.microphone = GetBool(m, "microphone", false);
 
     Recorder::StartedInfo info;
     std::string error;

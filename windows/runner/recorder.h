@@ -37,6 +37,8 @@ class Recorder {
     std::string video_quality = "high";  // low|medium|high -> bitrate bpp tier
     int max_long_side = 0;               // px, 0 = native (mp4 cap)
     int max_duration_sec = 0;            // auto-stop after N unpaused seconds (0 = off)
+    bool system_audio = false;           // WASAPI loopback (default render endpoint)
+    bool microphone = false;             // WASAPI capture (default capture endpoint)
   };
 
   // The recorded rect reported back to Dart as onRecordStarted (display-local

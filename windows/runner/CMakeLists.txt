@@ -20,6 +20,7 @@ add_executable(${BINARY_NAME} WIN32
   "overlay_manager.cpp"
   "overlay_window.cpp"
   "pin_window.cpp"
+  "record_audio.cpp"
   "record_channel.cpp"
   "recorder.cpp"
   "tray_icon.cpp"
@@ -60,9 +61,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib" "version.lib" "advapi
 # (comdlg32).
 target_link_libraries(${BINARY_NAME} PRIVATE "gdi32.lib" "comdlg32.lib")
 # Screen recording (Phase 6 S6): Media Foundation sink writer (mfplat +
-# mfreadwrite) and the MF format/attribute GUIDs (mfuuid). WASAPI audio libs
-# (mmdevapi/avrt) are added when audio lands.
-target_link_libraries(${BINARY_NAME} PRIVATE "mfplat.lib" "mfreadwrite.lib" "mfuuid.lib")
+# mfreadwrite) and the MF format/attribute GUIDs (mfuuid). WASAPI audio capture
+# (mmdevapi) for the loopback + microphone endpoints.
+target_link_libraries(${BINARY_NAME} PRIVATE "mfplat.lib" "mfreadwrite.lib" "mfuuid.lib" "mmdevapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

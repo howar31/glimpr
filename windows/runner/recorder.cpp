@@ -1,5 +1,7 @@
 #include "recorder.h"
 
+#include "record_audio.h"
+
 #include <d3d11.h>
 #include <dxgi.h>
 #include <mfapi.h>
@@ -80,6 +82,16 @@ struct QueuedFrame {
   LONGLONG ts100ns = 0;
 };
 
+// One Media Foundation audio stream fed from a WASAPI source: its sink-writer
+// stream index, the queue of pending PCM packets (guarded by the recorder's
+// shared queue mutex), and the encoder-thread monotonic-pts guard.
+struct AudioStream {
+  DWORD mf_index = 0;
+  bool active = false;
+  std::deque<AudioPacket> queue;
+  LONGLONG last_pts = -1;
+};
+
 }  // namespace
 
 struct Recorder::Impl {
@@ -121,6 +133,16 @@ struct Recorder::Impl {
   std::deque<QueuedFrame> queue;
   std::atomic<bool> stop_requested{false};
   std::mutex readback_mutex;  // serialize the immediate-context Map across pool threads
+
+  // ---- audio (WASAPI -> AAC stream(s)) -----------------------------------
+  // The encoder thread is the SOLE sink-writer writer: WASAPI capture threads
+  // only push packets into these queues (guarded by queue_mutex), and the encoder
+  // drains video + audio in timestamp order. Two-track when both sources are on
+  // (mergeAudio is handled in a later sub-slice).
+  std::unique_ptr<WasapiCapture> sys_cap;
+  std::unique_ptr<WasapiCapture> mic_cap;
+  AudioStream audio_sys;
+  AudioStream audio_mic;
 
   // ---- async error -------------------------------------------------------
   HWND async_target = nullptr;
@@ -213,46 +235,102 @@ void Recorder::Impl::OnFrameArrived() {
 void Recorder::Impl::EncoderLoop() {
   const uint32_t in_stride = cap_w * 4;
   const DWORD in_size = in_stride * cap_h;
+  constexpr LONGLONG kMaxTs = 0x7fffffffffffffffLL;
   for (;;) {
-    QueuedFrame qf;
+    enum Pick { kNone, kVideo, kSys, kMic } pick = kNone;
+    QueuedFrame vf;
+    AudioPacket ap;
     {
       std::unique_lock<std::mutex> lock(queue_mutex);
-      queue_cv.wait(lock, [&] { return !queue.empty() || stop_requested; });
-      if (queue.empty()) {
+      queue_cv.wait(lock, [&] {
+        return !queue.empty() || !audio_sys.queue.empty() ||
+               !audio_mic.queue.empty() || stop_requested;
+      });
+      const LONGLONG vt = queue.empty() ? kMaxTs : queue.front().ts100ns;
+      const LONGLONG st =
+          audio_sys.queue.empty() ? kMaxTs : audio_sys.queue.front().qpc100ns;
+      const LONGLONG mt =
+          audio_mic.queue.empty() ? kMaxTs : audio_mic.queue.front().qpc100ns;
+      if (vt == kMaxTs && st == kMaxTs && mt == kMaxTs) {
         if (stop_requested) break;
         continue;
       }
-      qf = std::move(queue.front());
-      queue.pop_front();
+      // Write the earliest-timestamped pending sample first so no single sink
+      // stream runs far ahead of the others (global time order).
+      if (vt <= st && vt <= mt) {
+        pick = kVideo;
+        vf = std::move(queue.front());
+        queue.pop_front();
+      } else if (st <= mt) {
+        pick = kSys;
+        ap = std::move(audio_sys.queue.front());
+        audio_sys.queue.pop_front();
+      } else {
+        pick = kMic;
+        ap = std::move(audio_mic.queue.front());
+        audio_mic.queue.pop_front();
+      }
     }
 
     LONGLONG start = session_start.load();
-    if (start < 0) start = qf.ts100ns;
-    LONGLONG pts = qf.ts100ns - start - paused_accum.load();
-    if (pts < 0) pts = 0;
-    // Monotonic guard: a resume's wall-clock gap estimate can momentarily land a
-    // frame at or before the last written pts; nudge it forward so sample times
-    // stay strictly increasing.
-    if (pts <= last_written_pts) pts = last_written_pts + 1;
-    last_written_pts = pts;
+    HRESULT hr = S_OK;
 
-    winrt::com_ptr<IMFMediaBuffer> buf;
-    if (FAILED(MFCreateMemoryBuffer(in_size, buf.put()))) continue;
-    BYTE* dst = nullptr;
-    if (FAILED(buf->Lock(&dst, nullptr, nullptr))) continue;
-    // RGB32 top-down: positive stride into a top-down buffer (the input media
-    // type declares MF_MT_DEFAULT_STRIDE positive).
-    MFCopyImage(dst, in_stride, qf.bgra.data(), in_stride, in_stride, cap_h);
-    buf->Unlock();
-    buf->SetCurrentLength(in_size);
+    if (pick == kVideo) {
+      if (start < 0) start = vf.ts100ns;
+      LONGLONG pts = vf.ts100ns - start - paused_accum.load();
+      if (pts < 0) pts = 0;
+      // Monotonic guard: a resume's wall-clock gap estimate can momentarily land
+      // a frame at/before the last written pts; nudge it forward.
+      if (pts <= last_written_pts) pts = last_written_pts + 1;
+      last_written_pts = pts;
 
-    winrt::com_ptr<IMFSample> sample;
-    if (FAILED(MFCreateSample(sample.put()))) continue;
-    sample->AddBuffer(buf.get());
-    sample->SetSampleTime(pts);
-    sample->SetSampleDuration(frame_interval);
+      winrt::com_ptr<IMFMediaBuffer> buf;
+      if (FAILED(MFCreateMemoryBuffer(in_size, buf.put()))) continue;
+      BYTE* dst = nullptr;
+      if (FAILED(buf->Lock(&dst, nullptr, nullptr))) continue;
+      // RGB32 top-down: positive stride into a top-down buffer (the input media
+      // type declares MF_MT_DEFAULT_STRIDE positive).
+      MFCopyImage(dst, in_stride, vf.bgra.data(), in_stride, in_stride, cap_h);
+      buf->Unlock();
+      buf->SetCurrentLength(in_size);
 
-    HRESULT hr = writer->WriteSample(video_stream, sample.get());
+      winrt::com_ptr<IMFSample> sample;
+      if (FAILED(MFCreateSample(sample.put()))) continue;
+      sample->AddBuffer(buf.get());
+      sample->SetSampleTime(pts);
+      sample->SetSampleDuration(frame_interval);
+      hr = writer->WriteSample(video_stream, sample.get());
+    } else {
+      AudioStream& as = (pick == kSys) ? audio_sys : audio_mic;
+      if (start < 0) start = ap.qpc100ns;
+      LONGLONG pts = ap.qpc100ns - start - paused_accum.load();
+      if (pts < 0) pts = 0;
+      if (pts <= as.last_pts) pts = as.last_pts + 1;
+      as.last_pts = pts;
+
+      const DWORD bytes =
+          static_cast<DWORD>(ap.samples.size() * sizeof(int16_t));
+      const LONGLONG frames =
+          static_cast<LONGLONG>(ap.samples.size() / WasapiCapture::kChannels);
+      const LONGLONG dur =
+          frames * 10000000LL / static_cast<LONGLONG>(WasapiCapture::kSampleRate);
+
+      winrt::com_ptr<IMFMediaBuffer> buf;
+      if (FAILED(MFCreateMemoryBuffer(bytes, buf.put()))) continue;
+      BYTE* dst = nullptr;
+      if (FAILED(buf->Lock(&dst, nullptr, nullptr))) continue;
+      std::memcpy(dst, ap.samples.data(), bytes);
+      buf->Unlock();
+      buf->SetCurrentLength(bytes);
+
+      winrt::com_ptr<IMFSample> sample;
+      if (FAILED(MFCreateSample(sample.put()))) continue;
+      sample->AddBuffer(buf.get());
+      sample->SetSampleTime(pts);
+      sample->SetSampleDuration(dur);
+      hr = writer->WriteSample(as.mf_index, sample.get());
+    }
+
     if (FAILED(hr)) {
       {
         std::lock_guard<std::mutex> lock(error_mutex);
@@ -290,7 +368,18 @@ void Recorder::Impl::AutoStopLoop() {
 }
 
 void Recorder::Impl::Cleanup() {
-  // Stop the capture first so no more frames are enqueued.
+  // Stop the audio sources first so no more packets are enqueued.
+  if (sys_cap) {
+    sys_cap->Stop();
+    sys_cap.reset();
+  }
+  if (mic_cap) {
+    mic_cap->Stop();
+    mic_cap.reset();
+  }
+  audio_sys.active = false;
+  audio_mic.active = false;
+  // Stop the video capture so no more frames are enqueued.
   if (frame_token) {
     try {
       pool.FrameArrived(frame_token);
@@ -357,6 +446,15 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   {
     std::lock_guard<std::mutex> lock(impl_->error_mutex);
     impl_->async_error.clear();
+  }
+  impl_->audio_sys.active = false;
+  impl_->audio_sys.last_pts = -1;
+  impl_->audio_mic.active = false;
+  impl_->audio_mic.last_pts = -1;
+  {
+    std::lock_guard<std::mutex> lock(impl_->queue_mutex);
+    impl_->audio_sys.queue.clear();
+    impl_->audio_mic.queue.clear();
   }
 
   // ---- resolve the capture source (S6a: display only) --------------------
@@ -443,6 +541,42 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   const int fps = (std::max)(1, spec.fps);
   impl_->frame_interval = 10000000LL / fps;
 
+  // ---- WASAPI audio sources ----------------------------------------------
+  // Started BEFORE the writer's audio streams so only sources that actually open
+  // get an mp4 audio track (no empty-track finalize). Packets accumulate in the
+  // bounded queues until the encoder thread starts draining them; while paused
+  // they are dropped (the span is excluded). Two separate tracks when both are
+  // on (mergeAudio is handled in a later sub-slice).
+  Impl* impl = impl_.get();
+  if (spec.system_audio) {
+    impl_->sys_cap = std::make_unique<WasapiCapture>();
+    impl_->audio_sys.active = impl_->sys_cap->Start(
+        WasapiCapture::Kind::kLoopback, [impl](const AudioPacket& p) {
+          if (impl->paused.load()) return;
+          {
+            std::lock_guard<std::mutex> lock(impl->queue_mutex);
+            if (impl->audio_sys.queue.size() < 128)
+              impl->audio_sys.queue.push_back(p);
+          }
+          impl->queue_cv.notify_one();
+        });
+    if (!impl_->audio_sys.active) impl_->sys_cap.reset();
+  }
+  if (spec.microphone) {
+    impl_->mic_cap = std::make_unique<WasapiCapture>();
+    impl_->audio_mic.active = impl_->mic_cap->Start(
+        WasapiCapture::Kind::kMicrophone, [impl](const AudioPacket& p) {
+          if (impl->paused.load()) return;
+          {
+            std::lock_guard<std::mutex> lock(impl->queue_mutex);
+            if (impl->audio_mic.queue.size() < 128)
+              impl->audio_mic.queue.push_back(p);
+          }
+          impl->queue_cv.notify_one();
+        });
+    if (!impl_->audio_mic.active) impl_->mic_cap.reset();
+  }
+
   // ---- Media Foundation sink writer --------------------------------------
   if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) return fail("MFStartup");
   impl_->mf_started = true;
@@ -499,11 +633,54 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     return fail("SetInputMediaType");
   }
 
+  // Add an AAC audio stream (output) fed by 48k/stereo/s16 PCM (input) for each
+  // active WASAPI source. The sink writer inserts the AAC encoder MFT.
+  auto add_audio = [&](DWORD* out_index) -> bool {
+    winrt::com_ptr<IMFMediaType> aout;
+    if (FAILED(MFCreateMediaType(aout.put()))) return false;
+    aout->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+    aout->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
+    aout->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+    aout->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, WasapiCapture::kSampleRate);
+    aout->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, WasapiCapture::kChannels);
+    aout->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 16000);  // ~128 kbps
+    aout->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0);
+    DWORD idx = 0;
+    if (FAILED(writer->AddStream(aout.get(), &idx))) return false;
+
+    winrt::com_ptr<IMFMediaType> ain;
+    if (FAILED(MFCreateMediaType(ain.put()))) return false;
+    ain->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+    ain->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
+    ain->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+    ain->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, WasapiCapture::kSampleRate);
+    ain->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, WasapiCapture::kChannels);
+    ain->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, WasapiCapture::kChannels * 2);
+    ain->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
+                   WasapiCapture::kSampleRate * WasapiCapture::kChannels * 2);
+    if (FAILED(writer->SetInputMediaType(idx, ain.get(), nullptr))) return false;
+    *out_index = idx;
+    return true;
+  };
+  if (impl_->audio_sys.active && !add_audio(&impl_->audio_sys.mf_index)) {
+    impl_->audio_sys.active = false;
+    if (impl_->sys_cap) {
+      impl_->sys_cap->Stop();
+      impl_->sys_cap.reset();
+    }
+  }
+  if (impl_->audio_mic.active && !add_audio(&impl_->audio_mic.mf_index)) {
+    impl_->audio_mic.active = false;
+    if (impl_->mic_cap) {
+      impl_->mic_cap->Stop();
+      impl_->mic_cap.reset();
+    }
+  }
+
   if (FAILED(writer->BeginWriting())) return fail("BeginWriting");
   impl_->writer = writer;
 
   // ---- arm the frame callback + start the encoder + the capture ---------
-  Impl* impl = impl_.get();
   impl_->frame_token = impl_->pool.FrameArrived(
       [impl](auto&&, auto&&) { impl->OnFrameArrived(); });
   impl_->encoder = std::thread([impl] { impl->EncoderLoop(); });
