@@ -57,6 +57,9 @@ class RecordChrome {
   void Render();
   void RenderCountdown();
   void FinishCountdown(bool done);  // true = reached 0, false = cancelled
+  // Draw the recorded-rect border (rounded red edge + glow + viewfinder corner
+  // brackets) into a click-through overlay window, faithful to macOS.
+  void ShowBorder(int rx, int ry, int rw, int rh);  // recorded rect, physical px
   // Blit a finished D2D target bitmap to a layered window at (x,y).
   void PresentLayered(HWND hwnd, ID2D1Bitmap1* target, int x, int y, UINT W,
                       UINT H);

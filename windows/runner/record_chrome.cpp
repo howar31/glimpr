@@ -1,5 +1,6 @@
 #include "record_chrome.h"
 
+#include <d2d1effects.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #include <shellscalingapi.h>
@@ -24,6 +25,13 @@ namespace {
 using winrt::com_ptr;
 
 constexpr wchar_t kClass[] = L"GlimprRecordChrome";
+
+// CLSID_D2D1GaussianBlur is declared but not defined by the SDK import libs
+// (same as CLSID_D2D1Shadow in decoration.cpp) -- define the GUID value locally
+// under our own name to avoid the unresolved-external link error.
+const GUID kCLSID_GaussianBlur = {
+    0x1feb6d69, 0x2fe6, 0x4ac9, {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
+
 constexpr UINT_PTR kTickTimer = 0xC001;
 constexpr UINT kTickMs = 500;
 constexpr UINT_PTR kCdTimer = 0xC002;
@@ -47,23 +55,28 @@ double MonScale(HMONITOR mon) {
 // A layered, click-through, top-most, capture-excluded overlay at [x,y,w,h]
 // (physical px), its 32bpp top-down content filled by |fill| (premultiplied
 // BGRA). Used for the recorded-rect border + the other-display scrims.
+constexpr wchar_t kOverlayClass[] = L"GlimprRecordOverlay";
+
+// Register the shared click-through overlay window class once (border + scrims).
+void EnsureOverlayClass() {
+  static bool reg = false;
+  if (reg) return;
+  WNDCLASSW wc{};
+  wc.lpfnWndProc = DefWindowProcW;
+  wc.hInstance = GetModuleHandleW(nullptr);
+  wc.lpszClassName = kOverlayClass;
+  RegisterClassW(&wc);
+  reg = true;
+}
+
 HWND CreateFilledOverlay(int x, int y, int w, int h,
                          const std::function<void(uint8_t*, int, int)>& fill) {
   if (w <= 0 || h <= 0) return nullptr;
-  static bool reg = false;
-  static const wchar_t kOv[] = L"GlimprRecordOverlay";
-  if (!reg) {
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = DefWindowProcW;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = kOv;
-    RegisterClassW(&wc);
-    reg = true;
-  }
+  EnsureOverlayClass();
   HWND hwnd = CreateWindowExW(
       WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
           WS_EX_NOACTIVATE,
-      kOv, L"", WS_POPUP, x, y, w, h, nullptr, nullptr,
+      kOverlayClass, L"", WS_POPUP, x, y, w, h, nullptr, nullptr,
       GetModuleHandleW(nullptr), nullptr);
   if (!hwnd) return nullptr;
   SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
@@ -280,24 +293,9 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   Render();
   SetTimer(hwnd_, kTickTimer, kTickMs, nullptr);
 
-  // Red outline around the recorded rect (region / window modes).
-  if (border) {
-    const int t = (std::max)(2, static_cast<int>(std::lround(3 * scale_)));
-    auto border_fill = [t](uint8_t* p, int W, int H) {
-      for (int yy = 0; yy < H; ++yy) {
-        for (int xx = 0; xx < W; ++xx) {
-          if (xx < t || xx >= W - t || yy < t || yy >= H - t) {
-            uint8_t* q = p + (static_cast<size_t>(yy) * W + xx) * 4;
-            q[0] = 0x3A;  // B  (recording red #FF453A, premultiplied A=255)
-            q[1] = 0x45;  // G
-            q[2] = 0xFF;  // R
-            q[3] = 0xFF;  // A
-          }
-        }
-      }
-    };
-    border_hwnd_ = CreateFilledOverlay(tx, ty, tw, th, border_fill);
-  }
+  // Red rounded edge + glow + viewfinder corner brackets around the recorded
+  // rect (region / window modes), faithful to the macOS RecordingFrameView.
+  if (border) ShowBorder(tx, ty, tw, th);
 
   // Dim every OTHER display (40% black premultiplied).
   if (scrim) {
@@ -452,6 +450,103 @@ void RecordChrome::FinishCountdown(bool done) {
     if (done_cb) done_cb();
   } else if (cancel_cb) {
     cancel_cb();
+  }
+}
+
+void RecordChrome::ShowBorder(int rx, int ry, int rw, int rh) {
+  if (!dc_ || !factory_ || rw <= 0 || rh <= 0) return;
+  const int M = (std::max)(8, static_cast<int>(std::lround(20 * scale_)));
+  const int bx = rx - M, by = ry - M;
+  const UINT W = static_cast<UINT>(rw + 2 * M), H = static_cast<UINT>(rh + 2 * M);
+
+  EnsureOverlayClass();
+  border_hwnd_ = CreateWindowExW(
+      WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+          WS_EX_NOACTIVATE,
+      kOverlayClass, L"", WS_POPUP, bx, by, static_cast<int>(W),
+      static_cast<int>(H), nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+  if (!border_hwnd_) return;
+  SetWindowDisplayAffinity(border_hwnd_, WDA_EXCLUDEFROMCAPTURE);
+  ShowWindow(border_hwnd_, SW_SHOWNOACTIVATE);
+
+  auto S = [this](double v) { return static_cast<float>(v * scale_); };
+  const float fM = static_cast<float>(M);
+  const float Lx = fM, Ty = fM, Rx = fM + rw, By = fM + rh;
+  const float rad = S(3);
+  const D2D1_ROUNDED_RECT rr =
+      D2D1::RoundedRect(D2D1::RectF(Lx, Ty, Rx, By), rad, rad);
+  const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                    D2D1_ALPHA_MODE_PREMULTIPLIED);
+  const auto tp = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf);
+  try {
+    // Pass A: the glow source -- the rounded edge at the shadow alpha (0.18).
+    winrt::com_ptr<ID2D1Bitmap1> glow_src;
+    winrt::check_hresult(
+        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, tp, glow_src.put()));
+    winrt::com_ptr<ID2D1SolidColorBrush> b;
+    dc_->SetTarget(glow_src.get());
+    dc_->BeginDraw();
+    dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
+    dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 0.18f), b.put());
+    dc_->DrawRoundedRectangle(rr, b.get(), S(1));
+    winrt::check_hresult(dc_->EndDraw());
+
+    // Pass B: blurred glow + the sharp 1px edge (0.55) + viewfinder brackets.
+    winrt::com_ptr<ID2D1Bitmap1> target;
+    winrt::check_hresult(
+        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, tp, target.put()));
+    dc_->SetTarget(target.get());
+    dc_->BeginDraw();
+    dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
+    winrt::com_ptr<ID2D1Effect> blur;
+    if (SUCCEEDED(dc_->CreateEffect(kCLSID_GaussianBlur, blur.put()))) {
+      blur->SetInput(0, glow_src.get());
+      blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+                     static_cast<float>(6.0 * scale_));
+      dc_->DrawImage(blur.get());
+    }
+    winrt::com_ptr<ID2D1SolidColorBrush> edge;
+    dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 0.55f), edge.put());
+    dc_->DrawRoundedRectangle(rr, edge.get(), S(1));
+
+    // Viewfinder corner brackets: 22pt arms, 3pt stroke, round join/caps (the
+    // round join gives the rounded outer corner the macOS bracket has).
+    const float arm = S(22);
+    D2D1_STROKE_STYLE_PROPERTIES sp{};
+    sp.startCap = D2D1_CAP_STYLE_ROUND;
+    sp.endCap = D2D1_CAP_STYLE_ROUND;
+    sp.dashCap = D2D1_CAP_STYLE_ROUND;
+    sp.lineJoin = D2D1_LINE_JOIN_ROUND;
+    sp.miterLimit = 10.0f;
+    sp.dashStyle = D2D1_DASH_STYLE_SOLID;
+    winrt::com_ptr<ID2D1StrokeStyle> ss;
+    factory_->CreateStrokeStyle(sp, nullptr, 0, ss.put());
+    winrt::com_ptr<ID2D1PathGeometry> geom;
+    winrt::com_ptr<ID2D1SolidColorBrush> rb;
+    dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 1.0f), rb.put());
+    if (SUCCEEDED(factory_->CreatePathGeometry(geom.put()))) {
+      winrt::com_ptr<ID2D1GeometrySink> sink;
+      if (SUCCEEDED(geom->Open(sink.put()))) {
+        auto corner = [&](float ax, float ay, float cx, float cy, float ex,
+                          float ey) {
+          sink->BeginFigure(D2D1::Point2F(ax, ay), D2D1_FIGURE_BEGIN_HOLLOW);
+          sink->AddLine(D2D1::Point2F(cx, cy));
+          sink->AddLine(D2D1::Point2F(ex, ey));
+          sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        };
+        corner(Lx + arm, Ty, Lx, Ty, Lx, Ty + arm);  // top-left
+        corner(Rx - arm, Ty, Rx, Ty, Rx, Ty + arm);  // top-right
+        corner(Rx, By - arm, Rx, By, Rx - arm, By);  // bottom-right
+        corner(Lx, By - arm, Lx, By, Lx + arm, By);  // bottom-left
+        sink->Close();
+        dc_->DrawGeometry(geom.get(), rb.get(), S(3), ss.get());
+      }
+    }
+    winrt::check_hresult(dc_->EndDraw());
+    PresentLayered(border_hwnd_, target.get(), bx, by, W, H);
+    dc_->SetTarget(nullptr);
+  } catch (...) {
+    if (dc_) dc_->SetTarget(nullptr);
   }
 }
 
