@@ -200,7 +200,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFlowShowInFinder => '顯示於 Finder';
 
   @override
+  String get settingsFlowShowInFinderWin => '顯示於檔案總管';
+
+  @override
   String get settingsFlowShowInFinderHint => '在 Finder 中顯示已儲存的檔案';
+
+  @override
+  String get settingsFlowShowInFinderHintWin => '在檔案總管中顯示已儲存的檔案';
 
   @override
   String get settingsFlowOpenInEditor => '以圖片編輯器開啟';
@@ -1245,6 +1251,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorGalleryMoreTooltip => '在 Finder 中開啟儲存資料夾';
 
   @override
+  String get editorGalleryMoreTooltipWin => '在檔案總管中開啟儲存資料夾';
+
+  @override
   String get editorGalleryMoreCaption => '更多…';
 
   @override
@@ -1267,6 +1276,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editorContextShowInFinder => '顯示於 Finder';
+
+  @override
+  String get editorContextShowInFinderWin => '顯示於檔案總管';
 
   @override
   String get editorContextRemoveFromRecent => '從最近項目移除';
@@ -1328,6 +1340,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorToastCopyPathFailed => '複製路徑失敗';
 
   @override
+  String get editorToastRevealFailedWin => '無法在檔案總管中顯示';
+
+  @override
   String get editorToastRevealFailed => '無法在 Finder 中顯示';
 
   @override
@@ -1365,6 +1380,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editorMenuShowInFinder => '顯示於 Finder';
+
+  @override
+  String get editorMenuShowInFinderWin => '顯示於檔案總管';
 
   @override
   String get editorMenuShare => '分享…';

@@ -239,9 +239,17 @@
   "@settingsFlowShowInFinder": {
     "description": "Settings > Workflow: show-in-Finder flow action row title"
   },
+  "settingsFlowShowInFinderWin": "Show in Explorer",
+  "@settingsFlowShowInFinderWin": {
+    "description": "Windows variant of settingsFlowShowInFinder (File Explorer)"
+  },
   "settingsFlowShowInFinderHint": "Reveal the saved file in Finder",
   "@settingsFlowShowInFinderHint": {
     "description": "Settings > Workflow: show-in-Finder flow action hint (save is enabled)"
+  },
+  "settingsFlowShowInFinderHintWin": "Reveal the saved file in Explorer",
+  "@settingsFlowShowInFinderHintWin": {
+    "description": "Windows variant of settingsFlowShowInFinderHint"
   },
   "settingsFlowOpenInEditor": "Open in Image Editor",
   "@settingsFlowOpenInEditor": {
@@ -1488,6 +1496,10 @@
   "@editorGalleryMoreTooltip": {
     "description": "Image Editor gallery: tooltip on the trailing More tile"
   },
+  "editorGalleryMoreTooltipWin": "Open the save folder in Explorer",
+  "@editorGalleryMoreTooltipWin": {
+    "description": "Windows variant of editorGalleryMoreTooltip"
+  },
   "editorGalleryMoreCaption": "More…",
   "@editorGalleryMoreCaption": {
     "description": "Image Editor gallery: caption on the trailing More tile"
@@ -1519,6 +1531,10 @@
   "editorContextShowInFinder": "Show in Finder",
   "@editorContextShowInFinder": {
     "description": "Image Editor gallery context menu: reveal the file in Finder"
+  },
+  "editorContextShowInFinderWin": "Show in Explorer",
+  "@editorContextShowInFinderWin": {
+    "description": "Windows variant of editorContextShowInFinder"
   },
   "editorContextRemoveFromRecent": "Remove from Recent",
   "@editorContextRemoveFromRecent": {
@@ -1608,6 +1624,10 @@
   "@editorToastCopyPathFailed": {
     "description": "Image Editor Done flow toast: copy-path leg failed"
   },
+  "editorToastRevealFailedWin": "Reveal failed",
+  "@editorToastRevealFailedWin": {
+    "description": "Windows variant of editorToastRevealFailed (Explorer wording)"
+  },
   "editorToastRevealFailed": "Reveal failed",
   "@editorToastRevealFailed": {
     "description": "Image Editor Done flow toast: show-in-Finder leg failed"
@@ -1659,6 +1679,10 @@
   "editorMenuShowInFinder": "Show in Finder",
   "@editorMenuShowInFinder": {
     "description": "Image Editor toolbar chevron menu: show in Finder one-off action"
+  },
+  "editorMenuShowInFinderWin": "Show in Explorer",
+  "@editorMenuShowInFinderWin": {
+    "description": "Windows variant of editorMenuShowInFinder"
   },
   "editorMenuShare": "Share…",
   "@editorMenuShare": {

@@ -647,7 +647,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       if (actions.contains(FlowAction.copyPath))
         r.errors.containsKey('copyPath') ? _l.editorToastCopyPathFailed : _l.editorToastPathCopied,
       if (actions.contains(FlowAction.showInFinder))
-        if (r.errors.containsKey('showInFinder')) _l.editorToastRevealFailed,
+        if (r.errors.containsKey('showInFinder'))
+          Platform.isWindows
+              ? _l.editorToastRevealFailedWin
+              : _l.editorToastRevealFailed,
       if (actions.contains(FlowAction.shareSheet))
         if (r.errors.containsKey('shareSheet')) _l.editorToastShareFailed,
       if (actions.contains(FlowAction.pin))
@@ -1243,7 +1246,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               _oneOff(t, _l.editorMenuSaveOnly, Icons.save_outlined, {FlowAction.save}),
               _oneOff(t, _l.editorMenuCopyFilePath, Icons.link,
                   {FlowAction.save, FlowAction.copyPath}),
-              _oneOff(t, _l.editorMenuShowInFinder, Icons.folder_outlined,
+              _oneOff(
+                  t,
+                  Platform.isWindows
+                      ? _l.editorMenuShowInFinderWin
+                      : _l.editorMenuShowInFinder,
+                  Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
               // Share is macOS-only (no system share surface wired on Windows v1).
               if (!Platform.isWindows)
@@ -1336,7 +1344,9 @@ class _MoreTileState extends State<_MoreTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: l.editorGalleryMoreTooltip,
+          message: Platform.isWindows
+              ? l.editorGalleryMoreTooltipWin
+              : l.editorGalleryMoreTooltip,
           waitDuration: const Duration(milliseconds: 400),
           verticalOffset: box.maxHeight / 2 + 8,
           child: AnimatedContainer(
@@ -1797,7 +1807,13 @@ class _RecentTileState extends State<_RecentTile> {
         if (!Platform.isWindows)
           _menuItem(t, l.editorContextShare, Icons.ios_share, widget.onShare),
         _menuItem(t, l.editorContextPinToScreen, Icons.push_pin_outlined, widget.onPin),
-        _menuItem(t, l.editorContextShowInFinder, Icons.folder_outlined, widget.onReveal),
+        _menuItem(
+            t,
+            Platform.isWindows
+                ? l.editorContextShowInFinderWin
+                : l.editorContextShowInFinder,
+            Icons.folder_outlined,
+            widget.onReveal),
         const PopupMenuDivider(height: 8),
         _menuItem(
             t, l.editorContextRemoveFromRecent, Icons.close_outlined, widget.onRemove),

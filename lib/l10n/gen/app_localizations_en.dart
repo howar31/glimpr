@@ -207,7 +207,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFlowShowInFinder => 'Show in Finder';
 
   @override
+  String get settingsFlowShowInFinderWin => 'Show in Explorer';
+
+  @override
   String get settingsFlowShowInFinderHint => 'Reveal the saved file in Finder';
+
+  @override
+  String get settingsFlowShowInFinderHintWin =>
+      'Reveal the saved file in Explorer';
 
   @override
   String get settingsFlowOpenInEditor => 'Open in Image Editor';
@@ -1298,6 +1305,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorGalleryMoreTooltip => 'Open the save folder in Finder';
 
   @override
+  String get editorGalleryMoreTooltipWin => 'Open the save folder in Explorer';
+
+  @override
   String get editorGalleryMoreCaption => 'More…';
 
   @override
@@ -1320,6 +1330,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorContextShowInFinder => 'Show in Finder';
+
+  @override
+  String get editorContextShowInFinderWin => 'Show in Explorer';
 
   @override
   String get editorContextRemoveFromRecent => 'Remove from Recent';
@@ -1382,6 +1395,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorToastCopyPathFailed => 'Copy path failed';
 
   @override
+  String get editorToastRevealFailedWin => 'Reveal failed';
+
+  @override
   String get editorToastRevealFailed => 'Reveal failed';
 
   @override
@@ -1421,6 +1437,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorMenuShowInFinder => 'Show in Finder';
+
+  @override
+  String get editorMenuShowInFinderWin => 'Show in Explorer';
 
   @override
   String get editorMenuShare => 'Share…';

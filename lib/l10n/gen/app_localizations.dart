@@ -452,11 +452,23 @@ abstract class AppLocalizations {
   /// **'Show in Finder'**
   String get settingsFlowShowInFinder;
 
+  /// Windows variant of settingsFlowShowInFinder (File Explorer)
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Explorer'**
+  String get settingsFlowShowInFinderWin;
+
   /// Settings > Workflow: show-in-Finder flow action hint (save is enabled)
   ///
   /// In en, this message translates to:
   /// **'Reveal the saved file in Finder'**
   String get settingsFlowShowInFinderHint;
+
+  /// Windows variant of settingsFlowShowInFinderHint
+  ///
+  /// In en, this message translates to:
+  /// **'Reveal the saved file in Explorer'**
+  String get settingsFlowShowInFinderHintWin;
 
   /// Settings > Workflow: open-in-editor flow action row title
   ///
@@ -2486,6 +2498,12 @@ abstract class AppLocalizations {
   /// **'Open the save folder in Finder'**
   String get editorGalleryMoreTooltip;
 
+  /// Windows variant of editorGalleryMoreTooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Open the save folder in Explorer'**
+  String get editorGalleryMoreTooltipWin;
+
   /// Image Editor gallery: caption on the trailing More tile
   ///
   /// In en, this message translates to:
@@ -2533,6 +2551,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show in Finder'**
   String get editorContextShowInFinder;
+
+  /// Windows variant of editorContextShowInFinder
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Explorer'**
+  String get editorContextShowInFinderWin;
 
   /// Image Editor gallery context menu: remove this entry from the recent list
   ///
@@ -2636,6 +2660,12 @@ abstract class AppLocalizations {
   /// **'Copy path failed'**
   String get editorToastCopyPathFailed;
 
+  /// Windows variant of editorToastRevealFailed (Explorer wording)
+  ///
+  /// In en, this message translates to:
+  /// **'Reveal failed'**
+  String get editorToastRevealFailedWin;
+
   /// Image Editor Done flow toast: show-in-Finder leg failed
   ///
   /// In en, this message translates to:
@@ -2713,6 +2743,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show in Finder'**
   String get editorMenuShowInFinder;
+
+  /// Windows variant of editorMenuShowInFinder
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Explorer'**
+  String get editorMenuShowInFinderWin;
 
   /// Image Editor toolbar chevron menu: share one-off action
   ///

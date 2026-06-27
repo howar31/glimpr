@@ -437,9 +437,13 @@ class _SettingsAppState extends State<SettingsApp>
       ),
       SettingRow(
         divider: true,
-        title: _l.settingsFlowShowInFinder,
+        title: Platform.isWindows
+            ? _l.settingsFlowShowInFinderWin
+            : _l.settingsFlowShowInFinder,
         hint: hasSave
-            ? _l.settingsFlowShowInFinderHint
+            ? (Platform.isWindows
+                ? _l.settingsFlowShowInFinderHintWin
+                : _l.settingsFlowShowInFinderHint)
             : _l.settingsFlowCopyFilePathNeedsSave,
         trailing: toggle(FlowAction.showInFinder, enabled: hasSave),
       ),
@@ -1517,8 +1521,12 @@ class _SettingsAppState extends State<SettingsApp>
           ),
           SettingRow(
             divider: true,
-            title: _l.settingsFlowShowInFinder,
-            hint: _l.settingsFlowShowInFinderHint,
+            title: Platform.isWindows
+                ? _l.settingsFlowShowInFinderWin
+                : _l.settingsFlowShowInFinder,
+            hint: Platform.isWindows
+                ? _l.settingsFlowShowInFinderHintWin
+                : _l.settingsFlowShowInFinderHint,
             trailing: _recordingFlowToggle(FlowAction.showInFinder),
           ),
           SettingRow(
