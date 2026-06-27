@@ -786,21 +786,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         // opaque checkerboard worktable; the title bar + landing read as
         // glass chrome over the vibrancy, matching the Settings window.
         //
-        // Windows: an ancestor Ctrl+W closes the editor (macOS uses the native
-        // ⌘W window intercept). canRequestFocus:false so it never steals focus;
-        // key events bubble up here from the focused canvas/landing, which
-        // ignore Ctrl+W, so this is a safe last-resort handler in both states.
-        child: Focus(
-          canRequestFocus: false,
-          onKeyEvent: (node, e) {
-            if (Platform.isWindows &&
-                e is KeyDownEvent &&
-                HardwareKeyboard.instance.isControlPressed &&
-                e.logicalKey == LogicalKeyboardKey.keyW) {
-              _requestClose();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
+        // Windows: Ctrl+W closes the editor (macOS uses the native ⌘W window
+        // intercept). Same robust mechanism as the Settings window's Ctrl+W
+        // (CallbackShortcuts over the focused subtree), not a raw Focus handler.
+        child: CallbackShortcuts(
+          bindings: {
+            if (Platform.isWindows)
+              const SingleActivator(LogicalKeyboardKey.keyW, control: true):
+                  () => _requestClose(),
           },
           child: Scaffold(
           backgroundColor: Colors.transparent,

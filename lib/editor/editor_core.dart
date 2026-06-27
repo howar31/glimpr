@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
@@ -420,7 +421,12 @@ class _EditorCoreState extends State<EditorCore> {
       return;
     }
     if (!_interactive || e is! PointerScrollEvent) return;
-    if (HardwareKeyboard.instance.isMetaPressed) {
+    // Cmd+scroll zooms on macOS; on Windows meta is the Win key, so the
+    // conventional zoom modifier is Ctrl.
+    final zoomPressed = Platform.isWindows
+        ? HardwareKeyboard.instance.isControlPressed
+        : HardwareKeyboard.instance.isMetaPressed;
+    if (zoomPressed) {
       final ns = (_viewport.scale * (1 - e.scrollDelta.dy * 0.0015))
           .clamp(_kMinScale, _kMaxScale);
       setState(() => _viewport = _viewport.zoomedAround(e.localPosition, ns));
