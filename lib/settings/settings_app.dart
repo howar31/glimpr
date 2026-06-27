@@ -2268,27 +2268,25 @@ class _SettingsAppState extends State<SettingsApp>
       ]),
       _sectionNote(t, _l.settingsShortcutsCaptureNote),
       const SizedBox(height: 24),
-      // Recording shortcuts: macOS only for now (Windows recording = S6).
-      if (!Platform.isWindows) ...[
-        SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
-        GlassCard.rows([
-          for (final a in kGlobalActions)
-            if (kRecordActionKeys.contains(a.actionKey))
-              SettingRow(
-                title: globalActionLabel(_l, a.actionKey),
-                hint: globalActionHint(_l, a.actionKey),
-                tag: _scopeChip(_l.scopeGlobal),
-                warning: _bindingWarning(a.actionKey, true, dupes),
-                trailing: _bindingRow(
-                  t: t,
-                  actionKey: a.actionKey,
-                  requireModifier: true,
-                ),
+      // Recording shortcuts (all four modes are wired on macOS + Windows).
+      SectionLabel(_l.settingsSectionRecording, icon: Icons.videocam_outlined),
+      GlassCard.rows([
+        for (final a in kGlobalActions)
+          if (kRecordActionKeys.contains(a.actionKey))
+            SettingRow(
+              title: globalActionLabel(_l, a.actionKey),
+              hint: globalActionHint(_l, a.actionKey),
+              tag: _scopeChip(_l.scopeGlobal),
+              warning: _bindingWarning(a.actionKey, true, dupes),
+              trailing: _bindingRow(
+                t: t,
+                actionKey: a.actionKey,
+                requireModifier: true,
               ),
-        ]),
-        _sectionNote(t, _l.settingsShortcutsRecordingNote),
-        const SizedBox(height: 24),
-      ],
+            ),
+      ]),
+      _sectionNote(t, _l.settingsShortcutsRecordingNote),
+      const SizedBox(height: 24),
       // Tools — tool-selection keys (rebindable), in toolbar order.
       SectionLabel(_l.settingsShortcutsTools, icon: Icons.palette_outlined),
       GlassCard.rows([
