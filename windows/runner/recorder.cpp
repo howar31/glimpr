@@ -100,10 +100,19 @@ struct Recorder::Impl {
   uint32_t out_w = 0, out_h = 0;  // encoded (possibly capped) pixels
   LONGLONG frame_interval = 0;    // 100ns per target frame (fps throttle/dur)
 
-  // ---- timeline ----------------------------------------------------------
+  // ---- timeline / pause --------------------------------------------------
   std::atomic<LONGLONG> session_start{-1};  // first frame ts (100ns)
-  LONGLONG paused_accum = 0;                // S6b; 0 in S6a
-  LONGLONG last_enqueued = -1;              // throttle gate
+  std::atomic<LONGLONG> paused_accum{0};    // excluded span (100ns), grown at resume
+  LONGLONG last_enqueued = -1;              // throttle gate (capture thread)
+  LONGLONG last_written_pts = -1;           // monotonic guard (encoder thread)
+  std::atomic<bool> paused{false};
+  // Wall-clock pause/auto-stop bookkeeping (robust to a static screen that stops
+  // delivering frames): paused spans are measured in wall time and applied to the
+  // frame-ts timeline (WGC SystemRelativeTime is QPC-based, ~= wall time).
+  ULONGLONG start_wall_ms = 0;
+  ULONGLONG pause_wall_start = 0;
+  int max_duration_sec = 0;
+  std::thread autostop;
 
   // ---- worker / queue ----------------------------------------------------
   std::thread encoder;
@@ -123,6 +132,7 @@ struct Recorder::Impl {
   std::wstring output_path_w;
 
   void EncoderLoop();
+  void AutoStopLoop();
   void OnFrameArrived();
   void Cleanup();
 };
@@ -147,6 +157,10 @@ void Recorder::Impl::OnFrameArrived() {
     auto frame = pool.TryGetNextFrame();
     if (!frame) return;
     ts = frame.SystemRelativeTime().count();
+
+    // While paused, still drain the frame (releasing it back to the pool) but do
+    // not read it back or enqueue it -- the paused span is excluded from output.
+    if (paused.load()) return;
 
     // Throttle to the target fps (VFR keeps the real timestamps; this only caps
     // the rate so a 144Hz monitor does not flood the encoder + file).
@@ -214,8 +228,13 @@ void Recorder::Impl::EncoderLoop() {
 
     LONGLONG start = session_start.load();
     if (start < 0) start = qf.ts100ns;
-    LONGLONG pts = qf.ts100ns - start - paused_accum;
+    LONGLONG pts = qf.ts100ns - start - paused_accum.load();
     if (pts < 0) pts = 0;
+    // Monotonic guard: a resume's wall-clock gap estimate can momentarily land a
+    // frame at or before the last written pts; nudge it forward so sample times
+    // stay strictly increasing.
+    if (pts <= last_written_pts) pts = last_written_pts + 1;
+    last_written_pts = pts;
 
     winrt::com_ptr<IMFMediaBuffer> buf;
     if (FAILED(MFCreateMemoryBuffer(in_size, buf.put()))) continue;
@@ -248,6 +267,28 @@ void Recorder::Impl::EncoderLoop() {
   }
 }
 
+void Recorder::Impl::AutoStopLoop() {
+  // Wall-clock elapsed (excluding paused spans) -> auto-stop. Wall time rather
+  // than frame timestamps so a static screen that stops delivering frames still
+  // stops on time. One-shot: posts kAsyncAutoStop and exits; the platform-thread
+  // stop path tears the session down.
+  while (!stop_requested.load()) {
+    Sleep(250);
+    if (stop_requested.load()) return;
+    if (max_duration_sec <= 0) return;
+    if (paused.load()) continue;
+    const ULONGLONG now = GetTickCount64();
+    long long elapsed_ms = static_cast<long long>(now - start_wall_ms) -
+                           (paused_accum.load() / 10000);
+    if (elapsed_ms >= static_cast<long long>(max_duration_sec) * 1000) {
+      if (async_target) {
+        PostMessage(async_target, async_msg, Recorder::kAsyncAutoStop, 0);
+      }
+      return;
+    }
+  }
+}
+
 void Recorder::Impl::Cleanup() {
   // Stop the capture first so no more frames are enqueued.
   if (frame_token) {
@@ -271,10 +312,11 @@ void Recorder::Impl::Cleanup() {
     }
     pool = nullptr;
   }
-  // Drain + join the encoder.
+  // Drain + join the worker threads.
   stop_requested = true;
   queue_cv.notify_all();
   if (encoder.joinable()) encoder.join();
+  if (autostop.joinable()) autostop.join();
 
   staging = nullptr;
   context = nullptr;
@@ -304,6 +346,10 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   impl_->session_start = -1;
   impl_->paused_accum = 0;
   impl_->last_enqueued = -1;
+  impl_->last_written_pts = -1;
+  impl_->paused = false;
+  impl_->pause_wall_start = 0;
+  impl_->max_duration_sec = (std::max)(0, spec.max_duration_sec);
   impl_->stop_requested = false;
   impl_->failed = false;
   impl_->async_target = async_target;
@@ -461,6 +507,10 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   impl_->frame_token = impl_->pool.FrameArrived(
       [impl](auto&&, auto&&) { impl->OnFrameArrived(); });
   impl_->encoder = std::thread([impl] { impl->EncoderLoop(); });
+  impl_->start_wall_ms = GetTickCount64();
+  if (impl_->max_duration_sec > 0) {
+    impl_->autostop = std::thread([impl] { impl->AutoStopLoop(); });
+  }
   try {
     impl_->session.StartCapture();
   } catch (...) {
@@ -543,3 +593,20 @@ void Recorder::Abort() {
   impl_->Cleanup();
   if (!path_w.empty()) DeleteFileW(path_w.c_str());
 }
+
+void Recorder::Pause() {
+  if (!active_ || impl_->paused.load()) return;
+  impl_->pause_wall_start = GetTickCount64();
+  impl_->paused = true;  // capture + encoder stop writing from here
+}
+
+void Recorder::Resume() {
+  if (!active_ || !impl_->paused.load()) return;
+  // Grow the excluded span by the paused wall duration (ms -> 100ns) BEFORE
+  // clearing the flag, so the next encoded frame already sees the new offset.
+  const ULONGLONG gap_ms = GetTickCount64() - impl_->pause_wall_start;
+  impl_->paused_accum.fetch_add(static_cast<LONGLONG>(gap_ms) * 10000);
+  impl_->paused = false;
+}
+
+bool Recorder::paused() const { return impl_->paused.load(); }

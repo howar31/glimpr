@@ -37,6 +37,10 @@ class RecordChannel {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  // Stop the active recording + finalize, emitting onRecordStopping then
+  // onRecordFinished (or onRecordFailed). Shared by the stop method and the
+  // native auto-stop event. Platform thread only.
+  void FinishActive();
   void Emit(const char* method);
   void Emit(const char* method, flutter::EncodableValue args);
 

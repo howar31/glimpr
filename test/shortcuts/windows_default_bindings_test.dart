@@ -25,7 +25,7 @@ void main() {
     expect(w[kCaptureAreaKey]!.label(TargetPlatform.windows), 'Ctrl+Alt+Win+1');
   });
 
-  test('Windows binds pin/open-editor globals to Ctrl+Alt+Win+5/6/9/0; record disabled', () {
+  test('Windows binds pin/open-editor globals to Ctrl+Alt+Win+5/6/9/0; record display bound', () {
     final w = defaultBindingsFor(true);
     const ctrlAltWin = {
       HotkeyModifier.control,
@@ -41,10 +41,17 @@ void main() {
     expect(w[kOpenEditorKey]!.modifiers, ctrlAltWin);
     expect(w[kOpenEditorClipboardKey]!.physicalKey, PhysicalKeyboardKey.digit0);
     expect(w[kOpenEditorClipboardKey]!.modifiers, ctrlAltWin);
-    // Record globals stay disabled until S6.
+    // Record Display is wired end-to-end in S6b (Ctrl+Alt+Win+Shift+3); the
+    // other record modes stay disabled until S6e/S6f.
     expect(w[kRecordRegionKey], isNull);
     expect(w[kRecordWindowKey], isNull);
-    expect(w[kRecordDisplayKey], isNull);
+    expect(w[kRecordDisplayKey]!.physicalKey, PhysicalKeyboardKey.digit3);
+    expect(w[kRecordDisplayKey]!.modifiers, {
+      HotkeyModifier.control,
+      HotkeyModifier.alt,
+      HotkeyModifier.meta,
+      HotkeyModifier.shift,
+    });
     expect(w[kRecordLastRegionKey], isNull);
   });
 
@@ -68,14 +75,19 @@ void main() {
     expect(w[kEditorCopyHexKey], kDefaultBindings[kEditorCopyHexKey]);
   });
 
-  test('availability: capture + pin + open-editor available, record unavailable on Windows', () {
+  test('availability: capture + pin + open-editor + record-display available on Windows', () {
     expect(isGlobalActionAvailable(kCaptureAreaKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kPinAreaKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kPinClipboardKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kOpenEditorKey, isWindows: true), isTrue);
     expect(
         isGlobalActionAvailable(kOpenEditorClipboardKey, isWindows: true), isTrue);
+    // Record Display is wired (S6b); the other record modes are not yet.
+    expect(isGlobalActionAvailable(kRecordDisplayKey, isWindows: true), isTrue);
     expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: true), isFalse);
+    expect(isGlobalActionAvailable(kRecordWindowKey, isWindows: true), isFalse);
+    expect(
+        isGlobalActionAvailable(kRecordLastRegionKey, isWindows: true), isFalse);
     // Everything is available on macOS.
     expect(isGlobalActionAvailable(kPinAreaKey, isWindows: false), isTrue);
     expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: false), isTrue);

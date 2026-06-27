@@ -134,6 +134,7 @@ void RecordChannel::HandleMethodCall(
     spec.show_cursor = GetBool(m, "showsCursor", true);
     spec.video_quality = GetString(m, "videoQuality", "high");
     spec.max_long_side = GetInt(m, "maxLongSide", 0);
+    spec.max_duration_sec = GetInt(m, "maxDuration", 0);
 
     Recorder::StartedInfo info;
     std::string error;
@@ -157,19 +158,7 @@ void RecordChannel::HandleMethodCall(
   }
 
   if (method == "stop") {
-    if (recorder_->active()) {
-      Emit("onRecordStopping");
-      std::string path, error;
-      if (recorder_->Stop(&path, &error)) {
-        Emit("onRecordFinished",
-             EncodableValue(EncodableMap{
-                 {EncodableValue("path"), EncodableValue(path)}}));
-      } else {
-        Emit("onRecordFailed",
-             EncodableValue(EncodableMap{
-                 {EncodableValue("message"), EncodableValue(error)}}));
-      }
-    }
+    FinishActive();
     result->Success();
     return;
   }
@@ -183,13 +172,40 @@ void RecordChannel::HandleMethodCall(
     return;
   }
 
-  if (method == "pause" || method == "resume") {
-    // Pause/resume land in S6b (timeline rebase). No-op for now.
+  if (method == "pause") {
+    if (recorder_->active() && !recorder_->paused()) {
+      recorder_->Pause();
+      Emit("onRecordPaused");
+    }
+    result->Success();
+    return;
+  }
+
+  if (method == "resume") {
+    if (recorder_->active() && recorder_->paused()) {
+      recorder_->Resume();
+      Emit("onRecordResumed");
+    }
     result->Success();
     return;
   }
 
   result->NotImplemented();
+}
+
+void RecordChannel::FinishActive() {
+  if (!recorder_->active()) return;
+  Emit("onRecordStopping");
+  std::string path, error;
+  if (recorder_->Stop(&path, &error)) {
+    Emit("onRecordFinished",
+         EncodableValue(EncodableMap{
+             {EncodableValue("path"), EncodableValue(path)}}));
+  } else {
+    Emit("onRecordFailed",
+         EncodableValue(EncodableMap{
+             {EncodableValue("message"), EncodableValue(error)}}));
+  }
 }
 
 void RecordChannel::OnNativeEvent(uint32_t code) {
@@ -201,5 +217,8 @@ void RecordChannel::OnNativeEvent(uint32_t code) {
          EncodableValue(flutter::EncodableMap{
              {flutter::EncodableValue("message"),
               flutter::EncodableValue(error)}}));
+  } else if (code == Recorder::kAsyncAutoStop) {
+    // The auto-stop poller hit maxDuration: finalize like a user stop.
+    FinishActive();
   }
 }

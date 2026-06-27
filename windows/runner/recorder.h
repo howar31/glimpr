@@ -36,6 +36,7 @@ class Recorder {
     bool show_cursor = true;
     std::string video_quality = "high";  // low|medium|high -> bitrate bpp tier
     int max_long_side = 0;               // px, 0 = native (mp4 cap)
+    int max_duration_sec = 0;            // auto-stop after N unpaused seconds (0 = off)
   };
 
   // The recorded rect reported back to Dart as onRecordStarted (display-local
@@ -47,6 +48,7 @@ class Recorder {
 
   // Async event codes posted to the control window (wparam of |async_msg|).
   static constexpr uint32_t kAsyncFailed = 1;
+  static constexpr uint32_t kAsyncAutoStop = 2;
 
   Recorder();
   ~Recorder();
@@ -66,7 +68,14 @@ class Recorder {
   // Discard the active recording and delete the partial file. Platform thread.
   void Abort();
 
+  // Pause / resume the timeline (one continuous file; the paused span is excluded
+  // from the output and from the auto-stop elapsed). Platform thread; no-op unless
+  // recording. Mirrors the macOS pause-rebase.
+  void Pause();
+  void Resume();
+
   bool active() const { return active_; }
+  bool paused() const;
 
   // The last fatal error captured by the encoder worker (for the async-failed
   // path). Empty if none.
