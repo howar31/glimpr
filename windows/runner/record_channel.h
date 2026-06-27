@@ -48,9 +48,10 @@ class RecordChannel {
   void FinishActive();
   void Emit(const char* method);
   void Emit(const char* method, flutter::EncodableValue args);
-  // Show the recording control strip for the started recording + wire its
-  // Stop/Pause/Abort buttons back to this channel.
-  void ShowChrome(const Recorder::StartedInfo& info);
+  // Show the recording chrome for the started recording + wire its Stop/Pause/
+  // Abort buttons back to this channel. [border] draws the recorded-rect outline
+  // (region/window modes); [scrim] dims the other displays.
+  void ShowChrome(const Recorder::StartedInfo& info, bool border, bool scrim);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<Recorder> recorder_;

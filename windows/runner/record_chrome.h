@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <vector>
 
 // The recording control strip: a layered, top-most, Direct2D window showing a
 // recording-red dot + elapsed timer + Stop / Pause-Resume / Abort buttons. It is
@@ -30,10 +31,12 @@ class RecordChrome {
   RecordChrome(const RecordChrome&) = delete;
   RecordChrome& operator=(const RecordChrome&) = delete;
 
-  // Show the strip below-center of [x,y,w,h] (display-local, top-left LOGICAL
-  // points) on monitor [display_id] (HMONITOR round-tripped as int64).
+  // Show the chrome for a recording of [x,y,w,h] (display-local, top-left LOGICAL
+  // points) on monitor [display_id] (HMONITOR round-tripped as int64): the control
+  // strip below-center, plus a red border around the rect when [border] (region /
+  // window modes), plus a dim scrim over every OTHER display when [scrim].
   void Show(int64_t display_id, double x, double y, double w, double h,
-            Callbacks cb);
+            bool border, bool scrim, Callbacks cb);
   // Reflect a pause/resume (button label + freeze the timer).
   void SetPaused(bool paused);
   // Tear the strip down (stop / abort / finish / failure).
@@ -59,6 +62,9 @@ class RecordChrome {
   bool tracking_leave_ = false;
 
   RECT stop_rc_{}, pause_rc_{}, abort_rc_{};  // physical px, client coords
+
+  HWND border_hwnd_ = nullptr;        // red outline around the recorded rect
+  std::vector<HWND> scrim_hwnds_;     // dim overlays on the OTHER displays
 
   winrt::com_ptr<ID2D1Factory1> factory_;
   winrt::com_ptr<ID2D1Device> device_;

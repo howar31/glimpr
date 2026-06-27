@@ -42,6 +42,80 @@ double MonScale(HMONITOR mon) {
   return dx / 96.0;
 }
 
+// A layered, click-through, top-most, capture-excluded overlay at [x,y,w,h]
+// (physical px), its 32bpp top-down content filled by |fill| (premultiplied
+// BGRA). Used for the recorded-rect border + the other-display scrims.
+HWND CreateFilledOverlay(int x, int y, int w, int h,
+                         const std::function<void(uint8_t*, int, int)>& fill) {
+  if (w <= 0 || h <= 0) return nullptr;
+  static bool reg = false;
+  static const wchar_t kOv[] = L"GlimprRecordOverlay";
+  if (!reg) {
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kOv;
+    RegisterClassW(&wc);
+    reg = true;
+  }
+  HWND hwnd = CreateWindowExW(
+      WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+          WS_EX_NOACTIVATE,
+      kOv, L"", WS_POPUP, x, y, w, h, nullptr, nullptr,
+      GetModuleHandleW(nullptr), nullptr);
+  if (!hwnd) return nullptr;
+  SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+
+  BITMAPINFO bmi{};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = w;
+  bmi.bmiHeader.biHeight = -h;  // top-down
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+  HDC screen = GetDC(nullptr);
+  void* bits = nullptr;
+  HBITMAP dib =
+      CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (dib && bits) {
+    std::memset(bits, 0, static_cast<size_t>(w) * h * 4);
+    fill(static_cast<uint8_t*>(bits), w, h);
+    HDC mem = CreateCompatibleDC(screen);
+    HBITMAP old = static_cast<HBITMAP>(SelectObject(mem, dib));
+    POINT sp{0, 0};
+    SIZE sz{w, h};
+    POINT dp{x, y};
+    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    UpdateLayeredWindow(hwnd, screen, &dp, &sz, mem, &sp, 0, &bf, ULW_ALPHA);
+    SelectObject(mem, old);
+    DeleteDC(mem);
+  }
+  if (dib) DeleteObject(dib);
+  ReleaseDC(nullptr, screen);
+  return hwnd;
+}
+
+struct ScrimEnum {
+  HMONITOR skip = nullptr;
+  std::vector<HWND>* out = nullptr;
+  const std::function<void(uint8_t*, int, int)>* fill = nullptr;
+};
+
+BOOL CALLBACK ScrimMonitorProc(HMONITOR mon, HDC, LPRECT, LPARAM lp) {
+  auto* ctx = reinterpret_cast<ScrimEnum*>(lp);
+  if (mon == ctx->skip) return TRUE;
+  MONITORINFO mi{};
+  mi.cbSize = sizeof(mi);
+  if (!GetMonitorInfo(mon, &mi)) return TRUE;
+  HWND s = CreateFilledOverlay(
+      mi.rcMonitor.left, mi.rcMonitor.top,
+      mi.rcMonitor.right - mi.rcMonitor.left,
+      mi.rcMonitor.bottom - mi.rcMonitor.top, *ctx->fill);
+  if (s) ctx->out->push_back(s);
+  return TRUE;
+}
+
 com_ptr<ID3D11Device> CreateD3D() {
   com_ptr<ID3D11Device> dev;
   const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1,
@@ -125,7 +199,7 @@ void RecordChrome::Layout() {
 }
 
 void RecordChrome::Show(int64_t display_id, double x, double y, double w,
-                        double h, Callbacks cb) {
+                        double h, bool border, bool scrim, Callbacks cb) {
   Hide();
   cb_ = std::move(cb);
   paused_ = false;
@@ -195,6 +269,37 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
   Render();
   SetTimer(hwnd_, kTickTimer, kTickMs, nullptr);
+
+  // Red outline around the recorded rect (region / window modes).
+  if (border) {
+    const int t = (std::max)(2, static_cast<int>(std::lround(3 * scale_)));
+    auto border_fill = [t](uint8_t* p, int W, int H) {
+      for (int yy = 0; yy < H; ++yy) {
+        for (int xx = 0; xx < W; ++xx) {
+          if (xx < t || xx >= W - t || yy < t || yy >= H - t) {
+            uint8_t* q = p + (static_cast<size_t>(yy) * W + xx) * 4;
+            q[0] = 0x3A;  // B  (recording red #FF453A, premultiplied A=255)
+            q[1] = 0x45;  // G
+            q[2] = 0xFF;  // R
+            q[3] = 0xFF;  // A
+          }
+        }
+      }
+    };
+    border_hwnd_ = CreateFilledOverlay(tx, ty, tw, th, border_fill);
+  }
+
+  // Dim every OTHER display (40% black premultiplied).
+  if (scrim) {
+    auto scrim_fill = [](uint8_t* p, int W, int H) {
+      const size_t n = static_cast<size_t>(W) * H;
+      for (size_t i = 0; i < n; ++i) p[i * 4 + 3] = 0x66;  // BGR stay 0 (black)
+    };
+    std::function<void(uint8_t*, int, int)> fill = scrim_fill;
+    ScrimEnum ctx{mon, &scrim_hwnds_, &fill};
+    EnumDisplayMonitors(nullptr, nullptr, &ScrimMonitorProc,
+                        reinterpret_cast<LPARAM>(&ctx));
+  }
 }
 
 void RecordChrome::SetPaused(bool paused) {
@@ -216,6 +321,14 @@ void RecordChrome::Hide() {
     DestroyWindow(hwnd_);
     hwnd_ = nullptr;
   }
+  if (border_hwnd_) {
+    DestroyWindow(border_hwnd_);
+    border_hwnd_ = nullptr;
+  }
+  for (HWND s : scrim_hwnds_) {
+    if (s) DestroyWindow(s);
+  }
+  scrim_hwnds_.clear();
 }
 
 int RecordChrome::HitTest(POINT p) const {
