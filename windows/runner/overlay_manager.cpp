@@ -137,6 +137,7 @@ OverlayManager::OverlayManager(const flutter::DartProject& project,
 }
 
 OverlayManager::~OverlayManager() {
+  if (teardown_timer_) KillTimer(nullptr, teardown_timer_);
   StopCursorTracking();
   SetDrawingLock(0);
   SetCursorHidden(false);
@@ -257,12 +258,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   const int64_t cursor_id = MonId(cursor_mon);
   PresentBegin(cursor_id);
 
-  // Record-select (live_select) reuses the SAME frozen multi-display present as a
-  // screenshot: the Windows overlay is opaque, so the region picker sits over the
-  // frozen capture (a frozen-screenshot region picker; the crop UI + loupe behave
-  // exactly like the screenshot overlay). The live_select flag flows to Dart via
-  // PresentFrame -> onCaptureReady, which routes to the record-select picker.
-
+  live_select_ = live_select;
   std::vector<HMONITOR> mons = EnumerateMonitors();
   // Cursor display first (a valid strict-weak-ordering: "is-cursor" sorts ahead
   // of "is-not") so it is PRESENTED first, mirroring the macOS jobs.sort.
@@ -271,10 +267,46 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
                      return (MonId(a) == cursor_id) && (MonId(b) != cursor_id);
                    });
 
-  // Capture every monitor IN PARALLEL -- each worker has its OWN WinRT MTA + D3D
-  // device + frame pool (no shared state), so a multi-display freeze is not
-  // staggered across displays (mirrors macOS's parallel captureAll). The present
-  // (onCaptureReady) stays on this platform thread, cursor display first.
+  // The overlay window is ALWAYS DWM-glass (a frozen screenshot still reads
+  // opaque); only capture-EXCLUSION flips: exclude while a live loupe feed is/will
+  // be running (this live-select, OR a prior record-select still suspended beneath
+  // -- its feed persists across a screenshot-over-RS so the resurfaced loupe keeps
+  // sampling the true desktop), re-include otherwise so a recording over a session
+  // still captures the overlay as content.
+  const bool exclude = live_select || !live_sources_.empty();
+  for (HMONITOR m : mons) {
+    Unit* u = UnitFor(MonId(m));
+    if (u && u->window) u->window->SetCaptureExcluded(exclude);
+  }
+
+  if (live_select) {
+    // LIVE record-select (full macOS parity): NO frozen capture -- the overlay is
+    // transparent and the real desktop shows through; the loupe samples a
+    // per-display live WGC feed. Present a geometry-only (transparent-base) dict.
+    EndLiveSelect();  // idempotent: drop any stale feeds
+    int presented = 0;
+    for (HMONITOR m : mons) {
+      const int64_t id = MonId(m);
+      auto src = std::make_unique<LiveFrameSource>();
+      src->Start(m);  // failures are silent -> the loupe just stays empty
+      live_sources_[id] = std::move(src);
+      const bool is_cursor = (id == cursor_id);
+      PresentFrame(id, BuildLiveDisplayDict(m, is_cursor, cursor), pin_only,
+                   true);
+      ++presented;
+    }
+    if (presented > 0) {
+      presenting_ = true;
+      pending_shows_ = presented;
+    }
+    return;
+  }
+
+  // Frozen multi-display capture (screenshot / pin): capture every monitor IN
+  // PARALLEL -- each worker has its OWN WinRT MTA + D3D device + frame pool (no
+  // shared state), so a multi-display freeze is not staggered across displays
+  // (mirrors macOS's parallel captureAll). The present (onCaptureReady) stays on
+  // this platform thread, cursor display first.
   std::vector<std::optional<CaptureFrame>> frames(mons.size());
   {
     std::vector<std::thread> workers;
@@ -297,7 +329,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     const bool is_cursor = (MonId(mons[i]) == cursor_id);
     EncodableMap dict =
         BuildDisplayDict(mons[i], std::move(*frames[i]), is_cursor, cursor);
-    PresentFrame(MonId(mons[i]), std::move(dict), pin_only, live_select);
+    PresentFrame(MonId(mons[i]), std::move(dict), pin_only, false);
     ++presented;
   }
   // Block re-triggers until every presented display has been shown (or the
@@ -363,9 +395,58 @@ EncodableMap OverlayManager::BuildDisplayDict(HMONITOR mon, CaptureFrame frame,
   d[EncodableValue("rowBytes")] = EncodableValue(static_cast<int64_t>(frame.stride));
   d[EncodableValue("windows")] =
       EncodableValue(win_enum::SnappableWindows(mon, OverlayHwnds()));
+  // Force the frozen base fully OPAQUE. The overlay is a permanent DWM-glass
+  // window, so the Flutter content's per-pixel alpha reaches the desktop
+  // compositor. WGC monitor frames do NOT guarantee alpha == 255 for opaque
+  // desktop pixels, so a frozen screenshot would render SEE-THROUGH -- an
+  // invisible, click-catching, top-most full-screen window silently blocking the
+  // whole desktop. The captured monitor IS opaque, so stamping alpha = 255 is
+  // faithful (mirrors live_frame_source forcing the loupe patch alpha). The
+  // live record-select path stays transparent: BuildLiveDisplayDict passes an
+  // EMPTY buffer, so this loop is a no-op and Dart paints its transparent stub.
+  for (size_t i = 3; i < frame.bgra.size(); i += 4) frame.bgra[i] = 0xFF;
   // Move the BGRA buffer into the reply (never copied).
   d[EncodableValue("rawBytes")] = EncodableValue(std::move(frame.bgra));
   return d;
+}
+
+EncodableMap OverlayManager::BuildLiveDisplayDict(HMONITOR mon, bool is_cursor,
+                                                  POINT cursor_global) {
+  // Live-select: no frozen pixels. Reuse BuildDisplayDict with an EMPTY frame
+  // sized to the monitor -- Dart paints a transparent stub base + reads the live
+  // loupe feed, so the empty rawBytes is never decoded. Geometry + cursor +
+  // snappable windows still flow so the picker (crop HUD / window-snap) works.
+  MONITORINFO mi{};
+  mi.cbSize = sizeof(MONITORINFO);
+  GetMonitorInfo(mon, &mi);
+  CaptureFrame f;
+  f.width = static_cast<uint32_t>(mi.rcMonitor.right - mi.rcMonitor.left);
+  f.height = static_cast<uint32_t>(mi.rcMonitor.bottom - mi.rcMonitor.top);
+  f.stride = f.width * 4;  // f.bgra stays empty
+  return BuildDisplayDict(mon, std::move(f), is_cursor, cursor_global);
+}
+
+void OverlayManager::EndLiveSelect() {
+  for (auto& kv : live_sources_) {
+    if (kv.second) kv.second->Stop();
+  }
+  live_sources_.clear();
+  live_select_ = false;
+  // Re-include the overlays in capture: with no loupe feed running, a recording
+  // over a screenshot session beneath must capture the overlay as content.
+  for (auto& kv : units_) {
+    if (kv.second.window) kv.second.window->SetCaptureExcluded(false);
+  }
+}
+
+void OverlayManager::RelayRecordSelectHotkey() {
+  // Relay to every overlay engine; the shared Dart (_onRecordSelectHotkey)
+  // resurfaces a suspended picker or cancels a foreground one per its own state.
+  for (auto& kv : units_) {
+    if (kv.second.overlay) {
+      kv.second.overlay->InvokeMethod("onRecordSelectHotkey", nullptr);
+    }
+  }
 }
 
 std::vector<HWND> OverlayManager::OverlayHwnds() const {
@@ -431,12 +512,36 @@ void OverlayManager::Hide(int64_t display_id) {
 void OverlayManager::DismissAll() {
   presenting_ = false;  // session ended -> release the capture-serialization guard
   pending_shows_ = 0;
+  EndLiveSelect();  // stop any live record-select loupe feeds
   StopCursorTracking();
   SetCursorHidden(false);
   SetDrawingLock(0);
   for (auto& kv : units_) {
     if (kv.second.window) kv.second.window->Hide();
   }
+  // Repair the WinUI3 content-island input that a RENDERED overlay engine breaks
+  // in other apps: destroy + re-warm the engines a beat after dismiss. Deferred
+  // via a one-shot timer so the teardown runs OUTSIDE this dismissOverlay channel
+  // handler (whose engine it would otherwise destroy mid-call). See TeardownUnits.
+  if (teardown_timer_) KillTimer(nullptr, teardown_timer_);
+  teardown_timer_ = SetTimer(nullptr, 0, 250, &OverlayManager::TeardownProc);
+}
+
+void OverlayManager::TeardownUnits() {
+  if (teardown_timer_) {
+    KillTimer(nullptr, teardown_timer_);
+    teardown_timer_ = 0;
+  }
+  if (presenting_) return;  // a new capture started in the gap -- leave it intact
+  units_.clear();  // ~Unit -> ~OverlayWindow destroys each Flutter engine + window;
+                   // releasing the engine is what repairs the other apps' islands.
+  WarmUp();        // recreate warm engines so the NEXT capture stays instant (a
+                   // fresh engine that has not capture-rendered does not re-break).
+}
+
+// static
+void CALLBACK OverlayManager::TeardownProc(HWND, UINT, UINT_PTR, DWORD) {
+  if (instance_) instance_->TeardownUnits();
 }
 
 // ---- cursor poll / active display ----------------------------------------
@@ -663,12 +768,34 @@ void OverlayManager::HandleOverlayCapture(
     result->Success(EncodableValue(false));
     return;
   }
-  // Methods that are deferred on Windows (recording = S6, editor flows = S4,
-  // element snap, pins/share, processing/perf marks, window-alpha snap mask,
-  // loupe live feed): a safe null reply so the shared Dart degrades.
-  if (method == "captureWindowImage" || method == "loupeSample" ||
-      method == "elementSnapAt") {
-    result->Success();  // null -> Dart falls back (rect snap / blank loupe)
+  if (method == "loupeSample") {
+    // Live record-select loupe: a span x span RGBA patch around the native pixel
+    // (x, y) from THIS display's live feed; null before the first frame (the
+    // loupe just stays empty). Mirrors the macOS loupeSample.
+    auto it = live_sources_.find(display_id);
+    if (it != live_sources_.end() && it->second) {
+      auto get_int = [&](const char* k) -> int {
+        const auto* v = Find(args, k);
+        if (!v) return 0;
+        if (const auto* p = std::get_if<int32_t>(v)) return *p;
+        if (const auto* p = std::get_if<int64_t>(v)) return static_cast<int>(*p);
+        if (const auto* p = std::get_if<double>(v)) return static_cast<int>(*p);
+        return 0;
+      };
+      auto patch =
+          it->second->Sample(get_int("x"), get_int("y"), get_int("span"));
+      if (patch) {
+        result->Success(EncodableValue(std::move(*patch)));
+        return;
+      }
+    }
+    result->Success();  // null -> blank loupe until a live frame arrives
+    return;
+  }
+  // Methods still deferred on Windows (element snap, window-alpha snap mask): a
+  // safe null reply so the shared Dart degrades (rect snap).
+  if (method == "captureWindowImage" || method == "elementSnapAt") {
+    result->Success();  // null -> Dart falls back (rect snap)
     return;
   }
   if (method == "recordSelection") {
@@ -682,9 +809,16 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();
     return;
   }
+  if (method == "stopLoupeFeed") {
+    // Record-select ended (confirm/cancel): stop the live loupe feeds. The
+    // transparent overlay is restored to opaque on the next screenshot capture.
+    EndLiveSelect();
+    result->Success();
+    return;
+  }
   if (method == "requestAccessibility" || method == "setProcessing" ||
       method == "perfMark" || method == "shareSheet" ||
-      method == "recordSelectHotkey" || method == "stopLoupeFeed") {
+      method == "recordSelectHotkey") {
     result->Success();
     return;
   }

@@ -2,9 +2,14 @@
 
 #include <shellapi.h>
 
+#include <cmath>
+#include <cstring>
 #include <string>
+#include <vector>
 
 #include "resource.h"
+
+TrayIcon* TrayIcon::s_record_instance_ = nullptr;
 
 namespace {
 // Menu command ids. Global-action items map to an action-key string; the rest
@@ -113,9 +118,12 @@ TrayIcon::TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,
   nid.hIcon = icon_;
   wcscpy_s(nid.szTip, L"Glimpr");
   added_ = Shell_NotifyIconW(NIM_ADD, &nid) == TRUE;
+  s_record_instance_ = this;  // one tray; routes the record-tick timer
 }
 
 TrayIcon::~TrayIcon() {
+  if (record_timer_) KillTimer(nullptr, record_timer_);
+  if (s_record_instance_ == this) s_record_instance_ = nullptr;
   Remove();
   if (icon_) DestroyIcon(icon_);
 }
@@ -131,6 +139,9 @@ HICON TrayIcon::LoadThemeIcon() const {
 
 void TrayIcon::OnThemeChanged() {
   if (!added_) return;
+  // While recording, the breath tick re-tints from the live theme each frame
+  // (MakeTintedIcon -> LoadThemeIcon), so leave the animation alone here.
+  if (recording_ || ease_out_) return;
   HICON next = LoadThemeIcon();
   if (!next) return;
   NOTIFYICONDATAW nid = {};
@@ -288,4 +299,149 @@ void TrayIcon::SetRecentImages(std::vector<std::string> paths) {
 
 void TrayIcon::SetLabels(std::map<std::string, std::string> labels) {
   labels_ = std::move(labels);
+}
+
+// static
+void CALLBACK TrayIcon::RecordTimerProc(HWND, UINT, UINT_PTR, DWORD) {
+  if (s_record_instance_) s_record_instance_->OnRecordTick();
+}
+
+void TrayIcon::ApplyIcon(HICON icon) {
+  if (!icon) return;
+  if (!added_) {
+    DestroyIcon(icon);
+    return;
+  }
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = owner_;
+  nid.uID = 1;
+  nid.uFlags = NIF_ICON;
+  nid.hIcon = icon;
+  Shell_NotifyIconW(NIM_MODIFY, &nid);
+  if (icon_) DestroyIcon(icon_);
+  icon_ = icon;
+}
+
+// The theme mark with every opaque pixel blended toward recording-red (#FF453A)
+// by [mix] (0 = idle theme tint, 1 = full red). Mirrors macOS recordingIcon(mix:).
+// Reads the icon's 32bpp color bitmap (alpha = the mark's coverage) and reuses
+// its mask. Caller-independent; ApplyIcon takes ownership of the result.
+HICON TrayIcon::MakeTintedIcon(double mix) const {
+  HICON base = LoadThemeIcon();
+  if (!base) return nullptr;
+  ICONINFO ii = {};
+  if (!GetIconInfo(base, &ii)) {
+    DestroyIcon(base);
+    return nullptr;
+  }
+  BITMAP bm = {};
+  GetObject(ii.hbmColor, sizeof(bm), &bm);
+  const int w = bm.bmWidth, h = bm.bmHeight;
+  BITMAPINFO bi = {};
+  bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bi.bmiHeader.biWidth = w;
+  bi.bmiHeader.biHeight = -h;  // top-down
+  bi.bmiHeader.biPlanes = 1;
+  bi.bmiHeader.biBitCount = 32;
+  bi.bmiHeader.biCompression = BI_RGB;
+  std::vector<uint8_t> px(static_cast<size_t>(w) * h * 4, 0);
+  HDC dc = GetDC(nullptr);
+  GetDIBits(dc, ii.hbmColor, 0, h, px.data(), &bi, DIB_RGB_COLORS);
+  const double tr = 0xFF, tg = 0x45, tb = 0x3A;  // recording red #FF453A
+  for (size_t i = 0; i < px.size(); i += 4) {
+    if (px[i + 3] == 0) continue;  // transparent pixel -> leave it
+    px[i + 0] = static_cast<uint8_t>(px[i + 0] + (tb - px[i + 0]) * mix);  // B
+    px[i + 1] = static_cast<uint8_t>(px[i + 1] + (tg - px[i + 1]) * mix);  // G
+    px[i + 2] = static_cast<uint8_t>(px[i + 2] + (tr - px[i + 2]) * mix);  // R
+  }
+  HICON out = nullptr;
+  void* bits = nullptr;
+  HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (color && bits) {
+    std::memcpy(bits, px.data(), px.size());
+    ICONINFO ni = {};
+    ni.fIcon = TRUE;
+    ni.hbmColor = color;
+    ni.hbmMask = ii.hbmMask;  // reuse the base mask
+    out = CreateIconIndirect(&ni);
+  }
+  if (color) DeleteObject(color);
+  ReleaseDC(nullptr, dc);
+  if (ii.hbmColor) DeleteObject(ii.hbmColor);
+  if (ii.hbmMask) DeleteObject(ii.hbmMask);
+  DestroyIcon(base);
+  return out;
+}
+
+void TrayIcon::OnRecordTick() {
+  const unsigned long long now = GetTickCount64();
+  double mix;
+  if (ease_out_) {
+    const double t = static_cast<double>(now - ease_start_ms_) / 450.0;
+    if (t >= 1.0) {  // ease finished -> restore the idle theme icon, stop ticking
+      ease_out_ = false;
+      if (record_timer_) {
+        KillTimer(nullptr, record_timer_);
+        record_timer_ = 0;
+      }
+      ApplyIcon(LoadThemeIcon());
+      return;
+    }
+    mix = 1.0 - t;
+  } else if (recording_) {
+    // 0..1..0 cosine breath over 1.7s (mac parity): idle tone <-> full red.
+    const double phase =
+        static_cast<double>((now - record_start_ms_) % 1700) / 1700.0;
+    mix = 0.5 - 0.5 * std::cos(phase * 2.0 * 3.14159265358979);
+  } else {
+    if (record_timer_) {
+      KillTimer(nullptr, record_timer_);
+      record_timer_ = 0;
+    }
+    return;
+  }
+  HICON tinted = MakeTintedIcon(mix);
+  if (tinted) ApplyIcon(tinted);
+}
+
+void TrayIcon::SetRecordingState(bool active, bool graceful) {
+  if (active) {
+    if (recording_) return;
+    recording_ = true;
+    ease_out_ = false;
+    record_start_ms_ = GetTickCount64();
+    BOOL anim = TRUE;
+    SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &anim, 0);
+    if (!anim) {  // reduced motion: hold solid red, no timer
+      if (record_timer_) {
+        KillTimer(nullptr, record_timer_);
+        record_timer_ = 0;
+      }
+      ApplyIcon(MakeTintedIcon(1.0));
+      return;
+    }
+    if (!record_timer_) {
+      record_timer_ = SetTimer(nullptr, 0, 50, &TrayIcon::RecordTimerProc);
+    }
+    OnRecordTick();  // paint the first frame immediately
+    return;
+  }
+  if (!recording_ && !ease_out_) return;
+  recording_ = false;
+  if (!graceful) {  // abort / failure: snap straight back to idle
+    ease_out_ = false;
+    if (record_timer_) {
+      KillTimer(nullptr, record_timer_);
+      record_timer_ = 0;
+    }
+    ApplyIcon(LoadThemeIcon());
+    return;
+  }
+  // Graceful finish: ease the red back out over ~0.45s (handled in the tick).
+  ease_out_ = true;
+  ease_start_ms_ = GetTickCount64();
+  if (!record_timer_) {
+    record_timer_ = SetTimer(nullptr, 0, 50, &TrayIcon::RecordTimerProc);
+  }
 }

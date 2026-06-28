@@ -54,10 +54,13 @@ class RecordChrome {
   // the rect on the recording display (region/window) when [scrim]. The strip's
   // readout shows the mp4 file size polled from [output_path], or -- when [gif] --
   // the GIF frame count from [frame_count] (GIF buffers until finalize).
+  // [follow] is the recorded window (HWND, window mode) whose live rect the
+  // border + outside-rect scrim + strip track ~20 Hz with hysteresis; null in
+  // region/display modes (static frame). Mirrors the macOS startWindowFollow.
   void Show(int64_t display_id, double x, double y, double w, double h,
             bool border, bool scrim, int max_duration_sec, bool gif,
             const std::string& output_path, std::function<int()> frame_count,
-            Callbacks cb);
+            Callbacks cb, HWND follow);
   // Replace the localized strip / countdown labels (pushed once from Dart at
   // boot). Takes effect on the next Show; safe to call any time.
   void SetLabels(const Labels& labels) { labels_ = labels; }
@@ -71,7 +74,7 @@ class RecordChrome {
   void ShowCountdown(int64_t display_id, double x, double y, double w, double h,
                      int seconds, bool border, bool scrim,
                      std::function<void()> on_done,
-                     std::function<void()> on_cancel);
+                     std::function<void()> on_cancel, HWND follow);
   // Tear the strip + border + scrims + countdown down.
   void Hide();
 
@@ -96,6 +99,14 @@ class RecordChrome {
   void CreateFrameOverlays(HMONITOR mon, const MONITORINFO& mi, double x,
                            double y, double w, double h, bool border,
                            bool scrim);
+  // Window-follow (window mode): poll the followed window's live rect and, on a
+  // move/resize past a 1px hysteresis, reframe the border + outside-rect scrim +
+  // strip (until the user drags it) + countdown HUD. Driven by the strip /
+  // countdown timers (~20 Hz). No-op when not following.
+  bool PollFollow();  // returns true if it reframed this poll
+  void Reframe(const RECT& rect_px);  // rect_px = recorded rect (physical, global)
+  // Lay out the four outside-rect dim edges around [rect_px] within its monitor.
+  void LayoutScrim(const RECT& rect_px);
   // Draw the recorded-rect border (rounded red edge + glow + viewfinder corner
   // brackets) into a click-through overlay window, faithful to macOS.
   void ShowBorder(int rx, int ry, int rw, int rh);  // recorded rect, physical px
@@ -134,10 +145,20 @@ class RecordChrome {
 
   bool frame_up_ = false;             // the frame overlays are shown (border/scrims)
   HWND border_hwnd_ = nullptr;        // red outline around the recorded rect
-  std::vector<HWND> scrim_hwnds_;     // outside-rect + other-display dim overlays
+  int border_rw_ = 0, border_rh_ = 0; // recorded-rect size the border was drawn for (px)
+  std::vector<HWND> scrim_hwnds_;     // OTHER-display dim overlays (static)
+  HWND inrect_scrim_[4] = {};         // outside-rect dim edges (top/bottom/left/right)
+
+  // Window-follow state (window mode); follow_hwnd_ null = no follow.
+  HWND follow_hwnd_ = nullptr;
+  RECT follow_px_{};            // last applied recorded rect (physical, global)
+  bool follow_border_ = false;  // the recorded rect has a border (window mode)
+  bool strip_detached_ = false; // user dragged the strip -> it stops following
 
   HWND cd_hwnd_ = nullptr;            // countdown HUD window
   int cd_remaining_ = 0;
+  ULONGLONG cd_last_dec_ms_ = 0;      // last 1s decrement (the HUD ticks at ~20Hz
+                                      // for smooth window-follow during countdown)
   int cd_x_ = 0, cd_y_ = 0, cd_w_ = 0, cd_h_ = 0;  // physical px
   std::function<void()> cd_done_;
   std::function<void()> cd_cancel_;

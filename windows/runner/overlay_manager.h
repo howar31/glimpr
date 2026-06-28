@@ -15,6 +15,7 @@
 
 #include "clipboard_channel.h"
 #include "encode_channel.h"
+#include "live_frame_source.h"
 #include "overlay_window.h"
 
 // Owns the per-display overlay windows + their Flutter engines and drives the
@@ -33,9 +34,10 @@ class OverlayManager {
   OverlayManager& operator=(const OverlayManager&) = delete;
 
   // The native capture trigger (control engine's glimpr/capture beginCapture).
-  // Captures every display and presents the freeze overlay. [pinOnly] runs the
-  // pin-only confirm flow (pin no-ops on Windows for now); [liveSelect] (the
-  // recording picker) is deferred to S6 and ignored.
+  // [pinOnly] runs the pin-only confirm flow. [liveSelect] (the recording region
+  // picker) presents a TRUE-TRANSPARENT overlay over the LIVE screen (not a
+  // frozen screenshot) + starts a per-display live WGC feed for the loupe --
+  // full macOS parity.
   void BeginCapture(bool pin_only, bool live_select);
 
   // Pre-create the per-display overlay engines/windows ahead of the first
@@ -59,6 +61,12 @@ class OverlayManager {
   void SetRecordRelay(std::function<void(flutter::EncodableValue)> relay) {
     record_relay_ = std::move(relay);
   }
+
+  // A record hotkey pressed while a record-select picker is in flight: relay
+  // onRecordSelectHotkey to EVERY overlay engine so each resurfaces / cancels its
+  // picker per its own state (the shared Dart decides). Mirrors the macOS
+  // relayRecordSelectHotkey. Called from the control engine's capture channel.
+  void RelayRecordSelectHotkey();
 
  private:
   using EncodableValue = flutter::EncodableValue;
@@ -98,6 +106,13 @@ class OverlayManager {
   // display is ~33 MB -- never copied).
   EncodableMap BuildDisplayDict(HMONITOR mon, struct CaptureFrame frame,
                                 bool is_cursor, POINT cursor_global);
+  // Live record-select: the same dict MINUS the frozen pixels (the overlay is
+  // transparent over the live screen; Dart uses a transparent stub base + the
+  // live loupe feed). Geometry + cursor + snappable windows only.
+  EncodableMap BuildLiveDisplayDict(HMONITOR mon, bool is_cursor,
+                                    POINT cursor_global);
+  // Stop + clear the per-display live loupe feeds (idempotent).
+  void EndLiveSelect();
   std::vector<HWND> OverlayHwnds() const;  // our own windows, excluded from snap
 
   // ---- cursor poll / active display --------------------------------------
@@ -106,6 +121,21 @@ class OverlayManager {
   void TickCursor();
   void SetActiveDisplay(int64_t display_id, POINT global);
   static void CALLBACK TimerProc(HWND, UINT, UINT_PTR, DWORD);
+
+  // Destroy + re-warm the per-display overlay engines shortly after a dismiss.
+  // ROOT CAUSE (confirmed by rebuild-bisection on Windows): a resident overlay
+  // engine that has RENDERED a captured frame leaves other apps' WinUI3 content
+  // islands (e.g. File Explorer's tab / address bar --
+  // Microsoft.UI.Content.DesktopChildSiteBridge) unable to receive mouse/pointer
+  // input until THIS process's engine is torn down (legacy USER32 children +
+  // keyboard use other delivery paths, so they keep working -- which is why every
+  // queryable input state read clean). Destroying the engine repairs them; a
+  // fresh engine that has NOT yet rendered a capture does not re-break them, so we
+  // re-warm immediately to keep the next capture instant. Deferred via a one-shot
+  // timer so we never destroy an engine from inside its own channel handler (the
+  // dismissOverlay call that triggers it).
+  void TeardownUnits();
+  static void CALLBACK TeardownProc(HWND, UINT, UINT_PTR, DWORD);
 
   // ---- drawing lock / warp / cursor hide ---------------------------------
   void SetDrawingLock(int64_t display_id_or_zero);
@@ -128,6 +158,10 @@ class OverlayManager {
   class PinManager* pin_manager_ = nullptr;      // not owned
   std::function<void(flutter::EncodableValue)> record_relay_;  // -> control record channel
   std::map<int64_t, Unit> units_;
+  // Live record-select state: one live WGC loupe feed per display while a
+  // transparent picker session is up (empty otherwise).
+  bool live_select_ = false;
+  std::map<int64_t, std::unique_ptr<LiveFrameSource>> live_sources_;
 
   int64_t key_display_id_ = 0;     // cursor display at capture (takes focus)
   int64_t active_display_id_ = 0;  // current active (cursor poll authority)
@@ -143,6 +177,8 @@ class OverlayManager {
   // displays still awaiting Show (each presented display's overlayReady fires once).
   bool presenting_ = false;
   int pending_shows_ = 0;
+
+  UINT_PTR teardown_timer_ = 0;  // one-shot post-dismiss engine teardown + re-warm
 
   static OverlayManager* instance_;  // single owner; routes the timer callback
 };

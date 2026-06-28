@@ -54,9 +54,20 @@ class TrayIcon {
   // stable id; ShowMenu falls back to the English default when a key is absent.
   void SetLabels(std::map<std::string, std::string> labels);
 
+  // Reflect the recording state on the tray mark (mirrors macOS
+  // StatusItemController.setRecording): the mark breathes recording-red (~1.7s)
+  // while [active]; on stop it eases back to the idle theme tint when [graceful]
+  // (a normal finish) or snaps back immediately otherwise (abort / failure).
+  // Reduced motion (SPI_GETCLIENTAREAANIMATION off) holds solid red, no animation.
+  void SetRecordingState(bool active, bool graceful);
+
  private:
   void ShowMenu();
   void OnCommand(UINT command_id);
+  void OnRecordTick();                      // one breath/ease-out frame
+  HICON MakeTintedIcon(double mix) const;   // the base mark blended toward red
+  void ApplyIcon(HICON icon);               // NIM_MODIFY + take ownership of icon_
+  static void CALLBACK RecordTimerProc(HWND, UINT, UINT_PTR, DWORD);
   // The viewfinder mark tinted for the CURRENT taskbar theme (white mark on a
   // dark taskbar, dark mark on a light one), at the small-icon size. Caller owns
   // the returned HICON (DestroyIcon).
@@ -70,6 +81,14 @@ class TrayIcon {
   HICON icon_ = nullptr;  // current tray HICON (DestroyIcon on replace / remove)
   std::vector<std::string> recent_;  // Open Recent submenu (full paths, newest first)
   std::map<std::string, std::string> labels_;  // localized menu labels (UTF-8)
+
+  // Recording-state breath animation.
+  UINT_PTR record_timer_ = 0;
+  bool recording_ = false;
+  bool ease_out_ = false;
+  unsigned long long record_start_ms_ = 0;
+  unsigned long long ease_start_ms_ = 0;
+  static TrayIcon* s_record_instance_;  // routes the record-tick timer callback
 };
 
 #endif  // RUNNER_TRAY_ICON_H_

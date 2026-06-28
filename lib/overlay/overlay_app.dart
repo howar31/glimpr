@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -419,25 +418,12 @@ class _OverlayAppState extends State<OverlayApp> {
   /// touching the live screenshot/pin session: it renders on top, the session
   /// (if any) renders presentation-only beneath. Sets `_rs = active`.
   Future<void> _beginRecordSelect(CapturedDisplay d) async {
-    // macOS overlays are transparent, so the picker floats over the LIVE screen
-    // (a 1x1 stub base). The Windows overlay is opaque, so the picker uses the
-    // frozen capture as its base -- a frozen-screenshot region picker whose crop
-    // UI + loupe behave exactly like the Windows screenshot overlay.
-    ui.Image base;
-    if (Platform.isWindows) {
-      ui.Image? frozen;
-      try {
-        final completer = Completer<ui.Image>();
-        ui.decodeImageFromPixels(
-          d.rawBytes, d.pixelWidth, d.pixelHeight, ui.PixelFormat.bgra8888,
-          completer.complete, rowBytes: d.rowBytes,
-        );
-        frozen = await completer.future;
-      } catch (_) {/* fall back to a transparent base */}
-      base = frozen ?? await _transparentStub();
-    } else {
-      base = await _transparentStub();
-    }
+    // Both platforms float the picker over the LIVE screen: a 1x1 transparent
+    // stub base, the loupe fed by the native per-display live feed. The Windows
+    // overlay is made truly transparent (DWM glass) for live-select so the real
+    // desktop shows through -- full macOS parity. (It previously used the frozen
+    // capture as an opaque base; that was a prior-session shortcut, now removed.)
+    final ui.Image base = await _transparentStub();
     if (!mounted) {
       base.dispose();
       return;

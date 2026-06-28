@@ -16,6 +16,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "hotkey_host.cpp"
   "image_codec.cpp"
+  "live_frame_source.cpp"
   "main.cpp"
   "overlay_manager.cpp"
   "overlay_window.cpp"

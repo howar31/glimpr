@@ -9,12 +9,14 @@
 
 #include <memory>
 
-// A borderless, top-most, OPAQUE window covering exactly one monitor, hosting
-// its own Flutter engine + view (engine-per-surface). The Windows analogue of
-// the macOS OverlayWindow + its warmed FlutterViewController, MINUS the
-// transparency: the architecture checkpoint fixes the Windows overlay as opaque
-// + rectangular (no per-pixel alpha). Created hidden; revealed only after its
-// Dart paints the frozen frame (capture-then-show). One instance per display.
+// A borderless, top-most window covering exactly one monitor, hosting its own
+// Flutter engine + view (engine-per-surface). The Windows analogue of the macOS
+// OverlayWindow + its warmed FlutterViewController. ALWAYS true per-pixel
+// transparent (DWM glass sheet) like the macOS overlay: a frozen screenshot
+// renders opaque (its pixels are alpha 255), while the live record-select picker
+// paints a transparent base so the real desktop shows through -- so ONE window
+// composites every layer. Created hidden; revealed only after its Dart paints the
+// first frame (capture-then-show). One instance per display.
 class OverlayWindow {
  public:
   OverlayWindow();
@@ -36,6 +38,15 @@ class OverlayWindow {
   // Hide but keep the engine warm + resident (SW_HIDE; never destroyed between
   // captures, so the next capture re-reveals instantly).
   void Hide();
+
+  // Exclude (or re-include) this window from screen capture
+  // (SetWindowDisplayAffinity WDA_EXCLUDEFROMCAPTURE). Excluded ONLY while a live
+  // record-select loupe feed is active, so the loupe's WGC feed samples the TRUE
+  // desktop (not the dim veil). It must be re-INCLUDED otherwise so a recording
+  // over a screenshot session still captures the overlay (frozen screenshot +
+  // annotations) as content -- coexistence transition 1. The DWM glass itself is
+  // permanent (set in Create); this only toggles capture exclusion.
+  void SetCaptureExcluded(bool excluded);
 
   // Bring this window to the foreground (the cursor poll re-keys the active
   // display). Best-effort against Windows' SetForegroundWindow restrictions.

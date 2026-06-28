@@ -7,6 +7,7 @@
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -39,7 +40,17 @@ class RecordChannel {
   // engine's Dart (emits onRecordSelection -> RecordController). Platform thread.
   void RelaySelection(flutter::EncodableValue args);
 
+  // Notified when recording starts/stops so the tray can reflect the state
+  // (active=true on start; active=false on stop -- graceful=false for an abort /
+  // failure, true for a normal finish). Set once by FlutterWindow.
+  void SetRecordingStateCallback(std::function<void(bool active, bool graceful)> cb) {
+    on_state_ = std::move(cb);
+  }
+
  private:
+  void NotifyState(bool active, bool graceful) {
+    if (on_state_) on_state_(active, graceful);
+  }
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
@@ -58,7 +69,8 @@ class RecordChannel {
   // the rect on the recording display. [output_path]/[gif] drive the strip's
   // file-size / frame-count readout.
   void ShowChrome(const Recorder::StartedInfo& info, bool border, bool scrim,
-                  int max_duration_sec, const std::string& output_path, bool gif);
+                  int max_duration_sec, const std::string& output_path, bool gif,
+                  HWND follow);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<Recorder> recorder_;
@@ -68,6 +80,7 @@ class RecordChannel {
   // Held across a countdown: the spec to start when the countdown completes.
   Recorder::Spec pending_spec_;
   bool pending_scrim_ = true;
+  std::function<void(bool, bool)> on_state_;  // recording-state -> tray
 };
 
 #endif  // RUNNER_RECORD_CHANNEL_H_

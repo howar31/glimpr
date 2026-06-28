@@ -138,13 +138,19 @@ void RecordChannel::HandleMethodCall(
       pending_spec_ = spec;
       pending_scrim_ = show_scrim;
       const bool cd_border = spec.mode != Recorder::Mode::kDisplay;
+      // Window mode: follow the moving/resized window during the countdown too.
+      HWND follow =
+          (spec.mode == Recorder::Mode::kWindow && spec.window_id)
+              ? reinterpret_cast<HWND>(static_cast<intptr_t>(spec.window_id))
+              : nullptr;
       chrome_->ShowCountdown(
           spec.display_id, spec.x, spec.y, spec.w, spec.h, countdown, cd_border,
           show_scrim, [this]() { DoStart(pending_spec_, pending_scrim_); },
           [this]() {
             if (chrome_) chrome_->Hide();  // tear the countdown frame on cancel
             Emit("onRecordAborted");
-          });
+          },
+          follow);
     } else {
       DoStart(spec, show_scrim);
     }
@@ -164,6 +170,7 @@ void RecordChannel::HandleMethodCall(
       Emit("onRecordAborted");
     }
     if (chrome_) chrome_->Hide();
+    NotifyState(false, false);  // abort -> tray snaps back to idle
     result->Success();
     return;
   }
@@ -225,6 +232,7 @@ void RecordChannel::HandleMethodCall(
 
 void RecordChannel::FinishActive() {
   if (!recorder_->active()) return;
+  NotifyState(false, true);  // graceful finish -> tray eases back to idle
   if (chrome_) chrome_->Hide();  // the strip is in the recording's chrome; drop it first
   Emit("onRecordStopping");
   std::string path, error;
@@ -245,6 +253,7 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
   const bool ok =
       recorder_->Start(spec, control_hwnd_, WM_GLIMPR_RECORD, &info, &error);
   if (ok) {
+    NotifyState(true, true);  // recording started -> tray goes recording-red
     Emit("onRecordStarted",
          EncodableValue(EncodableMap{
              {EncodableValue("displayId"), EncodableValue(info.display_id)},
@@ -252,8 +261,13 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
              {EncodableValue("y"), EncodableValue(info.y)},
              {EncodableValue("w"), EncodableValue(info.w)},
              {EncodableValue("h"), EncodableValue(info.h)}}));
+    // Window mode: the chrome follows the moving/resized window.
+    HWND follow =
+        (spec.mode == Recorder::Mode::kWindow && spec.window_id)
+            ? reinterpret_cast<HWND>(static_cast<intptr_t>(spec.window_id))
+            : nullptr;
     ShowChrome(info, spec.mode != Recorder::Mode::kDisplay, show_scrim,
-               spec.max_duration_sec, spec.output_path, spec.gif);
+               spec.max_duration_sec, spec.output_path, spec.gif, follow);
   } else {
     Emit("onRecordFailed",
          EncodableValue(EncodableMap{
@@ -263,7 +277,8 @@ void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
 
 void RecordChannel::ShowChrome(const Recorder::StartedInfo& info, bool border,
                                bool scrim, int max_duration_sec,
-                               const std::string& output_path, bool gif) {
+                               const std::string& output_path, bool gif,
+                               HWND follow) {
   if (!chrome_) return;
   chrome_->Show(info.display_id, info.x, info.y, info.w, info.h, border, scrim,
                 max_duration_sec, gif, output_path,
@@ -287,8 +302,10 @@ void RecordChannel::ShowChrome(const Recorder::StartedInfo& info, bool border,
                         Emit("onRecordAborted");
                       }
                       if (chrome_) chrome_->Hide();
+                      NotifyState(false, false);  // strip Abort -> tray idle
                     },
-                });
+                },
+                follow);
 }
 
 void RecordChannel::RelaySelection(EncodableValue args) {
@@ -301,6 +318,7 @@ void RecordChannel::OnNativeEvent(uint32_t code) {
     if (error.empty()) error = "recording failed";
     if (recorder_->active()) recorder_->Abort();  // discard the partial file
     if (chrome_) chrome_->Hide();
+    NotifyState(false, false);  // failure -> tray snaps back to idle
     Emit("onRecordFailed",
          EncodableValue(flutter::EncodableMap{
              {flutter::EncodableValue("message"),

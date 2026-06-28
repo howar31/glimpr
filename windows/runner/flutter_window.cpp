@@ -363,6 +363,10 @@ bool FlutterWindow::OnCreate() {
   editor_window_->SetRecentImagesCallback([this](std::vector<std::string> p) {
     if (tray_icon_) tray_icon_->SetRecentImages(std::move(p));
   });
+  // The tray mark reflects the recording state (red breathing while recording).
+  record_channel_->SetRecordingStateCallback([this](bool active, bool graceful) {
+    if (tray_icon_) tray_icon_->SetRecordingState(active, graceful);
+  });
 
   // A second instance posts this to reveal the running one's Settings.
   reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");

@@ -231,6 +231,13 @@ void CaptureChannel::HandleMethodCall(
     result->Success();
     return;
   }
+  if (call.method_name() == "recordSelectHotkey") {
+    // A record hotkey while the record-select picker is up: relay to the overlay
+    // engines so the picker resurfaces / cancels (mirrors macOS).
+    if (overlay_manager_) overlay_manager_->RelayRecordSelectHotkey();
+    result->Success();
+    return;
+  }
   if (call.method_name() == "openInEditor") {
     // The direct-capture flow's open-in-editor leg: reveal the editor + load the
     // saved/temp file.

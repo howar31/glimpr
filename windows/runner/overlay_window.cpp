@@ -1,8 +1,16 @@
 #include "overlay_window.h"
 
+#include <dwmapi.h>
 #include <flutter/generated_plugin_registrant.h>
 
 #include <optional>
+
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011  // Win10 2004+; excludes from WGC capture
+#endif
+#ifndef WDA_NONE
+#define WDA_NONE 0x00000000
+#endif
 
 namespace {
 
@@ -69,9 +77,13 @@ bool OverlayWindow::Create(const flutter::DartProject& project,
   child_ = controller_->view()->GetNativeWindow();
   SetParent(child_, hwnd_);
   MoveWindow(child_, 0, 0, w, h, TRUE);
-  // Nudge the engine so it produces a first frame even though the host window is
-  // still hidden; Dart signals overlayReady once it has painted the frozen frame.
-  controller_->ForceRedraw();
+  // Permanent DWM "glass sheet": DWM composites the Flutter surface's
+  // premultiplied alpha against the desktop, so a frozen screenshot's alpha-255
+  // pixels read opaque while the live record-select picker's transparent base
+  // lets the real desktop show through -- ONE window composites every layer
+  // (mirrors the macOS always-transparent NSWindow).
+  const MARGINS glass{-1, -1, -1, -1};
+  DwmExtendFrameIntoClientArea(hwnd_, &glass);
   return true;
 }
 
@@ -98,6 +110,15 @@ void OverlayWindow::Hide() {
   if (!hwnd_) return;
   ShowWindow(hwnd_, SW_HIDE);
   visible_ = false;
+}
+
+void OverlayWindow::SetCaptureExcluded(bool excluded) {
+  if (!hwnd_) return;
+  // Exclude only while a live record-select loupe feed runs, so the loupe's WGC
+  // feed sees the true desktop, not the dim veil. Re-include otherwise so a
+  // recording over a screenshot session captures the overlay as content. (The
+  // DWM glass is permanent -- applied in Create -- so this never changes opacity.)
+  SetWindowDisplayAffinity(hwnd_, excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
 }
 
 void OverlayWindow::SetForeground() {
