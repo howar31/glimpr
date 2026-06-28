@@ -232,11 +232,21 @@ void RecordChannel::HandleMethodCall(
 
 void RecordChannel::FinishActive() {
   if (!recorder_->active()) return;
-  NotifyState(false, true);  // graceful finish -> tray eases back to idle
+  // Mirror macOS: at a graceful stop the recording-red SNAPS off (graceful=false,
+  // so it does NOT ease and fight the pulse) and the logo-gradient "processing"
+  // pulse runs on the tray while the file finalizes. NOTE: Recorder::Stop blocks
+  // the platform thread (joins the encoder + finalizes), so the pulse animates
+  // only AFTER Stop returns -- it then runs >= 1 full cycle (mac's pulse-during-
+  // finalize would need an async finalize; the long-GIF finalize freeze is a
+  // documented platform deviation, see memory glimpr-windows-recording).
+  NotifyState(false, false);
+  NotifyProcessing(true);
   if (chrome_) chrome_->Hide();  // the strip is in the recording's chrome; drop it first
   Emit("onRecordStopping");
   std::string path, error;
-  if (recorder_->Stop(&path, &error)) {
+  const bool ok = recorder_->Stop(&path, &error);
+  NotifyProcessing(false);  // ends at the next pulse low (>= 1 full cycle)
+  if (ok) {
     Emit("onRecordFinished",
          EncodableValue(EncodableMap{
              {EncodableValue("path"), EncodableValue(path)}}));

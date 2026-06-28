@@ -54,6 +54,13 @@ class EditorWindow : public Win32Window {
   // Route the editor's pin flow leg to the shared pin manager (Task 7).
   void SetPinManager(PinManager* pm) { pin_manager_ = pm; }
 
+  // The editor-export "processing" pulse: glimpr/imageEditor setProcessing relays
+  // here -> the control engine's tray (set once by FlutterWindow). Mirrors macOS,
+  // where the editor's Done/export drives the status-item processing pulse.
+  void SetProcessingCallback(std::function<void(bool)> cb) {
+    proc_cb_ = std::move(cb);
+  }
+
  protected:
   bool OnCreate() override;
   void OnDestroy() override;
@@ -83,6 +90,7 @@ class EditorWindow : public Win32Window {
   std::optional<std::string> pending_path_;
 
   std::function<void(std::vector<std::string>)> recent_cb_;
+  std::function<void(bool)> proc_cb_;  // editor-export pulse -> control tray
   PinManager* pin_manager_ = nullptr;
 };
 

@@ -62,6 +62,13 @@ class OverlayManager {
     record_relay_ = std::move(relay);
   }
 
+  // Relay the capture-export "processing" pulse from an overlay engine's
+  // glimpr/capture setProcessing to the control engine's tray (set once by
+  // FlutterWindow). The overlay engine owns the capture lifecycle, like macOS.
+  void SetProcessingRelay(std::function<void(bool)> relay) {
+    processing_relay_ = std::move(relay);
+  }
+
   // A record hotkey pressed while a record-select picker is in flight: relay
   // onRecordSelectHotkey to EVERY overlay engine so each resurfaces / cancels its
   // picker per its own state (the shared Dart decides). Mirrors the macOS
@@ -157,6 +164,7 @@ class OverlayManager {
   class EditorWindow* editor_window_ = nullptr;  // not owned
   class PinManager* pin_manager_ = nullptr;      // not owned
   std::function<void(flutter::EncodableValue)> record_relay_;  // -> control record channel
+  std::function<void(bool)> processing_relay_;  // capture-export pulse -> control tray
   std::map<int64_t, Unit> units_;
   // Live record-select state: one live WGC loupe feed per display while a
   // transparent picker session is up (empty otherwise).

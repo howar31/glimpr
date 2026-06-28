@@ -367,6 +367,21 @@ bool FlutterWindow::OnCreate() {
   record_channel_->SetRecordingStateCallback([this](bool active, bool graceful) {
     if (tray_icon_) tray_icon_->SetRecordingState(active, graceful);
   });
+  // The tray mark pulses the logo gradient (cyan->blue->violet) while a capture
+  // export / recording finalize / editor export is in flight -- mirrors macOS
+  // setProcessing. All three sources route to the single control-engine tray.
+  record_channel_->SetProcessingCallback([this](bool active) {
+    if (tray_icon_) tray_icon_->SetProcessing(active);
+  });
+  capture_channel_->SetProcessingCallback([this](bool active) {
+    if (tray_icon_) tray_icon_->SetProcessing(active);  // direct-capture path
+  });
+  overlay_manager_->SetProcessingRelay([this](bool active) {
+    if (tray_icon_) tray_icon_->SetProcessing(active);  // interactive overlay path
+  });
+  editor_window_->SetProcessingCallback([this](bool active) {
+    if (tray_icon_) tray_icon_->SetProcessing(active);  // editor export
+  });
 
   // A second instance posts this to reveal the running one's Settings.
   reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");

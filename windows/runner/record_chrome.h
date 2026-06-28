@@ -104,12 +104,22 @@ class RecordChrome {
   // strip (until the user drags it) + countdown HUD. Driven by the strip /
   // countdown timers (~20 Hz). No-op when not following.
   bool PollFollow();  // returns true if it reframed this poll
+  // The recording chrome must stay ABOVE a screenshot freeze overlay even after
+  // the overlay is clicked (a click activates it -> the OS raises it to the front
+  // of the topmost band, above our equally-topmost chrome). macOS does this with
+  // an absolute window level (CGShieldingWindowLevel()+1); Windows has no band
+  // above topmost, so the chrome re-stacks itself when covered. Gated on actual
+  // overlap so a normal recording (nothing above) never churns the z-order.
+  bool IsChromeWindow(HWND w) const;  // one of our own scrim/border/strip/HUD windows
+  bool ChromeCovered() const;         // a foreign window overlaps + sits above the chrome
+  void RaiseChrome();                 // re-stack scrims < border < strip/HUD atop everything
   void Reframe(const RECT& rect_px);  // rect_px = recorded rect (physical, global)
-  // Lay out the four outside-rect dim edges around [rect_px] within its monitor.
-  void LayoutScrim(const RECT& rect_px);
-  // Draw the recorded-rect border (rounded red edge + glow + viewfinder corner
-  // brackets) into a click-through overlay window, faithful to macOS.
-  void ShowBorder(int rx, int ry, int rw, int rh);  // recorded rect, physical px
+  // Update the recording-frame window REGIONS for the recorded rect [rect_px]:
+  // the dim window's punched-out hole + the red window's ring/brackets shape. Both
+  // are full-monitor uniform-alpha click-through windows, so a follow reframe is
+  // just two SetWindowRgn calls -- no readback, no per-window seams (one dim piece,
+  // one frame piece), no flicker. Re-homes the windows on a cross-display move.
+  void ApplyFrameRegions(const RECT& rect_px);
   // Blit a finished D2D target bitmap to a layered window at (x,y).
   void PresentLayered(HWND hwnd, ID2D1Bitmap1* target, int x, int y, UINT W,
                       UINT H);
@@ -143,11 +153,18 @@ class RecordChrome {
 
   RECT stop_rc_{}, pause_rc_{}, abort_rc_{};  // physical px, client coords
 
-  bool frame_up_ = false;             // the frame overlays are shown (border/scrims)
-  HWND border_hwnd_ = nullptr;        // red outline around the recorded rect
-  int border_rw_ = 0, border_rh_ = 0; // recorded-rect size the border was drawn for (px)
+  bool frame_up_ = false;             // the frame windows + scrims are shown
+  // The recording frame = TWO full-monitor uniform-alpha click-through windows
+  // shaped by their REGION (no readback, no seams; mac's single hole-punched
+  // scrim + frame): the dim (black, full-monitor MINUS the rounded recorded-rect
+  // hole) and the red border (ring + viewfinder brackets). Created only in
+  // region/window modes; the follow updates their regions via SetWindowRgn.
+  HWND dim_hwnd_ = nullptr;           // unified outside-rect dim (region = hole)
+  HWND border_hwnd_ = nullptr;        // red frame (region = ring + brackets)
+  RECT frame_mon_{};                  // recording monitor rect (region coords are window-local)
+  bool frame_has_scrim_ = false;      // the dim window exists (the "Dim outside" setting)
+  bool frame_has_border_ = false;     // the red frame window exists (region/window modes)
   std::vector<HWND> scrim_hwnds_;     // OTHER-display dim overlays (static)
-  HWND inrect_scrim_[4] = {};         // outside-rect dim edges (top/bottom/left/right)
 
   // Window-follow state (window mode); follow_hwnd_ null = no follow.
   HWND follow_hwnd_ = nullptr;

@@ -27,14 +27,12 @@ using winrt::com_ptr;
 
 constexpr wchar_t kClass[] = L"GlimprRecordChrome";
 
-// CLSID_D2D1GaussianBlur is declared but not defined by the SDK import libs
-// (same as CLSID_D2D1Shadow in decoration.cpp) -- define the GUID value locally
-// under our own name to avoid the unresolved-external link error.
-const GUID kCLSID_GaussianBlur = {
-    0x1feb6d69, 0x2fe6, 0x4ac9, {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
-
 constexpr UINT_PTR kTickTimer = 0xC001;
-constexpr UINT kTickMs = 50;       // ~20 fps: smooth dot breath (idle while paused)
+// 30 (not 33) is deliberate: a USER timer fires on the system clock tick (~15.6ms
+// at the default resolution), so SetTimer rounds the period UP to a multiple of
+// it -- 33 -> 46.8ms (~21 Hz, measured), but 30 -> 31.25ms (~30 Hz, macOS-parity
+// window-follow). No timeBeginPeriod needed.
+constexpr UINT kTickMs = 30;       // ~30 fps: window-follow poll + dot breath
 constexpr UINT kDetailMs = 500;    // size/frames readout poll throttle
 constexpr UINT_PTR kCdTimer = 0xC002;
 constexpr int kCdPanel = 132;  // countdown HUD square (logical points)
@@ -170,16 +168,94 @@ HWND CreateUniformScrim(BYTE alpha) {
   return hwnd;
 }
 
-// Position a uniform scrim window to [r] (physical, global); hide it when empty.
-void PlaceScrim(HWND hwnd, const RECT& r) {
-  if (!hwnd) return;
-  const int w = r.right - r.left, h = r.bottom - r.top;
-  if (w <= 0 || h <= 0) {
-    ShowWindow(hwnd, SW_HIDE);
-    return;
+// A uniform recording-RED click-through layered window (the recorded-rect frame).
+// The visible shape (ring + brackets) is the window REGION; uniform alpha, so it
+// composites with NO readback -> a follow reframe just updates the region (cheap,
+// smooth). Like the dim scrim, WS_EX_TRANSPARENT keeps it fully click-through.
+constexpr wchar_t kUniformRedClass[] = L"GlimprRecordRed";
+
+void EnsureUniformRedClass() {
+  static bool reg = false;
+  if (reg) return;
+  WNDCLASSW wc{};
+  wc.lpfnWndProc = DefWindowProcW;
+  wc.hInstance = GetModuleHandleW(nullptr);
+  wc.lpszClassName = kUniformRedClass;
+  wc.hbrBackground = CreateSolidBrush(RGB(0xFF, 0x45, 0x3A));  // recording red
+  RegisterClassW(&wc);
+  reg = true;
+}
+
+HWND CreateUniformRed(BYTE alpha) {
+  EnsureUniformRedClass();
+  HWND hwnd = CreateWindowExW(
+      WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+          WS_EX_NOACTIVATE,
+      kUniformRedClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
+      GetModuleHandleW(nullptr), nullptr);
+  if (!hwnd) return nullptr;
+  SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+  SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+  return hwnd;
+}
+
+// Region (window-local) = full [w x h] MINUS the rounded recorded rect (the hole):
+// the unified dim with the recorded rect punched out, like macOS's single scrim.
+HRGN MakeHoleRegion(int w, int h, RECT hole, int radius) {
+  HRGN full = CreateRectRgn(0, 0, w, h);
+  if (hole.left < 0) hole.left = 0;
+  if (hole.top < 0) hole.top = 0;
+  if (hole.right > w) hole.right = w;
+  if (hole.bottom > h) hole.bottom = h;
+  if (hole.right > hole.left && hole.bottom > hole.top && full) {
+    HRGN h2 = CreateRoundRectRgn(hole.left, hole.top, hole.right, hole.bottom,
+                                 radius * 2, radius * 2);
+    if (h2) {
+      CombineRgn(full, full, h2, RGN_DIFF);
+      DeleteObject(h2);
+    }
   }
-  SetWindowPos(hwnd, HWND_TOPMOST, r.left, r.top, w, h,
-               SWP_NOACTIVATE | SWP_SHOWWINDOW);
+  return full;
+}
+
+// Region (window-local) for the red frame: a thin rounded ring around [r] plus the
+// four viewfinder corner brackets. Hard-edged (1-bit region, no AA / glow) -- the
+// owner-accepted trade for a readback-free, seam-free, smooth follow.
+HRGN MakeFrameRegion(const RECT& r, double scale) {
+  auto S = [scale](double v) {
+    return static_cast<int>(std::lround(v * scale));
+  };
+  const int rad = (std::max)(1, S(3));
+  const int half = (std::max)(1, S(1));   // ring half-thickness (~2pt total)
+  const int bt = (std::max)(2, S(3));      // bracket thickness
+  const int bh = bt / 2;
+  const int arm = (std::max)(bt + 1, S(22));  // bracket arm length
+  // Ring = outer rounded rect MINUS inner rounded rect.
+  HRGN rgn = CreateRoundRectRgn(r.left - half, r.top - half, r.right + half,
+                                r.bottom + half, (rad + half) * 2, (rad + half) * 2);
+  HRGN inner = CreateRoundRectRgn(r.left + half, r.top + half, r.right - half,
+                                  r.bottom - half, (std::max)(0, rad - half) * 2,
+                                  (std::max)(0, rad - half) * 2);
+  if (rgn && inner) CombineRgn(rgn, rgn, inner, RGN_DIFF);
+  if (inner) DeleteObject(inner);
+  if (!rgn) return nullptr;
+  auto add = [&](int l, int t, int rr, int b) {
+    HRGN h = CreateRectRgn(l, t, rr, b);
+    if (h) {
+      CombineRgn(rgn, rgn, h, RGN_OR);
+      DeleteObject(h);
+    }
+  };
+  const int L = r.left, T = r.top, R = r.right, B = r.bottom;
+  add(L - bh, T - bh, L - bh + arm, T - bh + bt);  // top-left horiz
+  add(L - bh, T - bh, L - bh + bt, T - bh + arm);  // top-left vert
+  add(R + bh - arm, T - bh, R + bh, T - bh + bt);  // top-right horiz
+  add(R + bh - bt, T - bh, R + bh, T - bh + arm);  // top-right vert
+  add(R + bh - arm, B + bh - bt, R + bh, B + bh);  // bottom-right horiz
+  add(R + bh - bt, B + bh - arm, R + bh, B + bh);  // bottom-right vert
+  add(L - bh, B + bh - bt, L - bh + arm, B + bh);  // bottom-left horiz
+  add(L - bh, B + bh - arm, L - bh + bt, B + bh);  // bottom-left vert
+  return rgn;
 }
 
 struct ScrimEnum {
@@ -476,28 +552,33 @@ void RecordChrome::CreateFrameOverlays(HMONITOR mon, const MONITORINFO& mi,
   const RECT rec_px{tx, ty, tx + tw, ty + th};
   follow_px_ = rec_px;
   follow_border_ = border;
+  frame_mon_ = mi.rcMonitor;
+  frame_has_scrim_ = border && scrim;
+  frame_has_border_ = border;
+  const int mw = mi.rcMonitor.right - mi.rcMonitor.left;
+  const int mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
-  // Region/window modes: dim everything OUTSIDE the recorded rect on the
-  // RECORDING display too (macOS RecordingFrameView punches the rect out of a
-  // full-display dim). Implemented as FOUR uniform dim edges (top/bottom/left/
-  // right) rather than a single per-pixel punch, so a followed window's move is a
-  // cheap SetWindowPos (LayoutScrim) instead of re-rasterizing a full-display
-  // bitmap each frame. Click-through + capture-excluded; the red border on top
-  // covers the inner cut edge.
-  if (border && scrim) {
-    for (HWND& s : inrect_scrim_) {
-      if (!s) s = CreateUniformScrim(0x66);
+  // Region/window modes: dim OUTSIDE the recorded rect via ONE full-monitor
+  // uniform-black click-through window with the rect punched out (region hole) --
+  // a single seamless piece like macOS's hole-punched scrim, and uniform-alpha so
+  // there is NO per-frame readback (a follow reframe just updates the region).
+  if (frame_has_scrim_) {
+    dim_hwnd_ = CreateUniformScrim(0x66);
+    if (dim_hwnd_) {
+      SetWindowPos(dim_hwnd_, HWND_TOPMOST, mi.rcMonitor.left, mi.rcMonitor.top,
+                   mw, mh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
-    LayoutScrim(rec_px);
   }
-
-  // Red rounded edge + glow + viewfinder corner brackets around the recorded
-  // rect (region / window modes), faithful to the macOS RecordingFrameView.
-  if (border) {
-    ShowBorder(tx, ty, tw, th);
-    border_rw_ = tw;
-    border_rh_ = th;
+  // Red recorded-rect frame: ONE full-monitor uniform-red click-through window
+  // whose REGION is the ring + viewfinder brackets (hard-edged, no readback).
+  if (frame_has_border_) {
+    border_hwnd_ = CreateUniformRed(0xD8);  // ~85% recording-red
+    if (border_hwnd_) {
+      SetWindowPos(border_hwnd_, HWND_TOPMOST, mi.rcMonitor.left, mi.rcMonitor.top,
+                   mw, mh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
   }
+  ApplyFrameRegions(rec_px);  // shape both windows for the initial rect
 
   // Dim every OTHER display (40% black premultiplied).
   if (scrim) {
@@ -512,53 +593,59 @@ void RecordChrome::CreateFrameOverlays(HMONITOR mon, const MONITORINFO& mi,
   }
 }
 
-void RecordChrome::LayoutScrim(const RECT& r) {
-  if (!inrect_scrim_[0]) return;  // no outside-rect scrim (display mode / none)
-  HMONITOR mon = MonitorFromRect(&r, MONITOR_DEFAULTTONEAREST);
+void RecordChrome::ApplyFrameRegions(const RECT& rect) {
+  if (!dim_hwnd_ && !border_hwnd_) return;
+  // Re-home the full-monitor frame windows if the rect crossed to another display.
+  HMONITOR mon = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi{};
   mi.cbSize = sizeof(mi);
-  if (!GetMonitorInfo(mon, &mi)) return;
-  const RECT m = mi.rcMonitor;
-  // Clamp the clear hole to the monitor so the edges never invert.
-  RECT hole = r;
-  if (hole.left < m.left) hole.left = m.left;
-  if (hole.top < m.top) hole.top = m.top;
-  if (hole.right > m.right) hole.right = m.right;
-  if (hole.bottom > m.bottom) hole.bottom = m.bottom;
-  PlaceScrim(inrect_scrim_[0], {m.left, m.top, m.right, hole.top});          // top
-  PlaceScrim(inrect_scrim_[1], {m.left, hole.bottom, m.right, m.bottom});    // bottom
-  PlaceScrim(inrect_scrim_[2], {m.left, hole.top, hole.left, hole.bottom});  // left
-  PlaceScrim(inrect_scrim_[3],
-             {hole.right, hole.top, m.right, hole.bottom});  // right
+  if (GetMonitorInfo(mon, &mi) &&
+      (mi.rcMonitor.left != frame_mon_.left ||
+       mi.rcMonitor.top != frame_mon_.top ||
+       mi.rcMonitor.right != frame_mon_.right ||
+       mi.rcMonitor.bottom != frame_mon_.bottom)) {
+    frame_mon_ = mi.rcMonitor;
+    const int mw = frame_mon_.right - frame_mon_.left;
+    const int mh = frame_mon_.bottom - frame_mon_.top;
+    if (dim_hwnd_)
+      SetWindowPos(dim_hwnd_, nullptr, frame_mon_.left, frame_mon_.top, mw, mh,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
+    if (border_hwnd_)
+      SetWindowPos(border_hwnd_, nullptr, frame_mon_.left, frame_mon_.top, mw, mh,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  const int mw = frame_mon_.right - frame_mon_.left;
+  const int mh = frame_mon_.bottom - frame_mon_.top;
+  const RECT lr{rect.left - frame_mon_.left, rect.top - frame_mon_.top,
+                rect.right - frame_mon_.left, rect.bottom - frame_mon_.top};
+  // bRedraw = TRUE: a region change on a layered window must force a repaint, else
+  // the new shape is set internally but never composited (the frame would not
+  // visually follow -- exactly the "doesn't follow" bug). The window owns the
+  // region after the call.
+  if (dim_hwnd_) {
+    SetWindowRgn(dim_hwnd_,
+                 MakeHoleRegion(mw, mh, lr,
+                                static_cast<int>(std::lround(3 * scale_))),
+                 TRUE);
+  }
+  if (border_hwnd_) {
+    SetWindowRgn(border_hwnd_, MakeFrameRegion(lr, scale_), TRUE);
+  }
 }
 
 void RecordChrome::Reframe(const RECT& r) {
   follow_px_ = r;
   const int tw = r.right - r.left, th = r.bottom - r.top;
-  // Outside-rect dim edges FIRST: each PlaceScrim re-raises to the top of the
-  // topmost band, so the border / strip / countdown must be re-asserted ABOVE
-  // them afterwards (last SetWindowPos(HWND_TOPMOST) wins the top).
-  LayoutScrim(r);
-  // Border above the scrims: a pure move is a cheap SetWindowPos (also re-raises
-  // it); a resize re-renders it (ShowBorder shows it on top).
-  if (follow_border_) {
-    const int M = (std::max)(8, static_cast<int>(std::lround(20 * scale_)));
-    if (border_hwnd_ && tw == border_rw_ && th == border_rh_) {
-      SetWindowPos(border_hwnd_, HWND_TOPMOST, r.left - M, r.top - M, 0, 0,
-                   SWP_NOSIZE | SWP_NOACTIVATE);
-    } else {
-      if (border_hwnd_) {
-        DestroyWindow(border_hwnd_);
-        border_hwnd_ = nullptr;
-      }
-      ShowBorder(r.left, r.top, tw, th);
-      border_rw_ = tw;
-      border_rh_ = th;
-    }
-  }
+  (void)th;
+
+  // Frame: update the dim hole + the red ring/brackets region for the new rect.
+  // Both are uniform-alpha full-monitor click-through windows, so this is just two
+  // SetWindowRgn calls -- no readback, no per-window seams -> smooth + no flicker.
+  ApplyFrameRegions(r);
+
   // Strip: re-home to the rect's bottom-centre until the user drags it (macOS
-  // detaches on first manual drag). Render() (driven by the tick) repaints it at
-  // the new win_x_/win_y_; here we just keep it stacked ABOVE the scrims.
+  // detaches on first manual drag). Render() (driven by the tick, right after this)
+  // repositions it (UpdateLayeredWindow) at the new win_x_/win_y_.
   HMONITOR mon = MonitorFromRect(&r, MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi{};
   mi.cbSize = sizeof(mi);
@@ -573,17 +660,10 @@ void RecordChrome::Reframe(const RECT& r) {
     if (win_y_ + win_h_ > mi.rcMonitor.bottom)
       win_y_ = mi.rcMonitor.bottom - win_h_;
   }
-  if (hwnd_) {  // keep the strip above the just-raised scrims
-    SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-  }
-  // Countdown HUD: recentre on the rect (RenderCountdown, driven by the cd tick,
-  // repaints it at the new cd_x_/cd_y_) and keep it above the scrims.
+  // Countdown HUD: recentre on the rect (RenderCountdown applies cd_x_/cd_y_).
   if (cd_hwnd_) {
     cd_x_ = (r.left + r.right) / 2 - cd_w_ / 2;
     cd_y_ = (r.top + r.bottom) / 2 - cd_h_ / 2;
-    SetWindowPos(cd_hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
   }
 }
 
@@ -608,6 +688,58 @@ bool RecordChrome::PollFollow() {
   }
   Reframe(r);
   return true;
+}
+
+bool RecordChrome::IsChromeWindow(HWND w) const {
+  if (w == hwnd_ || w == dim_hwnd_ || w == border_hwnd_ || w == cd_hwnd_) {
+    return true;
+  }
+  for (HWND s : scrim_hwnds_) {
+    if (w == s) return true;
+  }
+  return false;
+}
+
+bool RecordChrome::ChromeCovered() const {
+  // The frontmost chrome window: the strip while recording, else the countdown
+  // HUD during the countdown.
+  HWND front = hwnd_ ? hwnd_ : cd_hwnd_;
+  if (!front) return false;
+  RECT fr{};
+  if (!GetWindowRect(front, &fr)) return false;
+  // Walk the windows stacked ABOVE the frontmost chrome window (GW_HWNDPREV goes
+  // toward the top of the z-order). A visible, non-chrome window that OVERLAPS the
+  // chrome means a freeze overlay (or similar) raised itself over us on a click.
+  // The overlap gate stops an unrelated topmost window elsewhere from triggering a
+  // needless re-stack.
+  for (HWND w = GetWindow(front, GW_HWNDPREV); w; w = GetWindow(w, GW_HWNDPREV)) {
+    if (!IsWindowVisible(w) || IsChromeWindow(w)) continue;
+    RECT wr{}, ix{};
+    if (GetWindowRect(w, &wr) && IntersectRect(&ix, &wr, &fr)) return true;
+  }
+  return false;
+}
+
+void RecordChrome::RaiseChrome() {
+  // Re-stack the chrome to the front of the topmost band in its design order:
+  // scrims (bottom) -> border -> countdown HUD / strip (top). Each HWND_TOPMOST
+  // insert moves that window to the front, so the LAST raised ends up frontmost.
+  // One atomic DeferWindowPos pass; called only when actually covered, so it never
+  // runs during a normal recording (no z-order churn / flicker).
+  HDWP dwp = BeginDeferWindowPos(12);
+  if (!dwp) return;
+  auto raise = [&](HWND h) {
+    if (h && dwp) {
+      dwp = DeferWindowPos(dwp, h, HWND_TOPMOST, 0, 0, 0, 0,
+                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+  };
+  for (HWND s : scrim_hwnds_) raise(s);  // other-display dim (bottom)
+  raise(dim_hwnd_);                      // unified outside-rect dim
+  raise(border_hwnd_);                   // red recorded-rect frame
+  raise(cd_hwnd_);                       // countdown HUD (if any)
+  raise(hwnd_);                          // control strip (frontmost)
+  if (dwp) EndDeferWindowPos(dwp);
 }
 
 void RecordChrome::SetPaused(bool paused) {
@@ -759,119 +891,6 @@ void RecordChrome::FinishCountdown(bool done) {
   }
 }
 
-void RecordChrome::ShowBorder(int rx, int ry, int rw, int rh) {
-  if (!dc_ || !factory_ || rw <= 0 || rh <= 0) return;
-  const int M = (std::max)(8, static_cast<int>(std::lround(20 * scale_)));
-  const int bx = rx - M, by = ry - M;
-  const UINT W = static_cast<UINT>(rw + 2 * M), H = static_cast<UINT>(rh + 2 * M);
-
-  EnsureOverlayClass();
-  border_hwnd_ = CreateWindowExW(
-      WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
-          WS_EX_NOACTIVATE,
-      kOverlayClass, L"", WS_POPUP, bx, by, static_cast<int>(W),
-      static_cast<int>(H), nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-  if (!border_hwnd_) return;
-  SetWindowDisplayAffinity(border_hwnd_, WDA_EXCLUDEFROMCAPTURE);
-  ShowWindow(border_hwnd_, SW_SHOWNOACTIVATE);
-
-  auto S = [this](double v) { return static_cast<float>(v * scale_); };
-  const float fM = static_cast<float>(M);
-  const float Lx = fM, Ty = fM, Rx = fM + rw, By = fM + rh;
-  const float rad = S(3);
-  const D2D1_ROUNDED_RECT rr =
-      D2D1::RoundedRect(D2D1::RectF(Lx, Ty, Rx, By), rad, rad);
-  const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                    D2D1_ALPHA_MODE_PREMULTIPLIED);
-  const auto tp = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf);
-  try {
-    // Pass A: the glow source -- the rounded edge at the shadow alpha (0.18).
-    winrt::com_ptr<ID2D1Bitmap1> glow_src;
-    winrt::check_hresult(
-        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, tp, glow_src.put()));
-    winrt::com_ptr<ID2D1SolidColorBrush> b;
-    dc_->SetTarget(glow_src.get());
-    dc_->BeginDraw();
-    dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
-    dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 0.18f), b.put());
-    dc_->DrawRoundedRectangle(rr, b.get(), S(1));
-    winrt::check_hresult(dc_->EndDraw());
-
-    // Pass B: blurred glow + the sharp 1px edge (0.55) + viewfinder brackets.
-    winrt::com_ptr<ID2D1Bitmap1> target;
-    winrt::check_hresult(
-        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, tp, target.put()));
-    dc_->SetTarget(target.get());
-    dc_->BeginDraw();
-    dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
-    winrt::com_ptr<ID2D1Effect> blur;
-    if (SUCCEEDED(dc_->CreateEffect(kCLSID_GaussianBlur, blur.put()))) {
-      blur->SetInput(0, glow_src.get());
-      blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
-                     static_cast<float>(6.0 * scale_));
-      dc_->DrawImage(blur.get());
-    }
-    winrt::com_ptr<ID2D1SolidColorBrush> edge;
-    dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 0.55f), edge.put());
-    dc_->DrawRoundedRectangle(rr, edge.get(), S(1));
-
-    // Viewfinder corner brackets, faithful to macOS RecordingFrameView: 22pt
-    // arms, 3pt stroke, BUTT caps, and a 4.5pt rounded elbow drawn as an explicit
-    // arc (the earlier round line-join only rounded by stroke/2 = 1.5pt, which
-    // read as "slightly off").
-    const float arm = S(22);
-    const float r = S(4.5);
-    D2D1_STROKE_STYLE_PROPERTIES sp{};
-    sp.startCap = D2D1_CAP_STYLE_FLAT;
-    sp.endCap = D2D1_CAP_STYLE_FLAT;
-    sp.dashCap = D2D1_CAP_STYLE_FLAT;
-    sp.lineJoin = D2D1_LINE_JOIN_ROUND;
-    sp.miterLimit = 10.0f;
-    sp.dashStyle = D2D1_DASH_STYLE_SOLID;
-    winrt::com_ptr<ID2D1StrokeStyle> ss;
-    factory_->CreateStrokeStyle(sp, nullptr, 0, ss.put());
-    winrt::com_ptr<ID2D1PathGeometry> geom;
-    winrt::com_ptr<ID2D1SolidColorBrush> rb;
-    dc_->CreateSolidColorBrush(D2D1::ColorF(0xFF453A, 1.0f), rb.put());
-    if (SUCCEEDED(factory_->CreatePathGeometry(geom.put()))) {
-      winrt::com_ptr<ID2D1GeometrySink> sink;
-      if (SUCCEEDED(geom->Open(sink.put()))) {
-        // arm0 -line-> a0 -arc(r)-> a1 -line-> arm1; the arc is tangent to both
-        // arms (radius perpendicular to each), so the elbow is a smooth round.
-        auto bracket = [&](D2D1_POINT_2F arm0, D2D1_POINT_2F a0,
-                           D2D1_POINT_2F a1, D2D1_POINT_2F arm1,
-                           D2D1_SWEEP_DIRECTION sweep) {
-          sink->BeginFigure(arm0, D2D1_FIGURE_BEGIN_HOLLOW);
-          sink->AddLine(a0);
-          sink->AddArc(D2D1::ArcSegment(a1, D2D1::SizeF(r, r), 0.0f, sweep,
-                                        D2D1_ARC_SIZE_SMALL));
-          sink->AddLine(arm1);
-          sink->EndFigure(D2D1_FIGURE_END_OPEN);
-        };
-        bracket(D2D1::Point2F(Lx + arm, Ty), D2D1::Point2F(Lx + r, Ty),
-                D2D1::Point2F(Lx, Ty + r), D2D1::Point2F(Lx, Ty + arm),
-                D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE);  // top-left
-        bracket(D2D1::Point2F(Rx - arm, Ty), D2D1::Point2F(Rx - r, Ty),
-                D2D1::Point2F(Rx, Ty + r), D2D1::Point2F(Rx, Ty + arm),
-                D2D1_SWEEP_DIRECTION_CLOCKWISE);  // top-right
-        bracket(D2D1::Point2F(Rx, By - arm), D2D1::Point2F(Rx, By - r),
-                D2D1::Point2F(Rx - r, By), D2D1::Point2F(Rx - arm, By),
-                D2D1_SWEEP_DIRECTION_CLOCKWISE);  // bottom-right
-        bracket(D2D1::Point2F(Lx, By - arm), D2D1::Point2F(Lx, By - r),
-                D2D1::Point2F(Lx + r, By), D2D1::Point2F(Lx + arm, By),
-                D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE);  // bottom-left
-        sink->Close();
-        dc_->DrawGeometry(geom.get(), rb.get(), S(3), ss.get());
-      }
-    }
-    winrt::check_hresult(dc_->EndDraw());
-    PresentLayered(border_hwnd_, target.get(), bx, by, W, H);
-    dc_->SetTarget(nullptr);
-  } catch (...) {
-    if (dc_) dc_->SetTarget(nullptr);
-  }
-}
-
 void RecordChrome::TearStrip() {
   // Tear ONLY the strip + countdown HUD windows; leaves the frame overlays
   // (border + scrims) intact so the countdown -> recording transition is seamless.
@@ -891,20 +910,21 @@ void RecordChrome::TearStrip() {
 
 void RecordChrome::Hide() {
   TearStrip();
+  if (dim_hwnd_) {
+    DestroyWindow(dim_hwnd_);
+    dim_hwnd_ = nullptr;
+  }
   if (border_hwnd_) {
     DestroyWindow(border_hwnd_);
     border_hwnd_ = nullptr;
   }
-  border_rw_ = 0;
-  border_rh_ = 0;
+  frame_has_scrim_ = false;
+  frame_has_border_ = false;
+  frame_mon_ = RECT{};
   for (HWND s : scrim_hwnds_) {
     if (s) DestroyWindow(s);
   }
   scrim_hwnds_.clear();
-  for (HWND& s : inrect_scrim_) {
-    if (s) DestroyWindow(s);
-    s = nullptr;
-  }
   follow_hwnd_ = nullptr;
   strip_detached_ = false;
   frame_up_ = false;
@@ -927,6 +947,7 @@ LRESULT RecordChrome::MessageHandler(HWND hwnd, UINT msg, WPARAM wp,
   if (hwnd == cd_hwnd_) {
     if (msg == WM_TIMER && wp == kCdTimer) {
       const bool reframed = PollFollow();  // follow the window during countdown
+      if (ChromeCovered()) RaiseChrome();  // stay above a clicked freeze overlay
       const ULONGLONG now = GetTickCount64();
       bool dec = false;
       if (now - cd_last_dec_ms_ >= 1000) {
@@ -950,11 +971,12 @@ LRESULT RecordChrome::MessageHandler(HWND hwnd, UINT msg, WPARAM wp,
     case WM_TIMER:
       if (wp == kTickTimer) {
         const bool reframed = PollFollow();  // window-follow (window mode)
+        if (ChromeCovered()) RaiseChrome();  // stay above a clicked freeze overlay
         if (abort_armed_ && GetTickCount64() - abort_arm_ms_ > 3000) {
           abort_armed_ = false;  // auto-disarm after 3s
           Render();
         } else if (!paused_ || reframed) {
-          // Breathing render (~20 fps) + the 2 Hz size/timer refresh inside it.
+          // Breathing render (~30 fps) + the 2 Hz size/timer refresh inside it.
           // Normally skipped while paused (static dim dot, frozen timer) to stay
           // idle -- but a follow-reframe while paused still needs one repaint to
           // move the strip to the window's new position.

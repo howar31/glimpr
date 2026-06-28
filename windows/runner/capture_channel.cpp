@@ -259,6 +259,16 @@ void CaptureChannel::HandleMethodCall(
     result->Success();
     return;
   }
+  if (call.method_name() == "setProcessing") {
+    // Direct-capture commit (true) / delivered (false): drive the tray's
+    // logo-gradient processing pulse (mirrors macOS onCaptureProcessingChange).
+    const EncodableMap empty;
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const EncodableMap& map = args ? *args : empty;
+    if (proc_cb_) proc_cb_(GetBool(map, "active", false));
+    result->Success();
+    return;
+  }
   if (call.method_name() == "pinImage") {
     // The capture flow's pin leg: float [path] as a pin, in place over the
     // captured region when x/y/w/h are present, else centered.

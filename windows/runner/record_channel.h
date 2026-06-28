@@ -47,9 +47,19 @@ class RecordChannel {
     on_state_ = std::move(cb);
   }
 
+  // Notified to start/stop the tray's logo-gradient "processing" pulse while the
+  // file finalizes after a graceful stop (mirrors macOS onRecordingProcessingChange).
+  // Set once by FlutterWindow.
+  void SetProcessingCallback(std::function<void(bool active)> cb) {
+    on_processing_ = std::move(cb);
+  }
+
  private:
   void NotifyState(bool active, bool graceful) {
     if (on_state_) on_state_(active, graceful);
+  }
+  void NotifyProcessing(bool active) {
+    if (on_processing_) on_processing_(active);
   }
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -80,7 +90,8 @@ class RecordChannel {
   // Held across a countdown: the spec to start when the countdown completes.
   Recorder::Spec pending_spec_;
   bool pending_scrim_ = true;
-  std::function<void(bool, bool)> on_state_;  // recording-state -> tray
+  std::function<void(bool, bool)> on_state_;       // recording-state -> tray
+  std::function<void(bool)> on_processing_;        // finalize pulse -> tray
 };
 
 #endif  // RUNNER_RECORD_CHANNEL_H_

@@ -816,9 +816,16 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();
     return;
   }
-  if (method == "requestAccessibility" || method == "setProcessing" ||
-      method == "perfMark" || method == "shareSheet" ||
-      method == "recordSelectHotkey") {
+  if (method == "setProcessing") {
+    // Capture committed (true) / delivered (false): relay to the control engine's
+    // tray to drive the logo-gradient processing pulse (mirrors macOS, where the
+    // overlay engine forwards setProcessing to the status item).
+    if (processing_relay_) processing_relay_(GetBool(args, "active", false));
+    result->Success();
+    return;
+  }
+  if (method == "requestAccessibility" || method == "perfMark" ||
+      method == "shareSheet" || method == "recordSelectHotkey") {
     result->Success();
     return;
   }

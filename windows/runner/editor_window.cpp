@@ -178,6 +178,18 @@ bool EditorWindow::OnCreate() {
             }
           }
           result->Success();
+        } else if (m == "setProcessing") {
+          // Editor Done/export commit (true) / delivered (false): relay to the
+          // control engine's tray to drive the logo-gradient processing pulse.
+          bool active = false;
+          if (const auto* a = std::get_if<EncodableMap>(call.arguments())) {
+            auto it = a->find(EncodableValue(std::string("active")));
+            if (it != a->end()) {
+              if (const auto* b = std::get_if<bool>(&it->second)) active = *b;
+            }
+          }
+          if (proc_cb_) proc_cb_(active);
+          result->Success();
         } else if (m == "shareSheet") {
           result->Success();  // Windows v1: no system share surface
         } else if (m == "openSettings") {

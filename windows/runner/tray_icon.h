@@ -61,13 +61,27 @@ class TrayIcon {
   // Reduced motion (SPI_GETCLIENTAREAANIMATION off) holds solid red, no animation.
   void SetRecordingState(bool active, bool graceful);
 
+  // Reflect a "processing" state on the tray mark (mirrors macOS
+  // StatusItemController.setProcessing): the brand mark fills with the LOGO
+  // gradient (cyan #22D3EE -> blue #3B82F6 -> violet #A78BFA along ~-45deg) and
+  // PULSES (~0.5s, punchier + faster than the recording-red breath, so the two
+  // never read alike) while a capture export / recording finalize / editor
+  // export is in flight. [active]=false requests a stop that lands at the next
+  // pulse low after >= 1 full cycle, so even an instant operation shows one
+  // pulse. Reduced motion holds a static gradient fill. Ignored while recording
+  // (the red breath owns the mark; the finalize flow snaps red off first).
+  void SetProcessing(bool active);
+
  private:
   void ShowMenu();
   void OnCommand(UINT command_id);
   void OnRecordTick();                      // one breath/ease-out frame
+  void OnProcTick();                        // one processing-pulse frame
   HICON MakeTintedIcon(double mix) const;   // the base mark blended toward red
+  HICON MakeProcessingIcon(double intensity) const;  // mark filled w/ logo gradient
   void ApplyIcon(HICON icon);               // NIM_MODIFY + take ownership of icon_
   static void CALLBACK RecordTimerProc(HWND, UINT, UINT_PTR, DWORD);
+  static void CALLBACK ProcTimerProc(HWND, UINT, UINT_PTR, DWORD);
   // The viewfinder mark tinted for the CURRENT taskbar theme (white mark on a
   // dark taskbar, dark mark on a light one), at the small-icon size. Caller owns
   // the returned HICON (DestroyIcon).
@@ -88,7 +102,18 @@ class TrayIcon {
   bool ease_out_ = false;
   unsigned long long record_start_ms_ = 0;
   unsigned long long ease_start_ms_ = 0;
-  static TrayIcon* s_record_instance_;  // routes the record-tick timer callback
+
+  // Processing-pulse animation (logo-gradient fill); a SEPARATE timer from the
+  // recording breath so they never share a frame -- the finalize flow snaps the
+  // red off before starting the pulse, and a recording start kills any pulse.
+  UINT_PTR proc_timer_ = 0;
+  bool processing_ = false;
+  bool processing_stop_ = false;   // a stop was requested; end at the next low
+  bool proc_reduce_ = false;       // reduced motion -> static fill
+  unsigned long long proc_start_ms_ = 0;
+  int proc_last_cycle_ = 0;
+
+  static TrayIcon* s_record_instance_;  // the single tray; routes BOTH timers
 };
 
 #endif  // RUNNER_TRAY_ICON_H_
