@@ -15,6 +15,7 @@
 
 #include "clipboard_channel.h"
 #include "encode_channel.h"
+#include "sound_channel.h"
 #include "live_frame_source.h"
 #include "overlay_window.h"
 
@@ -90,6 +91,7 @@ class OverlayManager {
     std::unique_ptr<MethodChannel<EncodableValue>> fonts;
     std::unique_ptr<ClipboardChannel> clipboard;
     std::unique_ptr<EncodeChannel> encode;
+    std::unique_ptr<SoundChannel> sound;
   };
 
   // ---- lifecycle ----------------------------------------------------------

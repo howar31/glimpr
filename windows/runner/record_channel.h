@@ -13,6 +13,7 @@
 
 #include "record_chrome.h"
 #include "recorder.h"
+#include "recorder_client.h"
 
 // The window message a background recorder thread posts to the control window to
 // marshal an async event (e.g. a mid-recording encode failure) back to the
@@ -83,7 +84,9 @@ class RecordChannel {
                   HWND follow);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
-  std::unique_ptr<Recorder> recorder_;
+  // The recording runs in a worker process (RecorderClient mirrors the in-process
+  // Recorder API) so a capture/encode crash cannot take down the main app.
+  std::unique_ptr<RecorderClient> recorder_;
   std::unique_ptr<RecordChrome> chrome_;
   HWND control_hwnd_ = nullptr;
 

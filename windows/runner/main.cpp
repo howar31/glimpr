@@ -1,12 +1,31 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+// shellapi.h (CommandLineToArgvW) must follow windows.h.
+#include <shellapi.h>
 
 #include "flutter_window.h"
+#include "record_worker.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // Screen-recording worker: a child the running instance spawns to own the
+  // WGC + Media Foundation capture/encode in its OWN process, so a capture
+  // crash kills only the worker, never the main app. It must bypass the
+  // single-instance guard and Flutter, so branch off before either. The worker
+  // initializes its own COM.
+  {
+    int argc = 0;
+    LPWSTR *argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    bool is_worker = false;
+    for (int i = 1; argv && i < argc; ++i) {
+      if (::wcscmp(argv[i], L"--record-worker") == 0) is_worker = true;
+    }
+    if (argv) ::LocalFree(argv);
+    if (is_worker) return RecordWorkerMain();
+  }
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {

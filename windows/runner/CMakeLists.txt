@@ -25,7 +25,10 @@ add_executable(${BINARY_NAME} WIN32
   "record_channel.cpp"
   "record_chrome.cpp"
   "record_gif.cpp"
+  "record_worker.cpp"
   "recorder.cpp"
+  "recorder_client.cpp"
+  "sound_channel.cpp"
   "tray_icon.cpp"
   "utils.cpp"
   "wgc_capturer.cpp"
@@ -71,6 +74,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE "mfplat.lib" "mfreadwrite.lib" "mfu
 # Recording control strip (Phase 6 S6g): DirectWrite for the timer/button text
 # (d2d1 + dwmapi already linked).
 target_link_libraries(${BINARY_NAME} PRIVATE "dwrite.lib")
+# Feedback cue playback (shutter / completion): XAudio2 (mixes overlapping
+# cues), replacing the audioplayers package.
+target_link_libraries(${BINARY_NAME} PRIVATE "xaudio2.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

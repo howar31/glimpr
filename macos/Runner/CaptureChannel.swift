@@ -469,3 +469,52 @@ enum ClipboardChannel {
     return rep.representation(using: .png, properties: [:])
   }
 }
+
+/// Hosts the "glimpr/sound" method channel: play a short feedback cue (shutter /
+/// completion) whose wav bytes arrive raw from Dart. Plays via NSSound, the
+/// native AppKit player — this replaces the `audioplayers` package (whose
+/// Windows backend crashed during recording; macOS moves to the native path too
+/// for one uniform seam). Registered on every engine, like ClipboardChannel.
+enum SoundChannel {
+  // NSSound is released (and playback cut) once nothing references it, so live
+  // cues are retained until they finish; separate sounds overlap rather than
+  // cut each other off (the prior two-player behaviour).
+  private static let keeper = SoundKeeper()
+
+  static func register(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "glimpr/sound", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "play":
+        guard let a = call.arguments as? [String: Any],
+              let data = (a["bytes"] as? FlutterStandardTypedData)?.data,
+              let sound = NSSound(data: data)
+        else {
+          result(FlutterError(
+            code: "sound_play", message: "invalid cue bytes", details: nil))
+          return
+        }
+        keeper.play(sound)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+}
+
+/// Retains in-flight NSSound cues until they finish playing, then drops them.
+private final class SoundKeeper: NSObject, NSSoundDelegate {
+  private var live: [NSSound] = []
+
+  func play(_ sound: NSSound) {
+    sound.delegate = self
+    live.append(sound)
+    if !sound.play() { live.removeAll { $0 === sound } }
+  }
+
+  func sound(_ sound: NSSound, didFinishPlaying finished: Bool) {
+    live.removeAll { $0 === sound }
+  }
+}

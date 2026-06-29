@@ -14,6 +14,7 @@
 
 #include "clipboard_channel.h"
 #include "encode_channel.h"
+#include "sound_channel.h"
 #include "win32_window.h"
 
 class PinManager;
@@ -84,6 +85,7 @@ class EditorWindow : public Win32Window {
       editor_channel_;
   std::unique_ptr<ClipboardChannel> clipboard_channel_;
   std::unique_ptr<EncodeChannel> encode_channel_;
+  std::unique_ptr<SoundChannel> sound_channel_;
 
   bool ready_ = false;            // editor Dart has signalled editorReady
   bool pending_clipboard_ = false;

@@ -122,6 +122,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     )
     EncodeChannel.register(messenger: flutterViewController.engine.binaryMessenger)
     ClipboardChannel.register(messenger: flutterViewController.engine.binaryMessenger)
+    SoundChannel.register(messenger: flutterViewController.engine.binaryMessenger)
     // Screen recording (macOS 15+): the whole module sits behind this seam;
     // the channel itself exists everywhere so Dart can probe isAvailable.
     recordingChannel = RecordingChannel(
@@ -405,6 +406,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     RegisterGeneratedPlugins(registry: vc)
     EncodeChannel.register(messenger: vc.engine.binaryMessenger)
     ClipboardChannel.register(messenger: vc.engine.binaryMessenger)
+    SoundChannel.register(messenger: vc.engine.binaryMessenger)
     let role = FlutterMethodChannel(
       name: "glimpr/role", binaryMessenger: vc.engine.binaryMessenger)
     role.setMethodCallHandler { call, result in

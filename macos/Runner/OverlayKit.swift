@@ -745,6 +745,7 @@ final class OverlayManager {
       }
       EncodeChannel.register(messenger: msgr)
       ClipboardChannel.register(messenger: msgr)
+      SoundChannel.register(messenger: msgr)
       let control = FlutterMethodChannel(name: "glimpr/capture", binaryMessenger: msgr)
       control.setMethodCallHandler { [weak self, weak vc] call, result in
         guard let self = self else { result(nil); return }

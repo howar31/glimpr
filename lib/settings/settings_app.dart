@@ -1434,18 +1434,22 @@ class _SettingsAppState extends State<SettingsApp>
                     },
                   ),
                 ),
-                SettingRow(
-                  divider: true,
-                  title: _l.settingsRecordingMergeAudio,
-                  hint: _l.settingsRecordingMergeAudioHint,
-                  trailing: GlassToggle(
-                    value: _recordMergeAudio,
-                    onChanged: (v) async {
-                      await _s.setRecordMergeAudio(v);
-                      if (mounted) setState(() => _recordMergeAudio = v);
-                    },
+                // Windows always mixes both sources into ONE track (a two-track
+                // mp4 is unplayable in common Windows players), so this toggle is
+                // a no-op there -- hide it. macOS keeps the two-track option.
+                if (!Platform.isWindows)
+                  SettingRow(
+                    divider: true,
+                    title: _l.settingsRecordingMergeAudio,
+                    hint: _l.settingsRecordingMergeAudioHint,
+                    trailing: GlassToggle(
+                      value: _recordMergeAudio,
+                      onChanged: (v) async {
+                        await _s.setRecordMergeAudio(v);
+                        if (mounted) setState(() => _recordMergeAudio = v);
+                      },
+                    ),
                   ),
-                ),
               ],
             ),
           ),

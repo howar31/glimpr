@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:audioplayers/audioplayers.dart';
 import 'clipboard.dart';
 import 'filename.dart';
 import 'name_tokens.dart';
 import 'saver.dart';
+import 'sounds.dart';
 
 /// Outcome of delivering one captured image to its destinations. Each leg runs
 /// independently, so a partial failure (e.g. clipboard works but the file save
@@ -31,11 +31,7 @@ typedef SaveFn =
 typedef ClipboardFn = Future<void> Function(Uint8List bytes);
 typedef SoundFn = Future<void> Function();
 
-final AudioPlayer _shutterPlayer = AudioPlayer()
-  ..setReleaseMode(ReleaseMode.stop);
-
-Future<void> _defaultSound() =>
-    _shutterPlayer.play(AssetSource('sounds/shutter.wav'));
+Future<void> _defaultSound() => playShutter();
 
 /// Delivers an already-encoded image (PNG or JPEG): file save + clipboard write
 /// + shutter sound. The bytes are encoded ONCE by the caller and reused for both

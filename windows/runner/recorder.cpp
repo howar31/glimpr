@@ -118,14 +118,17 @@ struct AudioStream {
 // AAC track. Mirrors the macOS AudioMixer (RecordingKit.swift): both sources
 // arrive already 48 kHz / stereo / s16 (WASAPI AUTOCONVERTPCM handles the device
 // mix format AND the mono-mic -> stereo upmix, so no converter is needed here,
-// unlike macOS) and already PTS-rebased to the session start (minus paused
-// spans), so this only aligns by frame index and adds. Driven inline on the SOLE
-// encoder thread -- single owner, no locks. A frame-indexed int32 accumulator
-// (int32 so summing two s16 cannot overflow before the clamp) holds pending
-// samples; each Add flushes up to the lower of the two sources' high-water marks
-// (with a 0.3 s silence-gap fallback so a quiet/idle source cannot stall the
-// flush -- WASAPI may deliver nothing during pure silence). The clamped s16
-// result is written to the merged AAC sink stream.
+// unlike macOS). Each source is laid down CONTIGUOUSLY by a per-source frame
+// cursor (advanced by the real sample count), with the packet pts used only to
+// seed the cursor and to re-sync across a genuine capture gap -- because the
+// WASAPI poll timestamps are too coarse/jittery to place every packet by (see
+// Add). Driven inline on the SOLE encoder thread -- single owner, no locks. A
+// frame-indexed int32 accumulator (int32 so summing two s16 cannot overflow
+// before the limiter) holds pending samples; each Add flushes up to the lower of
+// the two sources' high-water marks (with a 0.3 s silence-gap fallback so a
+// quiet/idle source cannot stall the flush -- WASAPI may deliver nothing during
+// pure silence). A peak limiter (not a hard clamp) on the sum is written to the
+// merged AAC sink stream.
 class AudioMixer {
  public:
   enum class Source { kSystem, kMic };
@@ -143,15 +146,31 @@ class AudioMixer {
     if (frame_count == 0) return S_OK;
     // Rebased pts (100ns) -> 48 kHz frame index, rounded. Split seconds +
     // remainder so the multiply cannot overflow int64 (same idiom as Qpc100ns).
-    const int64_t start_frame =
+    const int64_t pts_frame =
         (pts100ns / 10000000LL) * kSampleRate +
         ((pts100ns % 10000000LL) * kSampleRate + 5000000LL) / 10000000LL;
-    MixIn(samples, frame_count, start_frame);
-    const int64_t end_frame = start_frame + static_cast<int64_t>(frame_count);
+    // CRITICAL: place each packet CONTIGUOUSLY after this source's previous one
+    // (advance the cursor by the real sample count) -- do NOT re-derive the
+    // position from every packet's pts. WASAPI audio is POLLED, so packets drained
+    // back-to-back carry near-equal dequeue timestamps while representing
+    // sequential audio spans, and the ~15 ms poll cadence does not match the
+    // per-packet sample count; placing by pts therefore overlaps/gaps consecutive
+    // packets, summing audio onto itself -- the merged-track distortion. The pts
+    // is used only to seed the cursor on the first packet (aligning system vs mic)
+    // and to re-sync across a genuine capture gap (e.g. a loopback silence dropout,
+    // where the source delivers nothing for a while), so the two sources stay in
+    // sync without per-packet jitter corrupting the stream.
+    int64_t& cursor = (src == Source::kSystem) ? sys_cursor_ : mic_cursor_;
+    const int64_t drift = pts_frame - cursor;
+    if (cursor < 0 || drift > kResyncFrames || drift < -kResyncFrames) {
+      cursor = pts_frame;  // first packet, or a real gap -> snap to the wall clock
+    }
+    MixIn(samples, frame_count, cursor);
+    cursor += static_cast<int64_t>(frame_count);
     if (src == Source::kSystem) {
-      sys_hwm_ = (std::max)(sys_hwm_, end_frame);
+      sys_hwm_ = (std::max)(sys_hwm_, cursor);
     } else {
-      mic_hwm_ = (std::max)(mic_hwm_, end_frame);
+      mic_hwm_ = (std::max)(mic_hwm_, cursor);
     }
     return Flush(false);
   }
@@ -200,8 +219,28 @@ class AudioMixer {
     if (FAILED(buf->Lock(&dst, nullptr, nullptr))) return S_OK;
     auto* out = reinterpret_cast<int16_t*>(dst);
     for (int64_t i = 0; i < count; ++i) {
-      out[i * 2] = ClampS16(acc_l_[static_cast<size_t>(i)]);
-      out[i * 2 + 1] = ClampS16(acc_r_[static_cast<size_t>(i)]);
+      const int32_t l = acc_l_[static_cast<size_t>(i)];
+      const int32_t r = acc_r_[static_cast<size_t>(i)];
+      // Peak LIMITER (instant attack, slow release) on the system+mic SUM so a
+      // loud combined signal is gain-reduced instead of hard-clipped (the
+      // break-up distortion the owner heard). gain_ persists across flushes so
+      // the reduction is click-free; the final ClampS16 is only a rounding-safety
+      // net. Normal-level content stays at unity (gain_ == 1).
+      const int32_t al = l < 0 ? -l : l;
+      const int32_t ar = r < 0 ? -r : r;
+      const int32_t peak = al > ar ? al : ar;
+      double target = 1.0;
+      if (peak > kLimit) target = static_cast<double>(kLimit) / peak;
+      if (target < gain_) {
+        gain_ = target;  // attack: drop instantly to avoid an overshoot
+      } else {
+        gain_ += (target - gain_) * kRelease;  // release: recover slowly
+      }
+      const double gl = l * gain_;
+      const double gr = r * gain_;
+      out[i * 2] = ClampS16(static_cast<int32_t>(gl >= 0 ? gl + 0.5 : gl - 0.5));
+      out[i * 2 + 1] =
+          ClampS16(static_cast<int32_t>(gr >= 0 ? gr + 0.5 : gr - 0.5));
     }
     buf->Unlock();
     buf->SetCurrentLength(bytes);
@@ -233,13 +272,18 @@ class AudioMixer {
   static constexpr int64_t kSampleRate = 48000;
   static constexpr int kChannels = 2;
   static constexpr int64_t kLagFrames = 48000 * 3 / 10;  // 0.3 s
+  static constexpr int32_t kLimit = 32200;     // limiter ceiling (~ -0.15 dBFS)
+  static constexpr double kRelease = 0.0002;   // ~100 ms gain recovery at 48 kHz
+  static constexpr int64_t kResyncFrames = 48000 / 5;  // 0.2 s gap -> re-sync
 
   IMFSinkWriter* writer_;
   DWORD stream_;
   std::vector<int32_t> acc_l_, acc_r_;  // frame-indexed; acc_l_[0] == base_frame_
   int64_t base_frame_ = -1;             // -1 until the first sample lands
+  int64_t sys_cursor_ = -1, mic_cursor_ = -1;  // next write frame per source
   int64_t sys_hwm_ = 0, mic_hwm_ = 0;   // highest frame delivered by each source
   LONGLONG last_pts_ = -1;              // monotonic guard for emitted samples
+  double gain_ = 1.0;                   // limiter gain state (1 = unity)
 };
 
 }  // namespace
@@ -990,13 +1034,15 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     *out_index = idx;
     return true;
   };
-  // Merge path mirrors macOS: engage only when the user enabled mergeAudio AND
-  // both sources actually opened. One merged AAC stream fed by the mixer; the
-  // separate per-source tracks (and the encoder's two-track write) are bypassed.
-  // If only one source opened there is nothing to mix -> fall through to the
-  // single-track path. If adding the merged stream fails, fall back to two
-  // tracks rather than dropping audio entirely.
-  if (spec.merge_audio && impl_->audio_sys.active && impl_->audio_mic.active) {
+  // Windows ALWAYS mixes to ONE AAC track when both sources are on -- a two-track
+  // mp4 is unplayable in common Windows players (Windows Media Player plays no
+  // track at all; PotPlayer mixes both at once, so the level is wrong), so the
+  // mergeAudio toggle is overridden here. A single source still writes its own
+  // single track below. (Owner ruling 2026-06-30; intentional Windows-only
+  // deviation from the macOS two-track-when-unmerged behaviour -- spec.merge_audio
+  // is therefore not consulted on Windows.) If adding the merged stream fails,
+  // fall back to two tracks rather than dropping audio entirely.
+  if (impl_->audio_sys.active && impl_->audio_mic.active) {
     DWORD merged_index = 0;
     if (add_audio(&merged_index)) {
       impl_->merge_audio = true;

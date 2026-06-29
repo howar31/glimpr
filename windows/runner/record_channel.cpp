@@ -63,7 +63,7 @@ bool HasKey(const EncodableMap& map, const char* key) {
 
 RecordChannel::RecordChannel(flutter::BinaryMessenger* messenger,
                              HWND control_hwnd)
-    : recorder_(std::make_unique<Recorder>()),
+    : recorder_(std::make_unique<RecorderClient>()),
       chrome_(std::make_unique<RecordChrome>()),
       control_hwnd_(control_hwnd) {
   channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(

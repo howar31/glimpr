@@ -178,6 +178,7 @@ bool FlutterWindow::OnCreate() {
   // Native capture/clipboard channels (in-runner, mirroring macOS).
   capture_channel_ = std::make_unique<CaptureChannel>(messenger);
   clipboard_channel_ = std::make_unique<ClipboardChannel>(messenger);
+  sound_channel_ = std::make_unique<SoundChannel>(messenger);
 
   // This is the CONTROL engine: answer glimpr/role (so main.dart mounts the
   // Settings app without the retry) plus the Settings surface the shared

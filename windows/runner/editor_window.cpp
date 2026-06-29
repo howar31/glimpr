@@ -225,6 +225,7 @@ bool EditorWindow::OnCreate() {
   // is faster + enables clipboard paste).
   clipboard_channel_ = std::make_unique<ClipboardChannel>(messenger);
   encode_channel_ = std::make_unique<EncodeChannel>(messenger);
+  sound_channel_ = std::make_unique<SoundChannel>(messenger);
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   return true;

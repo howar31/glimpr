@@ -8,6 +8,7 @@
 
 #include "capture_channel.h"
 #include "clipboard_channel.h"
+#include "sound_channel.h"
 #include "editor_window.h"
 #include "hotkey_host.h"
 #include "overlay_manager.h"
@@ -53,6 +54,7 @@ class FlutterWindow : public Win32Window {
   // Native channel hosts (in-runner, like macOS).
   std::unique_ptr<CaptureChannel> capture_channel_;
   std::unique_ptr<ClipboardChannel> clipboard_channel_;
+  std::unique_ptr<SoundChannel> sound_channel_;
   // The control engine's role channel: getRole + the Settings surface (close,
   // about, version, external links, relaunch).
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> role_channel_;

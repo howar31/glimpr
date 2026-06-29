@@ -239,6 +239,8 @@ void OverlayManager::RegisterUnitChannels(Unit& unit) {
   // Native PNG/JPEG encode + Direct2D decoration for the annotated export (the
   // overlay composites on this engine), instead of the pure-Dart fallback.
   unit.encode = std::make_unique<EncodeChannel>(msgr);
+  // Feedback cue playback (shutter / completion) on this engine, like macOS.
+  unit.sound = std::make_unique<SoundChannel>(msgr);
 }
 
 // ---- present / show / dismiss --------------------------------------------
