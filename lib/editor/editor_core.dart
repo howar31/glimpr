@@ -57,6 +57,23 @@ Offset _squareCornerIn(Offset a, Offset p, Size bounds) {
   return Offset(a.dx + (dx < 0 ? -s : s), a.dy + (dy < 0 ? -s : s));
 }
 
+/// Live record-select: clamp the dragged corner [p] (anchored at [a]) so the
+/// marquee is at least [minSide] in each axis, staying inside [bounds]. The box
+/// visibly refuses to shrink past the floor; near a canvas edge it extends the
+/// opposite way so a minimum-size region always fits. Enforces the Windows
+/// encoder's minimum frame size at selection time (see `_kMinRecordSide`).
+Offset _recordMinCornerIn(Offset a, Offset p, Size bounds, double minSide) {
+  double axis(double anchor, double to, double limit) {
+    double d = to - anchor;
+    if (d.abs() < minSide) d = d < 0 ? -minSide : minSide;
+    double end = anchor + d;
+    if (end < 0) end = anchor + minSide; // no room toward the low edge -> flip +
+    if (end > limit) end = anchor - minSide; // no room toward the high edge -> -
+    return end;
+  }
+  return Offset(axis(a.dx, p.dx, bounds.width), axis(a.dy, p.dy, bounds.height));
+}
+
 /// Shift-constrain a segment drag to the nearest of 8 directions (multiples of
 /// 45°) from anchor [a]: the moving point is projected onto that ray, so the tip
 /// tracks the cursor along an axis/diagonal.
@@ -390,6 +407,15 @@ class _EditorCoreState extends State<EditorCore> {
 
   static const double _kMinScale = 0.1;
   static const double _kMaxScale = 16.0;
+  // Live record-select minimum region side (logical points). The Windows Media
+  // Foundation H.264 encoder rejects very small frames (SetInputMediaType fails
+  // below a few dozen px), so a sub-minimum record selection would silently
+  // never start. We clamp the marquee to this floor DURING the drag so the box
+  // visibly refuses to shrink past it — the minimum is explicit, not a silent
+  // post-hoc failure. recordMode only: macOS's VideoToolbox tolerates tiny
+  // frames and screenshots have no such limit. With display scale >= 1 this maps
+  // to >= 80 physical px out, comfortably above the encoder floor.
+  static const double _kMinRecordSide = 80.0;
   double _panZoomBaseScale = 1.0;
   bool _middlePanning = false; // middle mouse button (wheel press) viewport pan
 
@@ -2181,7 +2207,15 @@ class _EditorCoreState extends State<EditorCore> {
         _crop.set(_cropMoveOrigin!.shift(p - _cropMoveStart!));
       } else {
         final a = _crop.anchor;
-        final to = (shift && a != null) ? _squareCornerIn(a, p, _canvasSize) : p;
+        var to = (shift && a != null) ? _squareCornerIn(a, p, _canvasSize) : p;
+        // Live record-select enforces the encoder's minimum region size at drag
+        // time: the marquee can't shrink below the floor, so the user sees the
+        // limit instead of a silent no-record. Windows only (its Media Foundation
+        // H.264 encoder rejects tiny frames); macOS's VideoToolbox has no such
+        // floor, and screenshots are unaffected on both.
+        if (widget.recordMode && a != null && Platform.isWindows) {
+          to = _recordMinCornerIn(a, to, _canvasSize, _kMinRecordSide);
+        }
         _crop.update(to);
       }
       setState(() => _setCursor(p, 'cropU'));

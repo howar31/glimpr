@@ -269,6 +269,28 @@ void CaptureChannel::HandleMethodCall(
     result->Success();
     return;
   }
+  if (call.method_name() == "showError") {
+    // The control engine (RecordController et al.) surfaces errors here. Without
+    // this handler the call returned NotImplemented and the unawaited Future
+    // swallowed it -> a failed recording looked like "no response". Mirrors the
+    // overlay engine's showError (OverlayManager).
+    const EncodableMap empty;
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const EncodableMap& map = args ? *args : empty;
+    std::string msg;
+    if (const auto* v = Find(map, "message")) {
+      if (const auto* s = std::get_if<std::string>(v)) msg = *s;
+    }
+    std::wstring wmsg;
+    int n = MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, nullptr, 0);
+    if (n > 0) {
+      wmsg.resize(static_cast<size_t>(n - 1));
+      MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, wmsg.data(), n);
+    }
+    MessageBoxW(nullptr, wmsg.c_str(), L"Glimpr", MB_OK | MB_ICONWARNING);
+    result->Success();
+    return;
+  }
   if (call.method_name() == "pinImage") {
     // The capture flow's pin leg: float [path] as a pin, in place over the
     // captured region when x/y/w/h are present, else centered.
