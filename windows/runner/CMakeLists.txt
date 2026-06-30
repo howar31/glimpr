@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "capture_channel.cpp"
   "clipboard_channel.cpp"
+  "crash_dump.cpp"
   "cursor_image.cpp"
   "decoration.cpp"
   "editor_window.cpp"
@@ -77,6 +78,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwrite.lib")
 # Feedback cue playback (shutter / completion): XAudio2 (mixes overlapping
 # cues), replacing the audioplayers package.
 target_link_libraries(${BINARY_NAME} PRIVATE "xaudio2.lib")
+# Crash minidumps (MiniDumpWriteDump) for best-effort on-device diagnostics.
+target_link_libraries(${BINARY_NAME} PRIVATE "dbghelp.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

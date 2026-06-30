@@ -4,12 +4,30 @@
 // shellapi.h (CommandLineToArgvW) must follow windows.h.
 #include <shellapi.h>
 
+#include "crash_dump.h"
 #include "flutter_window.h"
 #include "record_worker.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // Refuse legacy extension-point injection (global SetWindowsHookEx hooks,
+  // AppInit DLLs, Winsock LSPs) into this process. Third-party window managers /
+  // overlays (DisplayFusion, RTSS, ...) inject a hook DLL this way and subclass
+  // our windows; when such a tool is unstable its injected code faults INSIDE our
+  // process and takes us down with a STATUS_FATAL_USER_CALLBACK_EXCEPTION (seen
+  // with DisplayFusion). Keeping foreign hook DLLs out of our address space stops
+  // that whole class of crash. NOTE: this also blocks LEGACY (extension-point)
+  // IMEs; modern TSF text services are unaffected. Set before any window exists.
+  PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY ext_policy = {};
+  ext_policy.DisableExtensionPoints = TRUE;
+  ::SetProcessMitigationPolicy(ProcessExtensionPointDisablePolicy, &ext_policy,
+                               sizeof(ext_policy));
+
+  // Best-effort crash capture (minidump next to the exe) for both this process
+  // and the record worker below.
+  InstallCrashHandler();
+
   // Screen-recording worker: a child the running instance spawns to own the
   // WGC + Media Foundation capture/encode in its OWN process, so a capture
   // crash kills only the worker, never the main app. It must bypass the
