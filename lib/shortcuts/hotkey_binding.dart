@@ -23,8 +23,6 @@ class HotkeyBinding {
   final LogicalKeyboardKey logicalKey;
   final Set<HotkeyModifier> modifiers;
 
-  bool get hasModifier => modifiers.isNotEmpty;
-
   /// A usable binding has a non-modifier main key. (The recorder never produces
   /// a modifier-only binding, but persisted data could.)
   bool get isComplete => true; // a constructed binding always has a main key

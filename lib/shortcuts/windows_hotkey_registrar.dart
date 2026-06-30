@@ -10,7 +10,7 @@ import 'windows_hotkey_codes.dart';
 /// unmappable key returns [UnavailableReason.error]. The native side fires
 /// `onHotkey(actionKey)`, dispatched here to the stored callback (or [fallback]
 /// for a menu item whose action has no bound hotkey). Mirrors NativeHotkeyRegistrar.
-class WindowsHotkeyRegistrar implements HotkeyRegistrar {
+class WindowsHotkeyRegistrar implements HotkeyRegistrar, HotkeyKeyCapture {
   WindowsHotkeyRegistrar([MethodChannel? channel])
       : _channel = channel ?? const MethodChannel('glimpr/hotkeys') {
     _channel.setMethodCallHandler(_onNative);
@@ -23,17 +23,45 @@ class WindowsHotkeyRegistrar implements HotkeyRegistrar {
   /// hotkey callback (the shortcut is unbound). Set by main()'s bootstrap.
   void Function(String actionKey)? fallback;
 
+  // Active recorder capture session (only one field records at a time).
+  void Function(int vk, int modifierMask, bool available)? _onCaptureKey;
+  void Function()? _onCaptureCancel;
+
   Future<dynamic> _onNative(MethodCall call) async {
-    if (call.method == 'onHotkey') {
-      final key = call.arguments as String;
-      final cb = _byAction[key];
-      if (cb != null) {
-        cb();
-      } else {
-        fallback?.call(key);
-      }
+    switch (call.method) {
+      case 'onHotkey':
+        final key = call.arguments as String;
+        final cb = _byAction[key];
+        if (cb != null) {
+          cb();
+        } else {
+          fallback?.call(key);
+        }
+      case 'onCaptureKey':
+        final a = (call.arguments as Map).cast<String, dynamic>();
+        _onCaptureKey?.call(
+            a['vk'] as int, a['modifiers'] as int, a['available'] as bool? ?? true);
+      case 'onCaptureCancel':
+        _onCaptureCancel?.call();
     }
     return null;
+  }
+
+  @override
+  Future<void> beginKeyCapture(
+    void Function(int vk, int modifierMask, bool available) onKey,
+    void Function() onCancel,
+  ) async {
+    _onCaptureKey = onKey;
+    _onCaptureCancel = onCancel;
+    await _channel.invokeMethod('beginCaptureKeys');
+  }
+
+  @override
+  Future<void> endKeyCapture() async {
+    _onCaptureKey = null;
+    _onCaptureCancel = null;
+    await _channel.invokeMethod('endCaptureKeys');
   }
 
   @override

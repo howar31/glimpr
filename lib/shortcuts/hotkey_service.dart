@@ -18,17 +18,26 @@ class HotkeyService {
   final void Function(String actionKey) onAction;
   final Map<String, HotkeyBinding?> _bindings;
 
+  // Actions whose stored binding could NOT be registered at [start] — the combo
+  // is reserved by the OS / already taken by another app. main() warns the user
+  // once at boot (ShareX-style); Settings seeds its inline markers from this.
+  final Set<String> _failed = {};
+  Set<String> get failedActions => Set.unmodifiable(_failed);
+
   /// Registers all global actions. Null bindings are skipped (disabled). Never
   /// throws — a registration failure is logged so it cannot block app start.
   Future<void> start() async {
     try {
       await registrar.unregisterAll();
+      _failed.clear();
       for (final a in kGlobalActions) {
         final b = _bindings.containsKey(a.actionKey)
             ? _bindings[a.actionKey]
             : defaultBindingFor(a.actionKey);
         if (b == null) continue; // disabled
-        await registrar.register(a.actionKey, b, () => onAction(a.actionKey));
+        final r =
+            await registrar.register(a.actionKey, b, () => onAction(a.actionKey));
+        if (r is RegisterUnavailable) _failed.add(a.actionKey);
       }
     } catch (e, st) {
       debugPrint('HotkeyService.start failed: $e\n$st');

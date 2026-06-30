@@ -3,14 +3,16 @@ import 'package:flutter/services.dart';
 import '../../l10n/gen/app_localizations.dart';
 import '../../theme/glimpr_theme.dart';
 import '../hotkey_binding.dart';
+import '../hotkey_registrar.dart';
+import '../windows_hotkey_codes.dart';
 import 'key_cap_chips.dart';
 
-/// Click to record a combo, then press the desired key chord. [requireModifier]
-/// rejects modifier-less combos (Tier 1, the global capture hotkey).
-/// [isReserved] rejects a recorded combo that collides with a fixed editor /
-/// system shortcut (the full key + modifier set is passed, so it can reject ⌘W
-/// while allowing bare W). Esc cancels recording (keeps the prior value);
-/// clicking anywhere else also cancels.
+/// Click to record a combo, then press the desired key chord. Any key combo is
+/// recordable, with or without a modifier (a bare key — PrintScreen, an F-key —
+/// is a valid global hotkey, ShareX-style). [isReserved] rejects a recorded
+/// combo that collides with a fixed editor / system shortcut (the full key +
+/// modifier set is passed, so it can reject ⌘W while allowing bare W). Esc
+/// cancels recording (keeps the prior value); clicking anywhere else also cancels.
 ///
 /// Clearing a binding is the row's job (a visible ✕ button), NOT a key — so every
 /// other key, including Backspace, is freely recordable. The field is a FIXED
@@ -21,15 +23,30 @@ class HotkeyRecorderField extends StatefulWidget {
     super.key,
     required this.value,
     required this.onChanged,
-    required this.requireModifier,
     this.isReserved,
     this.emptyLabel,
     this.onRecordingChanged,
+    this.keyCapture,
+    this.hasWarning = false,
   });
 
+  /// The committed binding is invalid (a duplicate combo, or reserved / taken by
+  /// another app). Paints the field's border red so the problem row stands out,
+  /// not just the warning sub-line under it.
+  final bool hasWarning;
+
   final HotkeyBinding? value;
-  final ValueChanged<HotkeyBinding?> onChanged;
-  final bool requireModifier;
+
+  /// Fires when a combo is recorded (or cleared, with a null binding).
+  /// [available] is false when a record-time probe found the combo reserved /
+  /// already taken by another app (Windows only) — the Shortcuts pane then marks
+  /// it + blocks Apply, like an internal duplicate. Always true on macOS / clear.
+  final void Function(HotkeyBinding? binding, {bool available}) onChanged;
+
+  /// Native key capture (Windows only): when non-null the recorder reads keys
+  /// from the OS window-proc instead of Flutter events, so PrintScreen + the Win
+  /// key (which Flutter drops) are recordable. Null on macOS -> Flutter events.
+  final HotkeyKeyCapture? keyCapture;
 
   /// Returns true when binding the given key + modifiers would collide with a
   /// fixed editor / system shortcut, so the recorder refuses it.
@@ -59,6 +76,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
   final _focus = FocusNode();
   bool _recording = false;
   bool _lastNotifiedRecording = false;
+  bool _nativeCapturing = false; // a native (Windows) capture session is active
   String? _error;
 
   @override
@@ -73,6 +91,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     // An external change (the row's Clear / Reset button) supersedes an
     // in-progress recording — drop back to showing the new value.
     if (_recording && widget.value != old.value) {
+      _stopCapture();
       setState(() {
         _recording = false;
         _error = null;
@@ -83,7 +102,8 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
   @override
   void dispose() {
     // Disposed mid-recording (e.g. switching tabs) — balance the notification so
-    // the paused global hotkeys are resumed.
+    // the paused global hotkeys are resumed, and end any native capture.
+    _stopCapture();
     if (_lastNotifiedRecording) widget.onRecordingChanged?.call(false);
     _focus.removeListener(_onFocusChange);
     _focus.dispose();
@@ -94,6 +114,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
   // cancels recording so the field never stays stuck on "Press keys…".
   void _onFocusChange() {
     if (!_focus.hasFocus && _recording) {
+      _stopCapture();
       setState(() {
         _recording = false;
         _error = null;
@@ -107,46 +128,89 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
       _error = null;
     });
     _focus.requestFocus();
+    // Windows: keys come from the native window-proc capture (Flutter drops
+    // PrintScreen + the Win key). macOS: keyCapture is null -> Flutter _onKey.
+    final cap = widget.keyCapture;
+    if (cap != null) {
+      _nativeCapturing = true;
+      cap.beginKeyCapture(_onNativeKey, _onNativeCancel);
+    }
   }
 
-  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
-    if (!_recording || e is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = e.logicalKey;
-    _error = null; // re-evaluate fresh on each keystroke
+  // End any native capture session (idempotent). Call wherever recording stops.
+  void _stopCapture() {
+    if (_nativeCapturing) {
+      _nativeCapturing = false;
+      widget.keyCapture?.endKeyCapture();
+    }
+  }
 
+  // macOS path: read the chord from Flutter key events. On Windows the native
+  // capture drives commits instead (it suppresses the keys, so this rarely fires
+  // there; the guard makes the precedence explicit).
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (!_recording || _nativeCapturing) return KeyEventResult.ignored;
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = e.logicalKey;
     if (key == LogicalKeyboardKey.escape) {
       setState(() => _recording = false); // cancel: keep prior value
       return KeyEventResult.handled;
     }
     if (_isModifierKey(key)) return KeyEventResult.handled; // wait for a main key
-
     final pressed = <HotkeyModifier>{
       if (HardwareKeyboard.instance.isMetaPressed) HotkeyModifier.meta,
       if (HardwareKeyboard.instance.isAltPressed) HotkeyModifier.alt,
       if (HardwareKeyboard.instance.isControlPressed) HotkeyModifier.control,
       if (HardwareKeyboard.instance.isShiftPressed) HotkeyModifier.shift,
     };
-    // Combo-aware reserved check: the full key + modifier set must be known, so
-    // it runs after `pressed` is built (⌘W is rejected, bare W is allowed).
-    if (widget.isReserved?.call(key, pressed) ?? false) {
+    _commit(e.physicalKey, key, pressed);
+    return KeyEventResult.handled;
+  }
+
+  // Windows path: a key arrived from the native window-proc capture as a Win32
+  // vk + modifier mask + a record-time availability probe. Rebuild the Flutter
+  // key pair and commit (carrying availability so a taken combo is flagged).
+  void _onNativeKey(int vk, int modifierMask, bool available) {
+    if (!_recording) return; // ignore stray events after a commit
+    final keys = keysForVk(vk);
+    if (keys == null) return; // unsupported key -> keep recording
+    _commit(keys.physical, keys.logical, modifiersFromWin32Mask(modifierMask),
+        available: available);
+  }
+
+  void _onNativeCancel() {
+    if (!_recording) return;
+    _stopCapture();
+    setState(() => _recording = false); // keep prior value (Esc)
+  }
+
+  // Shared commit: reserved check (keep recording on failure), else store the
+  // binding and stop. [available] (Windows probe) is passed through so the host
+  // can flag a taken combo + block Apply. Used by both the Flutter and native
+  // paths.
+  void _commit(PhysicalKeyboardKey physical, LogicalKeyboardKey logical,
+      Set<HotkeyModifier> pressed,
+      {bool available = true}) {
+    _error = null; // re-evaluate fresh on each keystroke
+    // Combo-aware reserved check: the full key + modifier set must be known
+    // (⌘W is rejected, bare W is allowed).
+    if (widget.isReserved?.call(logical, pressed) ?? false) {
       setState(() => _error = AppLocalizations.of(context).recorderReservedKey);
-      return KeyEventResult.handled;
+      return;
     }
-    if (widget.requireModifier && pressed.isEmpty) {
-      setState(() =>
-          _error = AppLocalizations.of(context).recorderNeedsModifier);
-      return KeyEventResult.handled;
-    }
-    widget.onChanged(HotkeyBinding(
-      physicalKey: e.physicalKey,
-      logicalKey: key,
-      modifiers: pressed,
-    ));
+    _stopCapture();
+    widget.onChanged(
+      HotkeyBinding(
+        physicalKey: physical,
+        logicalKey: logical,
+        modifiers: pressed,
+      ),
+      available: available,
+    );
     setState(() {
       _recording = false;
       _error = null;
     });
-    return KeyEventResult.handled;
   }
 
   // The field's fixed trailing slot is contextual: when idle it is a keyboard
@@ -192,7 +256,10 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
     }
     final t = GlimprTheme.of(context);
     final hasError = _error != null;
-    final borderColor = hasError
+    // Red border for an in-progress error OR a committed-but-invalid binding
+    // (duplicate / in use), so the problem field stands out, not just its row.
+    final showDanger = hasError || widget.hasWarning;
+    final borderColor = showDanger
         ? GlimprTokens.danger
         : (_recording ? GlimprTokens.accent : t.fieldBorder);
 
@@ -236,7 +303,7 @@ class _HotkeyRecorderFieldState extends State<HotkeyRecorderField> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: borderColor,
-          width: (_recording || hasError) ? 1.5 : 1,
+          width: (_recording || showDanger) ? 1.5 : 1,
         ),
       ),
       child: content,

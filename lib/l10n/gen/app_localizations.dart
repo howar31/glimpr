@@ -1475,7 +1475,7 @@ abstract class AppLocalizations {
   /// Settings > Shortcuts: Capture section note
   ///
   /// In en, this message translates to:
-  /// **'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)'**
+  /// **'Fire globally, from any app'**
   String get settingsShortcutsCaptureNote;
 
   /// Settings > Shortcuts: Recording section note on recording-vs-screenshot hotkey behaviour
@@ -1706,17 +1706,23 @@ abstract class AppLocalizations {
   /// **'Cancel text'**
   String get settingsReservedCancelText;
 
-  /// Settings > Shortcuts: warning shown when a global shortcut has no modifier
-  ///
-  /// In en, this message translates to:
-  /// **'Needs a modifier'**
-  String get settingsShortcutsNeedsModifier;
-
   /// Settings > Shortcuts: warning shown when two shortcuts share the same key combo
   ///
   /// In en, this message translates to:
   /// **'Duplicate'**
   String get settingsShortcutsDuplicate;
+
+  /// Settings > Shortcuts: inline warning when a global shortcut could not be registered because the combo is reserved by the system or already taken by another app
+  ///
+  /// In en, this message translates to:
+  /// **'In use by another app'**
+  String get settingsShortcutsInUse;
+
+  /// Startup warning dialog shown when one or more saved global hotkeys failed to register at launch (conflict with another app); the conflicting shortcuts are listed after this line
+  ///
+  /// In en, this message translates to:
+  /// **'Some shortcuts couldn\'t be registered — they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:'**
+  String get shortcutsConflictWarning;
 
   /// Settings > Shortcuts: tooltip on the per-shortcut reset icon button
   ///
@@ -2923,12 +2929,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reserved key'**
   String get recorderReservedKey;
-
-  /// 3e batch: masks/confirm/recorder/overlay
-  ///
-  /// In en, this message translates to:
-  /// **'Needs a modifier (⌘ ⌥ ⌃ ⇧)'**
-  String get recorderNeedsModifier;
 
   /// Shortcut recorder: tooltip on the prohibition glyph that clears the binding (sets it to no shortcut)
   ///

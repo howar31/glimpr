@@ -17,6 +17,23 @@ abstract class HotkeyRegistrar {
   Future<void> unregisterAll();
 }
 
+/// Optional capability: native recorder key capture. Implemented only where
+/// Flutter cannot deliver the keys to the recorder — Windows (it drops
+/// PrintScreen + the Win key), via window-proc interception. macOS reads Flutter
+/// key events directly and does NOT implement this. The recorder field checks
+/// `registrar is HotkeyKeyCapture` and falls back to Flutter events otherwise.
+abstract interface class HotkeyKeyCapture {
+  /// Begin a capture session: [onKey] receives a Win32 virtual-key code, a
+  /// RegisterHotKey-style modifier mask, and whether the combo is currently
+  /// available (a record-time probe — false = reserved / already taken by
+  /// another app). [onCancel] fires on Escape.
+  Future<void> beginKeyCapture(
+    void Function(int vk, int modifierMask, bool available) onKey,
+    void Function() onCancel,
+  );
+  Future<void> endKeyCapture();
+}
+
 /// macOS registrar over native Carbon (`glimpr/hotkeys` channel). Carbon
 /// RegisterEventHotKey is non-exclusive and cannot find a third-party owner, so
 /// a successful native registration returns [RegisterResult.ok]; an unmappable

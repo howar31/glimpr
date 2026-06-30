@@ -80,6 +80,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwrite.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "xaudio2.lib")
 # Crash minidumps (MiniDumpWriteDump) for best-effort on-device diagnostics.
 target_link_libraries(${BINARY_NAME} PRIVATE "dbghelp.lib")
+# Window subclassing (SetWindowSubclass/DefSubclassProc) for the recorder's
+# native key capture.
+target_link_libraries(${BINARY_NAME} PRIVATE "comctl32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

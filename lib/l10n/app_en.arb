@@ -807,7 +807,7 @@
   "@settingsResetAllToolStylesConfirm": {
     "description": "Settings > Advanced > Tool styles: confirm label for the two-step reset button"
   },
-  "settingsShortcutsCaptureNote": "Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)",
+  "settingsShortcutsCaptureNote": "Fire globally, from any app",
   "@settingsShortcutsCaptureNote": {
     "description": "Settings > Shortcuts: Capture section note"
   },
@@ -963,13 +963,17 @@
   "@settingsReservedCancelText": {
     "description": "Settings > Shortcuts > Reserved: Cancel text row title"
   },
-  "settingsShortcutsNeedsModifier": "Needs a modifier",
-  "@settingsShortcutsNeedsModifier": {
-    "description": "Settings > Shortcuts: warning shown when a global shortcut has no modifier"
-  },
   "settingsShortcutsDuplicate": "Duplicate",
   "@settingsShortcutsDuplicate": {
     "description": "Settings > Shortcuts: warning shown when two shortcuts share the same key combo"
+  },
+  "settingsShortcutsInUse": "In use by another app",
+  "@settingsShortcutsInUse": {
+    "description": "Settings > Shortcuts: inline warning when a global shortcut could not be registered because the combo is reserved by the system or already taken by another app"
+  },
+  "shortcutsConflictWarning": "Some shortcuts couldn't be registered — they're in use by another app and won't work. Please check them in Settings → Shortcuts:",
+  "@shortcutsConflictWarning": {
+    "description": "Startup warning dialog shown when one or more saved global hotkeys failed to register at launch (conflict with another app); the conflicting shortcuts are listed after this line"
   },
   "settingsShortcutsResetToDefault": "Reset to default",
   "@settingsShortcutsResetToDefault": {
@@ -1798,10 +1802,6 @@
   },
   "recorderReservedKey": "Reserved key",
   "@recorderReservedKey": {
-    "description": "3e batch: masks/confirm/recorder/overlay"
-  },
-  "recorderNeedsModifier": "Needs a modifier (⌘ ⌥ ⌃ ⇧)",
-  "@recorderNeedsModifier": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },
   "recorderDisable": "Disable",

@@ -734,7 +734,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsResetAllToolStylesConfirm => '再按一次以重設所有工具樣式';
 
   @override
-  String get settingsShortcutsCaptureNote => '全域生效，因此需要修飾鍵（⌘ ⌥ ⌃ ⇧）';
+  String get settingsShortcutsCaptureNote => '全域生效，在任何 App 都能觸發';
 
   @override
   String get settingsShortcutsRecordingNote =>
@@ -852,10 +852,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsReservedCancelText => '取消文字';
 
   @override
-  String get settingsShortcutsNeedsModifier => '需要修飾鍵';
+  String get settingsShortcutsDuplicate => '重複';
 
   @override
-  String get settingsShortcutsDuplicate => '重複';
+  String get settingsShortcutsInUse => '已被其他程式占用';
+
+  @override
+  String get shortcutsConflictWarning =>
+      '部分快捷鍵無法註冊——已被其他程式占用、將無法使用。請到「設定 → 快捷鍵」檢查：';
 
   @override
   String get settingsShortcutsResetToDefault => '重設為預設值';
@@ -1470,9 +1474,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recorderReservedKey => '保留按鍵';
-
-  @override
-  String get recorderNeedsModifier => '需要修飾鍵（⌘ ⌥ ⌃ ⇧）';
 
   @override
   String get recorderDisable => '停用';

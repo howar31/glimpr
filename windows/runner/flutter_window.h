@@ -45,6 +45,13 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  // Subclass proc on the Flutter view HWND: while the Settings recorder is
+  // capturing, routes key messages to HotkeyHost (Flutter drops PrintScreen +
+  // the Win key, so we intercept at the window-proc level) and suppresses them.
+  static LRESULT CALLBACK KeyCaptureSubclassProc(HWND hwnd, UINT message,
+                                                 WPARAM wparam, LPARAM lparam,
+                                                 UINT_PTR id, DWORD_PTR ref);
+
   // The project to run.
   flutter::DartProject project_;
 

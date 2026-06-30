@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <commctrl.h>
 #include <shellapi.h>
 #include <wincred.h>
 
@@ -392,7 +393,12 @@ bool FlutterWindow::OnCreate() {
   // editor open), off the launch critical path.
   SetTimer(GetHandle(), kWarmupTimerId, kWarmupDelayMs, nullptr);
 
-  SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  HWND view_hwnd = flutter_controller_->view()->GetNativeWindow();
+  SetChildContent(view_hwnd);
+  // Subclass the view so the Settings recorder can capture keys Flutter drops
+  // (PrintScreen, the Win key). Active only while HotkeyHost::Capturing().
+  SetWindowSubclass(view_hwnd, &FlutterWindow::KeyCaptureSubclassProc, 1,
+                    reinterpret_cast<DWORD_PTR>(this));
 
   // Resident shell: start HIDDEN in the tray (no window at launch, mirroring the
   // macOS at-rest accessory). main.dart still runs (registers hotkeys + builds
@@ -421,6 +427,22 @@ void FlutterWindow::RevealControlWindow() {
 void FlutterWindow::Quit() {
   if (tray_icon_) tray_icon_->Remove();
   PostQuitMessage(0);
+}
+
+LRESULT CALLBACK FlutterWindow::KeyCaptureSubclassProc(HWND hwnd, UINT message,
+                                                       WPARAM wparam,
+                                                       LPARAM lparam,
+                                                       UINT_PTR /*id*/,
+                                                       DWORD_PTR ref) {
+  auto* self = reinterpret_cast<FlutterWindow*>(ref);
+  if (self && self->hotkey_host_ && self->hotkey_host_->Capturing() &&
+      (message == WM_KEYDOWN || message == WM_KEYUP ||
+       message == WM_SYSKEYDOWN || message == WM_SYSKEYUP)) {
+    if (self->hotkey_host_->HandleCaptureMessage(message, wparam, lparam)) {
+      return 0;  // consumed: Flutter never sees the key while recording
+    }
+  }
+  return DefSubclassProc(hwnd, message, wparam, lparam);
 }
 
 LRESULT

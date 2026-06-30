@@ -772,8 +772,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Click again to reset all tool styles';
 
   @override
-  String get settingsShortcutsCaptureNote =>
-      'Fire globally, so they need a modifier (⌘ ⌥ ⌃ ⇧)';
+  String get settingsShortcutsCaptureNote => 'Fire globally, from any app';
 
   @override
   String get settingsShortcutsRecordingNote =>
@@ -896,10 +895,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsReservedCancelText => 'Cancel text';
 
   @override
-  String get settingsShortcutsNeedsModifier => 'Needs a modifier';
+  String get settingsShortcutsDuplicate => 'Duplicate';
 
   @override
-  String get settingsShortcutsDuplicate => 'Duplicate';
+  String get settingsShortcutsInUse => 'In use by another app';
+
+  @override
+  String get shortcutsConflictWarning =>
+      'Some shortcuts couldn\'t be registered — they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:';
 
   @override
   String get settingsShortcutsResetToDefault => 'Reset to default';
@@ -1528,9 +1531,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recorderReservedKey => 'Reserved key';
-
-  @override
-  String get recorderNeedsModifier => 'Needs a modifier (⌘ ⌥ ⌃ ⇧)';
 
   @override
   String get recorderDisable => 'Disable';

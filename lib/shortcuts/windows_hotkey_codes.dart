@@ -70,6 +70,12 @@ final Map<PhysicalKeyboardKey, int> _kWin32VirtualKeys = {
   PhysicalKeyboardKey.end: 0x23, // VK_END
   PhysicalKeyboardKey.pageUp: 0x21, // VK_PRIOR
   PhysicalKeyboardKey.pageDown: 0x22, // VK_NEXT
+  PhysicalKeyboardKey.insert: 0x2D, // VK_INSERT
+  // PrintScreen (VK_SNAPSHOT): a normal RegisterHotKey vk. The recorder captures
+  // it on key-up (no key-down is delivered); see HotkeyRecorderField. A Win-key
+  // combo on it (Win+PrintScreen) is OS-reserved so RegisterHotKey may still
+  // fail -- that surfaces as RegisterResult.error, not a silent drop.
+  PhysicalKeyboardKey.printScreen: 0x2C, // VK_SNAPSHOT
   // Arrows.
   PhysicalKeyboardKey.arrowLeft: 0x25, // VK_LEFT
   PhysicalKeyboardKey.arrowUp: 0x26, // VK_UP
@@ -88,10 +94,96 @@ final Map<PhysicalKeyboardKey, int> _kWin32VirtualKeys = {
   PhysicalKeyboardKey.f10: 0x79,
   PhysicalKeyboardKey.f11: 0x7A,
   PhysicalKeyboardKey.f12: 0x7B,
+  // Extended function keys VK_F13..VK_F24 = 0x7C..0x87 (full-size / media
+  // keyboards). RegisterHotKey accepts them; the native capture reports their vk.
+  PhysicalKeyboardKey.f13: 0x7C,
+  PhysicalKeyboardKey.f14: 0x7D,
+  PhysicalKeyboardKey.f15: 0x7E,
+  PhysicalKeyboardKey.f16: 0x7F,
+  PhysicalKeyboardKey.f17: 0x80,
+  PhysicalKeyboardKey.f18: 0x81,
+  PhysicalKeyboardKey.f19: 0x82,
+  PhysicalKeyboardKey.f20: 0x83,
+  PhysicalKeyboardKey.f21: 0x84,
+  PhysicalKeyboardKey.f22: 0x85,
+  PhysicalKeyboardKey.f23: 0x86,
+  PhysicalKeyboardKey.f24: 0x87,
 };
 
 /// The Win32 virtual keycode for [key], or null when it has none.
 int? win32VirtualKey(PhysicalKeyboardKey key) => _kWin32VirtualKeys[key];
+
+// ---- Reverse mapping: a natively-captured Win32 vk -> the Flutter key pair a
+// HotkeyBinding needs. Used by the recorder's native window-proc capture (the
+// Windows runner sends a vk because Flutter drops PrintScreen + the Win key, so
+// we can't read them from Flutter key events). The physical side inverts
+// _kWin32VirtualKeys (one source of truth); the logical side is computed for
+// letters/digits/function keys and explicit for the rest, so the recorded
+// binding labels + persists identically to a Flutter-captured one.
+final Map<int, PhysicalKeyboardKey> _kVkToPhysical = {
+  for (final e in _kWin32VirtualKeys.entries) e.value: e.key,
+};
+
+// Non-letter/digit/function vks -> their LogicalKeyboardKey (for the label).
+final Map<int, LogicalKeyboardKey> _kVkToLogicalSpecial = {
+  0xBD: LogicalKeyboardKey.minus,
+  0xBB: LogicalKeyboardKey.equal,
+  0xDB: LogicalKeyboardKey.bracketLeft,
+  0xDD: LogicalKeyboardKey.bracketRight,
+  0xDC: LogicalKeyboardKey.backslash,
+  0xBA: LogicalKeyboardKey.semicolon,
+  0xDE: LogicalKeyboardKey.quote,
+  0xC0: LogicalKeyboardKey.backquote,
+  0xBC: LogicalKeyboardKey.comma,
+  0xBE: LogicalKeyboardKey.period,
+  0xBF: LogicalKeyboardKey.slash,
+  0x0D: LogicalKeyboardKey.enter,
+  0x09: LogicalKeyboardKey.tab,
+  0x20: LogicalKeyboardKey.space,
+  0x08: LogicalKeyboardKey.backspace,
+  0x2E: LogicalKeyboardKey.delete,
+  0x24: LogicalKeyboardKey.home,
+  0x23: LogicalKeyboardKey.end,
+  0x21: LogicalKeyboardKey.pageUp,
+  0x22: LogicalKeyboardKey.pageDown,
+  0x2D: LogicalKeyboardKey.insert,
+  0x2C: LogicalKeyboardKey.printScreen,
+  0x25: LogicalKeyboardKey.arrowLeft,
+  0x26: LogicalKeyboardKey.arrowUp,
+  0x27: LogicalKeyboardKey.arrowRight,
+  0x28: LogicalKeyboardKey.arrowDown,
+};
+
+LogicalKeyboardKey? _logicalForVk(int vk) {
+  if (vk >= 0x41 && vk <= 0x5A) {
+    return LogicalKeyboardKey.findKeyByKeyId(vk + 0x20); // 'A'-'Z' -> 'a'-'z'
+  }
+  if (vk >= 0x30 && vk <= 0x39) {
+    return LogicalKeyboardKey.findKeyByKeyId(vk); // '0'-'9'
+  }
+  if (vk >= 0x70 && vk <= 0x87) {
+    return LogicalKeyboardKey.findKeyByKeyId(0x100000801 + (vk - 0x70)); // F1-F24
+  }
+  return _kVkToLogicalSpecial[vk];
+}
+
+/// The (physical, logical) Flutter key pair for a captured Win32 [vk], or null
+/// when the key is not a supported/registrable hotkey key.
+({PhysicalKeyboardKey physical, LogicalKeyboardKey logical})? keysForVk(int vk) {
+  final p = _kVkToPhysical[vk];
+  final l = _logicalForVk(vk);
+  if (p == null || l == null) return null;
+  return (physical: p, logical: l);
+}
+
+// RegisterHotKey fsModifiers (winuser.h) -> our modifier set, for decoding the
+// modifier mask the native capture sends alongside the vk.
+Set<HotkeyModifier> modifiersFromWin32Mask(int mask) => {
+      if (mask & _modAlt != 0) HotkeyModifier.alt,
+      if (mask & _modControl != 0) HotkeyModifier.control,
+      if (mask & _modShift != 0) HotkeyModifier.shift,
+      if (mask & _modWin != 0) HotkeyModifier.meta,
+    };
 
 // RegisterHotKey fsModifiers bits (winuser.h).
 const int _modAlt = 0x0001; // MOD_ALT

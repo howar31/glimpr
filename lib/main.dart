@@ -100,6 +100,21 @@ Future<void> main() async {
     onAction: dispatchAction,
   );
   await hotkeyService.start();
+  // ShareX-style: if a stored global hotkey couldn't be registered at boot (the
+  // combo is reserved / already taken by another app), warn the user once so
+  // they go check Settings. Windows-only in practice — macOS Carbon can't detect
+  // conflicts, so failedActions is always empty there.
+  final failedHotkeys = hotkeyService.failedActions;
+  if (failedHotkeys.isNotEmpty) {
+    final l = appL10n;
+    final lines = failedHotkeys.map((k) {
+      final b = bindings[k] ?? defaultBindingFor(k);
+      // Conflicts only surface on Windows (macOS Carbon can't detect them).
+      final combo = b?.label(TargetPlatform.windows) ?? '';
+      return '• ${globalActionLabel(l, k)}  ($combo)';
+    }).join('\n');
+    CaptureBridge().showError('${l.shortcutsConflictWarning}\n\n$lines');
+  }
 
   // Windows: push the localized tray-menu labels to native. The runner C++ is
   // ASCII-only (cp950), so it cannot hold the zh strings — Dart owns l10n and

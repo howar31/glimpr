@@ -25,6 +25,7 @@ import '../output/name_tokens.dart';
 import '../output/flow.dart';
 import '../record/record_bridge.dart';
 import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/hotkey_registrar.dart';
 import '../shortcuts/hotkey_service.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
@@ -184,6 +185,15 @@ class _SettingsAppState extends State<SettingsApp>
   late final _shortcutStore = ShortcutStore(widget.settings.store);
   Map<String, HotkeyBinding?>? _shortcutsDraft;
   Map<String, HotkeyBinding?> _shortcutsBaseline = const {};
+  // Actions whose CURRENT DRAFT combo is reserved / already taken by another app
+  // (a record-time probe on Windows said unavailable, or seeded from a boot
+  // conflict). Treated like a duplicate: the row warns and Apply is blocked, so
+  // an unusable binding can't be saved.
+  final Set<String> _inUseActions = {};
+  // The same, but for the BASELINE (last-applied) bindings — boot conflicts that
+  // still apply. Revert restores _inUseActions from this (so a still-valid error
+  // isn't wiped); a successful Apply clears it (the applied state is conflict-free).
+  Set<String> _baselineInUse = {};
   // While any recorder is recording, the live global hotkeys are suspended so a
   // system-registered combo reaches the recorder instead of firing its action.
   int _activeRecorders = 0;
@@ -2237,6 +2247,13 @@ class _SettingsAppState extends State<SettingsApp>
     setState(() {
       _shortcutsDraft = {...all};
       _shortcutsBaseline = {...all};
+      // Seed from boot-time registration failures so a conflicting binding shows
+      // its inline warning + red border + blocks Apply right away (the startup
+      // dialog told the user to come check here).
+      _baselineInUse = {...?widget.hotkeyService?.failedActions};
+      _inUseActions
+        ..clear()
+        ..addAll(_baselineInUse);
     });
   }
 
@@ -2264,11 +2281,11 @@ class _SettingsAppState extends State<SettingsApp>
               title: globalActionLabel(_l, a.actionKey),
               hint: globalActionHint(_l, a.actionKey),
               tag: _scopeChip(_l.scopeGlobal),
-              warning: _bindingWarning(a.actionKey, true, dupes),
+              warning: _bindingWarning(a.actionKey, dupes),
               trailing: _bindingRow(
                 t: t,
                 actionKey: a.actionKey,
-                requireModifier: true,
+                dupes: dupes,
               ),
             ),
       ]),
@@ -2283,11 +2300,11 @@ class _SettingsAppState extends State<SettingsApp>
               title: globalActionLabel(_l, a.actionKey),
               hint: globalActionHint(_l, a.actionKey),
               tag: _scopeChip(_l.scopeGlobal),
-              warning: _bindingWarning(a.actionKey, true, dupes),
+              warning: _bindingWarning(a.actionKey, dupes),
               trailing: _bindingRow(
                 t: t,
                 actionKey: a.actionKey,
-                requireModifier: true,
+                dupes: dupes,
               ),
             ),
       ]),
@@ -2309,11 +2326,11 @@ class _SettingsAppState extends State<SettingsApp>
             iconWidget: tool == ToolKind.crop
                 ? _CropPinGlyph(t: t)
                 : null,
-            warning: _bindingWarning(kEditorToolActionKey[tool]!, false, dupes),
+            warning: _bindingWarning(kEditorToolActionKey[tool]!, dupes),
             trailing: _bindingRow(
               t: t,
               actionKey: kEditorToolActionKey[tool]!,
-              requireModifier: false,
+              dupes: dupes,
             ),
           ),
       ]),
@@ -2368,11 +2385,11 @@ class _SettingsAppState extends State<SettingsApp>
             title: cmd.$2,
             hint: cmd.$3,
             tag: _scopeChip(_l.scopeEditor),
-            warning: _bindingWarning(cmd.$1, false, dupes),
+            warning: _bindingWarning(cmd.$1, dupes),
             trailing: _bindingRow(
               t: t,
               actionKey: cmd.$1,
-              requireModifier: false,
+              dupes: dupes,
             ),
           ),
       ]),
@@ -2462,13 +2479,13 @@ class _SettingsAppState extends State<SettingsApp>
   // The Shortcuts pane's Apply/Revert bar, pinned to the bottom of the content
   // area (see _content) so it stays reachable however long the list grows. Only
   // shown when the draft is dirty; Apply is disabled (rendered as a dead ghost)
-  // when the draft is invalid (duplicate / missing-modifier).
+  // when the draft is invalid (a duplicate combo).
   Widget _shortcutsFooter(GlimprTokens t) {
     final draft = _shortcutsDraft;
     if (draft == null || _mapEquals(draft, _shortcutsBaseline)) {
       return const SizedBox.shrink();
     }
-    final allValid = _allValid(draft, duplicateActionKeys(draft));
+    final allValid = _allValid(duplicateActionKeys(draft));
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 12, 28, 16),
       decoration: BoxDecoration(
@@ -2488,26 +2505,21 @@ class _SettingsAppState extends State<SettingsApp>
     );
   }
 
-  // The row's danger sub-line, shown under the title (NOT inline in the
-  // recorder row) so the trailing stays narrow and the leading scope tag never
-  // overflows: missing-modifier (global rows) or a duplicate combo.
-  String? _bindingWarning(
-    String actionKey,
-    bool requireModifier,
-    Set<String> dupes,
-  ) {
-    final b = _shortcutsDraft![actionKey];
-    if (requireModifier && b != null && !b.hasModifier) {
-      return _l.settingsShortcutsNeedsModifier;
-    }
+  // The row's danger sub-line, shown under the title (NOT inline in the recorder
+  // row) so the trailing stays narrow and the leading scope tag never overflows.
+  // Two cases: a duplicate combo, or a combo the OS refused to register (reserved
+  // / already taken by another app) — the latter mirrors ShareX's inline failed
+  // status instead of a dialog. Bare keys are allowed (no missing-modifier case).
+  String? _bindingWarning(String actionKey, Set<String> dupes) {
     if (dupes.contains(actionKey)) return _l.settingsShortcutsDuplicate;
+    if (_inUseActions.contains(actionKey)) return _l.settingsShortcutsInUse;
     return null;
   }
 
   Widget _bindingRow({
     required GlimprTokens t,
     required String actionKey,
-    required bool requireModifier,
+    required Set<String> dupes,
   }) {
     final draft = _shortcutsDraft!;
     final binding = draft[actionKey];
@@ -2517,13 +2529,28 @@ class _SettingsAppState extends State<SettingsApp>
       children: [
         HotkeyRecorderField(
           value: binding,
-          requireModifier: requireModifier,
+          // Red border when this row's combo is invalid (duplicate / in use).
+          hasWarning: _bindingWarning(actionKey, dupes) != null,
           // Every row rejects the same fixed editor/system combos (⌘W, ⌘1, ⌘2,
           // bare , / . , / and the ⌘, settings chord), so a binding can never
           // land on a reserved shortcut anywhere on the page.
           isReserved: isEditorReservedCombo,
-          onChanged: (b) => setState(() => draft[actionKey] = b),
+          onChanged: (b, {bool available = true}) => setState(() {
+            draft[actionKey] = b;
+            if (b != null && !available) {
+              _inUseActions.add(actionKey); // taken by the OS / another app
+            } else {
+              _inUseActions.remove(actionKey);
+            }
+          }),
           onRecordingChanged: _onRecordingChanged,
+          // Windows: the registrar also captures keys natively (Flutter drops
+          // PrintScreen + the Win key). macOS registrar isn't a HotkeyKeyCapture
+          // -> null -> the field reads Flutter key events.
+          keyCapture: switch (widget.hotkeyService?.registrar) {
+            final HotkeyKeyCapture c => c,
+            _ => null,
+          },
         ),
         const SizedBox(width: 4),
         // Reset to default — disabled + dimmed when the binding already is the
@@ -2531,38 +2558,57 @@ class _SettingsAppState extends State<SettingsApp>
         _resetIconButton(
           t,
           isDefault: isDefault,
-          onReset: () =>
-              setState(() => draft[actionKey] = defaultBindingFor(actionKey)),
+          onReset: () => setState(() {
+            final d = defaultBindingFor(actionKey);
+            draft[actionKey] = d;
+            // Reset-to-default normally clears the in-use flag; keep it only if
+            // the default IS the still-conflicting baseline binding.
+            if (_baselineInUse.contains(actionKey) &&
+                d == _shortcutsBaseline[actionKey]) {
+              _inUseActions.add(actionKey);
+            } else {
+              _inUseActions.remove(actionKey);
+            }
+          }),
         ),
       ],
     );
   }
 
-  // Valid when there are no duplicate combos and every present global binding has
-  // a modifier (a bare global hotkey is rejected — Tier 1 requires a modifier).
-  bool _allValid(Map<String, HotkeyBinding?> draft, Set<String> dupes) {
-    if (dupes.isNotEmpty) return false;
-    for (final a in kGlobalActions) {
-      final b = draft[a.actionKey];
-      if (b != null && !b.hasModifier) return false;
-    }
-    return true;
-  }
+  // Valid when there are no duplicate combos AND nothing is reserved/taken by the
+  // OS / another app. Bare keys are allowed (a bare PrintScreen / F-key is a
+  // legitimate global hotkey, ShareX-style).
+  bool _allValid(Set<String> dupes) => dupes.isEmpty && _inUseActions.isEmpty;
 
   Future<void> _applyShortcuts() async {
     final draft = _shortcutsDraft!;
     await _shortcutStore.saveAll(draft);
-    // Re-register the changed Tier-1 actions live (no restart).
+    // Re-register the changed Tier-1 actions live (no restart). Apply is only
+    // reachable when every binding is valid (no duplicate, nothing in use — the
+    // record-time probe blocked those), so these registrations succeed.
     for (final a in kGlobalActions) {
       if (draft[a.actionKey] != _shortcutsBaseline[a.actionKey]) {
         await widget.hotkeyService?.rebind(a.actionKey, draft[a.actionKey]);
       }
     }
-    if (mounted) setState(() => _shortcutsBaseline = {...draft});
+    // Apply is only reachable when _inUseActions is empty, so the new baseline is
+    // conflict-free — clear the baseline-conflict snapshot too.
+    if (mounted) {
+      setState(() {
+        _shortcutsBaseline = {...draft};
+        _baselineInUse = {};
+      });
+    }
   }
 
-  void _revertShortcuts() =>
-      setState(() => _shortcutsDraft = {..._shortcutsBaseline});
+  void _revertShortcuts() => setState(() {
+        _shortcutsDraft = {..._shortcutsBaseline};
+        // Restore the baseline's conflicts (boot failures) — don't wipe a
+        // still-valid error.
+        _inUseActions
+          ..clear()
+          ..addAll(_baselineInUse);
+      });
 
   // Entry-wise equality for two binding maps (HotkeyBinding has value equality).
   bool _mapEquals(

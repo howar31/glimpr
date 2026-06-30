@@ -89,6 +89,16 @@ final Map<PhysicalKeyboardKey, int> _kVirtualKeyCodes = {
   PhysicalKeyboardKey.f10: 0x6D,
   PhysicalKeyboardKey.f11: 0x67,
   PhysicalKeyboardKey.f12: 0x6F,
+  // Extended function keys (kVK_F13..kVK_F20). Carbon defines no keycode past
+  // F20, so F21-F24 stay unmapped (-> not registrable) on macOS.
+  PhysicalKeyboardKey.f13: 0x69,
+  PhysicalKeyboardKey.f14: 0x6B,
+  PhysicalKeyboardKey.f15: 0x71,
+  PhysicalKeyboardKey.f16: 0x6A,
+  PhysicalKeyboardKey.f17: 0x40,
+  PhysicalKeyboardKey.f18: 0x4F,
+  PhysicalKeyboardKey.f19: 0x50,
+  PhysicalKeyboardKey.f20: 0x5A,
 };
 
 /// The Carbon virtual keycode for [key], or null when it has none.
