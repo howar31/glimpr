@@ -200,14 +200,17 @@ class LoupePainter extends CustomPainter {
       canvas.restore();
     }
 
-    // Pixel grid (one cell per source pixel) — inverting blend so the lines
-    // show over any magnified content. Anchored to TRUE pixel boundaries: the
-    // view is centered on a pixel center, so boundaries sit at half-cell
-    // offsets from the loupe center (not at multiples of zoom from the edge).
+    // Pixel grid (one cell per source pixel). A dark, semi-transparent line on a
+    // NORMAL (src-over) blend — NOT difference — so it never re-colours the
+    // magnified pixels: faithful colour reading wins over universal line
+    // legibility. The center marker below stays difference-blended, so the aimed
+    // pixel is always findable even on dark content where this faint grid softens.
+    // Anchored to TRUE pixel boundaries: the view is centered on a pixel center,
+    // so boundaries sit at half-cell offsets from the loupe center (not at
+    // multiples of zoom from the edge).
     final grid = Paint()
-      ..color = const Color(0x66FFFFFF)
-      ..strokeWidth = 1
-      ..blendMode = BlendMode.difference;
+      ..color = const Color(0x40000000)
+      ..strokeWidth = 1;
     final phaseX = (size.width / 2 - zoom / 2) % zoom;
     final phaseY = (size.height / 2 - zoom / 2) % zoom;
     for (double x = phaseX; x <= size.width; x += zoom) {
