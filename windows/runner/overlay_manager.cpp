@@ -1,6 +1,7 @@
 #include "overlay_manager.h"
 
 #include <shellscalingapi.h>
+#include <dwmapi.h>
 
 #include <flutter/standard_method_codec.h>
 
@@ -315,6 +316,24 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   // shared state), so a multi-display freeze is not staggered across displays
   // (mirrors macOS's parallel captureAll). The present (onCaptureReady) stays on
   // this platform thread, cursor display first.
+  //
+  // A frozen screenshot/pin taken over an ACTIVE record-select must capture the
+  // RS crosshair/veil/loupe as CONTENT (macOS parity: an op's OWN live chrome
+  // self-excludes, but the OTHER op's chrome is captured). The exclusion applied
+  // above (for the still-alive RS loupe feed) hides our overlay from WGC, so
+  // momentarily re-INCLUDE the overlays for THIS one grab, then re-exclude right
+  // after: the loupe is not displayed while RS suspends beneath the new freeze
+  // layer, and re-excluding here keeps the RESTORED loupe clean (no resurface
+  // hook needed). DwmFlush forces DWM to compose the now-included overlay before
+  // the fresh WGC session samples it, else the grab could miss it by a frame.
+  const bool unexclude_for_grab = !live_sources_.empty();
+  if (unexclude_for_grab) {
+    for (HMONITOR m : mons) {
+      Unit* u = UnitFor(MonId(m));
+      if (u && u->window) u->window->SetCaptureExcluded(false);
+    }
+    DwmFlush();
+  }
   std::vector<std::optional<CaptureFrame>> frames(mons.size());
   {
     std::vector<std::thread> workers;
@@ -330,6 +349,14 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
       });
     }
     for (auto& t : workers) t.join();
+  }
+  if (unexclude_for_grab) {
+    // Restore the resting exclusion so the RS loupe feed is clean when RS
+    // resurfaces (record hotkey while suspended, or the freeze layer draining).
+    for (HMONITOR m : mons) {
+      Unit* u = UnitFor(MonId(m));
+      if (u && u->window) u->window->SetCaptureExcluded(true);
+    }
   }
   int presented = 0;
   for (size_t i = 0; i < mons.size(); ++i) {
