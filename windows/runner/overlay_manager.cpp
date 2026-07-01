@@ -260,7 +260,6 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   const int64_t cursor_id = MonId(cursor_mon);
   PresentBegin(cursor_id);
 
-  live_select_ = live_select;
   std::vector<HMONITOR> mons = EnumerateMonitors();
   // Cursor display first (a valid strict-weak-ordering: "is-cursor" sorts ahead
   // of "is-not") so it is PRESENTED first, mirroring the macOS jobs.sort.
@@ -268,6 +267,13 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
                    [cursor_id](HMONITOR a, HMONITOR b) {
                      return (MonId(a) == cursor_id) && (MonId(b) != cursor_id);
                    });
+
+  // A fresh live record-select drops any STALE feeds first. EndLiveSelect also
+  // RE-INCLUDES every overlay in capture, so it MUST run BEFORE we set the
+  // exclusion below -- otherwise it clobbers the exclusion and the loupe's live
+  // WGC feed captures our own crosshair/veil (the "crosshair in the loupe" bug).
+  if (live_select) EndLiveSelect();
+  live_select_ = live_select;
 
   // The overlay window is ALWAYS DWM-glass (a frozen screenshot still reads
   // opaque); only capture-EXCLUSION flips: exclude while a live loupe feed is/will
@@ -285,7 +291,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     // LIVE record-select (full macOS parity): NO frozen capture -- the overlay is
     // transparent and the real desktop shows through; the loupe samples a
     // per-display live WGC feed. Present a geometry-only (transparent-base) dict.
-    EndLiveSelect();  // idempotent: drop any stale feeds
+    // (Stale feeds already dropped + capture exclusion applied above.)
     int presented = 0;
     for (HMONITOR m : mons) {
       const int64_t id = MonId(m);
