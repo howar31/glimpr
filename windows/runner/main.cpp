@@ -82,7 +82,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_FAILURE;
   }
   // Resident shell: closing the Settings window hides it to the tray; only the
-  // tray "Quit" (FlutterWindow::Quit -> PostQuitMessage) ends the app.
+  // tray "Quit" (FlutterWindow::Quit -> ExitProcess) ends the app.
   window.SetQuitOnClose(false);
 
   ::MSG msg;

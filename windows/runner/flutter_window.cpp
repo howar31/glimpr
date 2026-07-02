@@ -426,7 +426,13 @@ void FlutterWindow::RevealControlWindow() {
 
 void FlutterWindow::Quit() {
   if (tray_icon_) tray_icon_->Remove();
-  PostQuitMessage(0);
+  // Force-exit instead of PostQuitMessage: the clean message-loop teardown
+  // destroys the editor + per-display overlay Flutter engines before the main
+  // HWND, so the still-visible windows linger for seconds after the tray icon
+  // is gone (and the teardown can hang outright -- same reason the relaunch
+  // path force-exits). Process death destroys every window at once and closes
+  // the record worker's stdin, which makes an in-flight worker abort itself.
+  ExitProcess(0);
 }
 
 LRESULT CALLBACK FlutterWindow::KeyCaptureSubclassProc(HWND hwnd, UINT message,

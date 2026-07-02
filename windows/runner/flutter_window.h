@@ -30,7 +30,7 @@ class FlutterWindow : public Win32Window {
   // / the overlay's openSettings / a second-instance reveal). Mirrors macOS
   // revealSettings: show + first-frame redraw + foreground.
   void RevealControlWindow();
-  // Quit the resident app (tray "Quit"): remove the tray icon, end the loop.
+  // Quit the resident app (tray "Quit"): remove the tray icon, force-exit.
   void Quit();
 
   // Broadcast message a second instance posts to reveal the running one's
