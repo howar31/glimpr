@@ -93,6 +93,8 @@ class RegionCapture {
     required this.displayOrigin,
     required this.scaleFactor,
     this.plainBytes,
+    this.hdrBytes,
+    this.hdrExt,
   });
   final Uint8List bytes;
   final int displayId;
@@ -105,6 +107,12 @@ class RegionCapture {
   /// capture.
   final Uint8List? plainBytes;
 
+  /// Encoded HDR rendition (undecorated) + its file extension ('heic'/'jxr'),
+  /// present only when HDR screenshots are on and the captured display is HDR.
+  /// The flow writes it as a sibling file beside the saved SDR image.
+  final Uint8List? hdrBytes;
+  final String? hdrExt;
+
   factory RegionCapture.fromMap(Map<dynamic, dynamic> m) => RegionCapture(
         bytes: m['bytes'] as Uint8List,
         displayId: (m['displayId'] as num).toInt(),
@@ -114,6 +122,8 @@ class RegionCapture {
             (m['left'] as num).toDouble(), (m['top'] as num).toDouble()),
         scaleFactor: (m['scaleFactor'] as num).toDouble(),
         plainBytes: m['plainBytes'] as Uint8List?,
+        hdrBytes: m['hdrBytes'] as Uint8List?,
+        hdrExt: m['hdrExt'] as String?,
       );
 }
 
@@ -147,6 +157,10 @@ class CapturedDisplay {
   final Uint8List? cursorImageBytes;
   final double? cursorLeft;
   final double? cursorTop;
+  // The freeze retained an HDR base natively for this display (HDR monitor +
+  // the HDR-screenshot setting on at capture): [hdrGen] identifies that
+  // retained generation for encodeHdrRegion. Null = no HDR sibling possible.
+  final int? hdrGen;
 
   const CapturedDisplay({
     required this.displayId,
@@ -166,6 +180,7 @@ class CapturedDisplay {
     this.cursorImageBytes,
     this.cursorLeft,
     this.cursorTop,
+    this.hdrGen,
   });
 
   /// Whether this dict carries frozen pixels. A live-select session (recording)
@@ -190,6 +205,7 @@ class CapturedDisplay {
     cursorImageBytes: m['cursorImage'] as Uint8List?,
     cursorLeft: (m['cursorLeft'] as num?)?.toDouble(),
     cursorTop: (m['cursorTop'] as num?)?.toDouble(),
+    hdrGen: (m['hdrGen'] as num?)?.toInt(),
     windows: ((m['windows'] as List<dynamic>?) ?? const [])
         .map((e) => (e as Map).cast<dynamic, dynamic>())
         .map((w) => SnapWindow(

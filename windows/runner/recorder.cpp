@@ -1,8 +1,11 @@
 #include "recorder.h"
 
+#include "hdr_convert_gpu.h"
+#include "hdr_util.h"
 #include "record_audio.h"
 #include "record_gif.h"
 
+#include <codecapi.h>
 #include <d3d11.h>
 #include <dwmapi.h>
 #include <dxgi.h>
@@ -301,6 +304,16 @@ struct Recorder::Impl {
   uint32_t crop_x = 0, crop_y = 0;        // crop offset into the source frame (px)
   uint32_t staging_w = 0, staging_h = 0;  // current staging size (= source frame)
 
+  // ---- HDR (fp16 scRGB source on an HDR monitor) --------------------------
+  // src_hdr: the WGC pool runs R16G16B16A16Float. Without hdr10 the frames are
+  // GPU tone-mapped to SDR (the wash-out fix); with hdr10 (spec.hdr + Main10
+  // accepted) they are GPU-converted to P010 and encoded as HDR10.
+  bool src_hdr = false;
+  bool hdr10 = false;
+  float sdr_white_nits = 240.0f;
+  float max_nits = 1000.0f;
+  std::unique_ptr<HdrConverter> hdr_conv;
+
   // ---- encode (Media Foundation IMFSinkWriter) ---------------------------
   bool mf_started = false;
   winrt::com_ptr<IMFSinkWriter> writer;
@@ -413,52 +426,101 @@ void Recorder::Impl::OnFrameArrived() {
     D3D11_TEXTURE2D_DESC desc{};
     texture->GetDesc(&desc);
 
-    // (Re)create the staging texture to match the live frame size -- it can
-    // change if a recorded window is resized mid-recording.
-    if (!staging || staging_w != desc.Width || staging_h != desc.Height) {
-      staging = nullptr;
-      D3D11_TEXTURE2D_DESC sd{};
-      sd.Width = desc.Width;
-      sd.Height = desc.Height;
-      sd.MipLevels = 1;
-      sd.ArraySize = 1;
-      sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-      sd.SampleDesc.Count = 1;
-      sd.Usage = D3D11_USAGE_STAGING;
-      sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-      if (FAILED(device->CreateTexture2D(&sd, nullptr, staging.put()))) return;
-      staging_w = desc.Width;
-      staging_h = desc.Height;
-    }
-
-    context->CopyResource(staging.get(), texture.get());
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    if (FAILED(context->Map(staging.get(), 0, D3D11_MAP_READ, 0, &mapped))) {
-      return;
-    }
-    // Copy the crop window [crop_x, crop_y, cap_w x cap_h] from the source into a
-    // tightly-packed, encode-sized buffer (zero-filled; anything outside the
-    // source -- e.g. a shrunk window -- stays black).
-    const uint32_t stride = cap_w * 4;
-    buffer.assign(static_cast<size_t>(stride) * cap_h, 0);
-    const auto* src = static_cast<const uint8_t*>(mapped.pData);
-    uint32_t copy_w = cap_w;
-    if (crop_x >= desc.Width) {
-      copy_w = 0;
-    } else if (crop_x + copy_w > desc.Width) {
-      copy_w = desc.Width - crop_x;
-    }
-    if (copy_w > 0) {
-      for (uint32_t y = 0; y < cap_h; ++y) {
-        const uint32_t sy = crop_y + y;
-        if (sy >= desc.Height) break;  // below the source -> leave black
-        std::memcpy(buffer.data() + static_cast<size_t>(y) * stride,
-                    src + static_cast<size_t>(sy) * mapped.RowPitch +
-                        static_cast<size_t>(crop_x) * 4,
-                    static_cast<size_t>(copy_w) * 4);
+    if (src_hdr && hdr10) {
+      // HDR10: GPU scRGB -> PQ/BT.2020 P010 conversion, crop applied in the
+      // shader; read back the two planes (3 B/px total, smaller than BGRA) and
+      // pack a standard P010 buffer (Y plane then interleaved UV plane).
+      ID3D11Texture2D* ys = nullptr;
+      ID3D11Texture2D* uvs = nullptr;
+      if (!hdr_conv->ToP010(texture.get(), crop_x, crop_y, cap_w, cap_h, &ys,
+                            &uvs)) {
+        return;
       }
+      D3D11_MAPPED_SUBRESOURCE my{};
+      if (FAILED(context->Map(ys, 0, D3D11_MAP_READ, 0, &my))) return;
+      D3D11_MAPPED_SUBRESOURCE muv{};
+      if (FAILED(context->Map(uvs, 0, D3D11_MAP_READ, 0, &muv))) {
+        context->Unmap(ys, 0);
+        return;
+      }
+      const uint32_t y_stride = cap_w * 2;
+      const size_t y_size = static_cast<size_t>(y_stride) * cap_h;
+      const uint32_t uv_stride = cap_w * 2;  // (cap_w/2) px * 2 ch * 2 bytes
+      const size_t uv_size = static_cast<size_t>(uv_stride) * (cap_h / 2);
+      buffer.resize(y_size + uv_size);
+      const auto* ysrc = static_cast<const uint8_t*>(my.pData);
+      for (uint32_t y = 0; y < cap_h; ++y) {
+        std::memcpy(buffer.data() + static_cast<size_t>(y) * y_stride,
+                    ysrc + static_cast<size_t>(y) * my.RowPitch, y_stride);
+      }
+      const auto* uvsrc = static_cast<const uint8_t*>(muv.pData);
+      for (uint32_t y = 0; y < cap_h / 2; ++y) {
+        std::memcpy(
+            buffer.data() + y_size + static_cast<size_t>(y) * uv_stride,
+            uvsrc + static_cast<size_t>(y) * muv.RowPitch, uv_stride);
+      }
+      context->Unmap(uvs, 0);
+      context->Unmap(ys, 0);
+    } else {
+      // fp16 source (HDR monitor), SDR output: GPU tone-map to a
+      // BGRA-byte-order RGBA8 texture; the readback below then consumes it
+      // exactly like a plain BGRA frame.
+      ID3D11Texture2D* copy_src = texture.get();
+      if (src_hdr) {
+        copy_src = hdr_conv->ToBgra(texture.get(), sdr_white_nits);
+        if (!copy_src) return;
+        copy_src->GetDesc(&desc);
+      }
+
+      // (Re)create the staging texture to match the live frame size + format
+      // -- the size can change if a recorded window is resized mid-recording.
+      if (!staging || staging_w != desc.Width || staging_h != desc.Height) {
+        staging = nullptr;
+        D3D11_TEXTURE2D_DESC sd{};
+        sd.Width = desc.Width;
+        sd.Height = desc.Height;
+        sd.MipLevels = 1;
+        sd.ArraySize = 1;
+        sd.Format = desc.Format;
+        sd.SampleDesc.Count = 1;
+        sd.Usage = D3D11_USAGE_STAGING;
+        sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        if (FAILED(device->CreateTexture2D(&sd, nullptr, staging.put()))) {
+          return;
+        }
+        staging_w = desc.Width;
+        staging_h = desc.Height;
+      }
+
+      context->CopyResource(staging.get(), copy_src);
+      D3D11_MAPPED_SUBRESOURCE mapped{};
+      if (FAILED(context->Map(staging.get(), 0, D3D11_MAP_READ, 0, &mapped))) {
+        return;
+      }
+      // Copy the crop window [crop_x, crop_y, cap_w x cap_h] from the source
+      // into a tightly-packed, encode-sized buffer (zero-filled; anything
+      // outside the source -- e.g. a shrunk window -- stays black).
+      const uint32_t stride = cap_w * 4;
+      buffer.assign(static_cast<size_t>(stride) * cap_h, 0);
+      const auto* src = static_cast<const uint8_t*>(mapped.pData);
+      uint32_t copy_w = cap_w;
+      if (crop_x >= desc.Width) {
+        copy_w = 0;
+      } else if (crop_x + copy_w > desc.Width) {
+        copy_w = desc.Width - crop_x;
+      }
+      if (copy_w > 0) {
+        for (uint32_t y = 0; y < cap_h; ++y) {
+          const uint32_t sy = crop_y + y;
+          if (sy >= desc.Height) break;  // below the source -> leave black
+          std::memcpy(buffer.data() + static_cast<size_t>(y) * stride,
+                      src + static_cast<size_t>(sy) * mapped.RowPitch +
+                          static_cast<size_t>(crop_x) * 4,
+                      static_cast<size_t>(copy_w) * 4);
+        }
+      }
+      context->Unmap(staging.get(), 0);
     }
-    context->Unmap(staging.get(), 0);
   }
 
   LONGLONG expected = -1;
@@ -478,8 +540,6 @@ void Recorder::Impl::OnFrameArrived() {
 }
 
 void Recorder::Impl::EncoderLoop() {
-  const uint32_t in_stride = cap_w * 4;
-  const DWORD in_size = in_stride * cap_h;
   constexpr LONGLONG kMaxTs = 0x7fffffffffffffffLL;
   for (;;) {
     enum Pick { kNone, kVideo, kSys, kMic } pick = kNone;
@@ -548,15 +608,17 @@ void Recorder::Impl::EncoderLoop() {
       if (pts <= last_written_pts) pts = last_written_pts + 1;
       last_written_pts = pts;
 
+      // The queued buffer is already tightly packed in the input media type's
+      // layout: RGB32 top-down (positive MF_MT_DEFAULT_STRIDE), or a P010
+      // plane pair on the HDR10 path.
+      const DWORD sample_size = static_cast<DWORD>(vf.bgra.size());
       winrt::com_ptr<IMFMediaBuffer> buf;
-      if (FAILED(MFCreateMemoryBuffer(in_size, buf.put()))) continue;
+      if (FAILED(MFCreateMemoryBuffer(sample_size, buf.put()))) continue;
       BYTE* dst = nullptr;
       if (FAILED(buf->Lock(&dst, nullptr, nullptr))) continue;
-      // RGB32 top-down: positive stride into a top-down buffer (the input media
-      // type declares MF_MT_DEFAULT_STRIDE positive).
-      MFCopyImage(dst, in_stride, vf.bgra.data(), in_stride, in_stride, cap_h);
+      std::memcpy(dst, vf.bgra.data(), sample_size);
       buf->Unlock();
-      buf->SetCurrentLength(in_size);
+      buf->SetCurrentLength(sample_size);
 
       winrt::com_ptr<IMFSample> sample;
       if (FAILED(MFCreateSample(sample.put()))) continue;
@@ -698,6 +760,9 @@ void Recorder::Impl::Cleanup() {
   if (autostop.joinable()) autostop.join();
 
   staging = nullptr;
+  hdr_conv.reset();  // holds device resources -> release before the device
+  src_hdr = false;
+  hdr10 = false;
   context = nullptr;
   device = nullptr;
   item = nullptr;
@@ -781,6 +846,16 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   GetMonitorInfo(mon, &mi);
   const double scale = MonScale(mon);
 
+  // HDR-ness is decided by the START monitor and never mid-switches (a
+  // followed window that crosses displays keeps its starting pipeline).
+  {
+    const hdr::MonitorHdrInfo hdr_info = hdr::QueryMonitorHdr(mon);
+    impl_->src_hdr = hdr_info.hdr;
+    impl_->sdr_white_nits = hdr_info.sdr_white_nits;
+    impl_->max_nits = hdr_info.max_nits;
+    impl_->hdr10 = false;  // decided at sink-writer setup (spec.hdr + Main10 ok)
+  }
+
   // A region crop applies only when a rect was given (region / lastRegion).
   const bool region = !window_mode && spec.w > 0 && spec.h > 0;
 
@@ -791,6 +866,17 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     if (!impl_->device) return fail("no d3d device");
     impl_->device->GetImmediateContext(impl_->context.put());
     auto rtDevice = WrapDevice(impl_->device);
+
+    // The fp16 pipeline needs the GPU converter; if its shaders fail to build,
+    // fall back to the plain BGRA capture (recording still works, the HDR
+    // monitor just keeps the OS SDR conversion).
+    if (impl_->src_hdr) {
+      impl_->hdr_conv = std::make_unique<HdrConverter>();
+      if (!impl_->hdr_conv->Init(impl_->device.get(), impl_->context.get())) {
+        impl_->hdr_conv.reset();
+        impl_->src_hdr = false;
+      }
+    }
 
     auto interop = GetInterop();
     const winrt::guid iid = winrt::guid_of<cap::GraphicsCaptureItem>();
@@ -839,7 +925,10 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
     impl_->staging_h = 0;
 
     impl_->pool = cap::Direct3D11CaptureFramePool::CreateFreeThreaded(
-        rtDevice, dx::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, size);
+        rtDevice,
+        impl_->src_hdr ? dx::DirectXPixelFormat::R16G16B16A16Float
+                       : dx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+        2, size);
     impl_->session = impl_->pool.CreateCaptureSession(impl_->item);
     try {
       impl_->session.IsBorderRequired(false);
@@ -967,6 +1056,77 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   UINT32 bitrate = static_cast<UINT32>(
       (std::max)(500000.0, static_cast<double>(out_w) * out_h * fps * bpp));
 
+  // ---- HDR10 attempt: HEVC Main10 out + P010 in, BT.2020/PQ metadata -------
+  // Only when the user picked HEVC (HDR) AND the start monitor is HDR. On ANY
+  // failure the sink writer is recreated clean and the plain SDR path below
+  // runs (with the GPU tone-map) -- the recording always starts. Attribute set
+  // validated by the 2026-07-02 on-box probe (ffprobe: Main 10 / yuv420p10le /
+  // bt2020nc / smpte2084 / bt2020).
+  if (spec.hdr && impl_->src_hdr && spec.hevc) {
+    // P010 4:2:0 needs even dims; the MF scaler is unverified on P010, so HDR
+    // records at capture size (no maxLongSide cap).
+    const uint32_t hw = impl_->cap_w & ~1u;
+    const uint32_t hh = impl_->cap_h & ~1u;
+    const UINT32 b10 = static_cast<UINT32>((std::max)(
+        500000.0, static_cast<double>(hw) * hh * fps * bpp * 1.25));
+    HRESULT hr10 = E_FAIL;
+    DWORD stream10 = 0;
+    if (hw >= 2 && hh >= 2) {
+      do {
+        winrt::com_ptr<IMFMediaType> ot;
+        if (FAILED(MFCreateMediaType(ot.put()))) break;
+        ot->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+        ot->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_HEVC);
+        ot->SetUINT32(MF_MT_VIDEO_PROFILE, eAVEncH265VProfile_Main_420_10);
+        ot->SetUINT32(MF_MT_AVG_BITRATE, b10);
+        ot->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+        MFSetAttributeSize(ot.get(), MF_MT_FRAME_SIZE, hw, hh);
+        MFSetAttributeRatio(ot.get(), MF_MT_FRAME_RATE, fps, 1);
+        MFSetAttributeRatio(ot.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+        ot->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT2020);
+        ot->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_2084);
+        ot->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT2020_10);
+        ot->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
+        ot->SetUINT32(MF_MT_MAX_LUMINANCE_LEVEL,
+                      static_cast<UINT32>(impl_->max_nits));
+        ot->SetUINT32(MF_MT_MAX_FRAME_AVERAGE_LUMINANCE_LEVEL,
+                      static_cast<UINT32>(
+                          (std::min)(impl_->max_nits, 400.0f)));
+        if (FAILED(writer->AddStream(ot.get(), &stream10))) break;
+        winrt::com_ptr<IMFMediaType> it;
+        if (FAILED(MFCreateMediaType(it.put()))) break;
+        it->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+        it->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_P010);
+        it->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+        it->SetUINT32(MF_MT_DEFAULT_STRIDE, hw * 2);
+        MFSetAttributeSize(it.get(), MF_MT_FRAME_SIZE, hw, hh);
+        MFSetAttributeRatio(it.get(), MF_MT_FRAME_RATE, fps, 1);
+        MFSetAttributeRatio(it.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+        it->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT2020);
+        it->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_2084);
+        it->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT2020_10);
+        hr10 = writer->SetInputMediaType(stream10, it.get(), nullptr);
+      } while (false);
+    }
+    if (SUCCEEDED(hr10)) {
+      impl_->hdr10 = true;
+      impl_->video_stream = stream10;
+      impl_->cap_w = hw;
+      impl_->cap_h = hh;
+      impl_->out_w = hw;
+      impl_->out_h = hh;
+    } else {
+      // A failed AddStream may leave a stream behind: rebuild the writer.
+      writer = nullptr;
+      if (FAILED(MFCreateSinkWriterFromURL(impl_->output_path_w.c_str(),
+                                           nullptr, sw_attrs.get(),
+                                           writer.put()))) {
+        return fail("MFCreateSinkWriterFromURL");
+      }
+    }
+  }
+
+  if (!impl_->hdr10) {
   // Output (encoded) type.
   winrt::com_ptr<IMFMediaType> out_type;
   if (FAILED(MFCreateMediaType(out_type.put()))) return fail("out type");
@@ -1004,6 +1164,7 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
                                        nullptr))) {
     return fail("SetInputMediaType");
   }
+  }  // !hdr10
 
   // Add an AAC audio stream (output) fed by 48k/stereo/s16 PCM (input) for each
   // active WASAPI source. The sink writer inserts the AAC encoder MFT.

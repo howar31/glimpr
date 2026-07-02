@@ -47,6 +47,11 @@ class EditorToolbar extends StatelessWidget {
   // Whether to show the mouse-pointer toggle (the capture carried a cursor image —
   // overlay only). Toggles `controller.showCursor`.
   final bool showCursorToggle;
+  // Whether to show the HDR-sibling toggle (the freeze retained an HDR base:
+  // HDR display + the HDR-screenshot setting on). Toggles `controller.hdrExport`
+  // — a per-take opt-OUT of the extra HDR file; it can never opt IN (the base
+  // must exist from freeze time).
+  final bool showHdrToggle;
   // The ⌘⌥7 capture-to-pin session: the Crop tool's icon becomes a pin and a
   // caption below the bar names the mode, so it cannot be mistaken for a
   // normal capture. The normal ⌘⌥1 overlay never sets this.
@@ -72,6 +77,7 @@ class EditorToolbar extends StatelessWidget {
     this.showDragHandle = true,
     this.trailing = const [],
     this.showCursorToggle = false,
+    this.showHdrToggle = false,
     this.pinMode = false,
     this.recordMode = false,
     this.recordOverrides,
@@ -189,6 +195,7 @@ class EditorToolbar extends StatelessWidget {
                 // Mouse-pointer toggle (overlay, when the capture carried a
                 // cursor) — not a tool: shows/hides the captured cursor layer.
                 if (showCursorToggle) _CursorToggle(controller: controller),
+                if (showHdrToggle) _HdrToggle(controller: controller),
                 // Crosshair-lines / pixel-loupe toggles (annotation surfaces only,
                 // not the record-select picker). Greyed + inert for tools the HUD
                 // element doesn't apply to.
@@ -499,6 +506,7 @@ class RecordOverrides {
     required bool systemAudio,
     required bool microphone,
     required bool hevc,
+    required bool hdr,
     required bool gif,
     required int fps,
     required int gifFps,
@@ -507,6 +515,7 @@ class RecordOverrides {
         systemAudio = ValueNotifier(systemAudio),
         microphone = ValueNotifier(microphone),
         hevc = ValueNotifier(hevc),
+        hdr = ValueNotifier(hdr),
         gif = ValueNotifier(gif),
         fps = ValueNotifier(fps),
         gifFps = ValueNotifier(gifFps),
@@ -516,6 +525,7 @@ class RecordOverrides {
   final ValueNotifier<bool> systemAudio;
   final ValueNotifier<bool> microphone;
   final ValueNotifier<bool> hevc; // false = H.264
+  final ValueNotifier<bool> hdr; // true = HEVC (HDR): HDR10 on an HDR display
   final ValueNotifier<bool> gif; // true = direct GIF (no mp4, no audio)
   final ValueNotifier<int> fps; // 30 | 60 (mp4 frame rate)
   final ValueNotifier<int> gifFps; // 10 | 15 | 20 | 25 (GIF frame rate)
@@ -531,6 +541,7 @@ class RecordOverrides {
     systemAudio.value = r.systemAudio;
     microphone.value = r.microphone;
     hevc.value = r.hevc;
+    hdr.value = r.hdr;
     gif.value = r.isGif;
     fps.value = r.fps;
     gifFps.value = r.gifFps;
@@ -542,6 +553,7 @@ class RecordOverrides {
     systemAudio.dispose();
     microphone.dispose();
     hevc.dispose();
+    hdr.dispose();
     gif.dispose();
     fps.dispose();
     gifFps.dispose();
@@ -656,6 +668,28 @@ class _CursorToggle extends StatelessWidget {
         color: on ? _ToolbarTheme.accentOf(context) : p.fg,
         tooltip: on ? l10n.toolbarMousePointerShown : l10n.toolbarMousePointerHidden,
         onPressed: () => controller.showCursor.value = !on,
+      ),
+    );
+  }
+}
+
+/// HDR-sibling toggle: whether THIS capture also writes the HDR file beside the
+/// SDR image (shown only when the freeze retained an HDR base). Accent when on,
+/// mirroring the cursor toggle's language.
+class _HdrToggle extends StatelessWidget {
+  final EditorController controller;
+  const _HdrToggle({required this.controller});
+  @override
+  Widget build(BuildContext context) {
+    final p = _ToolbarTheme.of(context);
+    final l10n = AppLocalizations.of(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: controller.hdrExport,
+      builder: (_, on, _) => IconButton(
+        icon: const Icon(Icons.hdr_on_outlined),
+        color: on ? _ToolbarTheme.accentOf(context) : p.fg,
+        tooltip: on ? l10n.toolbarHdrOn : l10n.toolbarHdrOff,
+        onPressed: () => controller.hdrExport.value = !on,
       ),
     );
   }
@@ -1096,17 +1130,26 @@ class _OptionsRowState extends State<_OptionsRow> {
     }
     _closePopover();
     final o = widget.recordOverrides!;
-    final sel = o.gif.value ? 'gif' : (o.hevc.value ? 'hevc' : 'h264');
+    final sel = o.gif.value
+        ? 'gif'
+        : (o.hdr.value ? 'hevcHdr' : (o.hevc.value ? 'hevc' : 'h264'));
     _showPopover(
       _OpenPopover.recordCodec,
       _barLink,
       width: 170,
       child: ChoiceListPopover<String>(
         selected: sel,
-        options: const [('h264', 'H.264'), ('hevc', 'HEVC'), ('gif', 'GIF')],
+        options: const [
+          ('h264', 'H.264'),
+          ('hevc', 'HEVC'),
+          ('hevcHdr', 'HEVC (HDR)'),
+          ('gif', 'GIF'),
+        ],
         accent: GlimprTokens.recordingAccent,
         onSelected: (v) {
-          o.hevc.value = v == 'hevc';
+          // hevcHdr rides the HEVC codec path with the HDR flag on top.
+          o.hevc.value = v == 'hevc' || v == 'hevcHdr';
+          o.hdr.value = v == 'hevcHdr';
           o.gif.value = v == 'gif';
           _closePopover();
           setState(() {});
@@ -1291,8 +1334,13 @@ class _OptionsRowState extends State<_OptionsRow> {
         child: _Bar(
           height: _Bar.heightSub,
           child: ListenableBuilder(
-            listenable: Listenable.merge(
-                [overrides.hevc, overrides.gif, overrides.fps, overrides.gifFps]),
+            listenable: Listenable.merge([
+              overrides.hevc,
+              overrides.hdr,
+              overrides.gif,
+              overrides.fps,
+              overrides.gifFps
+            ]),
             builder: (_, _) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1300,7 +1348,9 @@ class _OptionsRowState extends State<_OptionsRow> {
                   key: const ValueKey('record-format-picker'),
                   label: overrides.gif.value
                       ? 'GIF'
-                      : (overrides.hevc.value ? 'HEVC' : 'H.264'),
+                      : (overrides.hdr.value
+                          ? 'HEVC (HDR)'
+                          : (overrides.hevc.value ? 'HEVC' : 'H.264')),
                   tooltip: l10n.toolbarRecordCodec,
                   onTap: _openRecordCodecPopover,
                 ),

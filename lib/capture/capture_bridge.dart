@@ -40,6 +40,7 @@ class CaptureBridge {
     bool? systemAudio,
     bool? microphone,
     bool? hevc,
+    bool? hdr,
     bool? gif,
     int? fps,
     int? gifFps,
@@ -57,6 +58,7 @@ class CaptureBridge {
         'systemAudio': ?systemAudio,
         'microphone': ?microphone,
         'hevc': ?hevc,
+        'hdr': ?hdr,
         'gif': ?gif,
         'fps': ?fps,
         'gifFps': ?gifFps,
@@ -78,6 +80,9 @@ class CaptureBridge {
     // Also return the UNDECORATED rendition (plainBytes) when decorating —
     // the flow's pin leg always consumes the plain capture.
     bool alsoPlain = false,
+    // Dual-output HDR: when the captured display is HDR, also return the
+    // undecorated HDR rendition (hdrBytes + hdrExt) beside the SDR bytes.
+    bool hdr = false,
   }) async {
     final res = await _channel.invokeMethod('captureRegion', {
       'displayId': ?displayId,
@@ -89,6 +94,7 @@ class CaptureBridge {
       'quality': jpegQuality,
       'decoration': ?decoration,
       'alsoPlain': alsoPlain,
+      'hdr': hdr,
     });
     if (res == null) return null;
     return RegionCapture.fromMap((res as Map).cast<dynamic, dynamic>());
@@ -160,13 +166,20 @@ class CaptureBridge {
   /// the UNDECORATED sibling rendition for the flow's pin leg. Null when no
   /// such window / the native capture failed -> the caller falls back to a
   /// rect crop.
-  Future<({Uint8List bytes, Uint8List? plainBytes})?> captureWindowDelivered(
+  Future<
+      ({
+        Uint8List bytes,
+        Uint8List? plainBytes,
+        Uint8List? hdrBytes,
+        String? hdrExt,
+      })?> captureWindowDelivered(
     int windowId, {
     bool showsCursor = false,
     bool jpeg = false,
     int jpegQuality = 90,
     Map<String, dynamic>? decoration,
     bool alsoPlain = false,
+    bool hdr = false,
   }) async {
     final res = await _channel.invokeMethod('captureWindowDelivered', {
       'windowId': windowId,
@@ -175,12 +188,56 @@ class CaptureBridge {
       'quality': jpegQuality,
       'decoration': ?decoration,
       'alsoPlain': alsoPlain,
+      'hdr': hdr,
     });
     if (res == null) return null;
     final m = res as Map;
     final bytes = m['bytes'] as Uint8List?;
     if (bytes == null) return null;
-    return (bytes: bytes, plainBytes: m['plainBytes'] as Uint8List?);
+    return (
+      bytes: bytes,
+      plainBytes: m['plainBytes'] as Uint8List?,
+      hdrBytes: m['hdrBytes'] as Uint8List?,
+      hdrExt: m['hdrExt'] as String?,
+    );
+  }
+
+  /// Composite + encode the HDR rendition of an annotated overlay export from
+  /// the natively-retained HDR base (freeze-time fp16/EDR). [items] is the
+  /// ordered overlay-segment / effect-op list from buildHdrExportItems; [crop]
+  /// is the FRAME-space native px crop. Returns null when no HDR base is
+  /// retained for [displayId]/[gen] (SDR-only display, setting off at freeze,
+  /// or a stale layer) — the caller just skips the HDR sibling.
+  Future<({Uint8List bytes, String ext})?> encodeHdrRegion({
+    required int displayId,
+    required int gen,
+    required Rect crop,
+    required List<Map<String, dynamic>> items,
+    Uint8List? maskBytes,
+    int maskW = 0,
+    int maskH = 0,
+    int maskRowBytes = 0,
+  }) async {
+    try {
+      final res = await _channel.invokeMethod('encodeHdrRegion', {
+        'displayId': displayId,
+        'gen': gen,
+        'x': crop.left, 'y': crop.top, 'w': crop.width, 'h': crop.height,
+        'items': items,
+        'mask': ?maskBytes,
+        'maskW': maskW,
+        'maskH': maskH,
+        'maskRowBytes': maskRowBytes,
+      });
+      if (res == null) return null;
+      final m = res as Map;
+      final bytes = m['bytes'] as Uint8List?;
+      final ext = m['ext'] as String?;
+      if (bytes == null || ext == null) return null;
+      return (bytes: bytes, ext: ext);
+    } catch (_) {
+      return null; // handler absent (tests / older native) -> no HDR sibling
+    }
   }
 
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).

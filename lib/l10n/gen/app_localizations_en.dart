@@ -106,6 +106,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionBehaviour => 'Behaviour';
 
   @override
+  String get settingsHdrScreenshot => 'Save HDR screenshots';
+
+  @override
+  String get settingsHdrScreenshotHintMac =>
+      'On an HDR display, screenshots also save an HDR HEIC file beside the standard image (macOS 26 or later): annotations included; a toolbar button can skip it per shot. The clipboard and editor keep the standard image.';
+
+  @override
+  String get settingsHdrScreenshotHintWindows =>
+      'On an HDR display, screenshots also save an HDR JPEG XR file beside the standard image: annotations included; a toolbar button can skip it per shot. The clipboard and editor keep the standard image.';
+
+  @override
+  String get toolbarHdrOn => 'HDR file: on for this shot';
+
+  @override
+  String get toolbarHdrOff => 'HDR file: off for this shot';
+
+  @override
   String get settingsMousePointer => 'Mouse pointer';
 
   @override
@@ -902,7 +919,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutsConflictWarning =>
-      'Some shortcuts couldn\'t be registered — they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:';
+      'Some shortcuts couldn\'t be registered: they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:';
 
   @override
   String get settingsShortcutsResetToDefault => 'Reset to default';

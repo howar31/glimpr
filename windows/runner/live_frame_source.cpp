@@ -12,6 +12,8 @@
 #include <cstring>
 #include <mutex>
 
+#include "hdr_util.h"
+
 namespace {
 
 namespace cap = winrt::Windows::Graphics::Capture;
@@ -58,6 +60,10 @@ struct LiveFrameSource::Impl {
   std::mutex mutex;
   uint32_t w = 0, h = 0;  // staging size (px)
   bool has_frame = false;
+  // HDR monitor: the feed runs in fp16 scRGB and Sample() tone-maps each patch
+  // (span^2 px, trivial) so the loupe reads faithful SDR colour.
+  bool f16 = false;
+  hdr::ToneMapLut tonemap;
 
   void OnFrameArrived();
 };
@@ -84,7 +90,8 @@ void LiveFrameSource::Impl::OnFrameArrived() {
     sd.Height = desc.Height;
     sd.MipLevels = 1;
     sd.ArraySize = 1;
-    sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sd.Format = f16 ? DXGI_FORMAT_R16G16B16A16_FLOAT
+                    : DXGI_FORMAT_B8G8R8A8_UNORM;
     sd.SampleDesc.Count = 1;
     sd.Usage = D3D11_USAGE_STAGING;
     sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -115,8 +122,16 @@ bool LiveFrameSource::Start(HMONITOR monitor) {
 
     auto size = impl_->item.Size();
     if (size.Width <= 0 || size.Height <= 0) return false;
+    // HDR monitor -> fp16 scRGB feed + per-patch tone-map in Sample() (the
+    // 8-bit OS conversion would hand the loupe washed-out colour).
+    const hdr::MonitorHdrInfo hdr_info = hdr::QueryMonitorHdr(monitor);
+    impl_->f16 = hdr_info.hdr;
+    if (impl_->f16) impl_->tonemap.Build(hdr_info.sdr_white_nits);
     impl_->pool = cap::Direct3D11CaptureFramePool::CreateFreeThreaded(
-        rtDevice, dx::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, size);
+        rtDevice,
+        impl_->f16 ? dx::DirectXPixelFormat::R16G16B16A16Float
+                   : dx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+        2, size);
     impl_->session = impl_->pool.CreateCaptureSession(impl_->item);
     try {
       impl_->session.IsBorderRequired(false);
@@ -191,14 +206,22 @@ std::optional<std::vector<uint8_t>> LiveFrameSource::Sample(int center_x,
     for (int col = 0; col < span; ++col) {
       const int x = center_x - half + col;
       if (x < 0 || x >= W) continue;
-      const uint8_t* p =
-          base + static_cast<size_t>(y) * mapped.RowPitch +
-          static_cast<size_t>(x) * 4;
       uint8_t* d = out.data() + (static_cast<size_t>(row) * span + col) * 4;
-      d[0] = p[2];  // R (source is BGRA)
-      d[1] = p[1];  // G
-      d[2] = p[0];  // B
-      d[3] = 255;
+      if (impl_->f16) {
+        // fp16 scRGB texel -> tone-mapped RGBA (one LUT lookup per channel).
+        const uint16_t* p = reinterpret_cast<const uint16_t*>(
+            base + static_cast<size_t>(y) * mapped.RowPitch +
+            static_cast<size_t>(x) * 8);
+        impl_->tonemap.MapToRgba(p, 1, d);
+      } else {
+        const uint8_t* p =
+            base + static_cast<size_t>(y) * mapped.RowPitch +
+            static_cast<size_t>(x) * 4;
+        d[0] = p[2];  // R (source is BGRA)
+        d[1] = p[1];  // G
+        d[2] = p[0];  // B
+        d[3] = 255;
+      }
     }
   }
   impl_->context->Unmap(impl_->staging.get(), 0);

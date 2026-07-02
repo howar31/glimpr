@@ -272,6 +272,36 @@ abstract class AppLocalizations {
   /// **'Behaviour'**
   String get settingsSectionBehaviour;
 
+  /// Settings > Screenshot > Format: dual-output HDR screenshot toggle title
+  ///
+  /// In en, this message translates to:
+  /// **'Save HDR screenshots'**
+  String get settingsHdrScreenshot;
+
+  /// Settings > Screenshot > Format: dual-output HDR screenshot toggle hint (macOS wording)
+  ///
+  /// In en, this message translates to:
+  /// **'On an HDR display, screenshots also save an HDR HEIC file beside the standard image (macOS 26 or later): annotations included; a toolbar button can skip it per shot. The clipboard and editor keep the standard image.'**
+  String get settingsHdrScreenshotHintMac;
+
+  /// Settings > Screenshot > Format: dual-output HDR screenshot toggle hint (Windows wording)
+  ///
+  /// In en, this message translates to:
+  /// **'On an HDR display, screenshots also save an HDR JPEG XR file beside the standard image: annotations included; a toolbar button can skip it per shot. The clipboard and editor keep the standard image.'**
+  String get settingsHdrScreenshotHintWindows;
+
+  /// Overlay toolbar HDR toggle tooltip while ON (this capture also writes the HDR sibling file)
+  ///
+  /// In en, this message translates to:
+  /// **'HDR file: on for this shot'**
+  String get toolbarHdrOn;
+
+  /// Overlay toolbar HDR toggle tooltip while OFF (this capture skips the HDR sibling file)
+  ///
+  /// In en, this message translates to:
+  /// **'HDR file: off for this shot'**
+  String get toolbarHdrOff;
+
   /// Settings > Capture > Behaviour: mouse pointer toggle title
   ///
   /// In en, this message translates to:
@@ -1721,7 +1751,7 @@ abstract class AppLocalizations {
   /// Startup warning dialog shown when one or more saved global hotkeys failed to register at launch (conflict with another app); the conflicting shortcuts are listed after this line
   ///
   /// In en, this message translates to:
-  /// **'Some shortcuts couldn\'t be registered — they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:'**
+  /// **'Some shortcuts couldn\'t be registered: they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:'**
   String get shortcutsConflictWarning;
 
   /// Settings > Shortcuts: tooltip on the per-shortcut reset icon button

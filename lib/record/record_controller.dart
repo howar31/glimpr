@@ -229,6 +229,7 @@ class RecordController {
       windowId: windowId,
       fps: rec.fps,
       hevc: rec.hevc,
+      hdr: rec.hdr,
       gif: isGif,
       showsCursor: rec.showCursor,
       showScrim: rec.scrim,
@@ -295,6 +296,7 @@ class RecordController {
         // The live-select toolbar's one-shot overrides win over the settings.
         fps: (a['fps'] as num?)?.toInt() ?? rec.fps,
         hevc: (a['hevc'] as bool?) ?? rec.hevc,
+        hdr: (a['hdr'] as bool?) ?? rec.hdr,
         gif: isGif,
         showsCursor: (a['showsCursor'] as bool?) ?? rec.showCursor,
         showScrim: rec.scrim, // settings-only; no per-take toolbar override

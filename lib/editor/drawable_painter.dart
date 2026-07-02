@@ -271,18 +271,27 @@ typedef EffectImageLookup = ui.Image? Function(Drawable d);
 /// rect 1:1) for a settled region, or null while it is being drawn / computed (a
 /// styled placeholder is drawn instead). A null lookup on the vector-only paths
 /// (unit tests) -> every region shows the placeholder.
+/// Which pieces of a magnify callout to paint. The HDR export renders the
+/// base-sampled magnified CONTENT natively, so it paints the callout chrome in
+/// two overlay passes around that native op: the pieces UNDER the content
+/// (shadow + source frame + connectors) and the piece OVER it (the border).
+/// [all] is the normal single-pass SDR path.
+enum MagnifyPart { all, underChrome, overChrome }
+
 class DrawablePainter extends CustomPainter {
   final List<Drawable> drawables;
   final EffectImageLookup? effectImage;
   final ui.Image? baseImage; // the magnify tool samples this directly
   final double baseScale; // logical -> native for the magnify source sample
   final ui.Image? spotlightImage; // full-canvas blur/pixelate for the spotlight layer
+  final MagnifyPart magnifyPart; // HDR export chrome split (see MagnifyPart)
   const DrawablePainter({
     required this.drawables,
     this.effectImage,
     this.baseImage,
     this.baseScale = 1,
     this.spotlightImage,
+    this.magnifyPart = MagnifyPart.all,
   });
 
   @override
@@ -509,7 +518,9 @@ class DrawablePainter extends CustomPainter {
   /// which is why the lens stays a square rectangle).
   void _paintMagnify(Canvas canvas, MagnifyDrawable d) {
     final base = baseImage;
-    if (base == null) return;
+    // The chrome-only passes (HDR export) never sample the base, so they must
+    // not bail on a null base image.
+    if (base == null && magnifyPart == MagnifyPart.all) return;
     final dest = d.destRect; // always a right-angle rectangle
     final src = Rect.fromLTRB(
       d.sourceRect.left * baseScale,
@@ -526,7 +537,7 @@ class DrawablePainter extends CustomPainter {
 
     // Unified drop shadow (shared shadow toggle) behind the WHOLE callout — the
     // lens, the source frame, AND the connector lines — in one offset/blur pass.
-    if (d.style.shadow) {
+    if (d.style.shadow && magnifyPart != MagnifyPart.overChrome) {
       canvas.save();
       canvas.translate(_kShadowOffset.dx, _kShadowOffset.dy);
       final fillShadow = Paint()
@@ -549,37 +560,44 @@ class DrawablePainter extends CustomPainter {
       canvas.restore();
     }
 
-    // Source frame is ALWAYS drawn (marks the captured region); the connector
-    // toggle only adds/removes the bridge LINES.
-    final frame = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = thin
-      ..color = color;
-    canvas.drawRect(d.sourceRect, frame);
-    final link = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = thin
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-    for (final (p, q) in bridges) {
-      canvas.drawLine(p, q, link);
+    if (magnifyPart != MagnifyPart.overChrome) {
+      // Source frame is ALWAYS drawn (marks the captured region); the connector
+      // toggle only adds/removes the bridge LINES.
+      final frame = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thin
+        ..color = color;
+      canvas.drawRect(d.sourceRect, frame);
+      final link = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thin
+        ..strokeCap = StrokeCap.round
+        ..color = color;
+      for (final (p, q) in bridges) {
+        canvas.drawLine(p, q, link);
+      }
     }
 
-    // Sharp magnified content.
-    canvas.save();
-    canvas.clipRect(dest);
-    canvas.drawImageRect(
-        base, src, dest, Paint()..filterQuality = FilterQuality.high);
-    canvas.restore();
+    // Sharp magnified content (the HDR export replaces this with a native
+    // base-sampled op, so the chrome passes skip it).
+    if (magnifyPart == MagnifyPart.all && base != null) {
+      canvas.save();
+      canvas.clipRect(dest);
+      canvas.drawImageRect(
+          base, src, dest, Paint()..filterQuality = FilterQuality.high);
+      canvas.restore();
+    }
 
-    // Plain tool-colour border.
-    canvas.drawRect(
-      dest,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = w
-        ..color = color,
-    );
+    if (magnifyPart != MagnifyPart.underChrome) {
+      // Plain tool-colour border.
+      canvas.drawRect(
+        dest,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w
+          ..color = color,
+      );
+    }
   }
 
   /// Draws a blur/pixelate region: its pre-rasterised region image (stretched 1:1

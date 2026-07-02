@@ -116,6 +116,14 @@ Future<FlowResult> runFlow({
   // Called with the saved path after a successful save leg — capture exports
   // record it into the shared recent-images list. Never fails the flow.
   Future<void> Function(String path)? recordRecentFn,
+  // Dual-output HDR: an already-encoded HDR rendition written as a sibling
+  // file beside the saved SDR image, sharing its (collision-resolved) basename
+  // with [hdrExt] as the extension. Skipped when the flow has no save leg
+  // (there is nowhere to sit beside); a write failure records an 'hdrFile'
+  // error but never fails the flow. Only the SDR file enters recents.
+  Uint8List? hdrBytes,
+  String? hdrExt,
+  Future<void> Function(Uint8List bytes, String path)? hdrWriteFn,
 }) async {
   final delivery = await deliverCapture(
     pngBytes: bytes,
@@ -132,6 +140,16 @@ Future<FlowResult> runFlow({
       await recordRecentFn(delivery.savedPath!);
     } catch (_) {
       // Recents are best-effort bookkeeping — never fail the flow over them.
+    }
+  }
+  final hdrErrors = <String, String>{};
+  if (hdrBytes != null && hdrExt != null && delivery.savedPath != null) {
+    try {
+      final hdrWrite =
+          hdrWriteFn ?? ((b, p) async => File(p).writeAsBytes(b));
+      await hdrWrite(hdrBytes, _siblingPath(delivery.savedPath!, hdrExt));
+    } catch (e) {
+      hdrErrors['hdrFile'] = '$e';
     }
   }
 
@@ -203,7 +221,20 @@ Future<FlowResult> runFlow({
       extra['shareSheet'] = '$e';
     }
   }
-  return FlowResult(delivery, extra);
+  return FlowResult(delivery, {...hdrErrors, ...extra});
+}
+
+/// The HDR sibling's path: the saved file's (collision-resolved) basename with
+/// [ext] as the extension — `shot_001.png` -> `shot_001.jxr`. The SDR save's
+/// `_NNN` collision handling keeps the pair's basename fresh, so the sibling
+/// simply overwrites any stale file of the same name.
+String _siblingPath(String savedPath, String ext) {
+  final dot = savedPath.lastIndexOf('.');
+  final sep = savedPath.lastIndexOf('/') > savedPath.lastIndexOf('\\')
+      ? savedPath.lastIndexOf('/')
+      : savedPath.lastIndexOf('\\');
+  final base = dot > sep ? savedPath.substring(0, dot) : savedPath;
+  return '$base.$ext';
 }
 
 /// Reveal a saved file in the OS file manager, with the file SELECTED. Shared by

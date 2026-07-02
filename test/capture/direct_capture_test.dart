@@ -69,7 +69,8 @@ void main() {
       marks = [];
       return DirectCapture(
         captureRegion: ({displayId, rect, showsCursor = false, jpeg = false,
-            jpegQuality = 90, decoration, alsoPlain = false}) async {
+            jpegQuality = 90, decoration, alsoPlain = false,
+            hdr = false}) async {
           regionCalls.add((displayId: displayId, rect: rect));
           regionDecorations.add(decoration);
           regionAlsoPlain.add(alsoPlain);
@@ -227,12 +228,18 @@ void main() {
             bool jpeg = false,
             int jpegQuality = 90,
             Map<String, dynamic>? decoration,
-            bool alsoPlain = false}) async {
+            bool alsoPlain = false,
+            bool hdr = false}) async {
           expect(id, 99);
           passedDecoration = decoration;
-          return (bytes: Uint8List.fromList([1, 2, 3]), plainBytes: null);
+          return (
+            bytes: Uint8List.fromList([1, 2, 3]),
+            plainBytes: null,
+            hdrBytes: null,
+            hdrExt: null,
+          );
         },
-        deliverWindow: (bytes, cap, info, {pinBytes}) async {
+        deliverWindow: (bytes, cap, info, {pinBytes, hdrBytes, hdrExt}) async {
           deliveredBytes = bytes;
           return const FlowResult(DeliveryResult(
               savedPath: '/x.png', copiedToClipboard: true, soundPlayed: true));
@@ -268,11 +275,17 @@ void main() {
             bool jpeg = false,
             int jpegQuality = 90,
             Map<String, dynamic>? decoration,
-            bool alsoPlain = false}) async {
+            bool alsoPlain = false,
+            bool hdr = false}) async {
           passedDecoration = decoration;
-          return (bytes: Uint8List.fromList([1]), plainBytes: null);
+          return (
+            bytes: Uint8List.fromList([1]),
+            plainBytes: null,
+            hdrBytes: null,
+            hdrExt: null,
+          );
         },
-        deliverWindow: (bytes, cap, info, {pinBytes}) async =>
+        deliverWindow: (bytes, cap, info, {pinBytes, hdrBytes, hdrExt}) async =>
             const FlowResult(DeliveryResult(
                 savedPath: '/x.png',
                 copiedToClipboard: true,
@@ -311,11 +324,17 @@ void main() {
             bool jpeg = false,
             int jpegQuality = 90,
             Map<String, dynamic>? decoration,
-            bool alsoPlain = false}) async {
+            bool alsoPlain = false,
+            bool hdr = false}) async {
           passedAlsoPlain = alsoPlain;
-          return (bytes: Uint8List.fromList([1]), plainBytes: plain);
+          return (
+            bytes: Uint8List.fromList([1]),
+            plainBytes: plain,
+            hdrBytes: null,
+            hdrExt: null,
+          );
         },
-        deliverWindow: (bytes, cap, info, {pinBytes}) async {
+        deliverWindow: (bytes, cap, info, {pinBytes, hdrBytes, hdrExt}) async {
           deliveredPin = pinBytes;
           return const FlowResult(DeliveryResult(
               savedPath: '/x.png',

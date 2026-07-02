@@ -15,6 +15,8 @@
 
 #include "cursor_image.h"
 #include "editor_window.h"
+#include "hdr_compose.h"
+#include "hdr_util.h"
 #include "image_codec.h"
 #include "pin_window.h"
 #include "wgc_capturer.h"
@@ -334,17 +336,24 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     }
     DwmFlush();
   }
+  // HDR-base retention decision belongs to the FREEZE moment: when the Dart
+  // hdr_screenshot setting is on, HDR monitors capture in fp16 anyway (the
+  // wash-out fix) and keep the raw buffer for the annotated export's HDR
+  // sibling. One generation only; stale bases die here or in TeardownUnits.
+  const bool keep_f16 = hdr::ReadHdrScreenshotSetting();
+  ++hdr_gen_;
+  hdr_bases_.clear();
   std::vector<std::optional<CaptureFrame>> frames(mons.size());
   {
     std::vector<std::thread> workers;
     workers.reserve(mons.size());
     for (size_t i = 0; i < mons.size(); ++i) {
-      workers.emplace_back([&frames, &mons, i]() {
+      workers.emplace_back([&frames, &mons, i, keep_f16]() {
         try {
           winrt::init_apartment(winrt::apartment_type::multi_threaded);
         } catch (...) {
         }
-        frames[i] = wgc::CaptureMonitor(mons[i], false);
+        frames[i] = wgc::CaptureMonitor(mons[i], false, keep_f16);
         winrt::uninit_apartment();
       });
     }
@@ -361,10 +370,24 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   int presented = 0;
   for (size_t i = 0; i < mons.size(); ++i) {
     if (!frames[i]) continue;
-    const bool is_cursor = (MonId(mons[i]) == cursor_id);
+    const int64_t id = MonId(mons[i]);
+    const bool is_cursor = (id == cursor_id);
+    // Retain the fp16 base (extracted BEFORE the frame moves into the dict).
+    if (!frames[i]->f16.empty()) {
+      HdrBase hb;
+      hb.w = frames[i]->width;
+      hb.h = frames[i]->height;
+      hb.sdr_white_nits = frames[i]->sdr_white_nits;
+      hb.gen = hdr_gen_;
+      hb.f16 = std::move(frames[i]->f16);
+      hdr_bases_[id] = std::move(hb);
+    }
     EncodableMap dict =
         BuildDisplayDict(mons[i], std::move(*frames[i]), is_cursor, cursor);
-    PresentFrame(MonId(mons[i]), std::move(dict), pin_only, false);
+    if (hdr_bases_.count(id) != 0) {
+      dict[EncodableValue("hdrGen")] = EncodableValue(hdr_bases_[id].gen);
+    }
+    PresentFrame(id, std::move(dict), pin_only, false);
     ++presented;
   }
   // Block re-triggers until every presented display has been shown (or the
@@ -568,6 +591,7 @@ void OverlayManager::TeardownUnits() {
     teardown_timer_ = 0;
   }
   if (presenting_) return;  // a new capture started in the gap -- leave it intact
+  hdr_bases_.clear();  // the annotated export consumed (or forfeited) them
   units_.clear();  // ~Unit -> ~OverlayWindow destroys each Flutter engine + window;
                    // releasing the engine is what repairs the other apps' islands.
   WarmUp();        // recreate warm engines so the NEXT capture stays instant (a
@@ -693,6 +717,135 @@ void OverlayManager::HandleOverlayCapture(
   const EncodableMap empty;
   const auto* args_ptr = std::get_if<EncodableMap>(call.arguments());
   const EncodableMap& args = args_ptr ? *args_ptr : empty;
+
+  if (method == "encodeHdrRegion") {
+    // The annotated export's HDR sibling: composite the Dart-supplied overlay
+    // segments + effect ops onto this display's freeze-retained fp16 base and
+    // return the encoded JXR. Null reply = no base retained (SDR monitor,
+    // setting off at freeze, or a stale layer generation) -> Dart skips it.
+    const auto get_i64 = [](const EncodableMap& m, const char* key,
+                            int64_t dflt) -> int64_t {
+      auto it = m.find(EncodableValue(key));
+      if (it == m.end()) return dflt;
+      if (auto p = std::get_if<int32_t>(&it->second)) return *p;
+      if (auto p = std::get_if<int64_t>(&it->second)) return *p;
+      return dflt;
+    };
+    const auto get_str = [](const EncodableMap& m,
+                            const char* key) -> std::string {
+      auto it = m.find(EncodableValue(key));
+      if (it == m.end()) return {};
+      if (auto p = std::get_if<std::string>(&it->second)) return *p;
+      return {};
+    };
+    const auto base_it = hdr_bases_.find(display_id);
+    if (base_it == hdr_bases_.end() ||
+        base_it->second.gen != get_i64(args, "gen", -1)) {
+      result->Success();
+      return;
+    }
+    const HdrBase& hb = base_it->second;
+    const int cx = static_cast<int>(std::lround(GetDouble(args, "x", 0)));
+    const int cy = static_cast<int>(std::lround(GetDouble(args, "y", 0)));
+    const int cw = static_cast<int>(std::lround(GetDouble(args, "w", 0)));
+    const int ch = static_cast<int>(std::lround(GetDouble(args, "h", 0)));
+    std::vector<hdrc::Item> items;
+    if (auto list_it = args.find(EncodableValue("items"));
+        list_it != args.end()) {
+      if (auto* list = std::get_if<flutter::EncodableList>(&list_it->second)) {
+        for (const auto& entry : *list) {
+          auto* m = std::get_if<EncodableMap>(&entry);
+          if (!m) continue;
+          const std::string t = get_str(*m, "t");
+          hdrc::Item item;
+          if (t == "overlay") {
+            item.kind = hdrc::Item::kOverlay;
+            auto b = m->find(EncodableValue("bytes"));
+            if (b == m->end()) continue;
+            auto* bytes = std::get_if<std::vector<uint8_t>>(&b->second);
+            if (!bytes) continue;
+            item.rgba = *bytes;
+            item.ow = static_cast<uint32_t>(get_i64(*m, "w", 0));
+            item.oh = static_cast<uint32_t>(get_i64(*m, "h", 0));
+          } else if (t == "blur" || t == "pixelate") {
+            item.kind =
+                t == "blur" ? hdrc::Item::kBlur : hdrc::Item::kPixelate;
+            item.x = GetDouble(*m, "x", 0);
+            item.y = GetDouble(*m, "y", 0);
+            item.w = GetDouble(*m, "w", 0);
+            item.h = GetDouble(*m, "h", 0);
+            item.sigma = GetDouble(*m, "sigma", 0);
+            item.cell = GetDouble(*m, "cell", 0);
+          } else if (t == "magnify") {
+            item.kind = hdrc::Item::kMagnify;
+            item.sx = GetDouble(*m, "sx", 0);
+            item.sy = GetDouble(*m, "sy", 0);
+            item.sw = GetDouble(*m, "sw", 0);
+            item.sh = GetDouble(*m, "sh", 0);
+            item.dx = GetDouble(*m, "dx", 0);
+            item.dy = GetDouble(*m, "dy", 0);
+            item.dw = GetDouble(*m, "dw", 0);
+            item.dh = GetDouble(*m, "dh", 0);
+          } else if (t == "spotlight") {
+            item.kind = hdrc::Item::kSpotlight;
+            const std::string effect = get_str(*m, "effect");
+            item.sp_effect = effect == "blur" ? 1
+                             : effect == "pixelate" ? 2
+                                                    : 0;
+            item.sp_strength = GetDouble(*m, "strength", 0);
+            item.sp_dim = GetDouble(*m, "dim", 0);
+            item.sp_feather = GetDouble(*m, "feather", 0);
+            if (auto holes_it = m->find(EncodableValue("holes"));
+                holes_it != m->end()) {
+              if (auto* holes =
+                      std::get_if<flutter::EncodableList>(&holes_it->second)) {
+                for (const auto& hv : *holes) {
+                  auto* hm = std::get_if<EncodableMap>(&hv);
+                  if (!hm) continue;
+                  hdrc::Hole hole;
+                  hole.x = GetDouble(*hm, "x", 0);
+                  hole.y = GetDouble(*hm, "y", 0);
+                  hole.w = GetDouble(*hm, "w", 0);
+                  hole.h = GetDouble(*hm, "h", 0);
+                  hole.radius = GetDouble(*hm, "radius", 0);
+                  item.holes.push_back(hole);
+                }
+              }
+            }
+          } else {
+            continue;
+          }
+          items.push_back(std::move(item));
+        }
+      }
+    }
+    const uint8_t* mask = nullptr;
+    int mask_w = 0, mask_h = 0, mask_row = 0;
+    std::vector<uint8_t> mask_store;
+    if (auto mk = args.find(EncodableValue("mask")); mk != args.end()) {
+      if (auto* mb = std::get_if<std::vector<uint8_t>>(&mk->second)) {
+        mask_store = *mb;
+        mask = mask_store.data();
+        mask_w = static_cast<int>(get_i64(args, "maskW", 0));
+        mask_h = static_cast<int>(get_i64(args, "maskH", 0));
+        mask_row = static_cast<int>(get_i64(args, "maskRowBytes", 0));
+        if (mask_row <= 0) mask_row = mask_w * 4;
+      }
+    }
+    auto encoded = hdrc::ComposeToJxr(
+        reinterpret_cast<const uint16_t*>(hb.f16.data()), hb.w, hb.h,
+        hb.sdr_white_nits, cx, cy, cw, ch, items, mask, mask_w, mask_h,
+        mask_row);
+    if (encoded.empty()) {
+      result->Success();
+      return;
+    }
+    EncodableMap reply;
+    reply[EncodableValue("bytes")] = EncodableValue(std::move(encoded));
+    reply[EncodableValue("ext")] = EncodableValue("jxr");
+    result->Success(EncodableValue(std::move(reply)));
+    return;
+  }
 
   if (method == "overlayReady") {
     // Reveal only AFTER the new frozen frame is actually presented, so the window

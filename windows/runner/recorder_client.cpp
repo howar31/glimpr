@@ -65,6 +65,7 @@ std::wstring BuildCommandLine(const Recorder::Spec& spec) {
   cl += L" --h=" + std::to_wstring(spec.h);
   cl += L" --fps=" + std::to_wstring(spec.fps);
   cl += L" --hevc=" + std::to_wstring(spec.hevc ? 1 : 0);
+  cl += L" --hdr=" + std::to_wstring(spec.hdr ? 1 : 0);
   cl += L" --gif=" + std::to_wstring(spec.gif ? 1 : 0);
   cl += L" --giffps=" + std::to_wstring(spec.gif_fps);
   cl += L" --cursor=" + std::to_wstring(spec.show_cursor ? 1 : 0);

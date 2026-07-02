@@ -42,6 +42,9 @@ class EditorCanvas extends StatelessWidget {
   // marks the transient "top layer was replaced" notice.
   final String? layerCaption;
   final bool layerAccent;
+  // The freeze retained an HDR base for this display -> the toolbar shows the
+  // per-take HDR-sibling toggle.
+  final bool hdrToggle;
   // Presentation-only: render base + drawables, no interactive chrome, never
   // active. Used to show the screenshot session beneath an active record-select.
   final bool presentationOnly;
@@ -70,6 +73,7 @@ class EditorCanvas extends StatelessWidget {
     this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
+    this.hdrToggle = false,
     this.presentationOnly = false,
     this.elementSnapAt,
   });
@@ -86,6 +90,7 @@ class EditorCanvas extends StatelessWidget {
       recordOverrides: recordOverrides,
       layerCaption: layerCaption,
       layerAccent: layerAccent,
+      hdrToggle: hdrToggle,
       presentationOnly: presentationOnly,
       host: OverlayEditorHost(
         display: display,

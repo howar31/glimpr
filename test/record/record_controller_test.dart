@@ -49,6 +49,7 @@ class _FakeBridge extends RecordBridge {
     int? windowId,
     int fps = 30,
     bool hevc = false,
+    bool hdr = false,
     bool gif = false,
     bool showsCursor = true,
     bool showScrim = true,
@@ -69,6 +70,7 @@ class _FakeBridge extends RecordBridge {
       'windowId': windowId,
       'fps': fps,
       'hevc': hevc,
+      'hdr': hdr,
       'gif': gif,
       'showsCursor': showsCursor,
       'showScrim': showScrim,
@@ -230,6 +232,17 @@ void main() {
       await rc.pause(); // idle
       expect(bridge.pauses, 0);
       expect(rc.phase, RecordPhase.idle);
+    });
+
+    test('HEVC (HDR) format flows hevc + hdr to the bridge', () async {
+      final rc = build();
+      final s = Settings(store);
+      await s.setRecordFormat(RecordFormat.hevcHdr);
+      await rc.toggle(kRecordModeDisplay);
+      final call = bridge.starts.single;
+      expect(call['hevc'], isTrue); // hevcHdr rides the HEVC codec path
+      expect(call['hdr'], isTrue);
+      expect(call['gif'], isFalse);
     });
 
     test('recording settings flow through to the bridge', () async {

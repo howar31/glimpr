@@ -167,6 +167,21 @@ CaptureFrame CropFrame(const CaptureFrame& f, long px, long py, long pw,
     std::memcpy(out.bgra.data() + static_cast<size_t>(row) * out.stride, src,
                 out.stride);
   }
+  // Carry the raw fp16 rendition (HDR captures) through the same crop.
+  if (!f.f16.empty()) {
+    out.sdr_white_nits = f.sdr_white_nits;
+    out.max_nits = f.max_nits;
+    const size_t src_stride = static_cast<size_t>(f.width) * 8;
+    const size_t dst_stride = static_cast<size_t>(out.width) * 8;
+    out.f16.resize(dst_stride * out.height);
+    for (uint32_t row = 0; row < out.height; ++row) {
+      const uint8_t* src = f.f16.data() +
+                           static_cast<size_t>(py + row) * src_stride +
+                           static_cast<size_t>(px) * 8;
+      std::memcpy(out.f16.data() + static_cast<size_t>(row) * dst_stride, src,
+                  dst_stride);
+    }
+  }
   return out;
 }
 
@@ -331,6 +346,9 @@ void CaptureChannel::HandleCaptureRegion(
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
   const bool show_cursor = GetBool(map, "showsCursor", false);
+  // Dual-output HDR: keep the raw fp16 rendition (HDR monitors only) and
+  // return it JXR-encoded beside the SDR bytes.
+  const bool want_hdr = GetBool(map, "hdr", false);
   const std::optional<int64_t> display_id = GetDisplayId(map);
 
   // Resolve the monitor: an explicit displayId (an HMONITOR round-tripped as an
@@ -357,7 +375,7 @@ void CaptureChannel::HandleCaptureRegion(
   GetMonitorInfo(mon, &mi);
   const double scale = MonitorScale(mon);
 
-  auto frame = wgc::CaptureMonitor(mon, show_cursor);
+  auto frame = wgc::CaptureMonitor(mon, show_cursor, want_hdr);
   if (!frame) {
     result->Success(EncodableValue());
     return;
@@ -415,6 +433,15 @@ void CaptureChannel::HandleCaptureRegion(
     return;
   }
 
+  // The HDR sibling: the UNDECORATED fp16 crop as JPEG XR (empty when the
+  // monitor is SDR or the encode fails -> the reply simply omits it).
+  std::vector<uint8_t> hdr_bytes;
+  if (want_hdr && !work.f16.empty()) {
+    hdr_bytes =
+        codec::EncodeJxr(work.f16.data(), work.width, work.height,
+                         work.width * 8);
+  }
+
   const double left = mi.rcMonitor.left / scale;
   const double top = mi.rcMonitor.top / scale;
 
@@ -431,6 +458,10 @@ void CaptureChannel::HandleCaptureRegion(
   reply[EncodableValue("scaleFactor")] = EncodableValue(scale);
   if (!plain_bytes.empty()) {
     reply[EncodableValue("plainBytes")] = EncodableValue(std::move(plain_bytes));
+  }
+  if (!hdr_bytes.empty()) {
+    reply[EncodableValue("hdrBytes")] = EncodableValue(std::move(hdr_bytes));
+    reply[EncodableValue("hdrExt")] = EncodableValue("jxr");
   }
   result->Success(EncodableValue(std::move(reply)));
 }
@@ -490,12 +521,14 @@ void CaptureChannel::HandleCaptureWindowDelivered(
   const bool show_cursor = GetBool(map, "showsCursor", false);
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
+  const bool want_hdr = GetBool(map, "hdr", false);
 
   // WGC's window capture already returns exactly the visible window (its frame
   // size equals DWMWA_EXTENDED_FRAME_BOUNDS), with the real rounded corners
   // transparent (faithful capture) -- so it is used as-is. The extended frame
   // bounds are only needed by the rect-crop fallback below.
-  std::optional<CaptureFrame> frame = wgc::CaptureWindow(hwnd, show_cursor);
+  std::optional<CaptureFrame> frame =
+      wgc::CaptureWindow(hwnd, show_cursor, want_hdr);
   if (!frame) {
     RECT efb{};
     if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb,
@@ -504,7 +537,7 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     }
     // Fallback: capture the window's monitor and crop to the visible bounds.
     HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    if (auto monframe = wgc::CaptureMonitor(mon, show_cursor)) {
+    if (auto monframe = wgc::CaptureMonitor(mon, show_cursor, want_hdr)) {
       MONITORINFO mi{};
       mi.cbSize = sizeof(MONITORINFO);
       GetMonitorInfo(mon, &mi);
@@ -549,10 +582,20 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     result->Success(EncodableValue());
     return;
   }
+  // The HDR sibling: the UNDECORATED fp16 window capture as JPEG XR.
+  std::vector<uint8_t> hdr_bytes;
+  if (want_hdr && !frame->f16.empty()) {
+    hdr_bytes = codec::EncodeJxr(frame->f16.data(), frame->width,
+                                 frame->height, frame->width * 8);
+  }
   EncodableMap reply;
   reply[EncodableValue("bytes")] = EncodableValue(std::move(bytes));
   if (!plain_bytes.empty()) {
     reply[EncodableValue("plainBytes")] = EncodableValue(std::move(plain_bytes));
+  }
+  if (!hdr_bytes.empty()) {
+    reply[EncodableValue("hdrBytes")] = EncodableValue(std::move(hdr_bytes));
+    reply[EncodableValue("hdrExt")] = EncodableValue("jxr");
   }
   result->Success(EncodableValue(std::move(reply)));
 }

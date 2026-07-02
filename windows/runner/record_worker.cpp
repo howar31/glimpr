@@ -92,6 +92,7 @@ Recorder::Spec ParseSpec(const std::vector<std::wstring>& args) {
   s.fps = atoi(ArgVal(args, L"--fps=").c_str());
   if (s.fps <= 0) s.fps = 30;
   s.hevc = ArgVal(args, L"--hevc=") == "1";
+  s.hdr = ArgVal(args, L"--hdr=") == "1";
   s.gif = ArgVal(args, L"--gif=") == "1";
   s.gif_fps = atoi(ArgVal(args, L"--giffps=").c_str());
   if (s.gif_fps <= 0) s.gif_fps = 15;

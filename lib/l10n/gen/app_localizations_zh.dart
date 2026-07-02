@@ -103,6 +103,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionBehaviour => '行為';
 
   @override
+  String get settingsHdrScreenshot => '儲存 HDR 截圖';
+
+  @override
+  String get settingsHdrScreenshotHintMac =>
+      '在 HDR 螢幕上，截圖會在標準圖片旁額外儲存一個 HDR HEIC 檔（需 macOS 26 以上），標註也會合成進去；工具列按鈕可單次略過。剪貼簿與編輯器仍使用標準圖片。';
+
+  @override
+  String get settingsHdrScreenshotHintWindows =>
+      '在 HDR 螢幕上，截圖會在標準圖片旁額外儲存一個 HDR JPEG XR 檔，標註也會合成進去；工具列按鈕可單次略過。剪貼簿與編輯器仍使用標準圖片。';
+
+  @override
+  String get toolbarHdrOn => 'HDR 檔：這張會輸出';
+
+  @override
+  String get toolbarHdrOff => 'HDR 檔：這張不輸出';
+
+  @override
   String get settingsMousePointer => '滑鼠指標';
 
   @override
@@ -859,7 +876,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shortcutsConflictWarning =>
-      '部分快捷鍵無法註冊——已被其他程式占用、將無法使用。請到「設定 → 快捷鍵」檢查：';
+      '部分快捷鍵無法註冊（已被其他程式占用），將無法使用。請到「設定 → 快捷鍵」檢查：';
 
   @override
   String get settingsShortcutsResetToDefault => '重設為預設值';

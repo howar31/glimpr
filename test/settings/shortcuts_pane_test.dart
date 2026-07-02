@@ -132,12 +132,13 @@ void main() {
   });
 
   testWidgets(
-      'recording a bare global key keeps Apply disabled with a modifier warning',
-      (tester) async {
+      'recording a bare global key is a valid draft (modifier requirement '
+      'dropped)', (tester) async {
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    // Record a bare 'G' on the global capture row (requireModifier => rejected).
+    // Record a bare 'G' on the global capture row. ShareX-parity: bare keys
+    // are allowed on both tiers, so this dirties the draft and enables Apply.
     await tester.tap(_globalRecorder);
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyG);
@@ -145,10 +146,9 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyG);
     await tester.pumpAndSettle();
 
-    // The recorder itself rejects a bare global key (requireModifier), so the
-    // binding is unchanged and the draft stays clean — Apply never appears.
-    expect(find.text('Apply'), findsNothing);
-    expect(find.textContaining('modifier'), findsWidgets);
+    await _scrollToFooter(tester);
+    expect(find.text('Apply'), findsOneWidget);
+    expect(find.text('Revert'), findsOneWidget);
   });
 
   testWidgets('recording a valid combo enables Apply', (tester) async {

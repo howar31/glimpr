@@ -12,8 +12,10 @@ import '../l10n/gen/app_localizations.dart';
 import '../theme/glimpr_theme.dart';
 import '../settings/app_locale.dart';
 import '../settings/prefs_cache.dart';
+import '../editor/composite.dart' show nativeCropRect;
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
+import '../editor/hdr_plan.dart';
 import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
@@ -437,6 +439,7 @@ class _OverlayAppState extends State<OverlayApp> {
         systemAudio: false,
         microphone: false,
         hevc: false,
+        hdr: false,
         gif: false,
         fps: 30,
         gifFps: 15,
@@ -578,6 +581,7 @@ class _OverlayAppState extends State<OverlayApp> {
         systemAudio: o?.systemAudio.value,
         microphone: o?.microphone.value,
         hevc: o?.hevc.value,
+        hdr: o?.hdr.value,
         gif: o?.gif.value,
         fps: o?.fps.value,
         gifFps: o?.gifFps.value,
@@ -1188,21 +1192,20 @@ class _OverlayAppState extends State<OverlayApp> {
     // underneath, which overwrites _pinOnly before the export reads it.
     final pinOnly = _pinOnly;
     _frozen = null;
-    // Pop back to the layer below (or end the session when this was the only
-    // one) IMMEDIATELY; the export composites in the background on its own
-    // snapshots (frozen/cursor ownership was transferred above).
-    _endTopLayer();
     // For a window snap, capture the window's real alpha so the export takes the
     // window's rounded-corner silhouette (frozen pixels + live alpha mask). The
     // window can't move during the freeze, so the mask aligns with the crop.
     // showsCursor:false — the cursor must NOT pollute the window-shape mask.
-    // Best effort — any failure falls back to the rectangular crop.
+    // Best effort — any failure falls back to the rectangular crop. Fetched
+    // BEFORE the layer pop so the HDR leg below can shape its output too.
     ui.Image? windowMask;
+    WindowImage? maskRaw;
     if (kind == CaptureKind.overlaySnap && window?.windowId != null) {
       try {
         final wi =
             await _bridge.captureWindowImage(window!.windowId!, showsCursor: false);
         if (wi != null) {
+          maskRaw = wi;
           // Raw BGRA8888 (premultiplied, sRGB) -> ui.Image without a PNG codec,
           // same as the freeze path. Only the alpha is used (dstIn mask).
           final completer = Completer<ui.Image>();
@@ -1216,6 +1219,50 @@ class _OverlayAppState extends State<OverlayApp> {
         /* fall back to a rectangular crop */
       }
     }
+    // HDR sibling: composited NATIVELY from the freeze-retained HDR base
+    // (annotations replayed via the segment/op protocol). Must run BEFORE the
+    // layer pop below — dismissing the overlay tears the native retention
+    // down. Adds a beat before the overlay hides, only on HDR exports.
+    Uint8List? hdrBytes;
+    String? hdrExt;
+    if (!pinOnly && d.hdrGen != null && editor.hdrExport.value) {
+      try {
+        final items = await buildHdrExportItems(
+          drawables: drawables,
+          scaleFactor: d.scaleFactor,
+          logicalSize: Size(d.width, d.height),
+          selectionLogical: selectionLogical,
+          cursorImage: cursorOn ? cursorImg : null,
+          cursorTopLeftNative: cursorTopLeftNative,
+        );
+        final crop = nativeCropRect(
+          selectionLogical: selectionLogical,
+          logicalSize: Size(d.width, d.height),
+          scaleFactor: d.scaleFactor,
+        );
+        final res = await _bridge.encodeHdrRegion(
+          displayId: d.displayId,
+          gen: d.hdrGen!,
+          crop: crop,
+          items: items,
+          // Window-snap silhouette: native applies the same dstIn alpha.
+          maskBytes: maskRaw?.rawBytes,
+          maskW: maskRaw?.width ?? 0,
+          maskH: maskRaw?.height ?? 0,
+          maskRowBytes: maskRaw?.rowBytes ?? 0,
+        );
+        if (res != null) {
+          hdrBytes = res.bytes;
+          hdrExt = res.ext;
+        }
+      } catch (_) {
+        // Best effort: the SDR export must never fail over the HDR sibling.
+      }
+    }
+    // Pop back to the layer below (or end the session when this was the only
+    // one) IMMEDIATELY; the export composites in the background on its own
+    // snapshots (frozen/cursor ownership was transferred above).
+    _endTopLayer();
     try {
       final result = await exportAnnotated(
         display: d,
@@ -1232,6 +1279,8 @@ class _OverlayAppState extends State<OverlayApp> {
         // ⌘⌥5 capture-to-pin: this LAYER runs ONLY the pin action (snapshot
         // taken before the pop, see above).
         flowOverride: pinOnly ? const {FlowAction.pin} : null,
+        hdrBytes: hdrBytes,
+        hdrExt: hdrExt,
       );
       // Success = every ENABLED leg succeeded (a disabled leg is not a failure).
       // On success play the completion chime (if enabled); on a real failure the
@@ -1322,6 +1371,9 @@ class _OverlayAppState extends State<OverlayApp> {
                       presentationOnly: rsActive,
                       layerCaption: _layerCaption,
                       layerAccent: _layerAccent,
+                      // The freeze retained an HDR base for this display ->
+                      // toolbar shows the per-take HDR-sibling toggle.
+                      hdrToggle: d.hdrGen != null,
                       // Precise element snap (Advanced experiment): only on the
                       // frozen screenshot session, only when the setting is on.
                       // Native returns null without the AX permission -> the

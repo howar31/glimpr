@@ -120,6 +120,7 @@ void RecordChannel::HandleMethodCall(
     }
     spec.fps = GetInt(m, "fps", 30);
     spec.hevc = GetBool(m, "hevc", false);
+    spec.hdr = GetBool(m, "hdr", false);
     spec.gif = GetBool(m, "gif", false);
     spec.gif_fps = GetInt(m, "gifFps", 15);
     spec.show_cursor = GetBool(m, "showsCursor", true);

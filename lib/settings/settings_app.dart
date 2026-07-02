@@ -115,6 +115,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _rightClickExits = true;
   bool _confirmOnExit = true;
   bool _captureCursor = false;
+  bool _hdrScreenshot = false;
   bool _pinHoverGlow = true;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
@@ -309,6 +310,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final layerCap = await _s.getCaptureLayerCap();
     final snapElementMode = await _s.getSnapElementMode();
+    final hdrScreenshot = await _s.getHdrScreenshot();
     final appLanguage = await _s.getAppLanguage();
     final pinHoverGlow = await _s.getPinHoverGlow();
     final rec = await _s.loadRecording();
@@ -344,6 +346,7 @@ class _SettingsAppState extends State<SettingsApp>
       _hudMarchingAnts = hudMarchingAnts;
       _captureLayerCap = layerCap;
       _snapElementMode = snapElementMode;
+      _hdrScreenshot = hdrScreenshot;
       _appLanguage = appLanguage;
       _appLanguageInitial = appLanguage;
       _recordFormat = rec.format;
@@ -1091,6 +1094,27 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 10),
+      // Dual-output HDR screenshots (direct modes only; HEIC on macOS 26+,
+      // JPEG XR on Windows). Its own card under the Format section: it is an
+      // output-format concern, not capture behaviour.
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsHdrScreenshot,
+          // Platform-specific wording: each platform names only its own HDR
+          // file format (owner feedback 2026-07-03).
+          hint: Platform.isWindows
+              ? _l.settingsHdrScreenshotHintWindows
+              : _l.settingsHdrScreenshotHintMac,
+          trailing: GlassToggle(
+            value: _hdrScreenshot,
+            onChanged: (v) async {
+              await _s.setHdrScreenshot(v);
+              if (mounted) setState(() => _hdrScreenshot = v);
+            },
+          ),
+        ),
+      ]),
       const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionBehaviour, icon: Icons.photo_camera_outlined),
       GlassCard.rows([
@@ -1330,6 +1354,7 @@ class _SettingsAppState extends State<SettingsApp>
               options: const [
                 (RecordFormat.h264, 'H.264'),
                 (RecordFormat.hevc, 'HEVC'),
+                (RecordFormat.hevcHdr, 'HEVC (HDR)'),
                 (RecordFormat.gif, 'GIF'),
               ],
               onChanged: (v) async {

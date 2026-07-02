@@ -24,8 +24,7 @@ void main() {
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: true,
-        onChanged: (b) => out = b,
+        onChanged: (b, {available = true}) => out = b,
       ),
     ));
     await tester.tap(find.byType(HotkeyRecorderField));
@@ -45,8 +44,7 @@ void main() {
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: false,
-        onChanged: (_) {},
+        onChanged: (_, {available = true}) {},
       ),
     ));
     expect(find.byTooltip('Press Esc to cancel'), findsNothing); // idle
@@ -55,21 +53,23 @@ void main() {
     expect(find.byTooltip('Press Esc to cancel'), findsOneWidget); // recording
   });
 
-  testWidgets('requireModifier rejects a bare key', (tester) async {
+  testWidgets('a bare key records (modifier requirement dropped)',
+      (tester) async {
+    // ShareX-parity: hotkeys may be a single bare key on both platforms.
     HotkeyBinding? out;
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: true,
-        onChanged: (b) => out = b,
+        onChanged: (b, {available = true}) => out = b,
       ),
     ));
     await tester.tap(find.byType(HotkeyRecorderField));
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyG);
     await tester.pump();
-    expect(out, isNull);
-    expect(find.textContaining('modifier'), findsOneWidget);
+    expect(out, isNotNull);
+    expect(out!.modifiers, isEmpty);
+    expect(out!.logicalKey, LogicalKeyboardKey.keyG);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyG);
   });
 
@@ -78,9 +78,8 @@ void main() {
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: false,
         isReserved: (k, m) => k == LogicalKeyboardKey.escape,
-        onChanged: (b) => out = b,
+        onChanged: (b, {available = true}) => out = b,
       ),
     ));
     await tester.tap(find.byType(HotkeyRecorderField));
@@ -98,9 +97,8 @@ void main() {
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: false,
         isReserved: (k, m) => k == LogicalKeyboardKey.arrowUp,
-        onChanged: (b) => out = b,
+        onChanged: (b, {available = true}) => out = b,
       ),
     ));
     await tester.tap(find.byType(HotkeyRecorderField));
@@ -118,9 +116,8 @@ void main() {
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: false,
         isReserved: isEditorReservedCombo,
-        onChanged: (b) => out = b,
+        onChanged: (b, {available = true}) => out = b,
       ),
     ));
     // Bare comma is reserved (element-snap level) -> rejected.
@@ -147,8 +144,7 @@ void main() {
     await tester.pumpWidget(_wrap(
       HotkeyRecorderField(
         value: null,
-        requireModifier: false, // editor tier: bare keys allowed
-        onChanged: (b) => out = b,
+        onChanged: (b, {available = true}) => out = b,
       ),
     ));
     await tester.tap(find.byType(HotkeyRecorderField));
@@ -176,8 +172,7 @@ void main() {
           setOuter = setState;
           return HotkeyRecorderField(
             value: value,
-            requireModifier: true,
-            onChanged: (b) => value = b,
+            onChanged: (b, {available = true}) => value = b,
           );
         },
       ),

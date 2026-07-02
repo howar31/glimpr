@@ -6,6 +6,7 @@ import FlutterMacOS
 import ImageIO
 import ScreenCaptureKit
 import UniformTypeIdentifiers
+import VideoToolbox
 
 // MARK: - LiveFrameSource
 
@@ -920,7 +921,7 @@ final class RecordingWriter {
   private var mixer: AudioMixer?
   private(set) var started = false
 
-  init(url: URL, width: Int, height: Int, hevc: Bool, bitrate: Int,
+  init(url: URL, width: Int, height: Int, hevc: Bool, hdr: Bool, bitrate: Int,
        systemAudio: Bool, microphone: Bool, mergeAudio: Bool) throws {
     try? FileManager.default.removeItem(at: url)
     writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -928,23 +929,42 @@ final class RecordingWriter {
     // bits-per-pixel × width × height × fps by the caller. Unset before this,
     // the encoder used an AVFoundation default. AVVideoQualityKey is ignored by
     // the H.264/HEVC encoders, so an average bitrate is the reliable knob.
-    let videoSettings: [String: Any] = [
+    // HDR (HEVC only): Main10 profile + BT.2020/PQ colour properties -- the
+    // SCK HDR stream's tagged EDR buffers are colour-converted to HDR10 by
+    // VideoToolbox per these properties (see AVVideoSettings.h).
+    var compression: [String: Any] = [AVVideoAverageBitRateKey: bitrate]
+    if hdr {
+      compression[AVVideoProfileLevelKey] =
+        kVTProfileLevel_HEVC_Main10_AutoLevel as String
+    }
+    var videoSettings: [String: Any] = [
       AVVideoCodecKey: hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
       AVVideoWidthKey: width,
       AVVideoHeightKey: height,
-      AVVideoCompressionPropertiesKey: [
-        AVVideoAverageBitRateKey: bitrate,
-      ],
+      AVVideoCompressionPropertiesKey: compression,
     ]
+    if hdr {
+      videoSettings[AVVideoColorPropertiesKey] = [
+        AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+        AVVideoTransferFunctionKey: AVVideoTransferFunction_SMPTE_ST_2084_PQ,
+        AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020,
+      ]
+    }
     videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
     videoInput.expectsMediaDataInRealTime = true
+    // The HDR path passes the SCK stream's own (10-bit / EDR) pixel buffers
+    // straight through, so the adaptor must not pin a BGRA pool format there.
+    var adaptorAttrs: [String: Any] = [
+      kCVPixelBufferWidthKey as String: width,
+      kCVPixelBufferHeightKey as String: height,
+    ]
+    if !hdr {
+      adaptorAttrs[kCVPixelBufferPixelFormatTypeKey as String] =
+        kCVPixelFormatType_32BGRA
+    }
     adaptor = AVAssetWriterInputPixelBufferAdaptor(
       assetWriterInput: videoInput,
-      sourcePixelBufferAttributes: [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-        kCVPixelBufferWidthKey as String: width,
-        kCVPixelBufferHeightKey as String: height,
-      ])
+      sourcePixelBufferAttributes: adaptorAttrs)
     guard writer.canAdd(videoInput) else {
       throw RecordingController.RecordingError.message("cannot add video input")
     }
@@ -1544,6 +1564,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
     let windowID: CGWindowID?
     let fps: Int
     let hevc: Bool
+    let hdr: Bool // HDR10 (HEVC Main10 + PQ) when the screen has EDR headroom
     let gif: Bool // true = direct GIF (no mp4, no audio)
     let showsCursor: Bool
     let showScrim: Bool // dim outside the region + other displays (red frame stays)
@@ -1737,10 +1758,21 @@ final class RecordingController: NSObject, SCStreamDelegate {
         chrome?.setStripHidden(false)
       }
 
-      let cfg = SCStreamConfiguration()
+      // HDR10 (spec.hdr, mp4 only): the SCK HDR preset owns captureDynamicRange
+      // + pixelFormat + colour space -- do NOT set colorSpaceName on that path.
+      // Gated on real EDR headroom; on an SDR screen (or Intel, where the SCK
+      // header documents HDR as a no-op) the recording silently stays SDR.
+      let hdrActive = spec.hdr && !spec.gif
+        && screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0
+      let cfg: SCStreamConfiguration
+      if hdrActive {
+        cfg = SCStreamConfiguration(preset: .captureHDRStreamCanonicalDisplay)
+      } else {
+        cfg = SCStreamConfiguration()
+        cfg.colorSpaceName = CGColorSpace.sRGB
+      }
       cfg.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(spec.fps))
       cfg.showsCursor = spec.showsCursor
-      cfg.colorSpaceName = CGColorSpace.sRGB
       if spec.mode == "window" {
         let content = filter.contentRect
         cfg.width = Self.even(Int((content.width * scale).rounded()))
@@ -1799,6 +1831,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
         let w = try RecordingWriter(
           url: URL(fileURLWithPath: spec.outputPath),
           width: cfg.width, height: cfg.height, hevc: spec.hevc,
+          hdr: hdrActive,
           bitrate: bitrate,
           systemAudio: spec.systemAudio, microphone: spec.microphone,
           mergeAudio: spec.mergeAudio)
@@ -2303,6 +2336,7 @@ final class RecordingChannel {
     let mode = (args["mode"] as? String) ?? "display"
     let fps = (args["fps"] as? Int) ?? 30
     let hevc = (args["hevc"] as? Bool) ?? false
+    let hdr = (args["hdr"] as? Bool) ?? false
     let gif = (args["gif"] as? Bool) ?? false
     let showsCursor = (args["showsCursor"] as? Bool) ?? true
     let showScrim = (args["showScrim"] as? Bool) ?? true
@@ -2337,7 +2371,7 @@ final class RecordingChannel {
     func begin(rect: CGRect?, display: CGDirectDisplayID?) {
       let spec = RecordingController.Spec(
         mode: mode, displayID: display, rect: rect, windowID: windowID,
-        fps: fps, hevc: hevc, gif: gif, showsCursor: showsCursor,
+        fps: fps, hevc: hevc, hdr: hdr, gif: gif, showsCursor: showsCursor,
         showScrim: showScrim,
         systemAudio: systemAudio, microphone: microphone,
         mergeAudio: mergeAudio,

@@ -23,13 +23,15 @@ const kRecordingCaptureLabel = 'RECORDING';
 /// the undecorated sibling for the flow's pin leg, when one was requested.
 Future<FlowResult> _defaultDeliverWindow(
     Uint8List bytes, CaptureSettings cap, FocusedWindowInfo info,
-    {Uint8List? pinBytes}) async {
+    {Uint8List? pinBytes, Uint8List? hdrBytes, String? hdrExt}) async {
   return deliverWindowBytes(
     bytes: bytes,
     cap: cap,
     windowTitle: info.title.isEmpty ? null : info.title,
     appName: info.app.isEmpty ? null : info.app,
     pinBytes: pinBytes,
+    hdrBytes: hdrBytes,
+    hdrExt: hdrExt,
   );
 }
 
@@ -47,15 +49,24 @@ class DirectCapture {
             bool jpeg,
             int jpegQuality,
             Map<String, dynamic>? decoration,
-            bool alsoPlain})?
+            bool alsoPlain,
+            bool hdr})?
         captureRegion,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
-    Future<({Uint8List bytes, Uint8List? plainBytes})?> Function(int,
+    Future<
+            ({
+              Uint8List bytes,
+              Uint8List? plainBytes,
+              Uint8List? hdrBytes,
+              String? hdrExt,
+            })?>
+        Function(int,
             {bool showsCursor,
             bool jpeg,
             int jpegQuality,
             Map<String, dynamic>? decoration,
-            bool alsoPlain})?
+            bool alsoPlain,
+            bool hdr})?
         captureWindowDelivered,
     Settings? settings,
     LastRegionStore? regionStore,
@@ -63,7 +74,7 @@ class DirectCapture {
             RegionCapture, CaptureSettings, CaptureKind, String?, String?)?
         deliverEncoded,
     Future<FlowResult> Function(Uint8List, CaptureSettings, FocusedWindowInfo,
-            {Uint8List? pinBytes})?
+            {Uint8List? pinBytes, Uint8List? hdrBytes, String? hdrExt})?
         deliverWindow,
     void Function()? shutter,
     void Function()? complete,
@@ -95,14 +106,22 @@ class DirectCapture {
       bool jpeg,
       int jpegQuality,
       Map<String, dynamic>? decoration,
-      bool alsoPlain}) _captureRegion;
+      bool alsoPlain,
+      bool hdr}) _captureRegion;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
-  final Future<({Uint8List bytes, Uint8List? plainBytes})?> Function(int,
+  final Future<
+      ({
+        Uint8List bytes,
+        Uint8List? plainBytes,
+        Uint8List? hdrBytes,
+        String? hdrExt,
+      })?> Function(int,
       {bool showsCursor,
       bool jpeg,
       int jpegQuality,
       Map<String, dynamic>? decoration,
-      bool alsoPlain}) _captureWindowDelivered;
+      bool alsoPlain,
+      bool hdr}) _captureWindowDelivered;
   final Settings _settings;
   final LastRegionStore _regionStore;
   final Future<FlowResult> Function(
@@ -110,7 +129,7 @@ class DirectCapture {
       _deliverEncoded;
   final Future<FlowResult> Function(
       Uint8List, CaptureSettings, FocusedWindowInfo,
-      {Uint8List? pinBytes}) _deliverWindow;
+      {Uint8List? pinBytes, Uint8List? hdrBytes, String? hdrExt}) _deliverWindow;
   final void Function() _shutter;
   final void Function() _complete;
   final void Function(String) _showError;
@@ -144,7 +163,12 @@ class DirectCapture {
               shapeFromAlpha: true,
             )
           : null;
-      ({Uint8List bytes, Uint8List? plainBytes})? delivered;
+      ({
+        Uint8List bytes,
+        Uint8List? plainBytes,
+        Uint8List? hdrBytes,
+        String? hdrExt,
+      })? delivered;
       try {
         delivered = await _captureWindowDelivered(
           info!.windowId!,
@@ -153,6 +177,7 @@ class DirectCapture {
           jpegQuality: cap.jpegQuality,
           decoration: decoration,
           alsoPlain: plan.needsPlainForPin,
+          hdr: cap.hdrScreenshot,
         );
       } catch (_) {
         delivered = null; // fall through to the rectangular crop
@@ -164,7 +189,9 @@ class DirectCapture {
         if (cap.shutterSound) _shutter();
         try {
           final result = await _deliverWindow(bytes, cap, info!,
-              pinBytes: delivered.plainBytes);
+              pinBytes: delivered.plainBytes,
+              hdrBytes: delivered.hdrBytes,
+              hdrExt: delivered.hdrExt);
           final ok = (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
               (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
           if (ok) {
@@ -261,6 +288,7 @@ class DirectCapture {
         jpegQuality: cap.jpegQuality,
         decoration: decoration,
         alsoPlain: plan.needsPlainForPin,
+        hdr: cap.hdrScreenshot,
       );
     } catch (e) {
       _showError('Capture failed: $e');

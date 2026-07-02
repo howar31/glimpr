@@ -2,6 +2,8 @@
 
 #include <d3d11.h>
 #include <dxgi.h>
+
+#include "hdr_util.h"
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
 #include <winrt/Windows.Foundation.h>
@@ -62,14 +64,22 @@ winrt::com_ptr<IGraphicsCaptureItemInterop> GetInterop() {
 }
 
 std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
-                                        bool show_cursor) {
+                                        bool show_cursor,
+                                        const hdr::MonitorHdrInfo& hdr_info,
+                                        bool keep_f16) {
   auto d3dDevice = CreateD3DDevice();
   if (!d3dDevice) return std::nullopt;
   auto rtDevice = WrapDevice(d3dDevice);
 
+  // HDR monitor: capture in fp16 scRGB and tone-map to SDR ourselves (the OS
+  // 8-bit conversion ignores the SDR white level -> washed-out output).
+  const bool f16 = hdr_info.hdr;
   auto size = item.Size();
   auto pool = cap::Direct3D11CaptureFramePool::CreateFreeThreaded(
-      rtDevice, dx::DirectXPixelFormat::B8G8R8A8UIntNormalized, 1, size);
+      rtDevice,
+      f16 ? dx::DirectXPixelFormat::R16G16B16A16Float
+          : dx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+      1, size);
   auto session = pool.CreateCaptureSession(item);
   try {
     session.IsBorderRequired(false);
@@ -119,10 +129,32 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
         cf.stride = desc.Width * 4;
         cf.bgra.resize(static_cast<size_t>(cf.stride) * cf.height);
         const auto* src = static_cast<const uint8_t*>(mapped.pData);
-        for (uint32_t y = 0; y < cf.height; ++y) {
-          std::memcpy(cf.bgra.data() + static_cast<size_t>(y) * cf.stride,
-                      src + static_cast<size_t>(y) * mapped.RowPitch,
-                      cf.stride);
+        if (f16) {
+          // Contiguous fp16 copy (stride width * 8), then tone-map to BGRA.
+          cf.sdr_white_nits = hdr_info.sdr_white_nits;
+          cf.max_nits = hdr_info.max_nits;
+          const uint32_t f16_stride = desc.Width * 8;
+          cf.f16.resize(static_cast<size_t>(f16_stride) * cf.height);
+          for (uint32_t y = 0; y < cf.height; ++y) {
+            std::memcpy(cf.f16.data() + static_cast<size_t>(y) * f16_stride,
+                        src + static_cast<size_t>(y) * mapped.RowPitch,
+                        f16_stride);
+          }
+          hdr::ToneMapLut lut;
+          lut.Build(hdr_info.sdr_white_nits);
+          lut.MapToBgra(reinterpret_cast<const uint16_t*>(cf.f16.data()),
+                        static_cast<size_t>(cf.width) * cf.height,
+                        cf.bgra.data());
+          if (!keep_f16) {
+            cf.f16.clear();
+            cf.f16.shrink_to_fit();
+          }
+        } else {
+          for (uint32_t y = 0; y < cf.height; ++y) {
+            std::memcpy(cf.bgra.data() + static_cast<size_t>(y) * cf.stride,
+                        src + static_cast<size_t>(y) * mapped.RowPitch,
+                        cf.stride);
+          }
         }
         ctx->Unmap(staging.get(), 0);
         out = std::move(cf);
@@ -139,7 +171,8 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
 
 namespace wgc {
 
-std::optional<CaptureFrame> CaptureMonitor(HMONITOR monitor, bool show_cursor) {
+std::optional<CaptureFrame> CaptureMonitor(HMONITOR monitor, bool show_cursor,
+                                           bool keep_f16) {
   EnsureWinrt();
   try {
     auto interop = GetInterop();
@@ -147,13 +180,15 @@ std::optional<CaptureFrame> CaptureMonitor(HMONITOR monitor, bool show_cursor) {
     const winrt::guid iid = winrt::guid_of<cap::GraphicsCaptureItem>();
     winrt::check_hresult(interop->CreateForMonitor(
         monitor, reinterpret_cast<GUID const&>(iid), winrt::put_abi(item)));
-    return CaptureItem(item, show_cursor);
+    return CaptureItem(item, show_cursor, hdr::QueryMonitorHdr(monitor),
+                       keep_f16);
   } catch (...) {
     return std::nullopt;
   }
 }
 
-std::optional<CaptureFrame> CaptureWindow(HWND window, bool show_cursor) {
+std::optional<CaptureFrame> CaptureWindow(HWND window, bool show_cursor,
+                                          bool keep_f16) {
   EnsureWinrt();
   try {
     auto interop = GetInterop();
@@ -161,7 +196,8 @@ std::optional<CaptureFrame> CaptureWindow(HWND window, bool show_cursor) {
     const winrt::guid iid = winrt::guid_of<cap::GraphicsCaptureItem>();
     winrt::check_hresult(interop->CreateForWindow(
         window, reinterpret_cast<GUID const&>(iid), winrt::put_abi(item)));
-    return CaptureItem(item, show_cursor);
+    HMONITOR mon = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+    return CaptureItem(item, show_cursor, hdr::QueryMonitorHdr(mon), keep_f16);
   } catch (...) {
     return std::nullopt;
   }

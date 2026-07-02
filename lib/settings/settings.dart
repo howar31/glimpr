@@ -33,6 +33,7 @@ class CaptureSettings {
     this.decorationJpegFill = 0xFFFFFFFF,
     this.captureCursor = false,
     this.snapElementMode = false,
+    this.hdrScreenshot = false,
   });
 
   final Directory? saveDir;
@@ -60,6 +61,10 @@ class CaptureSettings {
   // Accessibility element under the cursor instead of the whole window. Default
   // off; needs the macOS Accessibility permission, falls back to window snap.
   final bool snapElementMode;
+  // Dual-output HDR screenshots (direct modes only): on an HDR display the
+  // window/display/last-region captures also save an HDR file (HEIC on macOS 26+,
+  // JPEG XR on Windows) beside the standard image. Default off.
+  final bool hdrScreenshot;
 
   static const defaults = CaptureSettings();
 
@@ -131,6 +136,7 @@ class Settings {
   static const _decorationJpegFillKey = 'decoration_jpeg_fill';
   static const _captureCursorKey = 'capture_cursor';
   static const _snapElementModeKey = 'snap_element_mode';
+  static const _hdrScreenshotKey = 'hdr_screenshot';
   static const _pinHoverGlowKey = 'pin_hover_glow';
   static const _recordFormatKey = 'record_format';
   static const _recordFpsKey = 'record_fps';
@@ -284,6 +290,12 @@ class Settings {
   Future<void> setSnapElementMode(bool v) =>
       store.setBool(_snapElementModeKey, v);
 
+  // Dual-output HDR screenshots for the direct capture modes. Default OFF.
+  Future<bool> getHdrScreenshot() async =>
+      (await store.getBool(_hdrScreenshotKey)) ?? false;
+  Future<void> setHdrScreenshot(bool v) =>
+      store.setBool(_hdrScreenshotKey, v);
+
   // Pinned-window hover glow (Aurora corona). Default ON; read live by the
   // native PinPanel on each hover.
   Future<bool> getPinHoverGlow() async =>
@@ -298,6 +310,8 @@ class Settings {
     switch (await store.getString(_recordFormatKey)) {
       case 'gif':
         return RecordFormat.gif;
+      case 'hevcHdr':
+        return RecordFormat.hevcHdr;
       case 'hevc':
         return RecordFormat.hevc;
       case 'h264':
@@ -542,6 +556,7 @@ class Settings {
     decorationJpegFill: await getDecorationJpegFill(),
     captureCursor: await getCaptureCursor(),
     snapElementMode: await getSnapElementMode(),
+    hdrScreenshot: await getHdrScreenshot(),
   );
 
   /// One-shot snapshot of every HOT-RELOADABLE config setting (see [AppConfig]).
@@ -570,9 +585,11 @@ Directory? resolveSaveDir(String? path) =>
 /// Screen-recording settings bundle (macOS 15+ module). Loaded once per
 /// recording start by the record controller; the save folder and filename
 /// template come from [CaptureSettings] (shared output conventions).
-/// The recording output format. h264/hevc are mp4 codecs; gif is the direct
-/// ImageIO animated-GIF path (no mp4, no audio).
-enum RecordFormat { h264, hevc, gif }
+/// The recording output format. h264/hevc are mp4 codecs; hevcHdr is HEVC with
+/// HDR10 output when the recorded display is HDR (silently records plain SDR
+/// HEVC otherwise); gif is the direct ImageIO animated-GIF path (no mp4, no
+/// audio).
+enum RecordFormat { h264, hevc, hevcHdr, gif }
 
 /// mp4 video quality tier. Maps natively to an average encoder bitrate; GIF
 /// ignores it (256-color ImageIO).
@@ -596,7 +613,10 @@ class RecordingSettings {
   });
 
   final RecordFormat format;
-  bool get hevc => format == RecordFormat.hevc; // legacy convenience
+  // hevcHdr rides the HEVC codec path (Main10 when the display is HDR).
+  bool get hevc =>
+      format == RecordFormat.hevc || format == RecordFormat.hevcHdr;
+  bool get hdr => format == RecordFormat.hevcHdr;
   bool get isGif => format == RecordFormat.gif;
   final int fps; // 30 | 60
   final bool showCursor;

@@ -168,6 +168,21 @@ class OverlayManager {
   std::function<void(flutter::EncodableValue)> record_relay_;  // -> control record channel
   std::function<void(bool)> processing_relay_;  // capture-export pulse -> control tray
   std::map<int64_t, Unit> units_;
+
+  // Freeze-retained HDR base per display (HDR monitor + the hdr_screenshot
+  // setting on at capture): the fp16 scRGB frame the annotated export's HDR
+  // sibling is composited from (encodeHdrRegion). Latest capture generation
+  // only -- deeper layer-stack layers get no HDR sibling. Overwritten each
+  // BeginCapture, released in TeardownUnits.
+  struct HdrBase {
+    std::vector<uint8_t> f16;  // RGBA16F, stride = w * 8
+    uint32_t w = 0, h = 0;
+    float sdr_white_nits = 240.0f;
+    int64_t gen = 0;
+  };
+  std::map<int64_t, HdrBase> hdr_bases_;
+  int64_t hdr_gen_ = 0;
+
   // Live record-select state: one live WGC loupe feed per display while a
   // transparent picker session is up (empty otherwise).
   bool live_select_ = false;

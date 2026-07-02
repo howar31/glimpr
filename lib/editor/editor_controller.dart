@@ -137,6 +137,12 @@ class EditorController {
   /// cursor button; read by EditorCore (render) + the export.
   final showCursor = ValueNotifier<bool>(false);
 
+  /// Per-take "write the HDR sibling file" toggle (overlay only; shown when the
+  /// freeze retained an HDR base). Mirrors [showCursor]'s semantics: the
+  /// HDR-screenshot setting is the default, this is the one-shot override — it
+  /// can only decline the already-retained HDR output, never create one.
+  final hdrExport = ValueNotifier<bool>(true);
+
   /// Effective on/off for the full-screen crosshair lines and the pixel loupe.
   /// Seeded per session from the persistent HudConfig defaults (by the host, like
   /// [showCursor]), flipped by the toolbar toggle / hotkey, read by EditorCore for
@@ -541,6 +547,7 @@ class EditorController {
     stampImage.dispose();
     stampPick.dispose();
     showCursor.dispose();
+    hdrExport.dispose();
     crosshairOn.dispose();
     loupeOn.dispose();
   }

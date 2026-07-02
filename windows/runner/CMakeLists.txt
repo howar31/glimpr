@@ -15,6 +15,9 @@ add_executable(${BINARY_NAME} WIN32
   "editor_window.cpp"
   "encode_channel.cpp"
   "flutter_window.cpp"
+  "hdr_compose.cpp"
+  "hdr_convert_gpu.cpp"
+  "hdr_util.cpp"
   "hotkey_host.cpp"
   "image_codec.cpp"
   "live_frame_source.cpp"
@@ -62,6 +65,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 # Graphics libs for native capture (Windows.Graphics.Capture, D3D11, Direct2D,
 # WIC) and the WinRT umbrella. Added in Phase 6 S2a.
 target_link_libraries(${BINARY_NAME} PRIVATE "d3d11.lib" "dxgi.lib" "d2d1.lib" "windowscodecs.lib" "windowsapp.lib" "ole32.lib" "shcore.lib")
+# HDR capture/recording: runtime-compiled compute shaders (tone-map + P010).
+target_link_libraries(${BINARY_NAME} PRIVATE "d3dcompiler.lib")
 # Resident shell (Phase 6 S3): tray + ShellExecute (shell32), VERSIONINFO
 # (version), launch-at-login registry (advapi32).
 target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib" "version.lib" "advapi32.lib")

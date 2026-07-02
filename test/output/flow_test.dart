@@ -275,5 +275,56 @@ void main() {
       expect(r.savedOk, isFalse);
       expect(r.copiedToClipboard, isTrue);
     });
+
+    test('HDR sibling is written beside the saved file (same basename)',
+        () async {
+      final hdrWrites = <String, int>{};
+      final r = await runFlow(
+        actions: {FlowAction.save},
+        bytes: bytes,
+        fileName: 'shot.png',
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        hdrBytes: Uint8List.fromList([1, 2, 3]),
+        hdrExt: 'jxr',
+        hdrWriteFn: (b, p) async => hdrWrites[p] = b.length,
+      );
+      expect(r.savedPath, '/tmp/x/shot.png');
+      expect(hdrWrites, {'/tmp/x/shot.jxr': 3});
+      expect(r.errors, isEmpty);
+    });
+
+    test('HDR sibling is skipped without a save leg and never fails the flow',
+        () async {
+      var clipped = 0;
+      final r = await runFlow(
+        actions: {FlowAction.copy},
+        bytes: bytes,
+        saveFn: save,
+        clipboardFn: (b) async => clipped++,
+        soundFn: () async {},
+        hdrBytes: Uint8List.fromList([1, 2, 3]),
+        hdrExt: 'jxr',
+        hdrWriteFn: (b, p) async => fail('no save leg -> no HDR sibling'),
+      );
+      expect(clipped, 1);
+      expect(r.errors, isEmpty);
+
+      // A failing sibling write records an error but the flow still succeeds.
+      final r2 = await runFlow(
+        actions: {FlowAction.save},
+        bytes: bytes,
+        fileName: 'shot.png',
+        saveFn: save,
+        clipboardFn: clip,
+        soundFn: () async {},
+        hdrBytes: Uint8List.fromList([1, 2, 3]),
+        hdrExt: 'jxr',
+        hdrWriteFn: (b, p) async => throw Exception('disk full'),
+      );
+      expect(r2.savedPath, '/tmp/x/shot.png');
+      expect(r2.errors.keys, contains('hdrFile'));
+    });
   });
 }

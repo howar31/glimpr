@@ -18,7 +18,7 @@ final class CaptureController {
   func captureRegion(
     displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
     jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil,
-    alsoPlain: Bool = false
+    alsoPlain: Bool = false, hdr: Bool = false
   ) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
@@ -26,7 +26,7 @@ final class CaptureController {
     return try await capturer.captureRegion(
       displayID: displayID, rect: rect, showsCursor: showsCursor,
       jpeg: jpeg, jpegQuality: jpegQuality, decoration: decoration,
-      alsoPlain: alsoPlain)
+      alsoPlain: alsoPlain, hdr: hdr)
   }
 
   /// Single window's raw alpha shape (rounded corners) — the overlay snap mask;
@@ -43,14 +43,15 @@ final class CaptureController {
   /// natively); nil when no such window so the caller falls back to a rect crop.
   func captureWindowDelivered(
     windowID: CGWindowID, showsCursor: Bool, jpeg: Bool, jpegQuality: Int,
-    decoration: Decoration.Spec?, alsoPlain: Bool = false
+    decoration: Decoration.Spec?, alsoPlain: Bool = false, hdr: Bool = false
   ) async throws -> [String: Any]? {
     guard capturer.hasPermissionOrRequest() else {
       throw ScreenCapturer.CaptureError.noDisplays
     }
     return try await ScreenCapturer.captureWindowDelivered(
       windowID: windowID, showsCursor: showsCursor, jpeg: jpeg,
-      jpegQuality: jpegQuality, decoration: decoration, alsoPlain: alsoPlain)
+      jpegQuality: jpegQuality, decoration: decoration, alsoPlain: alsoPlain,
+      hdr: hdr)
   }
 
   /// [pinOnly]: the ⌘⌥7 "capture to pin" mode — the overlay session runs as
@@ -101,8 +102,14 @@ final class CaptureController {
         // image for that toggle. Each display is pushed (and its engine starts
         // painting) the moment its capture is ready — cursor display first.
         PerfLog.mark("captureAllBegin")
+        // Freeze-time HDR retention (the hdr_screenshot setting, bare key —
+        // Glimpr's SettingsStore writes plain NSUserDefaults keys): HDR
+        // displays keep their EDR image for the annotated export's sibling.
+        let wantHdr = UserDefaults.standard.bool(forKey: "hdr_screenshot")
+        manager.beginHdrRetention()
         try await self.capturer.captureAll(
-          showsCursor: false, includeCursorImage: true
+          showsCursor: false, includeCursorImage: true,
+          hdrRetainer: wantHdr ? { id, img in manager.retainHdr(id, img) } : nil
         ) { dict in
           manager.presentFrame(dict, pinOnly: pinOnly)
         }

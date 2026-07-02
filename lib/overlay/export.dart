@@ -34,6 +34,11 @@ Future<FlowResult> exportAnnotated({
   // Replaces the configured after-capture flow for this export (e.g. the
   // ⌘⌥5 capture-to-pin session runs {pin} only). Null = cap.flow.
   Set<FlowAction>? flowOverride,
+  // The natively-composited HDR rendition (annotations included), written as
+  // a same-basename sibling beside the saved SDR file. Produced by the
+  // overlay's HDR leg (encodeHdrRegion) when the freeze retained an HDR base.
+  Uint8List? hdrBytes,
+  String? hdrExt,
 }) async {
   final actions = normalizeFlow(flowOverride ?? cap.flow, forCapture: true);
   // Opt-in decoration for this scenario (null = plain, byte-identical output).
@@ -99,6 +104,8 @@ Future<FlowResult> exportAnnotated({
     soundFn: () async {},
     pinFn: (p) => CaptureBridge.pinImage(p, globalRect: pinRect),
     recordRecentFn: recordRecentCapture,
+    hdrBytes: hdrBytes,
+    hdrExt: hdrExt,
   );
 }
 
@@ -134,6 +141,10 @@ Future<FlowResult> deliverEncodedCapture({
     soundFn: () async {},
     pinFn: (p) => CaptureBridge.pinImage(p, globalRect: pinRect),
     recordRecentFn: recordRecentCapture,
+    // Dual-output HDR: written as a same-basename sibling beside the saved
+    // SDR file (skipped when the flow has no save leg).
+    hdrBytes: capture.hdrBytes,
+    hdrExt: capture.hdrExt,
   );
 }
 
@@ -161,6 +172,10 @@ Future<FlowResult> deliverWindowBytes({
   String? appName,
   // The undecorated sibling rendition for the flow's pin leg (alsoPlain).
   Uint8List? pinBytes,
+  // Dual-output HDR rendition (undecorated) + extension, when requested and
+  // the window's display is HDR.
+  Uint8List? hdrBytes,
+  String? hdrExt,
 }) async {
   final naming = await resolveCaptureNaming(
     cap: cap,
@@ -176,5 +191,7 @@ Future<FlowResult> deliverWindowBytes({
     fileName: naming.fileName,
     soundFn: () async {},
     recordRecentFn: recordRecentCapture,
+    hdrBytes: hdrBytes,
+    hdrExt: hdrExt,
   );
 }

@@ -36,15 +36,16 @@ void main() {
     expect(b!.modifiers, {HotkeyModifier.meta});
   });
 
-  test('isComplete / hasModifier', () {
+  test('isComplete (bare keys are valid bindings)', () {
     expect(cmdOpt1.isComplete, isTrue);
-    expect(cmdOpt1.hasModifier, isTrue);
+    // Modifier requirement was dropped (ShareX parity): a bare key is a
+    // complete binding too.
     const bareC = HotkeyBinding(
       physicalKey: PhysicalKeyboardKey.keyC,
       logicalKey: LogicalKeyboardKey.keyC,
       modifiers: {},
     );
-    expect(bareC.hasModifier, isFalse);
+    expect(bareC.isComplete, isTrue);
   });
 
   test('equality by value', () {

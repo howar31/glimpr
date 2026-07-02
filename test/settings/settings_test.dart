@@ -232,4 +232,27 @@ void main() {
     expect(await s.getRecordMaxLongSide(), 1920);
     expect(await s.getRecordGifFps(), 15);
   });
+
+  test('record format hevcHdr round-trips and implies hevc + hdr', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getRecordFormat(), RecordFormat.h264); // default unchanged
+    await s.setRecordFormat(RecordFormat.hevcHdr);
+    expect(await s.getRecordFormat(), RecordFormat.hevcHdr);
+    const rec = RecordingSettings(format: RecordFormat.hevcHdr);
+    expect(rec.hevc, isTrue); // hevcHdr rides the HEVC codec path
+    expect(rec.hdr, isTrue);
+    expect(rec.isGif, isFalse);
+    const plain = RecordingSettings(format: RecordFormat.hevc);
+    expect(plain.hdr, isFalse);
+  });
+
+  test('hdr_screenshot defaults off and round-trips into CaptureSettings',
+      () async {
+    final s = Settings(FakeStore());
+    expect(await s.getHdrScreenshot(), isFalse);
+    expect((await s.loadCapture()).hdrScreenshot, isFalse);
+    await s.setHdrScreenshot(true);
+    expect(await s.getHdrScreenshot(), isTrue);
+    expect((await s.loadCapture()).hdrScreenshot, isTrue);
+  });
 }

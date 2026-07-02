@@ -1,7 +1,9 @@
 import Cocoa
 import FlutterMacOS
+import ImageIO
 import ScreenCaptureKit
 import CoreGraphics
+import UniformTypeIdentifiers
 
 // MARK: - ScreenCapturer
 
@@ -79,7 +81,7 @@ final class ScreenCapturer {
   func captureRegion(
     displayID: CGDirectDisplayID?, rect: CGRect?, showsCursor: Bool,
     jpeg: Bool, jpegQuality: Int, decoration: Decoration.Spec? = nil,
-    alsoPlain: Bool = false
+    alsoPlain: Bool = false, hdr: Bool = false
   ) async throws -> [String: Any]? {
     let content = try await freshContent()
     let targetID = displayID ?? cursorDisplayID()
@@ -88,19 +90,41 @@ final class ScreenCapturer {
     let scale = Self.scaleFactor(for: d.displayID)
     let r = rect
       ?? CGRect(x: 0, y: 0, width: CGFloat(d.width), height: CGFloat(d.height))
-    let cfg = SCStreamConfiguration()
-    // sourceRect crops at capture time (content-space points, display-local
-    // top-left) — no separate CGImage crop pass.
-    cfg.sourceRect = r
-    cfg.width = max(1, Int((r.width * scale).rounded()))
-    cfg.height = max(1, Int((r.height * scale).rounded()))
-    cfg.showsCursor = showsCursor
-    cfg.colorSpaceName = CGColorSpace.sRGB
+    let outW = max(1, Int((r.width * scale).rounded()))
+    let outH = max(1, Int((r.height * scale).rounded()))
     let filter = SCContentFilter(display: d, excludingWindows: [])
-    PerfLog.mark("sckImageBegin display=\(d.displayID)")
-    let cg = try await SCScreenshotManager.captureImage(
-      contentFilter: filter, configuration: cfg)
-    PerfLog.mark("sckImageEnd display=\(d.displayID)")
+    // Dual-output HDR (macOS 26+): ONE capture yields the SDR image (converted
+    // to sRGB for the classic pipeline) + the HDR image encoded to HEIC. Any
+    // failure falls through to the classic SDR-only capture.
+    var dualSdr: CGImage? = nil
+    var hdrHeic: Data? = nil
+    if hdr, #available(macOS 26.0, *), Self.screenHasEdr(d.displayID) {
+      PerfLog.mark("sckDualBegin display=\(d.displayID)")
+      if let dual = try? await Self.captureDual(
+        filter: filter, width: outW, height: outH, sourceRect: r,
+        showsCursor: showsCursor) {
+        dualSdr = Self.toSrgb(dual.sdr)
+        if let h = dual.hdr { hdrHeic = Self.encodeHeic(h) }
+      }
+      PerfLog.mark("sckDualEnd display=\(d.displayID)")
+    }
+    let cg: CGImage
+    if let dualSdr {
+      cg = dualSdr
+    } else {
+      let cfg = SCStreamConfiguration()
+      // sourceRect crops at capture time (content-space points, display-local
+      // top-left) — no separate CGImage crop pass.
+      cfg.sourceRect = r
+      cfg.width = outW
+      cfg.height = outH
+      cfg.showsCursor = showsCursor
+      cfg.colorSpaceName = CGColorSpace.sRGB
+      PerfLog.mark("sckImageBegin display=\(d.displayID)")
+      cg = try await SCScreenshotManager.captureImage(
+        contentFilter: filter, configuration: cfg)
+      PerfLog.mark("sckImageEnd display=\(d.displayID)")
+    }
     // Opt-in decoration: wrap the captured pixels natively (margin + rounded
     // corners + drop shadow) before encoding — the direct path never hands the
     // pixels back to Dart. A render failure (rare) degrades to the plain image.
@@ -131,7 +155,93 @@ final class ScreenCapturer {
        let plain = Decoration.encode(cg, jpeg: jpeg, quality: jpegQuality) {
       dict["plainBytes"] = FlutterStandardTypedData(bytes: plain)
     }
+    // The HDR sibling (always undecorated), written by the Dart flow beside
+    // the saved SDR file.
+    if let hb = hdrHeic {
+      dict["hdrBytes"] = FlutterStandardTypedData(bytes: hb)
+      dict["hdrExt"] = "heic"
+    }
     return dict
+  }
+
+  /// macOS 26 dual-dynamic-range one-shot: SDR + HDR CGImages from ONE
+  /// capture (SCScreenshotConfiguration, dynamicRange = both). The HDR image
+  /// arrives in extended sRGB; the SDR image in the display's colour space.
+  @available(macOS 26.0, *)
+  static func captureDual(
+    filter: SCContentFilter, width: Int, height: Int, sourceRect: CGRect?,
+    showsCursor: Bool
+  ) async throws -> (sdr: CGImage, hdr: CGImage?)? {
+    let cfg = SCScreenshotConfiguration()
+    cfg.width = width
+    cfg.height = height
+    if let r = sourceRect { cfg.sourceRect = r }
+    cfg.showsCursor = showsCursor
+    cfg.dynamicRange = .bothSDRAndHDR
+    let output: SCScreenshotOutput =
+      try await withCheckedThrowingContinuation { cont in
+        SCScreenshotManager.captureScreenshot(
+          contentFilter: filter, configuration: cfg
+        ) { output, error in
+          if let output {
+            cont.resume(returning: output)
+          } else {
+            cont.resume(throwing: error ?? CaptureError.noDisplays)
+          }
+        }
+      }
+    guard let sdr = output.sdrImage else { return nil }
+    return (sdr, output.hdrImage)
+  }
+
+  /// Whether [displayID]'s screen can show EDR content (HDR-capable AND the
+  /// current settings give it headroom above SDR white).
+  static func screenHasEdr(_ displayID: CGDirectDisplayID) -> Bool {
+    let screen = NSScreen.screens.first { Self.screenNumber($0) == displayID }
+    return (screen?.maximumPotentialExtendedDynamicRangeColorComponentValue
+      ?? 1.0) > 1.0
+  }
+
+  /// Colour-convert to plain 8-bit sRGB by drawing (CG colour-matches), so the
+  /// dual capture's SDR leg keeps the Phase-2 "portable sRGB output" behaviour
+  /// (the classic path forces sRGB at capture; the dual API returns the
+  /// display's own colour space instead).
+  static func toSrgb(_ cg: CGImage) -> CGImage {
+    guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+          let ctx = CGContext(
+            data: nil, width: cg.width, height: cg.height, bitsPerComponent: 8,
+            bytesPerRow: 0, space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { return cg }
+    ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+    return ctx.makeImage() ?? cg
+  }
+
+  /// Encode an HDR CGImage to a true-HDR HEIC. The dual capture's hdrImage
+  /// arrives in EXTENDED sRGB, which ImageIO flattens to SDR on a plain encode
+  /// (probe-verified: headroom collapses to 1.0) — so convert to the BT.2100
+  /// PQ space first; a PQ-tagged 10-bit HEIC is the standard HDR still that
+  /// Preview/Photos render with headroom (probe-verified round-trip).
+  static func encodeHeic(_ image: CGImage) -> Data? {
+    guard let pq = CGColorSpace(name: CGColorSpace.itur_2100_PQ),
+          let ctx = CGContext(
+            data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 16, bytesPerRow: 0, space: pq,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              | CGBitmapInfo.byteOrder16Little.rawValue)
+    else { return nil }
+    ctx.draw(image,
+             in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    guard let pqImage = ctx.makeImage() else { return nil }
+    let data = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(
+      data as CFMutableData, UTType.heic.identifier as CFString, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(dest, pqImage, [
+      kCGImageDestinationLossyCompressionQuality: 0.92,
+    ] as CFDictionary)
+    guard CGImageDestinationFinalize(dest) else { return nil }
+    return data as Data
   }
 
   /// Per-display dicts for a LIVE-SELECT overlay session: the same shape as
@@ -177,6 +287,11 @@ final class ScreenCapturer {
   /// was pushed. Throws CaptureError.noDisplays or rethrows SCK errors.
   func captureAll(
     showsCursor: Bool = false, includeCursorImage: Bool = false,
+    // Freeze-time HDR retention (the hdr_screenshot setting): called with each
+    // HDR display's EDR image, returns the retention generation carried to
+    // Dart as hdrGen (thread-safe on the caller's side; the group tasks run
+    // concurrently). Nil = no retention (setting off).
+    hdrRetainer: ((CGDirectDisplayID, CGImage) -> Int)? = nil,
     onDisplayReady: @escaping @MainActor ([String: Any]) -> Void
   ) async throws {
     let content = try await freshContent()
@@ -235,22 +350,45 @@ final class ScreenCapturer {
       for job in jobs {
         group.addTask {
           let d = job.display
-          let cfg = SCStreamConfiguration()
-          cfg.width = Int(CGFloat(d.width) * job.scale)
-          cfg.height = Int(CGFloat(d.height) * job.scale)
-          cfg.showsCursor = showsCursor
-          // Capture in sRGB. SCK otherwise tags frames with the display's native
-          // wide-gamut profile (e.g. "LG ULTRAFINE"), but Flutter ignores
-          // embedded ICC profiles and treats pixels as sRGB — so a wide-gamut
-          // frame renders with a visible color cast in the overlay. Producing
-          // sRGB pixels makes the overlay match the live screen (the compositor
-          // maps sRGB -> display), and exported PNGs become portable sRGB files.
-          cfg.colorSpaceName = CGColorSpace.sRGB
+          let pixelW = Int(CGFloat(d.width) * job.scale)
+          let pixelH = Int(CGFloat(d.height) * job.scale)
           let filter = SCContentFilter(display: d, excludingWindows: [])
-          PerfLog.mark("sckImageBegin display=\(d.displayID)")
-          let cgImage = try await SCScreenshotManager.captureImage(
-            contentFilter: filter, configuration: cfg)
-          PerfLog.mark("sckImageEnd display=\(d.displayID)")
+          var hdrGen: Int? = nil
+          var dualSdr: CGImage? = nil
+          // Freeze-time dual capture (macOS 26+, HDR display, setting on): ONE
+          // capture yields the SDR frame for the overlay AND the EDR image the
+          // annotated export's HDR sibling is composited from. Failure falls
+          // through to the classic sRGB capture.
+          if let retain = hdrRetainer, #available(macOS 26.0, *),
+             Self.screenHasEdr(d.displayID) {
+            if let dual = try? await Self.captureDual(
+              filter: filter, width: pixelW, height: pixelH, sourceRect: nil,
+              showsCursor: showsCursor) {
+              dualSdr = Self.toSrgb(dual.sdr)
+              if let h = dual.hdr { hdrGen = retain(d.displayID, h) }
+            }
+          }
+          let cgImage: CGImage
+          if let dualSdr {
+            cgImage = dualSdr
+          } else {
+            hdrGen = nil
+            let cfg = SCStreamConfiguration()
+            cfg.width = pixelW
+            cfg.height = pixelH
+            cfg.showsCursor = showsCursor
+            // Capture in sRGB. SCK otherwise tags frames with the display's native
+            // wide-gamut profile (e.g. "LG ULTRAFINE"), but Flutter ignores
+            // embedded ICC profiles and treats pixels as sRGB — so a wide-gamut
+            // frame renders with a visible color cast in the overlay. Producing
+            // sRGB pixels makes the overlay match the live screen (the compositor
+            // maps sRGB -> display), and exported PNGs become portable sRGB files.
+            cfg.colorSpaceName = CGColorSpace.sRGB
+            PerfLog.mark("sckImageBegin display=\(d.displayID)")
+            cgImage = try await SCScreenshotManager.captureImage(
+              contentFilter: filter, configuration: cfg)
+            PerfLog.mark("sckImageEnd display=\(d.displayID)")
+          }
           // A failed pixel extraction skips this display (parity with the old
           // PNG-encode guard) — the other displays still freeze.
           guard let raw = Self.bgraData(from: cgImage) else { return }
@@ -260,6 +398,7 @@ final class ScreenCapturer {
           dict["pixelWidth"] = cgImage.width
           dict["pixelHeight"] = cgImage.height
           dict["rowBytes"] = raw.rowBytes
+          if let hdrGen { dict["hdrGen"] = hdrGen }
           await onDisplayReady(dict)
           PerfLog.mark("displayPushed display=\(d.displayID)")
         }
@@ -279,8 +418,9 @@ final class ScreenCapturer {
   /// crop. Static so BOTH the control engine (CaptureController) and EVERY
   /// overlay engine can call it — each Flutter engine has its own
   /// `glimpr/capture` handler, so the overlay can't reach the control engine's.
-  private static func windowCG(windowID: CGWindowID, showsCursor: Bool)
-    async throws -> (cg: CGImage, scale: CGFloat)? {
+  private static func windowCG(windowID: CGWindowID, showsCursor: Bool,
+                               hdr: Bool = false)
+    async throws -> (cg: CGImage, scale: CGFloat, hdrHeic: Data?)? {
     // Fetch shareable content fresh (window sets change between captures) and
     // find the target window.
     let shareable = try await SCShareableContent.current
@@ -296,16 +436,37 @@ final class ScreenCapturer {
     let filter = SCContentFilter(desktopIndependentWindow: window)
     let scale = CGFloat(filter.pointPixelScale)
     let content = filter.contentRect
-    let cfg = SCStreamConfiguration()
-    cfg.width = max(1, Int((content.width * scale).rounded()))
-    cfg.height = max(1, Int((content.height * scale).rounded()))
-    cfg.scalesToFit = true
-    cfg.showsCursor = showsCursor
-    cfg.colorSpaceName = CGColorSpace.sRGB
-    PerfLog.mark("windowSckBegin id=\(windowID)")
-    let cg = try await SCScreenshotManager.captureImage(
-      contentFilter: filter, configuration: cfg)
-    PerfLog.mark("windowSckEnd id=\(windowID)")
+    let wantW = max(1, Int((content.width * scale).rounded()))
+    let wantH = max(1, Int((content.height * scale).rounded()))
+    // Dual-output HDR (macOS 26+, window on an EDR-capable screen): one
+    // capture yields both renditions; failure falls through to the classic
+    // SDR-only capture.
+    var dualSdr: CGImage? = nil
+    var hdrHeic: Data? = nil
+    if hdr, #available(macOS 26.0, *), Self.windowScreenHasEdr(window) {
+      if let dual = try? await Self.captureDual(
+        filter: filter, width: wantW, height: wantH, sourceRect: nil,
+        showsCursor: showsCursor) {
+        dualSdr = Self.toSrgb(dual.sdr)
+        if let h = dual.hdr { hdrHeic = Self.encodeHeic(h) }
+      }
+    }
+    let cg: CGImage
+    if let dualSdr {
+      cg = dualSdr
+    } else {
+      hdrHeic = nil
+      let cfg = SCStreamConfiguration()
+      cfg.width = wantW
+      cfg.height = wantH
+      cfg.scalesToFit = true
+      cfg.showsCursor = showsCursor
+      cfg.colorSpaceName = CGColorSpace.sRGB
+      PerfLog.mark("windowSckBegin id=\(windowID)")
+      cg = try await SCScreenshotManager.captureImage(
+        contentFilter: filter, configuration: cfg)
+      PerfLog.mark("windowSckEnd id=\(windowID)")
+    }
     // Some windows are NOT independently capturable — notably a modern System
     // Settings modal alert, which is drawn into its PARENT window's surface
     // rather than being backed by its own. For those, SCK ignores the per-window
@@ -316,14 +477,23 @@ final class ScreenCapturer {
     // midpoint of every edge is opaque; if any is transparent the capture is a
     // mismatch -> bail so the caller falls back to a plain rectangular crop.
     guard Self.fillsBuffer(NSBitmapImageRep(cgImage: cg)) else { return nil }
-    return (cg, scale)
+    return (cg, scale, hdrHeic)
+  }
+
+  /// Whether the screen holding [window] can show EDR content.
+  static func windowScreenHasEdr(_ window: SCWindow) -> Bool {
+    var id: CGDirectDisplayID = 0
+    var count: UInt32 = 0
+    guard CGGetDisplaysWithRect(window.frame, 1, &id, &count) == .success,
+          count > 0 else { return false }
+    return screenHasEdr(id)
   }
 
   /// Overlay snap MASK: the window's raw BGRA8888 (premultiplied, sRGB) — only
   /// its alpha is used as a dstIn shape mask, so no PNG codec on the wire.
   static func captureWindowImage(windowID: CGWindowID, showsCursor: Bool)
     async throws -> [String: Any]? {
-    guard let (cg, scale) = try await windowCG(
+    guard let (cg, scale, _) = try await windowCG(
             windowID: windowID, showsCursor: showsCursor),
           let (data, rowBytes) = bgraData(from: cg) else { return nil }
     PerfLog.mark("windowBgraEnd id=\(windowID) bytes=\(data.count)")
@@ -341,10 +511,11 @@ final class ScreenCapturer {
   /// pixels never round-trip through Dart.
   static func captureWindowDelivered(
     windowID: CGWindowID, showsCursor: Bool, jpeg: Bool, jpegQuality: Int,
-    decoration: Decoration.Spec?, alsoPlain: Bool = false
+    decoration: Decoration.Spec?, alsoPlain: Bool = false, hdr: Bool = false
   ) async throws -> [String: Any]? {
-    guard let (cg, scale) = try await windowCG(
-      windowID: windowID, showsCursor: showsCursor) else { return nil }
+    guard let (cg, scale, hdrHeic) = try await windowCG(
+      windowID: windowID, showsCursor: showsCursor, hdr: hdr)
+    else { return nil }
     let image = decoration.flatMap { Decoration.render(cg, spec: $0, scale: scale) } ?? cg
     guard let bytes = Decoration.encode(image, jpeg: jpeg, quality: jpegQuality)
     else { return nil }
@@ -358,6 +529,11 @@ final class ScreenCapturer {
     if alsoPlain, decoration != nil,
        let plain = Decoration.encode(cg, jpeg: jpeg, quality: jpegQuality) {
       dict["plainBytes"] = FlutterStandardTypedData(bytes: plain)
+    }
+    // The HDR sibling (always undecorated).
+    if let hb = hdrHeic {
+      dict["hdrBytes"] = FlutterStandardTypedData(bytes: hb)
+      dict["hdrExt"] = "heic"
     }
     return dict
   }
@@ -615,6 +791,46 @@ final class OverlayManager {
   }
   private var units: [CGDirectDisplayID: Unit] = [:]
   private var pendingShow: Set<CGDirectDisplayID> = []
+
+  // Freeze-retained HDR base per display (HDR display + the hdr_screenshot
+  // setting on at capture): the EDR CGImage the annotated export's HDR sibling
+  // is composited from (encodeHdrRegion). Latest capture generation only;
+  // overwritten each capture, released on dismiss. Lock-guarded — captureAll's
+  // group tasks retain concurrently.
+  private var hdrBases: [CGDirectDisplayID: (image: CGImage, gen: Int)] = [:]
+  private var hdrGen = 0
+  private let hdrLock = NSLock()
+
+  /// New capture: bump the generation and drop the previous bases.
+  func beginHdrRetention() {
+    hdrLock.lock()
+    hdrGen += 1
+    hdrBases = [:]
+    hdrLock.unlock()
+  }
+
+  /// Retain [image] as [id]'s HDR base; returns the generation for the dict.
+  func retainHdr(_ id: CGDirectDisplayID, _ image: CGImage) -> Int {
+    hdrLock.lock()
+    defer { hdrLock.unlock() }
+    hdrBases[id] = (image, hdrGen)
+    return hdrGen
+  }
+
+  /// The retained base for [id] iff [gen] is still current (a stale layer's
+  /// export gets nil and skips its HDR sibling).
+  func hdrBase(for id: CGDirectDisplayID, gen: Int) -> CGImage? {
+    hdrLock.lock()
+    defer { hdrLock.unlock() }
+    guard let e = hdrBases[id], e.gen == gen else { return nil }
+    return e.image
+  }
+
+  private func clearHdrBases() {
+    hdrLock.lock()
+    hdrBases = [:]
+    hdrLock.unlock()
+  }
   // The display the cursor is on at capture = the interactive editor. Only its
   // window takes key/active focus on reveal (see show()). nil = unknown.
   private var keyDisplayID: CGDirectDisplayID?
@@ -881,6 +1097,32 @@ final class OverlayManager {
             }
           }
           result(nil)
+        case "encodeHdrRegion":
+          // The annotated export's HDR sibling: composite the Dart-supplied
+          // overlay segments + effect ops onto this display's freeze-retained
+          // EDR image and return the encoded HEIC. Nil reply = no base
+          // retained (SDR display / setting off / stale layer) -> Dart skips.
+          let a = (call.arguments as? [String: Any]) ?? [:]
+          let gen = (a["gen"] as? NSNumber)?.intValue ?? -1
+          guard let vc = vc, let id = self.displayID(forVC: vc),
+                let base = self.hdrBase(for: id, gen: gen) else {
+            result(nil)
+            return
+          }
+          // Heavy CPU work off the platform thread; reply back on it.
+          DispatchQueue.global(qos: .userInitiated).async {
+            let heic = HdrCompositor.composeHeic(base: base, args: a)
+            DispatchQueue.main.async {
+              if let heic {
+                result([
+                  "bytes": FlutterStandardTypedData(bytes: heic),
+                  "ext": "heic",
+                ])
+              } else {
+                result(nil)
+              }
+            }
+          }
         case "captureWindowImage":
           // The overlay snap fetches the window's real alpha here (this engine
           // has its OWN glimpr/capture handler, separate from the control one).
@@ -1248,6 +1490,7 @@ final class OverlayManager {
     pendingShow.removeAll()
     isSuspended = false
     endLiveSelect()
+    clearHdrBases() // the annotated export consumed (or forfeited) them
     for (_, u) in units {
       u.window.alphaValue = 0
       u.window.ignoresMouseEvents = true
@@ -1306,5 +1549,401 @@ final class OverlayManager {
     if let id = id, let unit = units[id], unit.window.canBecomeKey {
       unit.window.makeKeyAndOrderFront(nil)
     }
+  }
+}
+
+// MARK: - HdrCompositor
+
+/// The native HDR compositor for the annotated overlay export: replays the
+/// Dart editor's z-ordered output (overlay segments + base-sampling effect
+/// ops) on the freeze-retained EDR image and encodes the result as a PQ HEIC.
+///
+/// Space contract (mirrors lib/editor/hdr_plan.dart + the Windows
+/// hdr_compose.cpp): the EDR image is EXTENDED sRGB — gamma-encoded relative
+/// to SDR white — which IS the working domain, so every blend/filter here
+/// matches the Dart (sRGB) composite exactly wherever the base is within SDR
+/// range. Effect ops sample the PRISTINE base in FRAME space; overlay segments
+/// are CROP-space straight-alpha RGBA bitmaps. Lives inside OverlayKit.swift
+/// (new Swift files need 4 pbxproj entries — project rule: extend an existing
+/// compiled file instead).
+enum HdrCompositor {
+  /// [args] is the raw encodeHdrRegion payload (crop, items, optional mask).
+  static func composeHeic(base: CGImage, args: [String: Any]) -> Data? {
+    let baseW = base.width, baseH = base.height
+    guard baseW > 0, baseH > 0 else { return nil }
+    let cropX = Int(((args["x"] as? NSNumber)?.doubleValue ?? 0).rounded())
+    let cropY = Int(((args["y"] as? NSNumber)?.doubleValue ?? 0).rounded())
+    let cropW = Int(((args["w"] as? NSNumber)?.doubleValue ?? 0).rounded())
+    let cropH = Int(((args["h"] as? NSNumber)?.doubleValue ?? 0).rounded())
+    guard cropW > 0, cropH > 0 else { return nil }
+
+    // Rasterise the base ONCE into a float RGBA buffer (extended sRGB, gamma).
+    guard let ext = CGColorSpace(name: CGColorSpace.extendedSRGB) else { return nil }
+    let floatInfo = CGBitmapInfo.floatComponents.rawValue
+      | CGImageAlphaInfo.premultipliedLast.rawValue
+      | CGBitmapInfo.byteOrder32Little.rawValue
+    var basePx = [Float](repeating: 0, count: baseW * baseH * 4)
+    let ok: Bool = basePx.withUnsafeMutableBytes { p in
+      guard let ctx = CGContext(
+        data: p.baseAddress, width: baseW, height: baseH, bitsPerComponent: 32,
+        bytesPerRow: baseW * 16, space: ext, bitmapInfo: floatInfo)
+      else { return false }
+      ctx.draw(base, in: CGRect(x: 0, y: 0, width: baseW, height: baseH))
+      return true
+    }
+    guard ok else { return nil }
+
+    // The pristine-base fetch (clamp-to-edge; alpha is 1 -> premul == straight).
+    func fetch(_ x: Int, _ y: Int) -> (Float, Float, Float) {
+      let cx = min(max(x, 0), baseW - 1)
+      let cy = min(max(y, 0), baseH - 1)
+      let i = (cy * baseW + cx) * 4
+      return (basePx[i], basePx[i + 1], basePx[i + 2])
+    }
+    func fetchBilinear(_ fx: Double, _ fy: Double) -> (Float, Float, Float) {
+      let px = fx - 0.5, py = fy - 0.5
+      let x0 = Int(px.rounded(.down)), y0 = Int(py.rounded(.down))
+      let tx = Float(px - Double(x0)), ty = Float(py - Double(y0))
+      let c00 = fetch(x0, y0), c10 = fetch(x0 + 1, y0)
+      let c01 = fetch(x0, y0 + 1), c11 = fetch(x0 + 1, y0 + 1)
+      func mix(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * t }
+      return (
+        mix(mix(c00.0, c10.0, tx), mix(c01.0, c11.0, tx), ty),
+        mix(mix(c00.1, c10.1, tx), mix(c01.1, c11.1, tx), ty),
+        mix(mix(c00.2, c10.2, tx), mix(c01.2, c11.2, tx), ty)
+      )
+    }
+
+    // Working buffer: crop-space RGBA float (straight alpha, managed by hand).
+    var work = [Float](repeating: 0, count: cropW * cropH * 4)
+    for y in 0..<cropH {
+      for x in 0..<cropW {
+        let (r, g, b) = fetch(cropX + x, cropY + y)
+        let i = (y * cropW + x) * 4
+        work[i] = r; work[i + 1] = g; work[i + 2] = b; work[i + 3] = 1
+      }
+    }
+
+    // ---- small-image helpers (the downsampled effect sources) --------------
+    struct Small { var w = 0, h = 0; var rgb: [Float] = [] }
+    func downsample(_ srcX0: Double, _ srcY0: Double, _ srcX1: Double,
+                    _ srcY1: Double, _ gw: Int, _ gh: Int) -> Small {
+      var out = Small(w: gw, h: gh, rgb: [Float](repeating: 0, count: gw * gh * 3))
+      let cw = (srcX1 - srcX0) / Double(gw), ch = (srcY1 - srcY0) / Double(gh)
+      for gy in 0..<gh {
+        for gx in 0..<gw {
+          let x0 = Int((srcX0 + Double(gx) * cw).rounded(.down))
+          let y0 = Int((srcY0 + Double(gy) * ch).rounded(.down))
+          let x1 = max(x0 + 1, Int((srcX0 + Double(gx + 1) * cw).rounded(.up)))
+          let y1 = max(y0 + 1, Int((srcY0 + Double(gy + 1) * ch).rounded(.up)))
+          var acc: (Float, Float, Float) = (0, 0, 0)
+          var n = 0
+          for y in y0..<y1 {
+            for x in x0..<x1 {
+              let t = fetch(x, y)
+              acc.0 += t.0; acc.1 += t.1; acc.2 += t.2; n += 1
+            }
+          }
+          let i = (gy * gw + gx) * 3
+          if n > 0 {
+            out.rgb[i] = acc.0 / Float(n)
+            out.rgb[i + 1] = acc.1 / Float(n)
+            out.rgb[i + 2] = acc.2 / Float(n)
+          }
+        }
+      }
+      return out
+    }
+    func gaussianBlur(_ img: inout Small, sigma: Double) {
+      guard sigma > 0.05, img.w > 0, img.h > 0 else { return }
+      let radius = max(1, Int((sigma * 3).rounded(.up)))
+      var kernel = [Float](repeating: 0, count: radius + 1)
+      var sum = 0.0
+      for i in 0...radius {
+        kernel[i] = Float(exp(-Double(i * i) / (2 * sigma * sigma)))
+        sum += Double(kernel[i]) * (i == 0 ? 1 : 2)
+      }
+      for i in 0...radius { kernel[i] = Float(Double(kernel[i]) / sum) }
+      var tmp = img.rgb
+      for y in 0..<img.h { // horizontal
+        for x in 0..<img.w {
+          var acc: (Float, Float, Float) = (0, 0, 0)
+          for k in -radius...radius {
+            let sx = min(max(x + k, 0), img.w - 1)
+            let i = (y * img.w + sx) * 3
+            let kv = kernel[abs(k)]
+            acc.0 += tmp[i] * kv; acc.1 += tmp[i + 1] * kv; acc.2 += tmp[i + 2] * kv
+          }
+          let o = (y * img.w + x) * 3
+          img.rgb[o] = acc.0; img.rgb[o + 1] = acc.1; img.rgb[o + 2] = acc.2
+        }
+      }
+      tmp = img.rgb
+      for y in 0..<img.h { // vertical
+        for x in 0..<img.w {
+          var acc: (Float, Float, Float) = (0, 0, 0)
+          for k in -radius...radius {
+            let sy = min(max(y + k, 0), img.h - 1)
+            let i = (sy * img.w + x) * 3
+            let kv = kernel[abs(k)]
+            acc.0 += tmp[i] * kv; acc.1 += tmp[i + 1] * kv; acc.2 += tmp[i + 2] * kv
+          }
+          let o = (y * img.w + x) * 3
+          img.rgb[o] = acc.0; img.rgb[o + 1] = acc.1; img.rgb[o + 2] = acc.2
+        }
+      }
+    }
+    func sampleSmall(_ img: Small, _ fx: Double, _ fy: Double)
+      -> (Float, Float, Float) {
+      let px = fx - 0.5, py = fy - 0.5
+      let x0 = Int(px.rounded(.down)), y0 = Int(py.rounded(.down))
+      let tx = Float(px - Double(x0)), ty = Float(py - Double(y0))
+      func cl(_ v: Int, _ hi: Int) -> Int { min(max(v, 0), hi) }
+      let xa = cl(x0, img.w - 1), xb = cl(x0 + 1, img.w - 1)
+      let ya = cl(y0, img.h - 1), yb = cl(y0 + 1, img.h - 1)
+      func px3(_ x: Int, _ y: Int) -> (Float, Float, Float) {
+        let i = (y * img.w + x) * 3
+        return (img.rgb[i], img.rgb[i + 1], img.rgb[i + 2])
+      }
+      let c00 = px3(xa, ya), c10 = px3(xb, ya), c01 = px3(xa, yb), c11 = px3(xb, yb)
+      func mix(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * t }
+      return (
+        mix(mix(c00.0, c10.0, tx), mix(c01.0, c11.0, tx), ty),
+        mix(mix(c00.1, c10.1, tx), mix(c01.1, c11.1, tx), ty),
+        mix(mix(c00.2, c10.2, tx), mix(c01.2, c11.2, tx), ty)
+      )
+    }
+    // Mirror of raster.dart blurRegion: inflate by 3 sigma, downsample by
+    // max(1, floor(sigma/2)), small gaussian, bilinear-stretch back.
+    func blurRegion(_ rx: Double, _ ry: Double, _ rw: Double, _ rh: Double,
+                    _ sigma: Double) -> (img: Small, x0: Double, y0: Double,
+                                         factor: Double) {
+      let margin = (sigma * 3).rounded(.up)
+      let sx0 = max(0, rx - margin), sy0 = max(0, ry - margin)
+      let sx1 = min(Double(baseW), rx + rw + margin)
+      let sy1 = min(Double(baseH), ry + rh + margin)
+      let factor = max(1, (sigma / 2).rounded(.down))
+      let gw = max(1, Int(((sx1 - sx0) / factor).rounded(.up)))
+      let gh = max(1, Int(((sy1 - sy0) / factor).rounded(.up)))
+      var img = downsample(sx0, sy0, sx1, sy1, gw, gh)
+      gaussianBlur(&img, sigma: sigma / factor)
+      return (img, sx0, sy0, factor)
+    }
+    func erf(_ x0: Float) -> Float {
+      let sign: Float = x0 < 0 ? -1 : 1
+      let x = abs(x0)
+      let t = 1 / (1 + 0.3275911 * x)
+      let y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+        - 0.284496736) * t + 0.254829592) * t * exp(-x * x)
+      return sign * y
+    }
+
+    // ---- replay the item list ----------------------------------------------
+    let items = (args["items"] as? [Any]) ?? []
+    for entry in items {
+      guard let m = entry as? [String: Any], let t = m["t"] as? String else { continue }
+      func num(_ k: String) -> Double { (m[k] as? NSNumber)?.doubleValue ?? 0 }
+      switch t {
+      case "overlay":
+        guard let td = m["bytes"] as? FlutterStandardTypedData else { continue }
+        let ow = Int(num("w")), oh = Int(num("h"))
+        let bytes = [UInt8](td.data)
+        guard bytes.count >= ow * oh * 4 else { continue }
+        let w = min(ow, cropW), h = min(oh, cropH)
+        for y in 0..<h {
+          for x in 0..<w {
+            let s = (y * ow + x) * 4
+            let a = Float(bytes[s + 3]) / 255
+            if a <= 0 { continue }
+            let d = (y * cropW + x) * 4
+            for c in 0..<3 {
+              let o = Float(bytes[s + c]) / 255
+              work[d + c] = o * a + work[d + c] * (1 - a)
+            }
+          }
+        }
+      case "blur":
+        let rx = num("x"), ry = num("y"), rw = num("w"), rh = num("h")
+        let blur = blurRegion(rx, ry, rw, rh, num("sigma"))
+        let x0 = max(Int(rx.rounded(.down)), cropX)
+        let y0 = max(Int(ry.rounded(.down)), cropY)
+        let x1 = min(Int((rx + rw).rounded(.up)), cropX + cropW)
+        let y1 = min(Int((ry + rh).rounded(.up)), cropY + cropH)
+        guard x0 < x1, y0 < y1 else { continue }
+        for y in y0..<y1 {
+          for x in x0..<x1 {
+            let s = sampleSmall(blur.img,
+                                (Double(x) + 0.5 - blur.x0) / blur.factor,
+                                (Double(y) + 0.5 - blur.y0) / blur.factor)
+            let d = ((y - cropY) * cropW + (x - cropX)) * 4
+            work[d] = s.0; work[d + 1] = s.1; work[d + 2] = s.2
+          }
+        }
+      case "pixelate":
+        let rx = num("x"), ry = num("y"), rw = num("w"), rh = num("h")
+        let cell = max(1, num("cell"))
+        let gw = max(1, Int((rw / cell).rounded(.up)))
+        let gh = max(1, Int((rh / cell).rounded(.up)))
+        let grid = downsample(rx, ry, rx + rw, ry + rh, gw, gh)
+        let x0 = max(Int(rx.rounded(.down)), cropX)
+        let y0 = max(Int(ry.rounded(.down)), cropY)
+        let x1 = min(Int((rx + rw).rounded(.up)), cropX + cropW)
+        let y1 = min(Int((ry + rh).rounded(.up)), cropY + cropH)
+        guard x0 < x1, y0 < y1 else { continue }
+        for y in y0..<y1 {
+          for x in x0..<x1 {
+            var gx = Int((Double(x) + 0.5 - rx) / rw * Double(gw))
+            var gy = Int((Double(y) + 0.5 - ry) / rh * Double(gh))
+            gx = min(max(gx, 0), gw - 1)
+            gy = min(max(gy, 0), gh - 1)
+            let i = (gy * gw + gx) * 3
+            let d = ((y - cropY) * cropW + (x - cropX)) * 4
+            work[d] = grid.rgb[i]; work[d + 1] = grid.rgb[i + 1]
+            work[d + 2] = grid.rgb[i + 2]
+          }
+        }
+      case "magnify":
+        let dx = num("dx"), dy = num("dy"), dw = num("dw"), dh = num("dh")
+        guard dw > 0, dh > 0 else { continue }
+        let x0 = max(Int(dx.rounded(.down)), cropX)
+        let y0 = max(Int(dy.rounded(.down)), cropY)
+        let x1 = min(Int((dx + dw).rounded(.up)), cropX + cropW)
+        let y1 = min(Int((dy + dh).rounded(.up)), cropY + cropH)
+        guard x0 < x1, y0 < y1 else { continue }
+        let sx = num("sx"), sy = num("sy"), sw = num("sw"), sh = num("sh")
+        for y in y0..<y1 {
+          for x in x0..<x1 {
+            let u = sx + (Double(x) + 0.5 - dx) / dw * sw
+            let v = sy + (Double(y) + 0.5 - dy) / dh * sh
+            let s = fetchBilinear(u, v)
+            let d = ((y - cropY) * cropW + (x - cropX)) * 4
+            work[d] = s.0; work[d + 1] = s.1; work[d + 2] = s.2
+          }
+        }
+      case "spotlight":
+        let effect = (m["effect"] as? String) ?? "none"
+        let dim = Float(min(max(num("dim"), 0), 1))
+        let feather = num("feather")
+        if effect == "none" && dim <= 0 { continue }
+        var blur: (img: Small, x0: Double, y0: Double, factor: Double)? = nil
+        var grid: Small? = nil
+        var gw = 0, gh = 0
+        if effect == "blur" {
+          blur = blurRegion(0, 0, Double(baseW), Double(baseH), num("strength"))
+        } else if effect == "pixelate" {
+          let cell = max(1, num("strength"))
+          gw = max(1, Int((Double(baseW) / cell).rounded(.up)))
+          gh = max(1, Int((Double(baseH) / cell).rounded(.up)))
+          grid = downsample(0, 0, Double(baseW), Double(baseH), gw, gh)
+        }
+        let holes = (m["holes"] as? [Any]) ?? []
+        struct H { let x, y, w, h, r: Double }
+        var hs: [H] = []
+        for hv in holes {
+          guard let hm = hv as? [String: Any] else { continue }
+          func hn(_ k: String) -> Double { (hm[k] as? NSNumber)?.doubleValue ?? 0 }
+          hs.append(H(x: hn("x"), y: hn("y"), w: hn("w"), h: hn("h"),
+                      r: hn("radius")))
+        }
+        let layerA0: Float = effect != "none" ? 1 : dim
+        for wy in 0..<cropH {
+          for wx in 0..<cropW {
+            let fx = Double(cropX + wx) + 0.5, fy = Double(cropY + wy) + 0.5
+            var lr: Float = 0, lg: Float = 0, lb: Float = 0
+            if let blur {
+              let s = sampleSmall(blur.img, (fx - blur.x0) / blur.factor,
+                                  (fy - blur.y0) / blur.factor)
+              lr = s.0 * (1 - dim); lg = s.1 * (1 - dim); lb = s.2 * (1 - dim)
+            } else if let grid {
+              var gx = Int(fx / Double(baseW) * Double(gw))
+              var gy = Int(fy / Double(baseH) * Double(gh))
+              gx = min(max(gx, 0), gw - 1)
+              gy = min(max(gy, 0), gh - 1)
+              let i = (gy * gw + gx) * 3
+              lr = grid.rgb[i] * (1 - dim); lg = grid.rgb[i + 1] * (1 - dim)
+              lb = grid.rgb[i + 2] * (1 - dim)
+            }
+            var la = layerA0
+            for hole in hs {
+              // Feathered rounded-rect coverage (~ MaskFilter.blur): signed
+              // distance -> gaussian edge via erf.
+              let hw = hole.w / 2, hh = hole.h / 2
+              let r = min(hole.r, min(hw, hh))
+              let qx = abs(fx - (hole.x + hw)) - (hw - r)
+              let qy = abs(fy - (hole.y + hh)) - (hh - r)
+              let ox = max(qx, 0), oy = max(qy, 0)
+              let dist = (ox * ox + oy * oy).squareRoot() + min(max(qx, qy), 0) - r
+              let cov: Float
+              if feather <= 0.01 {
+                cov = dist < 0 ? 1 : 0
+              } else {
+                cov = 0.5 * (1 - erf(Float(dist / (feather * 1.4142135))))
+              }
+              if cov <= 0 { continue }
+              let keep = 1 - cov
+              la *= keep; lr *= keep; lg *= keep; lb *= keep
+            }
+            if la <= 0 && lr <= 0 && lg <= 0 && lb <= 0 { continue }
+            let d = (wy * cropW + wx) * 4
+            work[d] = lr + work[d] * (1 - la)
+            work[d + 1] = lg + work[d + 1] * (1 - la)
+            work[d + 2] = lb + work[d + 2] * (1 - la)
+          }
+        }
+      default:
+        continue
+      }
+    }
+
+    // Window-snap silhouette: dstIn alpha, mask stretched over the crop.
+    if let td = m0MaskData(args) {
+      let mw = Int(((args["maskW"] as? NSNumber)?.doubleValue ?? 0))
+      let mh = Int(((args["maskH"] as? NSNumber)?.doubleValue ?? 0))
+      var mrow = Int(((args["maskRowBytes"] as? NSNumber)?.doubleValue ?? 0))
+      if mrow <= 0 { mrow = mw * 4 }
+      if mw > 0, mh > 0 {
+        let mask = [UInt8](td.data)
+        func alphaAt(_ x: Int, _ y: Int) -> Float {
+          let cx = min(max(x, 0), mw - 1), cy = min(max(y, 0), mh - 1)
+          let i = cy * mrow + cx * 4 + 3
+          return i < mask.count ? Float(mask[i]) / 255 : 1
+        }
+        for y in 0..<cropH {
+          for x in 0..<cropW {
+            let u = (Double(x) + 0.5) / Double(cropW) * Double(mw) - 0.5
+            let v = (Double(y) + 0.5) / Double(cropH) * Double(mh) - 0.5
+            let x0 = Int(u.rounded(.down)), y0 = Int(v.rounded(.down))
+            let tx = Float(u - Double(x0)), ty = Float(v - Double(y0))
+            func mixf(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * t }
+            let top = mixf(alphaAt(x0, y0), alphaAt(x0 + 1, y0), tx)
+            let bot = mixf(alphaAt(x0, y0 + 1), alphaAt(x0 + 1, y0 + 1), tx)
+            work[(y * cropW + x) * 4 + 3] *= mixf(top, bot, ty)
+          }
+        }
+      }
+    }
+
+    // Premultiply (CG contexts are premultiplied) + make the extended-sRGB
+    // image, then the existing PQ HEIC encoder.
+    for i in stride(from: 0, to: work.count, by: 4) {
+      let a = work[i + 3]
+      if a < 1 {
+        work[i] *= a; work[i + 1] *= a; work[i + 2] *= a
+      }
+    }
+    var outImage: CGImage? = nil
+    work.withUnsafeMutableBytes { p in
+      if let ctx = CGContext(
+        data: p.baseAddress, width: cropW, height: cropH, bitsPerComponent: 32,
+        bytesPerRow: cropW * 16, space: ext, bitmapInfo: floatInfo) {
+        outImage = ctx.makeImage()
+      }
+    }
+    guard let outImage else { return nil }
+    return ScreenCapturer.encodeHeic(outImage)
+  }
+
+  private static func m0MaskData(_ args: [String: Any]) -> FlutterStandardTypedData? {
+    args["mask"] as? FlutterStandardTypedData
   }
 }

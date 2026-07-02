@@ -136,6 +136,10 @@ class EditorCore extends StatefulWidget {
   final String? layerCaption;
   final bool layerAccent;
 
+  /// The freeze retained an HDR base for this display (overlay only): show the
+  /// per-take HDR-sibling toggle in the toolbar.
+  final bool hdrToggle;
+
   /// Presentation-only: render the base image + drawables ONLY — no
   /// toolbar/HUD/crosshair/loupe/selection — and never become `_active` (the
   /// cross-display active signal is ignored). Used to render the screenshot
@@ -156,6 +160,7 @@ class EditorCore extends StatefulWidget {
     this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
+    this.hdrToggle = false,
     this.presentationOnly = false,
   });
 
@@ -3477,6 +3482,9 @@ class _EditorCoreState extends State<EditorCore> {
                           },
                           editorBindings: widget.editorBindings,
                           showCursorToggle: widget.host.cursorImage != null,
+                          // Pin-only sessions never write the HDR sibling, so
+                          // the toggle would be a dead control there.
+                          showHdrToggle: widget.hdrToggle && !widget.pinMode,
                           pinMode: widget.pinMode,
                           recordMode: widget.recordMode,
                           recordOverrides: widget.recordOverrides,

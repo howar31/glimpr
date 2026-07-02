@@ -119,6 +119,26 @@
   "@settingsSectionBehaviour": {
     "description": "Settings > Capture: Behaviour section label"
   },
+  "settingsHdrScreenshot": "Save HDR screenshots",
+  "@settingsHdrScreenshot": {
+    "description": "Settings > Screenshot > Format: dual-output HDR screenshot toggle title"
+  },
+  "settingsHdrScreenshotHintMac": "On an HDR display, screenshots also save an HDR HEIC file beside the standard image (macOS 26 or later): annotations included; a toolbar button can skip it per shot. The clipboard and editor keep the standard image.",
+  "@settingsHdrScreenshotHintMac": {
+    "description": "Settings > Screenshot > Format: dual-output HDR screenshot toggle hint (macOS wording)"
+  },
+  "settingsHdrScreenshotHintWindows": "On an HDR display, screenshots also save an HDR JPEG XR file beside the standard image: annotations included; a toolbar button can skip it per shot. The clipboard and editor keep the standard image.",
+  "@settingsHdrScreenshotHintWindows": {
+    "description": "Settings > Screenshot > Format: dual-output HDR screenshot toggle hint (Windows wording)"
+  },
+  "toolbarHdrOn": "HDR file: on for this shot",
+  "@toolbarHdrOn": {
+    "description": "Overlay toolbar HDR toggle tooltip while ON (this capture also writes the HDR sibling file)"
+  },
+  "toolbarHdrOff": "HDR file: off for this shot",
+  "@toolbarHdrOff": {
+    "description": "Overlay toolbar HDR toggle tooltip while OFF (this capture skips the HDR sibling file)"
+  },
   "settingsMousePointer": "Mouse pointer",
   "@settingsMousePointer": {
     "description": "Settings > Capture > Behaviour: mouse pointer toggle title"
@@ -971,7 +991,7 @@
   "@settingsShortcutsInUse": {
     "description": "Settings > Shortcuts: inline warning when a global shortcut could not be registered because the combo is reserved by the system or already taken by another app"
   },
-  "shortcutsConflictWarning": "Some shortcuts couldn't be registered — they're in use by another app and won't work. Please check them in Settings → Shortcuts:",
+  "shortcutsConflictWarning": "Some shortcuts couldn't be registered: they're in use by another app and won't work. Please check them in Settings → Shortcuts:",
   "@shortcutsConflictWarning": {
     "description": "Startup warning dialog shown when one or more saved global hotkeys failed to register at launch (conflict with another app); the conflicting shortcuts are listed after this line"
   },
