@@ -514,11 +514,16 @@ class _EditorCoreState extends State<EditorCore> {
   }
 
   // Middle mouse button (= pressing the scroll wheel) drag-pans the viewport.
-  // Handled on the OUTER full-window Listener so it works anywhere — over the
-  // image or the surrounding margins. The draw GestureDetector only claims the
-  // primary button, so a middle-drag never draws. Editor-only (gated by wiring).
+  // Handled on the OUTER full-window Listener; the grab is an IMAGE gesture
+  // (owner ruling) — the wheel scrolls from anywhere in the window, but the
+  // middle-drag only starts over the on-screen image rect, so it gates itself
+  // by rect here. The draw GestureDetector only claims the primary button, so
+  // a middle-drag never draws. Editor-only (gated by wiring).
   void _onMiddleButtonDown(PointerDownEvent e) {
-    if ((e.buttons & kMiddleMouseButton) != 0) _middlePanning = true;
+    if ((e.buttons & kMiddleMouseButton) == 0) return;
+    final v = _viewport;
+    final imageRect = v.offset & (_canvasSize * v.scale);
+    if (imageRect.contains(e.localPosition)) _middlePanning = true;
   }
 
   void _onMiddleButtonMove(PointerMoveEvent e) {
@@ -3511,6 +3516,18 @@ class _EditorCoreState extends State<EditorCore> {
             return Stack(
               fit: StackFit.expand,
               children: [
+                // Whole-box hit surface: the image-rect gesture layer below is
+                // the only other hit-testable layer, so without this the wheel /
+                // trackpad viewport signals never reach the outer Listener over
+                // the checkerboard margins (hit test fails -> no dispatch).
+                // Pure hit target, no handlers; draw gestures stay scoped to
+                // the image-rect layer and middle-pan gates itself by rect.
+                const Positioned.fill(
+                  child: Listener(
+                    behavior: HitTestBehavior.opaque,
+                    child: SizedBox.expand(),
+                  ),
+                ),
                 Transform(
                   transform: matrix,
                   transformHitTests: false,
