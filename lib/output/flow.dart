@@ -35,6 +35,28 @@ Set<FlowAction> parseFlow(String? names) {
 String flowToString(Set<FlowAction> s) =>
     [for (final a in FlowAction.values) if (s.contains(a)) a.name].join(',');
 
+/// One Settings toggle transition over a completion flow, enforcing the
+/// invariants the toggles promise: copy and copyPath are mutually exclusive
+/// (both write the clipboard), and copyPath / showInFinder need the save leg,
+/// so unchecking save also unchecks them — otherwise they would linger checked
+/// behind their disabled rows, a hidden always-failing state.
+Set<FlowAction> toggleFlowAction(
+    Set<FlowAction> flow, FlowAction action, bool on) {
+  final next = {...flow};
+  if (on) {
+    next.add(action);
+    if (action == FlowAction.copy) next.remove(FlowAction.copyPath);
+    if (action == FlowAction.copyPath) next.remove(FlowAction.copy);
+  } else {
+    next.remove(action);
+    if (action == FlowAction.save) {
+      next.remove(FlowAction.copyPath);
+      next.remove(FlowAction.showInFinder);
+    }
+  }
+  return next;
+}
+
 /// Canonicalize a flow before running it: openEditor only exists for the
 /// capture flow; copyPath yields to copy when both are checked (both write the
 /// clipboard — the UI keeps them mutually exclusive, this guards stale prefs);

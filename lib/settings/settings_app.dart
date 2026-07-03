@@ -393,22 +393,16 @@ class _SettingsAppState extends State<SettingsApp>
     if (mounted) setState(() => _recentCap = recentCap);
   }
 
-  /// Toggle one action in a completion flow and persist it. copy and copyPath
-  /// are mutually exclusive (both write the clipboard) — checking one unchecks
-  /// the other.
+  /// Toggle one action in a completion flow and persist it. The transition
+  /// rules (copy/copyPath exclusivity, save cascading its dependents off) live
+  /// in [toggleFlowAction].
   Future<void> _setFlowAction({
     required bool capture,
     required FlowAction action,
     required bool on,
   }) async {
-    final next = {...(capture ? _afterCapture : _afterEditorDone)};
-    if (on) {
-      next.add(action);
-      if (action == FlowAction.copy) next.remove(FlowAction.copyPath);
-      if (action == FlowAction.copyPath) next.remove(FlowAction.copy);
-    } else {
-      next.remove(action);
-    }
+    final next = toggleFlowAction(
+        capture ? _afterCapture : _afterEditorDone, action, on);
     if (capture) {
       await _s.setAfterCaptureFlow(next);
       if (mounted) setState(() => _afterCapture = next);

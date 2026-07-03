@@ -40,6 +40,42 @@ void main() {
     });
   });
 
+  group('toggleFlowAction', () {
+    test('checking copy unchecks copyPath and vice versa', () {
+      expect(
+          toggleFlowAction(
+              {FlowAction.copyPath, FlowAction.save}, FlowAction.copy, true),
+          {FlowAction.copy, FlowAction.save});
+      expect(
+          toggleFlowAction(
+              {FlowAction.copy, FlowAction.save}, FlowAction.copyPath, true),
+          {FlowAction.copyPath, FlowAction.save});
+    });
+
+    test('unchecking save cascades copyPath + showInFinder off', () {
+      expect(
+          toggleFlowAction(
+              {FlowAction.save, FlowAction.copyPath, FlowAction.showInFinder},
+              FlowAction.save,
+              false),
+          isEmpty);
+    });
+
+    test('re-checking save does not resurrect the cascaded legs', () {
+      var flow = toggleFlowAction(
+          {FlowAction.save, FlowAction.copyPath}, FlowAction.save, false);
+      flow = toggleFlowAction(flow, FlowAction.save, true);
+      expect(flow, {FlowAction.save});
+    });
+
+    test('unchecking save leaves independent legs alone', () {
+      expect(
+          toggleFlowAction({FlowAction.save, FlowAction.pin, FlowAction.copy},
+              FlowAction.save, false),
+          {FlowAction.pin, FlowAction.copy});
+    });
+  });
+
   group('decorationPlan', () {
     test('decoration off: never decorate, never plain', () {
       final p = decorationPlan(
