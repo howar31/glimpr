@@ -237,6 +237,20 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_SETTINGCHANGE:
+      // The system light/dark toggle broadcasts "ImmersiveColorSet" (it does
+      // NOT fire WM_DWMCOLORIZATIONCOLORCHANGED), and the title bar's
+      // immersive-dark attribute never follows the system by itself. Without
+      // this, a window created at boot (the hidden Settings window, the warm
+      // editor) keeps its creation-time title-bar theme forever. The Flutter
+      // CONTENT follows on its own (the engine watches the registry).
+      if (lparam &&
+          lstrcmpiW(reinterpret_cast<const wchar_t*>(lparam),
+                    L"ImmersiveColorSet") == 0) {
+        UpdateTheme(hwnd);
+      }
+      break;  // not consumed: fall through to DefWindowProc
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);

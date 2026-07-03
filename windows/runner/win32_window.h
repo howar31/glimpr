@@ -71,6 +71,12 @@ class Win32Window {
   // Called when Destroy is called.
   virtual void OnDestroy();
 
+  // Update the window frame's theme to match the system theme. Called at
+  // creation, and by subclasses when the system light/dark toggle broadcasts
+  // WM_SETTINGCHANGE "ImmersiveColorSet" (the title bar never follows the
+  // system by itself).
+  static void UpdateTheme(HWND const window);
+
  private:
   friend class WindowClassRegistrar;
 
@@ -86,9 +92,6 @@ class Win32Window {
 
   // Retrieves a class instance pointer for |window|
   static Win32Window* GetThisFromHandle(HWND const window) noexcept;
-
-  // Update the window frame's theme to match the system theme.
-  static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
 

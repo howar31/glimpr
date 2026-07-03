@@ -282,6 +282,17 @@ LRESULT EditorWindow::MessageHandler(HWND hwnd, UINT message, WPARAM wparam,
             nullptr);
       }
       break;
+    case WM_SETTINGCHANGE:
+      // System light/dark toggle: re-theme the title bar BEFORE the engine
+      // sees the message (belt and braces with the Win32Window base handler,
+      // in case the engine consumes WM_SETTINGCHANGE). The warm editor window
+      // exists from boot, so its title bar must follow the live toggle.
+      if (lparam &&
+          lstrcmpiW(reinterpret_cast<const wchar_t*>(lparam),
+                    L"ImmersiveColorSet") == 0) {
+        UpdateTheme(hwnd);
+      }
+      break;
     default:
       break;
   }

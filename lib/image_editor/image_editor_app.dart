@@ -803,7 +803,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                   () => _requestClose(),
           },
           child: Scaffold(
-          backgroundColor: Colors.transparent,
+          // Windows paints the opaque themed base (no native glass behind the
+          // view — a transparent base composites BLACK on the engine surface,
+          // which only LOOKS right under the dark palette); macOS stays pure
+          // vibrancy. The loaded-state canvas covers it with the checkerboard.
+          backgroundColor:
+              Platform.isWindows ? tokens.winBase : Colors.transparent,
           // A 44px Flutter title bar runs across the top in BOTH states (the OS
           // title is hidden + transparent), with the state content filling below.
           body: Builder(

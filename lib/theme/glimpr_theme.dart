@@ -145,6 +145,16 @@ class GlimprTokens {
 
   bool get isDark => brightness == Brightness.dark;
 
+  /// Opaque window base for hosts WITHOUT a native backdrop. macOS windows sit
+  /// on real NSVisualEffectView glass, so their Flutter base stays transparent
+  /// (pure vibrancy). Windows has no acrylic (yet): the engine surface renders
+  /// transparent base pixels as BLACK — invisible under the dark palette,
+  /// wrong in light mode. The Windows Settings/editor roots paint this token
+  /// instead of transparent: dark keeps the shipped near-black look; light
+  /// approximates the macOS light-glass tone over a typical desktop.
+  Color get winBase =>
+      isDark ? const Color(0xFF000000) : const Color(0xFFEEF0F4);
+
   // ========================== DARK (canonical) ===========================
   static const GlimprTokens dark = GlimprTokens(
     brightness: Brightness.dark,

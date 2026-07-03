@@ -671,7 +671,13 @@ class _SettingsAppState extends State<SettingsApp>
       ),
       home: GlimprTheme(
         tokens: tokens,
-        child: CallbackShortcuts(
+        // Windows paints the opaque themed base (no native glass behind the
+        // view — transparent base pixels composite BLACK on the raw engine
+        // surface, which only LOOKS right under the dark palette). macOS stays
+        // pure vibrancy (transparent over NSVisualEffectView).
+        child: ColoredBox(
+          color: Platform.isWindows ? tokens.winBase : Colors.transparent,
+          child: CallbackShortcuts(
           bindings: {
             // Close the Settings window: Ctrl+W on Windows, Cmd-W on macOS.
             // (meta = the Win key on Windows, and Win+W is a reserved system
@@ -702,6 +708,7 @@ class _SettingsAppState extends State<SettingsApp>
                 },
               ),
             ),
+          ),
           ),
         ),
       ),
