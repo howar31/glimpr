@@ -3,12 +3,20 @@
 /// axis; [zoom] is how many loupe px each native pixel is drawn at (the
 /// magnification). The on-screen box is [box] = span * zoom — the window grows
 /// with the size while the per-pixel magnification stays fixed.
+///
+/// [span] is ODD-only: the loupe view is centered on the CENTER of the aimed
+/// pixel (LoupePainter), so an even span puts a half-cell strip at both edges.
 const int kLoupeSpanMin = 5;
-const int kLoupeSpanMax = 20;
-const int kLoupeSpanDefault = 12;
+const int kLoupeSpanMax = 21;
+const int kLoupeSpanDefault = 13;
 const int kLoupeZoomMin = 4;
 const int kLoupeZoomMax = 16;
 const int kLoupeZoomDefault = 8;
+
+/// Clamp a loupe span to [kLoupeSpanMin, kLoupeSpanMax] and snap even values
+/// UP to odd (the range bounds are odd, so the snap stays in range). The one
+/// funnel for every span read/write — see the odd-only note above.
+int clampLoupeSpan(int v) => v.clamp(kLoupeSpanMin, kLoupeSpanMax) | 1;
 
 /// What the loupe shows beneath the glass; cycled by `?` / `/` (a fixed, not
 /// rebindable, shortcut): coordinates -> element level -> shortcuts -> hidden.
@@ -47,7 +55,7 @@ class LoupeConfig {
     LoupeInfoMode? infoMode,
   }) =>
       LoupeConfig(
-        span: (span ?? kLoupeSpanDefault).clamp(kLoupeSpanMin, kLoupeSpanMax),
+        span: clampLoupeSpan(span ?? kLoupeSpanDefault),
         zoom: (zoom ?? kLoupeZoomDefault).clamp(kLoupeZoomMin, kLoupeZoomMax),
         toolKeysCancelSampling: toolKeysCancelSampling ?? true,
         infoMode: infoMode ?? LoupeInfoMode.coords,

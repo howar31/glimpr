@@ -1699,6 +1699,7 @@ class _SettingsAppState extends State<SettingsApp>
                     min: kLoupeSpanMin,
                     max: kLoupeSpanMax,
                     suffix: ' px',
+                    step: 2, // odd-only: even spans cut half cells at the edges
                     onChanged: (v) => setState(() => _loupeSpan = v),
                     onEnd: (v) => _s.setLoupeSpan(v),
                   ),
@@ -1790,7 +1791,10 @@ class _SettingsAppState extends State<SettingsApp>
     required String suffix,
     required ValueChanged<int> onChanged,
     required ValueChanged<int> onEnd,
+    int step = 1, // snap detent; size uses 2 so the span stays odd
   }) {
+    int snap(double v) =>
+        (min + ((v - min) / step).round() * step).clamp(min, max);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1803,8 +1807,8 @@ class _SettingsAppState extends State<SettingsApp>
           min: min.toDouble(),
           max: max.toDouble(),
           suffix: suffix,
-          onChanged: (v) => onChanged(v.round()),
-          onChangeEnd: (v) => onEnd(v.round()),
+          onChanged: (v) => onChanged(snap(v)),
+          onChangeEnd: (v) => onEnd(snap(v)),
         ),
       ],
     );

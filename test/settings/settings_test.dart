@@ -134,11 +134,11 @@ void main() {
         {FlowAction.copyPath, FlowAction.save});
   });
 
-  test('loadLoupe defaults to span 12 / zoom 8 when unset', () async {
+  test('loadLoupe defaults to span 13 / zoom 8 when unset', () async {
     final l = await Settings(FakeStore()).loadLoupe();
-    expect(l.span, 12);
+    expect(l.span, 13);
     expect(l.zoom, 8);
-    expect(l.box, 96.0);
+    expect(l.box, 104.0);
   });
 
   test('loupe span + zoom round-trip into loadLoupe', () async {
@@ -152,12 +152,14 @@ void main() {
     expect(l.zoom, 12);
   });
 
-  test('loupe span is clamped to 5..20 on write', () async {
+  test('loupe span is clamped to 5..21 and snapped odd on write', () async {
     final s = Settings(FakeStore());
     await s.setLoupeSpan(99);
-    expect(await s.getLoupeSpan(), 20);
+    expect(await s.getLoupeSpan(), 21);
     await s.setLoupeSpan(1);
     expect(await s.getLoupeSpan(), 5);
+    await s.setLoupeSpan(12); // even -> snapped up to odd
+    expect(await s.getLoupeSpan(), 13);
   });
 
   test('loupe zoom is clamped to 4..16 on write', () async {
@@ -174,8 +176,11 @@ void main() {
     await store.setInt('loupe_span', 999);
     await store.setInt('loupe_zoom', 0);
     final s = Settings(store);
-    expect(await s.getLoupeSpan(), 20);
+    expect(await s.getLoupeSpan(), 21);
     expect(await s.getLoupeZoom(), 4);
+    // A stored even span (pre-odd-only rule) reads back snapped up to odd.
+    await store.setInt('loupe_span', 12);
+    expect(await s.getLoupeSpan(), 13);
   });
 
   test('loupe info mode defaults to coords, round-trips, and feeds loadLoupe',

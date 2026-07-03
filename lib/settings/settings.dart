@@ -475,10 +475,9 @@ class Settings {
       store.setInt(_captureLayerCapKey, v.clamp(1, 5));
 
   Future<int> getLoupeSpan() async =>
-      ((await store.getInt(_loupeSpanKey)) ?? kLoupeSpanDefault)
-          .clamp(kLoupeSpanMin, kLoupeSpanMax);
+      clampLoupeSpan((await store.getInt(_loupeSpanKey)) ?? kLoupeSpanDefault);
   Future<void> setLoupeSpan(int v) =>
-      store.setInt(_loupeSpanKey, v.clamp(kLoupeSpanMin, kLoupeSpanMax));
+      store.setInt(_loupeSpanKey, clampLoupeSpan(v));
 
   Future<int> getLoupeZoom() async =>
       ((await store.getInt(_loupeZoomKey)) ?? kLoupeZoomDefault)
