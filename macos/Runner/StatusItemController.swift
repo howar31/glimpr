@@ -323,9 +323,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// pulses until the work completes, with a minimum of one full pulse so even
   /// an instant capture is visible. [active] = false requests a stop (ends at
   /// the next pulse low after ≥ 1 cycle). Reduced motion holds a static fill.
-  func setProcessing(_ active: Bool) {
+  /// [label] (localized, e.g. "Processing screenshot…") becomes the icon's
+  /// hover tooltip while the pulse runs, so hovering says WHAT is processing.
+  func setProcessing(_ active: Bool, label: String? = nil) {
     if active {
       processingStop = false
+      // Set on every activation so an overlapping source updates the tooltip;
+      // cleared when the pulse ends.
+      item.button?.toolTip = label ?? L.s("Processing…", "正在處理…")
       if processingTimer != nil { return } // already pulsing — keep it alive
       processingPhase = 0
       processingLastCycle = 0
@@ -354,6 +359,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
           tm.invalidate()
           if self.processingTimer === tm { self.processingTimer = nil }
           self.item.button?.image = self.normalImage
+          self.item.button?.toolTip = nil
           self.item.button?.setAccessibilityLabel("Glimpr")
         }
         self.processingLastCycle = cycle

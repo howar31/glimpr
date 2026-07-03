@@ -39,7 +39,8 @@ class CaptureChannel {
   // here -> the control engine's tray (set once by FlutterWindow). Mirrors macOS
   // onCaptureProcessingChange. The interactive overlay path relays separately
   // (OverlayManager::SetProcessingRelay), but both land on the same tray.
-  void SetProcessingCallback(std::function<void(bool)> cb) {
+  // The label (localized, UTF-8) is the tray's hover tooltip while pulsing.
+  void SetProcessingCallback(std::function<void(bool, const std::string&)> cb) {
     proc_cb_ = std::move(cb);
   }
 
@@ -61,7 +62,8 @@ class CaptureChannel {
   OverlayManager* overlay_manager_ = nullptr;  // not owned
   EditorWindow* editor_window_ = nullptr;      // not owned
   PinManager* pin_manager_ = nullptr;          // not owned
-  std::function<void(bool)> proc_cb_;          // direct-capture pulse -> control tray
+  // Direct-capture pulse (+ tooltip label) -> control tray.
+  std::function<void(bool, const std::string&)> proc_cb_;
 };
 
 #endif  // RUNNER_CAPTURE_CHANNEL_H_

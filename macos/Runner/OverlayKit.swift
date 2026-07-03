@@ -984,11 +984,13 @@ final class OverlayManager {
         // dismiss() — which would also endLiveSelect — is skipped). Idempotent.
         case "stopLoupeFeed": self.endLiveSelect(); result(nil)
         // Menu-bar processing pulse — relay to the control engine's status item
-        // (the overlay capture lifecycle lives in this engine).
+        // (the overlay capture lifecycle lives in this engine). The optional
+        // label is the pulsing icon's hover tooltip.
         case "setProcessing":
-          let active = (call.arguments as? [String: Any])?["active"] as? Bool
-            ?? false
-          MainFlutterWindow.shared?.setCaptureProcessing(active)
+          let a = call.arguments as? [String: Any]
+          let active = a?["active"] as? Bool ?? false
+          let label = a?["label"] as? String
+          MainFlutterWindow.shared?.setCaptureProcessing(active, label: label)
           result(nil)
         // Hide ONLY the calling engine's window (a layer pop reached an
         // engine with no frame for the restored layer).

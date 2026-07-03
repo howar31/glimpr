@@ -266,6 +266,24 @@ abstract class AppLocalizations {
   /// **'Quit Glimpr'**
   String get trayQuit;
 
+  /// Menu-bar / tray icon tooltip while the processing pulse runs for a screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'Processing screenshot…'**
+  String get trayProcessingScreenshot;
+
+  /// Menu-bar / tray icon tooltip while the processing pulse runs for a recording finalize
+  ///
+  /// In en, this message translates to:
+  /// **'Processing recording…'**
+  String get trayProcessingRecording;
+
+  /// Menu-bar / tray icon tooltip while the processing pulse runs for an editor Done export
+  ///
+  /// In en, this message translates to:
+  /// **'Processing image…'**
+  String get trayProcessingImage;
+
   /// Settings > Capture: Behaviour section label
   ///
   /// In en, this message translates to:

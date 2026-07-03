@@ -277,10 +277,15 @@ void CaptureChannel::HandleMethodCall(
   if (call.method_name() == "setProcessing") {
     // Direct-capture commit (true) / delivered (false): drive the tray's
     // logo-gradient processing pulse (mirrors macOS onCaptureProcessingChange).
+    // The optional label becomes the tray's hover tooltip while pulsing.
     const EncodableMap empty;
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     const EncodableMap& map = args ? *args : empty;
-    if (proc_cb_) proc_cb_(GetBool(map, "active", false));
+    std::string label;
+    if (const auto* v = Find(map, "label")) {
+      if (const auto* s = std::get_if<std::string>(v)) label = *s;
+    }
+    if (proc_cb_) proc_cb_(GetBool(map, "active", false), label);
     result->Success();
     return;
   }

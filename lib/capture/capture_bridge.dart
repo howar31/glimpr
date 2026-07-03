@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import '../settings/app_locale.dart';
 import 'captured_display.dart';
 import 'element_snap.dart';
 
@@ -294,10 +295,14 @@ class CaptureBridge {
   /// Drive the menu-bar "processing" pulse: true at capture commit (the shutter
   /// moment), false once the output is delivered. Purely visual (independent of
   /// the shutter-sound setting). Fire-and-forget. From the overlay engine this
-  /// relays to the control engine's status item.
+  /// relays to the control engine's status item. The label becomes the pulsing
+  /// icon's hover tooltip (what is being processed).
   static Future<void> setCaptureProcessing(bool active) async {
     try {
-      await _channel.invokeMethod('setProcessing', {'active': active});
+      await _channel.invokeMethod('setProcessing', {
+        'active': active,
+        'label': appL10n.trayProcessingScreenshot,
+      });
     } catch (_) {
       // Fire-and-forget; absent in tests / other engines.
     }

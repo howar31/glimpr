@@ -565,6 +565,7 @@ void TrayIcon::OnProcTick() {
       proc_timer_ = 0;
     }
     ApplyIcon(LoadThemeIcon());
+    SetTip(L"Glimpr");  // drop the "Processing ..." hover tooltip
     return;
   }
   double intensity = 1.0;
@@ -578,10 +579,30 @@ void TrayIcon::OnProcTick() {
   if (icon) ApplyIcon(icon);
 }
 
-void TrayIcon::SetProcessing(bool active) {
+std::string TrayIcon::Label(const std::string& id,
+                            const std::string& fallback) const {
+  auto it = labels_.find(id);
+  return it != labels_.end() ? it->second : fallback;
+}
+
+void TrayIcon::SetTip(const std::wstring& tip) {
+  if (!added_) return;
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = owner_;
+  nid.uID = 1;
+  nid.uFlags = NIF_TIP;
+  wcsncpy_s(nid.szTip, tip.c_str(), _TRUNCATE);
+  Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
+void TrayIcon::SetProcessing(bool active, const std::string& tip_utf8) {
   if (active) {
     if (recording_) return;  // the recording-red breath owns the mark
     processing_stop_ = false;
+    // Hover tooltip: WHAT is being processed. Set on every activation so an
+    // overlapping source updates it; OnProcTick's end path restores "Glimpr".
+    if (!tip_utf8.empty()) SetTip(Utf8ToWide(tip_utf8));
     if (processing_) return;  // already pulsing -> keep it alive
     processing_ = true;
     proc_start_ms_ = GetTickCount64();

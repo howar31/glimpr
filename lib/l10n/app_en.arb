@@ -115,6 +115,18 @@
   "@trayQuit": {
     "description": "Windows system-tray menu: Quit item"
   },
+  "trayProcessingScreenshot": "Processing screenshot…",
+  "@trayProcessingScreenshot": {
+    "description": "Menu-bar / tray icon tooltip while the processing pulse runs for a screenshot"
+  },
+  "trayProcessingRecording": "Processing recording…",
+  "@trayProcessingRecording": {
+    "description": "Menu-bar / tray icon tooltip while the processing pulse runs for a recording finalize"
+  },
+  "trayProcessingImage": "Processing image…",
+  "@trayProcessingImage": {
+    "description": "Menu-bar / tray icon tooltip while the processing pulse runs for an editor Done export"
+  },
   "settingsSectionBehaviour": "Behaviour",
   "@settingsSectionBehaviour": {
     "description": "Settings > Capture: Behaviour section label"

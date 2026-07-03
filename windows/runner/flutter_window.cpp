@@ -372,18 +372,28 @@ bool FlutterWindow::OnCreate() {
   // The tray mark pulses the logo gradient (cyan->blue->violet) while a capture
   // export / recording finalize / editor export is in flight -- mirrors macOS
   // setProcessing. All three sources route to the single control-engine tray.
+  // Each source also carries a localized tooltip label (what is processing);
+  // the recording one is native-initiated, so its label comes from the pushed
+  // tray-label map instead of a channel argument.
   record_channel_->SetProcessingCallback([this](bool active) {
-    if (tray_icon_) tray_icon_->SetProcessing(active);
+    if (tray_icon_) {
+      tray_icon_->SetProcessing(
+          active,
+          tray_icon_->Label("processingRecording", "Processing recording..."));
+    }
   });
-  capture_channel_->SetProcessingCallback([this](bool active) {
-    if (tray_icon_) tray_icon_->SetProcessing(active);  // direct-capture path
-  });
-  overlay_manager_->SetProcessingRelay([this](bool active) {
-    if (tray_icon_) tray_icon_->SetProcessing(active);  // interactive overlay path
-  });
-  editor_window_->SetProcessingCallback([this](bool active) {
-    if (tray_icon_) tray_icon_->SetProcessing(active);  // editor export
-  });
+  capture_channel_->SetProcessingCallback(
+      [this](bool active, const std::string& label) {
+        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // direct
+      });
+  overlay_manager_->SetProcessingRelay(
+      [this](bool active, const std::string& label) {
+        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // overlay
+      });
+  editor_window_->SetProcessingCallback(
+      [this](bool active, const std::string& label) {
+        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // editor
+      });
 
   // A second instance posts this to reveal the running one's Settings.
   reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");

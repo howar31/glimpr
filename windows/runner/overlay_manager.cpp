@@ -1007,8 +1007,12 @@ void OverlayManager::HandleOverlayCapture(
   if (method == "setProcessing") {
     // Capture committed (true) / delivered (false): relay to the control engine's
     // tray to drive the logo-gradient processing pulse (mirrors macOS, where the
-    // overlay engine forwards setProcessing to the status item).
-    if (processing_relay_) processing_relay_(GetBool(args, "active", false));
+    // overlay engine forwards setProcessing to the status item). The optional
+    // label becomes the tray's hover tooltip while pulsing.
+    if (processing_relay_) {
+      processing_relay_(GetBool(args, "active", false),
+                        GetString(args, "label"));
+    }
     result->Success();
     return;
   }

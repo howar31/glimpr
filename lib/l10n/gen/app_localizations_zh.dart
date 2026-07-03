@@ -100,6 +100,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayQuit => '結束 Glimpr';
 
   @override
+  String get trayProcessingScreenshot => '正在處理截圖…';
+
+  @override
+  String get trayProcessingRecording => '正在處理錄影…';
+
+  @override
+  String get trayProcessingImage => '正在處理圖片…';
+
+  @override
   String get settingsSectionBehaviour => '行為';
 
   @override

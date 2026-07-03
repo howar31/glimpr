@@ -181,14 +181,22 @@ bool EditorWindow::OnCreate() {
         } else if (m == "setProcessing") {
           // Editor Done/export commit (true) / delivered (false): relay to the
           // control engine's tray to drive the logo-gradient processing pulse.
+          // The optional label becomes the tray's hover tooltip while pulsing.
           bool active = false;
+          std::string label;
           if (const auto* a = std::get_if<EncodableMap>(call.arguments())) {
             auto it = a->find(EncodableValue(std::string("active")));
             if (it != a->end()) {
               if (const auto* b = std::get_if<bool>(&it->second)) active = *b;
             }
+            auto lt = a->find(EncodableValue(std::string("label")));
+            if (lt != a->end()) {
+              if (const auto* s = std::get_if<std::string>(&lt->second)) {
+                label = *s;
+              }
+            }
           }
-          if (proc_cb_) proc_cb_(active);
+          if (proc_cb_) proc_cb_(active, label);
           result->Success();
         } else if (m == "shareSheet") {
           result->Success();  // Windows v1: no system share surface

@@ -141,6 +141,9 @@ Future<void> main() async {
       'about': l.trayAbout,
       'settings': l.traySettings,
       'quit': l.trayQuit,
+      // Not a menu item: the tray tooltip while the recording-finalize pulse
+      // runs (that pulse is native-initiated, so it cannot ride a channel arg).
+      'processingRecording': l.trayProcessingRecording,
     }).catchError((_) {});
     // Push the localized recording-strip / countdown labels to native for the
     // same reason: the runner C++ is ASCII-only (cp950), so Dart owns l10n and

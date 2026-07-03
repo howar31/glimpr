@@ -58,7 +58,8 @@ class EditorWindow : public Win32Window {
   // The editor-export "processing" pulse: glimpr/imageEditor setProcessing relays
   // here -> the control engine's tray (set once by FlutterWindow). Mirrors macOS,
   // where the editor's Done/export drives the status-item processing pulse.
-  void SetProcessingCallback(std::function<void(bool)> cb) {
+  // The label (localized, UTF-8) is the tray's hover tooltip while pulsing.
+  void SetProcessingCallback(std::function<void(bool, const std::string&)> cb) {
     proc_cb_ = std::move(cb);
   }
 
@@ -92,7 +93,8 @@ class EditorWindow : public Win32Window {
   std::optional<std::string> pending_path_;
 
   std::function<void(std::vector<std::string>)> recent_cb_;
-  std::function<void(bool)> proc_cb_;  // editor-export pulse -> control tray
+  // Editor-export pulse (+ tooltip label) -> control tray.
+  std::function<void(bool, const std::string&)> proc_cb_;
   PinManager* pin_manager_ = nullptr;
 };
 

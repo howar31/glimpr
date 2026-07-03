@@ -103,6 +103,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trayQuit => 'Quit Glimpr';
 
   @override
+  String get trayProcessingScreenshot => 'Processing screenshot…';
+
+  @override
+  String get trayProcessingRecording => 'Processing recording…';
+
+  @override
+  String get trayProcessingImage => 'Processing image…';
+
+  @override
   String get settingsSectionBehaviour => 'Behaviour';
 
   @override

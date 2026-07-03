@@ -70,7 +70,15 @@ class TrayIcon {
   // pulse low after >= 1 full cycle, so even an instant operation shows one
   // pulse. Reduced motion holds a static gradient fill. Ignored while recording
   // (the red breath owns the mark; the finalize flow snaps red off first).
-  void SetProcessing(bool active);
+  // [tip_utf8] (localized, e.g. "Processing screenshot...") becomes the tray
+  // tooltip while the pulse runs, so hovering says WHAT is processing; the
+  // tooltip reverts to "Glimpr" when the pulse ends. Empty = keep the tooltip.
+  void SetProcessing(bool active, const std::string& tip_utf8 = std::string());
+
+  // A pushed localized label by id (see SetLabels), or [fallback] when absent.
+  // Used for tips whose trigger is native-initiated (recording finalize), where
+  // no channel argument can carry the label.
+  std::string Label(const std::string& id, const std::string& fallback) const;
 
  private:
   void ShowMenu();
@@ -80,6 +88,7 @@ class TrayIcon {
   HICON MakeTintedIcon(double mix) const;   // the base mark blended toward red
   HICON MakeProcessingIcon(double intensity) const;  // mark filled w/ logo gradient
   void ApplyIcon(HICON icon);               // NIM_MODIFY + take ownership of icon_
+  void SetTip(const std::wstring& tip);     // NIM_MODIFY the hover tooltip
   static void CALLBACK RecordTimerProc(HWND, UINT, UINT_PTR, DWORD);
   static void CALLBACK ProcTimerProc(HWND, UINT, UINT_PTR, DWORD);
   // The viewfinder mark tinted for the CURRENT taskbar theme (white mark on a

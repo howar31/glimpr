@@ -629,10 +629,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   }
 
   /// Drive the menu-bar processing pulse from the editor engine (handled by the
-  /// control engine over `glimpr/imageEditor`). Fire-and-forget.
+  /// control engine over `glimpr/imageEditor`). The label becomes the pulsing
+  /// icon's hover tooltip. Fire-and-forget.
   void _setProcessing(bool active) {
     _channel
-        .invokeMethod('setProcessing', {'active': active})
+        .invokeMethod('setProcessing', {
+          'active': active,
+          'label': _l.trayProcessingImage,
+        })
         .then((_) {}, onError: (_, _) {});
   }
 

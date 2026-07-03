@@ -66,7 +66,9 @@ class OverlayManager {
   // Relay the capture-export "processing" pulse from an overlay engine's
   // glimpr/capture setProcessing to the control engine's tray (set once by
   // FlutterWindow). The overlay engine owns the capture lifecycle, like macOS.
-  void SetProcessingRelay(std::function<void(bool)> relay) {
+  // The label (localized, UTF-8) is the tray's hover tooltip while pulsing.
+  void SetProcessingRelay(
+      std::function<void(bool, const std::string&)> relay) {
     processing_relay_ = std::move(relay);
   }
 
@@ -166,7 +168,8 @@ class OverlayManager {
   class EditorWindow* editor_window_ = nullptr;  // not owned
   class PinManager* pin_manager_ = nullptr;      // not owned
   std::function<void(flutter::EncodableValue)> record_relay_;  // -> control record channel
-  std::function<void(bool)> processing_relay_;  // capture-export pulse -> control tray
+  // Capture-export pulse (+ tooltip label) -> control tray.
+  std::function<void(bool, const std::string&)> processing_relay_;
   std::map<int64_t, Unit> units_;
 
   // Freeze-retained HDR base per display (HDR monitor + the hdr_screenshot
