@@ -148,6 +148,14 @@ class OverlayManager {
   void TeardownUnits();
   static void CALLBACK TeardownProc(HWND, UINT, UINT_PTR, DWORD);
 
+  // Watchdog for the capture-serialization guard: if a presented display's
+  // engine never fires overlayReady (a wedged present chain), presenting_
+  // would stay set and silently drop every capture until a dismiss. The
+  // watchdog force-releases the guard after a few seconds.
+  void ArmPresentWatchdog();
+  void ReleaseStuckPresentGuard();
+  static void CALLBACK PresentWatchdogProc(HWND, UINT, UINT_PTR, DWORD);
+
   // ---- drawing lock / warp / cursor hide ---------------------------------
   void SetDrawingLock(int64_t display_id_or_zero);
   void ConfineToDrawingDisplay();
@@ -205,6 +213,7 @@ class OverlayManager {
   // displays still awaiting Show (each presented display's overlayReady fires once).
   bool presenting_ = false;
   int pending_shows_ = 0;
+  UINT_PTR present_watchdog_ = 0;  // one-shot stuck-present release (see above)
 
   UINT_PTR teardown_timer_ = 0;  // one-shot post-dismiss engine teardown + re-warm
 

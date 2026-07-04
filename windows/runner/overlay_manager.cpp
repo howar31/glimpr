@@ -150,6 +150,7 @@ OverlayManager::OverlayManager(const flutter::DartProject& project,
 
 OverlayManager::~OverlayManager() {
   if (teardown_timer_) KillTimer(nullptr, teardown_timer_);
+  if (present_watchdog_) KillTimer(nullptr, present_watchdog_);
   StopCursorTracking();
   SetDrawingLock(0);
   SetCursorHidden(false);
@@ -321,6 +322,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     if (presented > 0) {
       presenting_ = true;
       pending_shows_ = presented;
+      ArmPresentWatchdog();
     }
     return;
   }
@@ -413,6 +415,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   if (presented > 0) {
     presenting_ = true;
     pending_shows_ = presented;
+    ArmPresentWatchdog();
   }
 }
 
@@ -561,6 +564,10 @@ void OverlayManager::Show(int64_t display_id) {
   if (presenting_ && --pending_shows_ <= 0) {
     presenting_ = false;
     pending_shows_ = 0;
+    if (present_watchdog_) {
+      KillTimer(nullptr, present_watchdog_);
+      present_watchdog_ = 0;
+    }
   }
 
   // If the cursor is ALREADY on this display, claim active now. The user may
@@ -584,6 +591,10 @@ void OverlayManager::Hide(int64_t display_id) {
 void OverlayManager::DismissAll() {
   presenting_ = false;  // session ended -> release the capture-serialization guard
   pending_shows_ = 0;
+  if (present_watchdog_) {
+    KillTimer(nullptr, present_watchdog_);
+    present_watchdog_ = 0;
+  }
   EndLiveSelect();  // stop any live record-select loupe feeds
   StopCursorTracking();
   SetCursorHidden(false);
@@ -617,6 +628,32 @@ void OverlayManager::TeardownUnits() {
 // static
 void CALLBACK OverlayManager::TeardownProc(HWND, UINT, UINT_PTR, DWORD) {
   if (instance_) instance_->TeardownUnits();
+}
+
+// Arm (or re-arm) the stuck-present watchdog: one shot, a few seconds after
+// the present fan-out. A healthy chain releases the guard (and kills this
+// timer) within a few hundred ms; firing means an engine never delivered
+// overlayReady, which previously wedged ALL captures until a dismiss.
+void OverlayManager::ArmPresentWatchdog() {
+  if (present_watchdog_) KillTimer(nullptr, present_watchdog_);
+  present_watchdog_ =
+      SetTimer(nullptr, 0, 4000, &OverlayManager::PresentWatchdogProc);
+}
+
+void OverlayManager::ReleaseStuckPresentGuard() {
+  if (present_watchdog_) {
+    KillTimer(nullptr, present_watchdog_);
+    present_watchdog_ = 0;
+  }
+  if (!presenting_) return;
+  perf::Mark("presentGuardWatchdog pending=" + std::to_string(pending_shows_));
+  presenting_ = false;
+  pending_shows_ = 0;
+}
+
+// static
+void CALLBACK OverlayManager::PresentWatchdogProc(HWND, UINT, UINT_PTR, DWORD) {
+  if (instance_) instance_->ReleaseStuckPresentGuard();
 }
 
 // ---- cursor poll / active display ----------------------------------------
