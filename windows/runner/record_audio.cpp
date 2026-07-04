@@ -175,7 +175,7 @@ void WasapiCapture::Impl::Run() {
             } else {
               std::memcpy(pkt.samples.data(), data, count * sizeof(int16_t));
             }
-            if (sink) sink(pkt);
+            if (sink) sink(std::move(pkt));
           }
           capture->ReleaseBuffer(frames);
           if (FAILED(capture->GetNextPacketSize(&packet))) break;

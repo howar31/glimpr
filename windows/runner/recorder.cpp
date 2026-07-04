@@ -498,16 +498,24 @@ void Recorder::Impl::OnFrameArrived() {
         return;
       }
       // Copy the crop window [crop_x, crop_y, cap_w x cap_h] from the source
-      // into a tightly-packed, encode-sized buffer (zero-filled; anything
-      // outside the source -- e.g. a shrunk window -- stays black).
+      // into a tightly-packed, encode-sized buffer. The zero-fill only matters
+      // when part of the crop falls OUTSIDE the source (a shrunk window must
+      // stay black there); the common full-coverage case skips it -- a 4K30
+      // recording otherwise memsets ~500 MB/s for nothing.
       const uint32_t stride = cap_w * 4;
-      buffer.assign(static_cast<size_t>(stride) * cap_h, 0);
       const auto* src = static_cast<const uint8_t*>(mapped.pData);
       uint32_t copy_w = cap_w;
       if (crop_x >= desc.Width) {
         copy_w = 0;
       } else if (crop_x + copy_w > desc.Width) {
         copy_w = desc.Width - crop_x;
+      }
+      const bool full_cover =
+          copy_w == cap_w && crop_y + cap_h <= desc.Height;
+      if (full_cover) {
+        buffer.resize(static_cast<size_t>(stride) * cap_h);
+      } else {
+        buffer.assign(static_cast<size_t>(stride) * cap_h, 0);
       }
       if (copy_w > 0) {
         for (uint32_t y = 0; y < cap_h; ++y) {
@@ -987,13 +995,13 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   if (!spec.gif && spec.system_audio) {
     impl_->sys_cap = std::make_unique<WasapiCapture>();
     impl_->audio_sys.active = impl_->sys_cap->Start(
-        WasapiCapture::Kind::kLoopback, [impl](const AudioPacket& p) {
+        WasapiCapture::Kind::kLoopback, [impl](AudioPacket p) {
           if (impl->paused.load() || impl->stop_requested.load()) return;
           {
             std::lock_guard<std::mutex> lock(impl->queue_mutex);
             // Bound memory: drop if the encoder falls far behind (silent).
             if (impl->audio_sys.queue.size() < 128) {
-              impl->audio_sys.queue.push_back(p);
+              impl->audio_sys.queue.push_back(std::move(p));
             }
           }
           impl->queue_cv.notify_one();
@@ -1003,13 +1011,13 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   if (!spec.gif && spec.microphone) {
     impl_->mic_cap = std::make_unique<WasapiCapture>();
     impl_->audio_mic.active = impl_->mic_cap->Start(
-        WasapiCapture::Kind::kMicrophone, [impl](const AudioPacket& p) {
+        WasapiCapture::Kind::kMicrophone, [impl](AudioPacket p) {
           if (impl->paused.load() || impl->stop_requested.load()) return;
           {
             std::lock_guard<std::mutex> lock(impl->queue_mutex);
             // Bound memory: drop if the encoder falls far behind (silent).
             if (impl->audio_mic.queue.size() < 128) {
-              impl->audio_mic.queue.push_back(p);
+              impl->audio_mic.queue.push_back(std::move(p));
             }
           }
           impl->queue_cv.notify_one();

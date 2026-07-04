@@ -30,7 +30,9 @@ struct AudioPacket {
 class WasapiCapture {
  public:
   enum class Kind { kLoopback, kMicrophone };
-  using Sink = std::function<void(const AudioPacket&)>;
+  // By value so the producer moves the packet in and the consumer moves it
+  // into its queue (each was copied twice per ~10ms poll before).
+  using Sink = std::function<void(AudioPacket)>;
 
   static constexpr uint32_t kSampleRate = 48000;
   static constexpr uint16_t kChannels = 2;

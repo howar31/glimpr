@@ -114,6 +114,12 @@ int CALLBACK FontFamilyProc(const LOGFONTW* lf, const TEXTMETRICW*, DWORD,
 }
 
 EncodableValue EnumerateFontFamilies() {
+  // Cached: every overlay engine's font popover asks, and the installed set
+  // effectively never changes within a session (restart picks up new fonts,
+  // matching the macOS behaviour).
+  static EncodableValue cached;
+  static bool have_cached = false;
+  if (have_cached) return cached;
   HDC hdc = GetDC(nullptr);
   LOGFONTW lf{};
   lf.lfCharSet = DEFAULT_CHARSET;
@@ -123,7 +129,9 @@ EncodableValue EnumerateFontFamilies() {
   ReleaseDC(nullptr, hdc);
   EncodableList list;
   for (const auto& f : families) list.push_back(EncodableValue(Utf8(f)));
-  return EncodableValue(std::move(list));
+  cached = EncodableValue(std::move(list));
+  have_cached = true;
+  return cached;
 }
 
 std::unique_ptr<EncodableValue> Args(EncodableMap m) {
@@ -829,11 +837,11 @@ void OverlayManager::HandleOverlayCapture(
     }
     const uint8_t* mask = nullptr;
     int mask_w = 0, mask_h = 0, mask_row = 0;
-    std::vector<uint8_t> mask_store;
+    // Points straight into the call arguments (alive for this synchronous
+    // handler) -- the previous local copy duplicated a full-frame mask.
     if (auto mk = args.find(EncodableValue("mask")); mk != args.end()) {
       if (auto* mb = std::get_if<std::vector<uint8_t>>(&mk->second)) {
-        mask_store = *mb;
-        mask = mask_store.data();
+        mask = mb->data();
         mask_w = static_cast<int>(get_i64(args, "maskW", 0));
         mask_h = static_cast<int>(get_i64(args, "maskH", 0));
         mask_row = static_cast<int>(get_i64(args, "maskRowBytes", 0));

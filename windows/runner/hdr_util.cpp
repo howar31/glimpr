@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <string>
 
 namespace hdr {
@@ -96,6 +98,26 @@ bool QuerySdrWhiteNits(HMONITOR monitor, float* out_nits) {
 }  // namespace
 
 MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor) {
+  // Short-TTL cache: every capture queries EVERY monitor (a fresh DXGI
+  // factory + full adapter/output walk + DisplayConfig, a few ms on the
+  // hotkey critical path), and live feeds / recordings re-query on start. A
+  // 2s TTL keeps a capture burst free while an HDR toggle (or an HMONITOR
+  // handle recycled by a topology change) is picked up within seconds.
+  struct CacheEntry {
+    MonitorHdrInfo info;
+    ULONGLONG at_ms = 0;
+  };
+  static std::mutex cache_mutex;
+  static std::map<HMONITOR, CacheEntry> cache;
+  constexpr ULONGLONG kTtlMs = 2000;
+  const ULONGLONG now = GetTickCount64();
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    auto it = cache.find(monitor);
+    if (it != cache.end() && now - it->second.at_ms < kTtlMs) {
+      return it->second.info;
+    }
+  }
   MonitorHdrInfo info;
   // Raw COM + explicit Release keeps this file free of winrt headers.
   IDXGIFactory1* f = nullptr;
@@ -129,6 +151,10 @@ MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor) {
           float nits = 0;
           if (QuerySdrWhiteNits(monitor, &nits)) info.sdr_white_nits = nits;
         }
+        {
+          std::lock_guard<std::mutex> lock(cache_mutex);
+          cache[monitor] = CacheEntry{info, now};
+        }
         return info;
       }
       output->Release();
@@ -136,7 +162,13 @@ MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor) {
     adapter->Release();
   }
   f->Release();
-  return info;  // monitor not found (e.g. session 0) -> non-HDR defaults
+  // Monitor not found (e.g. session 0) -> non-HDR defaults; cached too so a
+  // headless burst does not re-walk per display.
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    cache[monitor] = CacheEntry{info, now};
+  }
+  return info;
 }
 
 bool ReadPrefsBool(const char* key_name, bool dflt) {
