@@ -73,51 +73,10 @@ bool WriteImageToClipboard(const uint8_t* data, size_t len) {
   std::vector<uint8_t> bgra;
   uint32_t w = 0, h = 0;
   if (!DecodeToBgra(data, len, bgra, w, h) || w == 0 || h == 0) return false;
-
-  BITMAPV5HEADER bi{};
-  bi.bV5Size = sizeof(BITMAPV5HEADER);
-  bi.bV5Width = static_cast<LONG>(w);
-  bi.bV5Height = -static_cast<LONG>(h);  // top-down
-  bi.bV5Planes = 1;
-  bi.bV5BitCount = 32;
-  bi.bV5Compression = BI_BITFIELDS;
-  bi.bV5RedMask = 0x00FF0000;
-  bi.bV5GreenMask = 0x0000FF00;
-  bi.bV5BlueMask = 0x000000FF;
-  bi.bV5AlphaMask = 0xFF000000;
-  bi.bV5CSType = LCS_WINDOWS_COLOR_SPACE;
-  bi.bV5Intent = LCS_GM_IMAGES;
-
-  const size_t pix = static_cast<size_t>(w) * 4 * h;
-  HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pix);
-  if (!dib) return false;
-  {
-    auto* p = static_cast<uint8_t*>(GlobalLock(dib));
-    if (!p) {
-      GlobalFree(dib);
-      return false;
-    }
-    std::memcpy(p, &bi, sizeof(bi));
-    std::memcpy(p + sizeof(bi), bgra.data(), pix);
-    GlobalUnlock(dib);
-  }
-
-  if (!OpenClipboard(nullptr)) {
-    GlobalFree(dib);
-    return false;
-  }
-  EmptyClipboard();
-  bool ok = SetClipboardData(CF_DIBV5, dib) != nullptr;
-  // PNG fidelity (preserves alpha) for apps that prefer it.
-  if (IsPng(data, len)) {
-    if (HGLOBAL png = CopyToGlobal(data, len)) {
-      UINT cf_png = RegisterClipboardFormatW(L"PNG");
-      if (cf_png) SetClipboardData(cf_png, png);
-    }
-  }
-  CloseClipboard();
-  if (!ok) GlobalFree(dib);  // ownership not transferred on failure
-  return ok;
+  const bool is_png = IsPng(data, len);
+  return clip::WriteBgraToClipboard(bgra.data(), w, h, w * 4,
+                                    is_png ? data : nullptr,
+                                    is_png ? len : 0);
 }
 
 // Wrap a packed DIB (BITMAPINFOHEADER/BITMAPV5HEADER + optional masks + color
@@ -204,6 +163,70 @@ std::vector<uint8_t> ReadImageFromOpenClipboard() {
 }
 
 }  // namespace
+
+namespace clip {
+
+bool WriteBgraToClipboard(const uint8_t* bgra, uint32_t w, uint32_t h,
+                          uint32_t stride, const uint8_t* png,
+                          size_t png_len) {
+  if (!bgra || w == 0 || h == 0) return false;
+
+  BITMAPV5HEADER bi{};
+  bi.bV5Size = sizeof(BITMAPV5HEADER);
+  bi.bV5Width = static_cast<LONG>(w);
+  bi.bV5Height = -static_cast<LONG>(h);  // top-down
+  bi.bV5Planes = 1;
+  bi.bV5BitCount = 32;
+  bi.bV5Compression = BI_BITFIELDS;
+  bi.bV5RedMask = 0x00FF0000;
+  bi.bV5GreenMask = 0x0000FF00;
+  bi.bV5BlueMask = 0x000000FF;
+  bi.bV5AlphaMask = 0xFF000000;
+  bi.bV5CSType = LCS_WINDOWS_COLOR_SPACE;
+  bi.bV5Intent = LCS_GM_IMAGES;
+
+  const size_t row = static_cast<size_t>(w) * 4;
+  const size_t pix = row * h;
+  HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pix);
+  if (!dib) return false;
+  {
+    auto* p = static_cast<uint8_t*>(GlobalLock(dib));
+    if (!p) {
+      GlobalFree(dib);
+      return false;
+    }
+    std::memcpy(p, &bi, sizeof(bi));
+    uint8_t* dst = p + sizeof(bi);
+    if (stride == row) {
+      std::memcpy(dst, bgra, pix);
+    } else {
+      for (uint32_t y = 0; y < h; ++y) {
+        std::memcpy(dst + static_cast<size_t>(y) * row,
+                    bgra + static_cast<size_t>(y) * stride, row);
+      }
+    }
+    GlobalUnlock(dib);
+  }
+
+  if (!OpenClipboard(nullptr)) {
+    GlobalFree(dib);
+    return false;
+  }
+  EmptyClipboard();
+  bool ok = SetClipboardData(CF_DIBV5, dib) != nullptr;
+  // PNG fidelity (preserves alpha) for apps that prefer it.
+  if (png && png_len) {
+    if (HGLOBAL hpng = CopyToGlobal(png, png_len)) {
+      UINT cf_png = RegisterClipboardFormatW(L"PNG");
+      if (cf_png) SetClipboardData(cf_png, hpng);
+    }
+  }
+  CloseClipboard();
+  if (!ok) GlobalFree(dib);  // ownership not transferred on failure
+  return ok;
+}
+
+}  // namespace clip
 
 ClipboardChannel::ClipboardChannel(flutter::BinaryMessenger* messenger) {
   channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(

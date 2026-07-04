@@ -77,6 +77,9 @@ Future<DeliveryResult> deliverCapture({
   SoundFn? soundFn,
   bool saveToFile = true,
   bool copyToClipboard = true,
+  // The clipboard was ALREADY written upstream (Windows native capture): the
+  // copy leg reports success without a second (decode-heavy) write.
+  bool preCopied = false,
 }) async {
   final dir = effectiveSaveDir(saveDir);
   final name = fileName ?? screenshotFilename(DateTime.now(), 'png');

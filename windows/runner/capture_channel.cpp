@@ -16,6 +16,7 @@
 
 #include <winrt/base.h>
 
+#include "clipboard_channel.h"
 #include "decoration.h"
 #include "editor_window.h"
 #include "image_codec.h"
@@ -489,6 +490,18 @@ EncodableValue CaptureChannel::ComputeRegionCapture(const EncodableMap& map) {
   if (bytes.empty()) return EncodableValue();
   perf::Mark("regionEncodeDone bytes=" + std::to_string(bytes.size()));
 
+  // The flow's clipboard leg, done natively from the BGRA in hand: writeImage
+  // over the channel has to DECODE the encoded bytes back to pixels for the
+  // CF_DIBV5 (baseline 369ms on a 4K PNG); here both forms already exist.
+  bool copied = false;
+  if (GetBool(map, "alsoCopy", false)) {
+    copied = clip::WriteBgraToClipboard(
+        to_encode->bgra.data(), to_encode->width, to_encode->height,
+        to_encode->stride, jpeg ? nullptr : bytes.data(),
+        jpeg ? 0 : bytes.size());
+    perf::Mark(copied ? "nativeCopyDone ok=1" : "nativeCopyDone ok=0");
+  }
+
   // The HDR sibling: the UNDECORATED fp16 crop as JPEG XR (empty when the
   // monitor is SDR or the encode fails -> the reply simply omits it).
   std::vector<uint8_t> hdr_bytes;
@@ -502,6 +515,7 @@ EncodableValue CaptureChannel::ComputeRegionCapture(const EncodableMap& map) {
   const double top = mi.rcMonitor.top / scale;
 
   EncodableMap reply;
+  reply[EncodableValue("copied")] = EncodableValue(copied);
   reply[EncodableValue("bytes")] = EncodableValue(std::move(bytes));
   reply[EncodableValue("displayId")] =
       EncodableValue(static_cast<int64_t>(reinterpret_cast<intptr_t>(mon)));
@@ -628,6 +642,15 @@ EncodableValue CaptureChannel::ComputeWindowDelivered(
                               to_encode->height, to_encode->stride);
   if (bytes.empty()) return EncodableValue();
   perf::Mark("windowEncodeDone bytes=" + std::to_string(bytes.size()));
+  // Native clipboard leg from the in-hand BGRA (see ComputeRegionCapture).
+  bool copied = false;
+  if (GetBool(map, "alsoCopy", false)) {
+    copied = clip::WriteBgraToClipboard(
+        to_encode->bgra.data(), to_encode->width, to_encode->height,
+        to_encode->stride, jpeg ? nullptr : bytes.data(),
+        jpeg ? 0 : bytes.size());
+    perf::Mark(copied ? "nativeCopyDone ok=1" : "nativeCopyDone ok=0");
+  }
   // The HDR sibling: the UNDECORATED fp16 window capture as JPEG XR.
   std::vector<uint8_t> hdr_bytes;
   if (want_hdr && !frame->f16.empty()) {
@@ -635,6 +658,7 @@ EncodableValue CaptureChannel::ComputeWindowDelivered(
                                  frame->height, frame->width * 8);
   }
   EncodableMap reply;
+  reply[EncodableValue("copied")] = EncodableValue(copied);
   reply[EncodableValue("bytes")] = EncodableValue(std::move(bytes));
   if (!plain_bytes.empty()) {
     reply[EncodableValue("plainBytes")] = EncodableValue(std::move(plain_bytes));

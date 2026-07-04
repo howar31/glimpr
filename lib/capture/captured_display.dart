@@ -95,6 +95,7 @@ class RegionCapture {
     this.plainBytes,
     this.hdrBytes,
     this.hdrExt,
+    this.copiedNative = false,
   });
   final Uint8List bytes;
   final int displayId;
@@ -113,6 +114,11 @@ class RegionCapture {
   final Uint8List? hdrBytes;
   final String? hdrExt;
 
+  /// Windows: the native capture already wrote the clipboard from its in-hand
+  /// BGRA (the alsoCopy request) -- the flow's copy leg reports success and
+  /// skips its own (decode-heavy) write. Always false on macOS.
+  final bool copiedNative;
+
   factory RegionCapture.fromMap(Map<dynamic, dynamic> m) => RegionCapture(
         bytes: m['bytes'] as Uint8List,
         displayId: (m['displayId'] as num).toInt(),
@@ -124,6 +130,7 @@ class RegionCapture {
         plainBytes: m['plainBytes'] as Uint8List?,
         hdrBytes: m['hdrBytes'] as Uint8List?,
         hdrExt: m['hdrExt'] as String?,
+        copiedNative: (m['copied'] as bool?) ?? false,
       );
 }
 

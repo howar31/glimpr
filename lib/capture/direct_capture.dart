@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 import '../editor/decoration.dart';
@@ -24,7 +25,10 @@ const kRecordingCaptureLabel = 'RECORDING';
 /// the undecorated sibling for the flow's pin leg, when one was requested.
 Future<FlowResult> _defaultDeliverWindow(
     Uint8List bytes, CaptureSettings cap, FocusedWindowInfo info,
-    {Uint8List? pinBytes, Uint8List? hdrBytes, String? hdrExt}) async {
+    {Uint8List? pinBytes,
+    Uint8List? hdrBytes,
+    String? hdrExt,
+    bool preCopied = false}) async {
   return deliverWindowBytes(
     bytes: bytes,
     cap: cap,
@@ -33,6 +37,7 @@ Future<FlowResult> _defaultDeliverWindow(
     pinBytes: pinBytes,
     hdrBytes: hdrBytes,
     hdrExt: hdrExt,
+    preCopied: preCopied,
   );
 }
 
@@ -51,7 +56,8 @@ class DirectCapture {
             int jpegQuality,
             Map<String, dynamic>? decoration,
             bool alsoPlain,
-            bool hdr})?
+            bool hdr,
+            bool alsoCopy})?
         captureRegion,
     Future<FocusedWindowInfo?> Function()? focusedWindow,
     Future<
@@ -60,6 +66,7 @@ class DirectCapture {
               Uint8List? plainBytes,
               Uint8List? hdrBytes,
               String? hdrExt,
+              bool copied,
             })?>
         Function(int,
             {bool showsCursor,
@@ -67,7 +74,8 @@ class DirectCapture {
             int jpegQuality,
             Map<String, dynamic>? decoration,
             bool alsoPlain,
-            bool hdr})?
+            bool hdr,
+            bool alsoCopy})?
         captureWindowDelivered,
     Settings? settings,
     LastRegionStore? regionStore,
@@ -75,7 +83,10 @@ class DirectCapture {
             RegionCapture, CaptureSettings, CaptureKind, String?, String?)?
         deliverEncoded,
     Future<FlowResult> Function(Uint8List, CaptureSettings, FocusedWindowInfo,
-            {Uint8List? pinBytes, Uint8List? hdrBytes, String? hdrExt})?
+            {Uint8List? pinBytes,
+            Uint8List? hdrBytes,
+            String? hdrExt,
+            bool preCopied})?
         deliverWindow,
     void Function()? shutter,
     void Function()? complete,
@@ -108,7 +119,8 @@ class DirectCapture {
       int jpegQuality,
       Map<String, dynamic>? decoration,
       bool alsoPlain,
-      bool hdr}) _captureRegion;
+      bool hdr,
+      bool alsoCopy}) _captureRegion;
   final Future<FocusedWindowInfo?> Function() _focusedWindow;
   final Future<
       ({
@@ -116,13 +128,15 @@ class DirectCapture {
         Uint8List? plainBytes,
         Uint8List? hdrBytes,
         String? hdrExt,
+        bool copied,
       })?> Function(int,
       {bool showsCursor,
       bool jpeg,
       int jpegQuality,
       Map<String, dynamic>? decoration,
       bool alsoPlain,
-      bool hdr}) _captureWindowDelivered;
+      bool hdr,
+      bool alsoCopy}) _captureWindowDelivered;
   final Settings _settings;
   final LastRegionStore _regionStore;
   final Future<FlowResult> Function(
@@ -130,7 +144,10 @@ class DirectCapture {
       _deliverEncoded;
   final Future<FlowResult> Function(
       Uint8List, CaptureSettings, FocusedWindowInfo,
-      {Uint8List? pinBytes, Uint8List? hdrBytes, String? hdrExt}) _deliverWindow;
+      {Uint8List? pinBytes,
+      Uint8List? hdrBytes,
+      String? hdrExt,
+      bool preCopied}) _deliverWindow;
   final void Function() _shutter;
   final void Function() _complete;
   final void Function(String) _showError;
@@ -154,9 +171,10 @@ class DirectCapture {
       // natively, so the delivered bytes are final. The pin leg always shows
       // the undecorated capture (decorationPlan): a pin-only flow skips
       // decoration; alongside other legs native also returns the plain sibling.
+      final actions = normalizeFlow(cap.flow, forCapture: true);
       final plan = decorationPlan(
         decorationEnabled: cap.decorateFor(CaptureKind.focusedWindow),
-        actions: normalizeFlow(cap.flow, forCapture: true),
+        actions: actions,
       );
       final decoration = plan.decorate
           ? logicalDecorationSpec(
@@ -169,6 +187,7 @@ class DirectCapture {
         Uint8List? plainBytes,
         Uint8List? hdrBytes,
         String? hdrExt,
+        bool copied,
       })? delivered;
       try {
         delivered = await _captureWindowDelivered(
@@ -179,6 +198,9 @@ class DirectCapture {
           decoration: decoration,
           alsoPlain: plan.needsPlainForPin,
           hdr: cap.hdrScreenshot,
+          // Windows: the native capture writes the clipboard itself (no
+          // decode); the flow's copy leg then just reports it (preCopied).
+          alsoCopy: Platform.isWindows && actions.contains(FlowAction.copy),
         );
       } catch (_) {
         delivered = null; // fall through to the rectangular crop
@@ -192,7 +214,8 @@ class DirectCapture {
           final result = await _deliverWindow(bytes, cap, info!,
               pinBytes: delivered.plainBytes,
               hdrBytes: delivered.hdrBytes,
-              hdrExt: delivered.hdrExt);
+              hdrExt: delivered.hdrExt,
+              preCopied: delivered.copied);
           final ok = (!cap.flow.contains(FlowAction.save) || result.savedOk) &&
               (!cap.flow.contains(FlowAction.copy) || result.copiedToClipboard);
           if (ok) {
@@ -269,9 +292,10 @@ class DirectCapture {
     // always shows the undecorated capture (decorationPlan): a pin-only flow
     // skips decoration; alongside other legs native also returns the plain
     // sibling (RegionCapture.plainBytes).
+    final actions = normalizeFlow(cap.flow, forCapture: true);
     final plan = decorationPlan(
       decorationEnabled: cap.decorateFor(kind),
-      actions: normalizeFlow(cap.flow, forCapture: true),
+      actions: actions,
     );
     final decoration = plan.decorate
         ? logicalDecorationSpec(
@@ -290,6 +314,9 @@ class DirectCapture {
         decoration: decoration,
         alsoPlain: plan.needsPlainForPin,
         hdr: cap.hdrScreenshot,
+        // Windows: native writes the clipboard from the captured BGRA; the
+        // flow's copy leg reports it via RegionCapture.copiedNative.
+        alsoCopy: Platform.isWindows && actions.contains(FlowAction.copy),
       );
     } catch (e) {
       _showError(appL10n.errorCaptureFailedDetail('$e'));

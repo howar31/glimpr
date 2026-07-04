@@ -145,6 +145,8 @@ Future<FlowResult> deliverEncodedCapture({
     // SDR file (skipped when the flow has no save leg).
     hdrBytes: capture.hdrBytes,
     hdrExt: capture.hdrExt,
+    // Windows: the native capture already wrote the clipboard (alsoCopy).
+    preCopied: capture.copiedNative,
   );
 }
 
@@ -176,6 +178,8 @@ Future<FlowResult> deliverWindowBytes({
   // the window's display is HDR.
   Uint8List? hdrBytes,
   String? hdrExt,
+  // Windows: the native capture already wrote the clipboard (alsoCopy).
+  bool preCopied = false,
 }) async {
   final naming = await resolveCaptureNaming(
     cap: cap,
@@ -193,5 +197,6 @@ Future<FlowResult> deliverWindowBytes({
     recordRecentFn: recordRecentCapture,
     hdrBytes: hdrBytes,
     hdrExt: hdrExt,
+    preCopied: preCopied,
   );
 }

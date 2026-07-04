@@ -84,6 +84,10 @@ class CaptureBridge {
     // Dual-output HDR: when the captured display is HDR, also return the
     // undecorated HDR rendition (hdrBytes + hdrExt) beside the SDR bytes.
     bool hdr = false,
+    // Windows: also write the clipboard natively from the captured BGRA (the
+    // flow's copy leg, minus the decode the writeImage channel needs). The
+    // reply's `copied` lands in RegionCapture.copiedNative.
+    bool alsoCopy = false,
   }) async {
     final res = await _channel.invokeMethod('captureRegion', {
       'displayId': ?displayId,
@@ -96,6 +100,7 @@ class CaptureBridge {
       'decoration': ?decoration,
       'alsoPlain': alsoPlain,
       'hdr': hdr,
+      'alsoCopy': alsoCopy,
     });
     if (res == null) return null;
     return RegionCapture.fromMap((res as Map).cast<dynamic, dynamic>());
@@ -173,6 +178,7 @@ class CaptureBridge {
         Uint8List? plainBytes,
         Uint8List? hdrBytes,
         String? hdrExt,
+        bool copied,
       })?> captureWindowDelivered(
     int windowId, {
     bool showsCursor = false,
@@ -181,6 +187,7 @@ class CaptureBridge {
     Map<String, dynamic>? decoration,
     bool alsoPlain = false,
     bool hdr = false,
+    bool alsoCopy = false,
   }) async {
     final res = await _channel.invokeMethod('captureWindowDelivered', {
       'windowId': windowId,
@@ -190,6 +197,7 @@ class CaptureBridge {
       'decoration': ?decoration,
       'alsoPlain': alsoPlain,
       'hdr': hdr,
+      'alsoCopy': alsoCopy,
     });
     if (res == null) return null;
     final m = res as Map;
@@ -200,6 +208,7 @@ class CaptureBridge {
       plainBytes: m['plainBytes'] as Uint8List?,
       hdrBytes: m['hdrBytes'] as Uint8List?,
       hdrExt: m['hdrExt'] as String?,
+      copied: (m['copied'] as bool?) ?? false,
     );
   }
 

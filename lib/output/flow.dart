@@ -146,6 +146,8 @@ Future<FlowResult> runFlow({
   Uint8List? hdrBytes,
   String? hdrExt,
   Future<void> Function(Uint8List bytes, String path)? hdrWriteFn,
+  // The clipboard was already written upstream (Windows native capture).
+  bool preCopied = false,
 }) async {
   final delivery = await deliverCapture(
     pngBytes: bytes,
@@ -156,6 +158,7 @@ Future<FlowResult> runFlow({
     soundFn: soundFn,
     saveToFile: actions.contains(FlowAction.save),
     copyToClipboard: actions.contains(FlowAction.copy),
+    preCopied: preCopied,
   );
   if (recordRecentFn != null && delivery.savedPath != null) {
     try {
