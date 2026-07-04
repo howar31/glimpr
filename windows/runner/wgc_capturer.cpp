@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <mutex>
 
 namespace {
 
@@ -58,6 +59,39 @@ d3d::IDirect3DDevice WrapDevice(winrt::com_ptr<ID3D11Device> const& device) {
   return inspectable.as<d3d::IDirect3DDevice>();
 }
 
+// Session-long cached capture device (creating one measured tens of ms per
+// capture, on the hotkey->frozen critical path). D3D11 devices are
+// free-threaded so the parallel per-monitor capture workers may share it, but
+// the IMMEDIATE CONTEXT is not: the staging readback below serializes on
+// g_readback_mutex. On failure a capture retries once with a recreated device
+// (device-lost / GPU reset recovery).
+std::mutex g_device_mutex;
+winrt::com_ptr<ID3D11Device> g_shared_device;
+d3d::IDirect3DDevice g_shared_rt_device{nullptr};
+std::mutex g_readback_mutex;
+
+bool SharedDevice(bool recreate, winrt::com_ptr<ID3D11Device>* out_d3d,
+                  d3d::IDirect3DDevice* out_rt) {
+  std::lock_guard<std::mutex> lock(g_device_mutex);
+  if (recreate) {
+    g_shared_device = nullptr;
+    g_shared_rt_device = nullptr;
+  }
+  if (!g_shared_device) {
+    g_shared_device = CreateD3DDevice();
+    if (!g_shared_device) return false;
+    try {
+      g_shared_rt_device = WrapDevice(g_shared_device);
+    } catch (...) {
+      g_shared_device = nullptr;
+      return false;
+    }
+  }
+  *out_d3d = g_shared_device;
+  *out_rt = g_shared_rt_device;
+  return true;
+}
+
 winrt::com_ptr<IGraphicsCaptureItemInterop> GetInterop() {
   auto factory = winrt::get_activation_factory<cap::GraphicsCaptureItem>();
   return factory.as<IGraphicsCaptureItemInterop>();
@@ -66,10 +100,11 @@ winrt::com_ptr<IGraphicsCaptureItemInterop> GetInterop() {
 std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
                                         bool show_cursor,
                                         const hdr::MonitorHdrInfo& hdr_info,
-                                        bool keep_f16) {
-  auto d3dDevice = CreateD3DDevice();
-  if (!d3dDevice) return std::nullopt;
-  auto rtDevice = WrapDevice(d3dDevice);
+                                        bool keep_f16, bool force_opaque,
+                                        bool fresh_device) {
+  winrt::com_ptr<ID3D11Device> d3dDevice;
+  d3d::IDirect3DDevice rtDevice{nullptr};
+  if (!SharedDevice(fresh_device, &d3dDevice, &rtDevice)) return std::nullopt;
 
   // HDR monitor: capture in fp16 scRGB and tone-map to SDR ourselves (the OS
   // 8-bit conversion ignores the SDR white level -> washed-out output).
@@ -116,6 +151,10 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
     staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
     staging_desc.MiscFlags = 0;
     winrt::com_ptr<ID3D11Texture2D> staging;
+    // The shared device's immediate context is not thread-safe: the parallel
+    // per-monitor workers serialize their readbacks here (the WGC session
+    // setup + frame wait above -- the expensive part -- still runs parallel).
+    std::lock_guard<std::mutex> readback_lock(g_readback_mutex);
     if (SUCCEEDED(d3dDevice->CreateTexture2D(&staging_desc, nullptr,
                                              staging.put()))) {
       winrt::com_ptr<ID3D11DeviceContext> ctx;
@@ -149,11 +188,22 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
             cf.f16.clear();
             cf.f16.shrink_to_fit();
           }
+          if (force_opaque) {
+            auto* px = reinterpret_cast<uint32_t*>(cf.bgra.data());
+            const size_t n = static_cast<size_t>(cf.width) * cf.height;
+            for (size_t i = 0; i < n; ++i) px[i] |= 0xFF000000u;
+          }
         } else {
           for (uint32_t y = 0; y < cf.height; ++y) {
-            std::memcpy(cf.bgra.data() + static_cast<size_t>(y) * cf.stride,
-                        src + static_cast<size_t>(y) * mapped.RowPitch,
+            uint8_t* dst = cf.bgra.data() + static_cast<size_t>(y) * cf.stride;
+            std::memcpy(dst, src + static_cast<size_t>(y) * mapped.RowPitch,
                         cf.stride);
+            if (force_opaque) {
+              // Stamp alpha=255 while the row is hot in cache (a separate
+              // full-frame pass measured meaningfully slower).
+              auto* px = reinterpret_cast<uint32_t*>(dst);
+              for (uint32_t x = 0; x < desc.Width; ++x) px[x] |= 0xFF000000u;
+            }
           }
         }
         ctx->Unmap(staging.get(), 0);
@@ -171,25 +221,36 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
 
 namespace wgc {
 
+winrt::com_ptr<ID3D11Device> CreateFreshD3DDevice() { return CreateD3DDevice(); }
+
 std::optional<CaptureFrame> CaptureMonitor(HMONITOR monitor, bool show_cursor,
-                                           bool keep_f16) {
+                                           bool keep_f16,
+                                           bool force_opaque_alpha) {
   EnsureWinrt();
-  try {
-    auto interop = GetInterop();
-    cap::GraphicsCaptureItem item{nullptr};
-    const winrt::guid iid = winrt::guid_of<cap::GraphicsCaptureItem>();
-    winrt::check_hresult(interop->CreateForMonitor(
-        monitor, reinterpret_cast<GUID const&>(iid), winrt::put_abi(item)));
-    return CaptureItem(item, show_cursor, hdr::QueryMonitorHdr(monitor),
-                       keep_f16);
-  } catch (...) {
-    return std::nullopt;
+  // Second attempt recreates the cached device (device-lost / GPU reset).
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    try {
+      auto interop = GetInterop();
+      cap::GraphicsCaptureItem item{nullptr};
+      const winrt::guid iid = winrt::guid_of<cap::GraphicsCaptureItem>();
+      winrt::check_hresult(interop->CreateForMonitor(
+          monitor, reinterpret_cast<GUID const&>(iid), winrt::put_abi(item)));
+      auto out = CaptureItem(item, show_cursor, hdr::QueryMonitorHdr(monitor),
+                             keep_f16, force_opaque_alpha, attempt > 0);
+      if (out) return out;
+    } catch (...) {
+    }
   }
+  return std::nullopt;
 }
 
 std::optional<CaptureFrame> CaptureWindow(HWND window, bool show_cursor,
                                           bool keep_f16) {
   EnsureWinrt();
+  // NO device-recreate retry here: a window capture's nullopt is a LEGIT fast
+  // fallback signal (non-capturable windows -> rect-crop path) and each retry
+  // would add the 2s frame-wait. A dead cached device recovers on the next
+  // monitor capture (the fallback itself is one).
   try {
     auto interop = GetInterop();
     cap::GraphicsCaptureItem item{nullptr};
@@ -197,7 +258,8 @@ std::optional<CaptureFrame> CaptureWindow(HWND window, bool show_cursor,
     winrt::check_hresult(interop->CreateForWindow(
         window, reinterpret_cast<GUID const&>(iid), winrt::put_abi(item)));
     HMONITOR mon = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
-    return CaptureItem(item, show_cursor, hdr::QueryMonitorHdr(mon), keep_f16);
+    return CaptureItem(item, show_cursor, hdr::QueryMonitorHdr(mon), keep_f16,
+                       false, false);
   } catch (...) {
     return std::nullopt;
   }

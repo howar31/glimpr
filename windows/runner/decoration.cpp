@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <mutex>
+
+#include "wgc_capturer.h"
 
 namespace {
 
@@ -27,16 +30,38 @@ D2D1_COLOR_F ColorFromArgb(uint32_t argb) {
                       ((argb >> 24) & 0xFF) / 255.0f);
 }
 
-winrt::com_ptr<ID3D11Device> CreateD3D() {
-  winrt::com_ptr<ID3D11Device> d;
-  if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                               D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
-                               D3D11_SDK_VERSION, d.put(), nullptr, nullptr))) {
-    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-                      D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
-                      D3D11_SDK_VERSION, d.put(), nullptr, nullptr);
+// Session-long cached D2D stack (its own D3D device, NOT shared with the wgc
+// capture device -- raw immediate-context use elsewhere would race D2D's).
+// The factory is MULTI_THREADED because Decorate is called from the platform
+// thread AND the async capture worker; D2D then serializes internally. The
+// device context (cheap) is created per call. Creating device+factory per
+// call measured milliseconds on the capture critical path.
+std::mutex g_deco_mutex;
+winrt::com_ptr<ID2D1Factory1> g_deco_factory;
+winrt::com_ptr<ID2D1Device> g_deco_device;
+
+bool DecoDevice(winrt::com_ptr<ID2D1Factory1>* out_factory,
+                winrt::com_ptr<ID2D1Device>* out_device) {
+  std::lock_guard<std::mutex> lock(g_deco_mutex);
+  if (!g_deco_device) {
+    auto d3d = wgc::CreateFreshD3DDevice();
+    if (!d3d) return false;
+    auto dxgi = d3d.as<IDXGIDevice>();
+    D2D1_FACTORY_OPTIONS fo{};
+    winrt::com_ptr<ID2D1Factory1> factory;
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
+                                 __uuidof(ID2D1Factory1), &fo,
+                                 factory.put_void()))) {
+      return false;
+    }
+    winrt::com_ptr<ID2D1Device> device;
+    if (FAILED(factory->CreateDevice(dxgi.get(), device.put()))) return false;
+    g_deco_factory = factory;
+    g_deco_device = device;
   }
-  return d;
+  *out_factory = g_deco_factory;
+  *out_device = g_deco_device;
+  return true;
 }
 
 }  // namespace
@@ -61,17 +86,9 @@ std::optional<CaptureFrame> Decorate(const CaptureFrame& content,
     const uint32_t out_w = static_cast<uint32_t>(std::lround(cw + 2 * m));
     const uint32_t out_h = static_cast<uint32_t>(std::lround(ch + 2 * m));
 
-    auto d3d = CreateD3D();
-    if (!d3d) return std::nullopt;
-    auto dxgi = d3d.as<IDXGIDevice>();
-
-    D2D1_FACTORY_OPTIONS fo{};
     winrt::com_ptr<ID2D1Factory1> factory;
-    winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-                                           __uuidof(ID2D1Factory1), &fo,
-                                           factory.put_void()));
     winrt::com_ptr<ID2D1Device> device;
-    winrt::check_hresult(factory->CreateDevice(dxgi.get(), device.put()));
+    if (!DecoDevice(&factory, &device)) return std::nullopt;
     winrt::com_ptr<ID2D1DeviceContext> dc;
     winrt::check_hresult(device->CreateDeviceContext(
         D2D1_DEVICE_CONTEXT_OPTIONS_NONE, dc.put()));

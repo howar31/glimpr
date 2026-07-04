@@ -357,7 +357,10 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
           winrt::init_apartment(winrt::apartment_type::multi_threaded);
         } catch (...) {
         }
-        frames[i] = wgc::CaptureMonitor(mons[i], false, keep_f16);
+        // force_opaque_alpha: the frozen base must read fully opaque on the
+        // permanent DWM-glass overlay window (see wgc_capturer.h).
+        frames[i] = wgc::CaptureMonitor(mons[i], false, keep_f16,
+                                        /*force_opaque_alpha=*/true);
         winrt::uninit_apartment();
       });
     }
@@ -459,16 +462,12 @@ EncodableMap OverlayManager::BuildDisplayDict(HMONITOR mon, CaptureFrame frame,
   d[EncodableValue("rowBytes")] = EncodableValue(static_cast<int64_t>(frame.stride));
   d[EncodableValue("windows")] =
       EncodableValue(win_enum::SnappableWindows(mon, OverlayHwnds()));
-  // Force the frozen base fully OPAQUE. The overlay is a permanent DWM-glass
-  // window, so the Flutter content's per-pixel alpha reaches the desktop
-  // compositor. WGC monitor frames do NOT guarantee alpha == 255 for opaque
-  // desktop pixels, so a frozen screenshot would render SEE-THROUGH -- an
-  // invisible, click-catching, top-most full-screen window silently blocking the
-  // whole desktop. The captured monitor IS opaque, so stamping alpha = 255 is
-  // faithful (mirrors live_frame_source forcing the loupe patch alpha). The
-  // live record-select path stays transparent: BuildLiveDisplayDict passes an
-  // EMPTY buffer, so this loop is a no-op and Dart paints its transparent stub.
-  for (size_t i = 3; i < frame.bgra.size(); i += 4) frame.bgra[i] = 0xFF;
+  // The frozen base arrives fully OPAQUE: BeginCapture's workers pass
+  // force_opaque_alpha to wgc::CaptureMonitor, which stamps alpha=255 during
+  // the readback row copy (cache-hot; a separate full-frame pass here cost
+  // 5-15ms per 4K display). Rationale in wgc_capturer.h. The live
+  // record-select path stays transparent: BuildLiveDisplayDict passes an
+  // EMPTY buffer and Dart paints its transparent stub.
   // Move the BGRA buffer into the reply (never copied).
   d[EncodableValue("rawBytes")] = EncodableValue(std::move(frame.bgra));
   return d;

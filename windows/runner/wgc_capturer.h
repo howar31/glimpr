@@ -3,9 +3,13 @@
 
 #include <windows.h>
 
+#include <winrt/base.h>
+
 #include <cstdint>
 #include <optional>
 #include <vector>
+
+struct ID3D11Device;
 
 // A single captured frame: tightly-packed BGRA8888 (premultiplied, sRGB),
 // stride == width * 4. On an HDR monitor the capture runs in fp16 scRGB and
@@ -25,10 +29,24 @@ struct CaptureFrame {
 // One-shot screen capture via Windows.Graphics.Capture (border-free on Win11).
 namespace wgc {
 
+// A fresh hardware (WARP-fallback) BGRA-capable D3D11 device. The ONE shared
+// creation helper for owners that keep their own device instance (recorder,
+// pins, recording chrome, live loupe feeds) -- deduplicates the former
+// per-file copies. The wgc captures themselves use an internal CACHED device
+// (creating one measured tens of ms per capture); do not share instances
+// across subsystems, the immediate context is not thread-safe.
+winrt::com_ptr<ID3D11Device> CreateFreshD3DDevice();
+
 // Capture a whole monitor. nullopt on failure (caller may fall back).
 // [keep_f16]: retain the raw fp16 pixels when the monitor is HDR.
+// [force_opaque_alpha]: stamp alpha=255 into the returned BGRA during the
+// readback row copy (cache-hot) -- the freeze overlay needs a fully opaque
+// base because WGC monitor frames do not guarantee alpha==255 and the overlay
+// window is permanent DWM glass (a see-through freeze would silently block
+// the desktop). The captured monitor IS opaque, so the stamp is faithful.
 std::optional<CaptureFrame> CaptureMonitor(HMONITOR monitor, bool show_cursor,
-                                           bool keep_f16 = false);
+                                           bool keep_f16 = false,
+                                           bool force_opaque_alpha = false);
 
 // Capture a single window's own surface. nullopt on failure (caller falls back
 // to a monitor capture cropped to the window rect).
