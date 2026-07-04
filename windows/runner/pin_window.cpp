@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "clipboard_channel.h"
 #include "decoration.h"
 #include "dpi_util.h"
 #include "hdr_util.h"
@@ -72,51 +73,13 @@ double ResolveScaleForLogical(double lx, double ly) {
 }
 
 // Write the pin image (straight BGRA) to the clipboard: CF_DIBV5 (alpha) + a
-// registered "PNG" copy. Mirrors clipboard_channel's writer (kept local to avoid
-// coupling the pin to the channel).
+// registered "PNG" copy, via the shared clip writer.
 void WritePinToClipboard(const std::vector<uint8_t>& bgra, uint32_t w,
                          uint32_t h) {
   if (bgra.empty() || w == 0 || h == 0) return;
-  BITMAPV5HEADER bi{};
-  bi.bV5Size = sizeof(BITMAPV5HEADER);
-  bi.bV5Width = static_cast<LONG>(w);
-  bi.bV5Height = -static_cast<LONG>(h);  // top-down
-  bi.bV5Planes = 1;
-  bi.bV5BitCount = 32;
-  bi.bV5Compression = BI_BITFIELDS;
-  bi.bV5RedMask = 0x00FF0000;
-  bi.bV5GreenMask = 0x0000FF00;
-  bi.bV5BlueMask = 0x000000FF;
-  bi.bV5AlphaMask = 0xFF000000;
-  bi.bV5CSType = LCS_WINDOWS_COLOR_SPACE;
-  bi.bV5Intent = LCS_GM_IMAGES;
-  const size_t pix = static_cast<size_t>(w) * 4 * h;
-  HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pix);
-  if (!dib) return;
-  if (auto* p = static_cast<uint8_t*>(GlobalLock(dib))) {
-    std::memcpy(p, &bi, sizeof(bi));
-    std::memcpy(p + sizeof(bi), bgra.data(), pix);
-    GlobalUnlock(dib);
-  }
-  if (!OpenClipboard(nullptr)) {
-    GlobalFree(dib);
-    return;
-  }
-  EmptyClipboard();
-  bool ok = SetClipboardData(CF_DIBV5, dib) != nullptr;
-  std::vector<uint8_t> png = codec::EncodePng(bgra.data(), w, h, w * 4);
-  if (!png.empty()) {
-    if (HGLOBAL pg = GlobalAlloc(GMEM_MOVEABLE, png.size())) {
-      if (void* pp = GlobalLock(pg)) {
-        std::memcpy(pp, png.data(), png.size());
-        GlobalUnlock(pg);
-      }
-      UINT cf_png = RegisterClipboardFormatW(L"PNG");
-      if (cf_png) SetClipboardData(cf_png, pg);
-    }
-  }
-  CloseClipboard();
-  if (!ok) GlobalFree(dib);
+  const std::vector<uint8_t> png = codec::EncodePng(bgra.data(), w, h, w * 4);
+  clip::WriteBgraToClipboard(bgra.data(), w, h, w * 4,
+                             png.empty() ? nullptr : png.data(), png.size());
 }
 
 }  // namespace
