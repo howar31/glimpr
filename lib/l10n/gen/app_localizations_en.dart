@@ -931,6 +931,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Some shortcuts couldn\'t be registered: they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:';
 
   @override
+  String get errorCaptureFailed => 'Capture failed';
+
+  @override
+  String errorCaptureFailedDetail(String detail) {
+    return 'Capture failed: $detail';
+  }
+
+  @override
+  String errorRecordingFailedDetail(String detail) {
+    return 'Recording failed: $detail';
+  }
+
+  @override
+  String get errorNoWindowToRecord => 'No window to record';
+
+  @override
+  String get errorNoImageInClipboard => 'No image in clipboard';
+
+  @override
   String get settingsShortcutsResetToDefault => 'Reset to default';
 
   @override

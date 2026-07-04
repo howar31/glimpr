@@ -1007,6 +1007,32 @@
   "@shortcutsConflictWarning": {
     "description": "Startup warning dialog shown when one or more saved global hotkeys failed to register at launch (conflict with another app); the conflicting shortcuts are listed after this line"
   },
+  "errorCaptureFailed": "Capture failed",
+  "@errorCaptureFailed": {
+    "description": "Native error alert: a direct capture produced no image"
+  },
+  "errorCaptureFailedDetail": "Capture failed: {detail}",
+  "@errorCaptureFailedDetail": {
+    "description": "Native error alert: a direct capture threw; detail is the raw error",
+    "placeholders": {
+      "detail": { "type": "String" }
+    }
+  },
+  "errorRecordingFailedDetail": "Recording failed: {detail}",
+  "@errorRecordingFailedDetail": {
+    "description": "Native error alert: starting/finishing a recording failed; detail is the raw error",
+    "placeholders": {
+      "detail": { "type": "String" }
+    }
+  },
+  "errorNoWindowToRecord": "No window to record",
+  "@errorNoWindowToRecord": {
+    "description": "Native error alert: record-window found no eligible window"
+  },
+  "errorNoImageInClipboard": "No image in clipboard",
+  "@errorNoImageInClipboard": {
+    "description": "Native error alert: the pin-clipboard / open-clipboard action found no image on the clipboard"
+  },
   "settingsShortcutsResetToDefault": "Reset to default",
   "@settingsShortcutsResetToDefault": {
     "description": "Settings > Shortcuts: tooltip on the per-shortcut reset icon button"

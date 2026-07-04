@@ -888,6 +888,25 @@ class AppLocalizationsZh extends AppLocalizations {
       '部分快捷鍵無法註冊（已被其他程式占用），將無法使用。請到「設定 → 快捷鍵」檢查：';
 
   @override
+  String get errorCaptureFailed => '截圖失敗';
+
+  @override
+  String errorCaptureFailedDetail(String detail) {
+    return '截圖失敗：$detail';
+  }
+
+  @override
+  String errorRecordingFailedDetail(String detail) {
+    return '錄影失敗：$detail';
+  }
+
+  @override
+  String get errorNoWindowToRecord => '沒有可錄影的視窗';
+
+  @override
+  String get errorNoImageInClipboard => '剪貼簿中沒有圖片';
+
+  @override
   String get settingsShortcutsResetToDefault => '重設為預設值';
 
   @override

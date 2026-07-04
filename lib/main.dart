@@ -175,7 +175,7 @@ Future<void> _pinClipboard() async {
     bytes = null;
   }
   if (bytes == null || bytes.isEmpty) {
-    CaptureBridge().showError('No image in clipboard');
+    CaptureBridge().showError(appL10n.errorNoImageInClipboard);
     return;
   }
   final file = File(

@@ -4,6 +4,7 @@ import '../editor/decoration.dart';
 import '../output/flow.dart';
 import '../output/sounds.dart';
 import '../overlay/export.dart';
+import '../settings/app_locale.dart';
 import '../settings/prefs_cache.dart';
 import '../settings/settings.dart';
 import 'capture_bridge.dart';
@@ -197,14 +198,14 @@ class DirectCapture {
           if (ok) {
             if (cap.completionSound) _complete();
           } else {
-            _showError('Capture failed');
+            _showError(appL10n.errorCaptureFailed);
           }
           CaptureBridge.setCaptureProcessing(false); // pulse: delivered
           // kind=window marks the real-alpha leg; the rectangular fallback
           // below reports kind=focusedWindow through _capture's mark instead.
           _perfMark('directDelivered ok=$ok kind=window');
         } catch (e) {
-          _showError('Capture failed: $e');
+          _showError(appL10n.errorCaptureFailedDetail('$e'));
         }
         // Record the window's rect so "Capture Last Region" can repeat it.
         await _regionStore.save(
@@ -291,7 +292,7 @@ class DirectCapture {
         hdr: cap.hdrScreenshot,
       );
     } catch (e) {
-      _showError('Capture failed: $e');
+      _showError(appL10n.errorCaptureFailedDetail('$e'));
       return true; // surfaced -> no retry
     }
     if (result == null) return silentOnMissingDisplay;
@@ -304,12 +305,12 @@ class DirectCapture {
       if (ok) {
         if (cap.completionSound) _complete();
       } else {
-        _showError('Capture failed');
+        _showError(appL10n.errorCaptureFailed);
       }
       CaptureBridge.setCaptureProcessing(false); // pulse: delivered
       _perfMark('directDelivered ok=$ok kind=${kind.name}');
     } catch (e) {
-      _showError('Capture failed: $e');
+      _showError(appL10n.errorCaptureFailedDetail('$e'));
     }
     // Record the captured region for the next "Capture Last Region".
     await _regionStore.save(

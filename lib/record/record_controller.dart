@@ -10,6 +10,7 @@ import '../capture/direct_capture.dart'
         kRecordingCaptureLabel;
 import '../capture/captured_display.dart' show FocusedWindowInfo;
 import '../capture/last_region.dart';
+import '../settings/app_locale.dart';
 import '../output/flow.dart';
 import '../output/output_naming.dart';
 import '../output/sounds.dart';
@@ -130,7 +131,7 @@ class RecordController {
       await _start(mode);
     } catch (e) {
       _phase = RecordPhase.idle;
-      _showError('Recording failed: $e');
+      _showError(appL10n.errorRecordingFailedDetail('$e'));
     }
   }
 
@@ -186,7 +187,7 @@ class RecordController {
         final info = await _focusedWindow();
         if (info?.windowId == null) {
           _phase = RecordPhase.idle;
-          _showError('No window to record');
+          _showError(appL10n.errorNoWindowToRecord);
           return;
         }
         windowId = info!.windowId;
@@ -316,7 +317,7 @@ class RecordController {
       );
     } catch (e) {
       _phase = RecordPhase.idle;
-      _showError('Recording failed: $e');
+      _showError(appL10n.errorRecordingFailedDetail('$e'));
     }
   }
 
@@ -358,7 +359,7 @@ class RecordController {
   void _onFailed(String message) {
     _phase = RecordPhase.idle;
     _inLiveSelect = false;
-    _showError('Recording failed: $message');
+    _showError(appL10n.errorRecordingFailedDetail(message));
   }
 
   void _onAborted() {

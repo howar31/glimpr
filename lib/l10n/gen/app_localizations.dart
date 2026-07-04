@@ -1772,6 +1772,36 @@ abstract class AppLocalizations {
   /// **'Some shortcuts couldn\'t be registered: they\'re in use by another app and won\'t work. Please check them in Settings → Shortcuts:'**
   String get shortcutsConflictWarning;
 
+  /// Native error alert: a direct capture produced no image
+  ///
+  /// In en, this message translates to:
+  /// **'Capture failed'**
+  String get errorCaptureFailed;
+
+  /// Native error alert: a direct capture threw; detail is the raw error
+  ///
+  /// In en, this message translates to:
+  /// **'Capture failed: {detail}'**
+  String errorCaptureFailedDetail(String detail);
+
+  /// Native error alert: starting/finishing a recording failed; detail is the raw error
+  ///
+  /// In en, this message translates to:
+  /// **'Recording failed: {detail}'**
+  String errorRecordingFailedDetail(String detail);
+
+  /// Native error alert: record-window found no eligible window
+  ///
+  /// In en, this message translates to:
+  /// **'No window to record'**
+  String get errorNoWindowToRecord;
+
+  /// Native error alert: the pin-clipboard / open-clipboard action found no image on the clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'No image in clipboard'**
+  String get errorNoImageInClipboard;
+
   /// Settings > Shortcuts: tooltip on the per-shortcut reset icon button
   ///
   /// In en, this message translates to:
