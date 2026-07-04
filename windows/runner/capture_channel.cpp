@@ -16,7 +16,9 @@
 
 #include <winrt/base.h>
 
+#include "channel_args.h"
 #include "clipboard_channel.h"
+#include "deco_args.h"
 #include "decoration.h"
 #include "editor_window.h"
 #include "image_codec.h"
@@ -29,47 +31,7 @@ namespace {
 
 using flutter::EncodableMap;
 using flutter::EncodableValue;
-
-const EncodableValue* Find(const EncodableMap& map, const char* key) {
-  auto it = map.find(EncodableValue(std::string(key)));
-  return it == map.end() ? nullptr : &it->second;
-}
-
-bool GetBool(const EncodableMap& map, const char* key, bool dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<bool>(v)) return *p;
-  }
-  return dflt;
-}
-
-int GetInt(const EncodableMap& map, const char* key, int dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<int>(*p);
-  }
-  return dflt;
-}
-
-std::optional<int64_t> GetDisplayId(const EncodableMap& map) {
-  if (const auto* v = Find(map, "displayId")) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return *p;
-  }
-  return std::nullopt;
-}
-
-double GetDouble(const EncodableMap& map, const char* key, double dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<double>(v)) return *p;
-    if (auto p = std::get_if<int32_t>(v)) return static_cast<double>(*p);
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<double>(*p);
-  }
-  return dflt;
-}
-
-bool HasKey(const EncodableMap& map, const char* key) {
-  return Find(map, key) != nullptr;
-}
+using namespace chanarg;
 
 double MonitorScale(HMONITOR mon) {
   UINT dpi_x = 96, dpi_y = 96;
@@ -77,14 +39,6 @@ double MonitorScale(HMONITOR mon) {
     dpi_x = 96;
   }
   return dpi_x / 96.0;
-}
-
-std::optional<int64_t> GetInt64(const EncodableMap& map, const char* key) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return *p;
-  }
-  return std::nullopt;
 }
 
 std::string Utf8(const std::wstring& w) {
@@ -188,26 +142,6 @@ CaptureFrame CropFrame(const CaptureFrame& f, long px, long py, long pw,
     }
   }
   return out;
-}
-
-const EncodableMap* GetMap(const EncodableMap& map, const char* key) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<EncodableMap>(v)) return p;
-  }
-  return nullptr;
-}
-
-deco::DecoSpec ParseDecoSpec(const EncodableMap& m) {
-  deco::DecoSpec s;
-  s.margin = GetDouble(m, "margin", 0);
-  s.cornerRadius = GetDouble(m, "cornerRadius", 0);
-  s.shadowBlur = GetDouble(m, "shadowBlur", 0);
-  s.shadowDx = GetDouble(m, "shadowDx", 0);
-  s.shadowDy = GetDouble(m, "shadowDy", 0);
-  if (auto c = GetInt64(m, "shadowColor")) s.shadowArgb = static_cast<uint32_t>(*c);
-  if (auto f = GetInt64(m, "fill")) s.fillArgb = static_cast<uint32_t>(*f);
-  s.shapeFromAlpha = GetBool(m, "shapeFromAlpha", false);
-  return s;
 }
 
 }  // namespace
@@ -412,7 +346,7 @@ EncodableValue CaptureChannel::ComputeRegionCapture(const EncodableMap& map) {
   // Dual-output HDR: keep the raw fp16 rendition (HDR monitors only) and
   // return it JXR-encoded beside the SDR bytes.
   const bool want_hdr = GetBool(map, "hdr", false);
-  const std::optional<int64_t> display_id = GetDisplayId(map);
+  const std::optional<int64_t> display_id = GetInt64(map, "displayId");
 
   // Resolve the monitor: an explicit displayId (an HMONITOR round-tripped as an
   // int), else the monitor under the cursor.

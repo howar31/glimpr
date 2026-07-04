@@ -13,6 +13,7 @@
 #include <string>
 #include <thread>
 
+#include "channel_args.h"
 #include "cursor_image.h"
 #include "editor_window.h"
 #include "hdr_compose.h"
@@ -29,6 +30,7 @@ namespace {
 using flutter::EncodableList;
 using flutter::EncodableMap;
 using flutter::EncodableValue;
+using namespace chanarg;
 
 inline int64_t MonId(HMONITOR m) {
   return static_cast<int64_t>(reinterpret_cast<intptr_t>(m));
@@ -43,34 +45,6 @@ double MonitorScale(HMONITOR mon) {
     dpi_x = 96;
   }
   return dpi_x / 96.0;
-}
-
-const EncodableValue* Find(const EncodableMap& map, const char* key) {
-  auto it = map.find(EncodableValue(std::string(key)));
-  return it == map.end() ? nullptr : &it->second;
-}
-
-bool GetBool(const EncodableMap& map, const char* key, bool dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<bool>(v)) return *p;
-  }
-  return dflt;
-}
-
-double GetDouble(const EncodableMap& map, const char* key, double dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<double>(v)) return *p;
-    if (auto p = std::get_if<int32_t>(v)) return static_cast<double>(*p);
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<double>(*p);
-  }
-  return dflt;
-}
-
-std::string GetString(const EncodableMap& map, const char* key) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<std::string>(v)) return *p;
-  }
-  return {};
 }
 
 std::wstring Wide(const std::string& s) {

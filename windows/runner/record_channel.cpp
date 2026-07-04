@@ -7,61 +7,14 @@
 #include <thread>
 #include <utility>
 
+#include "channel_args.h"
 #include "perf_log.h"
 
 namespace {
 
 using flutter::EncodableMap;
 using flutter::EncodableValue;
-
-const EncodableValue* Find(const EncodableMap& map, const char* key) {
-  auto it = map.find(EncodableValue(std::string(key)));
-  return it == map.end() ? nullptr : &it->second;
-}
-
-bool GetBool(const EncodableMap& map, const char* key, bool dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<bool>(v)) return *p;
-  }
-  return dflt;
-}
-
-int GetInt(const EncodableMap& map, const char* key, int dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<int>(*p);
-  }
-  return dflt;
-}
-
-int64_t GetInt64(const EncodableMap& map, const char* key, int64_t dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return *p;
-  }
-  return dflt;
-}
-
-double GetDouble(const EncodableMap& map, const char* key, double dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<double>(v)) return *p;
-    if (auto p = std::get_if<int32_t>(v)) return static_cast<double>(*p);
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<double>(*p);
-  }
-  return dflt;
-}
-
-std::string GetString(const EncodableMap& map, const char* key,
-                      const char* dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<std::string>(v)) return *p;
-  }
-  return dflt;
-}
-
-bool HasKey(const EncodableMap& map, const char* key) {
-  return Find(map, key) != nullptr;
-}
+using namespace chanarg;
 
 }  // namespace
 

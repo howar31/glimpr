@@ -2,8 +2,11 @@
 
 #include <flutter/standard_method_codec.h>
 
+#include "channel_args.h"
+
 using flutter::EncodableMap;
 using flutter::EncodableValue;
+using namespace chanarg;
 
 namespace {
 // RegisterHotKey fsModifiers add-on: do not re-fire while the keys stay held.
@@ -15,24 +18,6 @@ constexpr UINT kModAlt = 0x0001;      // MOD_ALT
 constexpr UINT kModControl = 0x0002;  // MOD_CONTROL
 constexpr UINT kModShift = 0x0004;    // MOD_SHIFT
 constexpr UINT kModWin = 0x0008;      // MOD_WIN
-
-// Safe arg readers (match the int32/int64 handling used elsewhere in the runner).
-std::string GetString(const EncodableMap& map, const char* key) {
-  auto it = map.find(EncodableValue(std::string(key)));
-  if (it != map.end()) {
-    if (auto p = std::get_if<std::string>(&it->second)) return *p;
-  }
-  return std::string();
-}
-
-int GetInt(const EncodableMap& map, const char* key, int dflt) {
-  auto it = map.find(EncodableValue(std::string(key)));
-  if (it != map.end()) {
-    if (auto p = std::get_if<int32_t>(&it->second)) return *p;
-    if (auto p = std::get_if<int64_t>(&it->second)) return static_cast<int>(*p);
-  }
-  return dflt;
-}
 }  // namespace
 
 HotkeyHost::HotkeyHost(flutter::BinaryMessenger* messenger, HWND owner)

@@ -7,6 +7,8 @@
 #include <optional>
 #include <vector>
 
+#include "channel_args.h"
+#include "deco_args.h"
 #include "decoration.h"
 #include "image_codec.h"
 #include "wgc_capturer.h"  // CaptureFrame
@@ -15,70 +17,7 @@ namespace {
 
 using flutter::EncodableMap;
 using flutter::EncodableValue;
-
-const EncodableValue* Find(const EncodableMap& map, const char* key) {
-  auto it = map.find(EncodableValue(std::string(key)));
-  return it == map.end() ? nullptr : &it->second;
-}
-
-bool GetBool(const EncodableMap& map, const char* key, bool dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<bool>(v)) return *p;
-  }
-  return dflt;
-}
-
-int GetInt(const EncodableMap& map, const char* key, int dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<int>(*p);
-  }
-  return dflt;
-}
-
-double GetDouble(const EncodableMap& map, const char* key, double dflt) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<double>(v)) return *p;
-    if (auto p = std::get_if<int32_t>(v)) return static_cast<double>(*p);
-    if (auto p = std::get_if<int64_t>(v)) return static_cast<double>(*p);
-  }
-  return dflt;
-}
-
-std::optional<int64_t> GetInt64(const EncodableMap& map, const char* key) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<int32_t>(v)) return *p;
-    if (auto p = std::get_if<int64_t>(v)) return *p;
-  }
-  return std::nullopt;
-}
-
-const std::vector<uint8_t>* GetBytes(const EncodableMap& map, const char* key) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<std::vector<uint8_t>>(v)) return p;
-  }
-  return nullptr;
-}
-
-const EncodableMap* GetMap(const EncodableMap& map, const char* key) {
-  if (const auto* v = Find(map, key)) {
-    if (auto p = std::get_if<EncodableMap>(v)) return p;
-  }
-  return nullptr;
-}
-
-deco::DecoSpec ParseDecoSpec(const EncodableMap& m) {
-  deco::DecoSpec s;
-  s.margin = GetDouble(m, "margin", 0);
-  s.cornerRadius = GetDouble(m, "cornerRadius", 0);
-  s.shadowBlur = GetDouble(m, "shadowBlur", 0);
-  s.shadowDx = GetDouble(m, "shadowDx", 0);
-  s.shadowDy = GetDouble(m, "shadowDy", 0);
-  if (auto c = GetInt64(m, "shadowColor")) s.shadowArgb = static_cast<uint32_t>(*c);
-  if (auto f = GetInt64(m, "fill")) s.fillArgb = static_cast<uint32_t>(*f);
-  s.shapeFromAlpha = GetBool(m, "shapeFromAlpha", false);
-  return s;
-}
+using namespace chanarg;
 
 // The editor composites in RGBA8888 (dart:ui rawRgba); the native codec +
 // decoration take BGRA. Swap R<->B (G, A unchanged); alpha sense is preserved.
