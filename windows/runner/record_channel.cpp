@@ -4,6 +4,8 @@
 
 #include <optional>
 #include <string>
+#include <thread>
+#include <utility>
 
 #include "perf_log.h"
 
@@ -101,6 +103,16 @@ void RecordChannel::HandleMethodCall(
   }
 
   if (method == "start") {
+    if (finishing_.load()) {
+      // The previous recording is still finalizing on the async-stop worker;
+      // one RecorderClient/worker at a time. Surfaces as a normal failure.
+      Emit("onRecordFailed",
+           EncodableValue(EncodableMap{
+               {EncodableValue("message"),
+                EncodableValue("previous recording is still finalizing")}}));
+      result->Success();
+      return;
+    }
     const EncodableMap empty;
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     const EncodableMap& m = args ? *args : empty;
@@ -234,32 +246,30 @@ void RecordChannel::HandleMethodCall(
 }
 
 void RecordChannel::FinishActive() {
-  if (!recorder_->active()) return;
+  if (!recorder_->active() || finishing_.exchange(true)) return;
   // Mirror macOS: at a graceful stop the recording-red SNAPS off (graceful=false,
-  // so it does NOT ease and fight the pulse) and the logo-gradient "processing"
-  // pulse runs on the tray while the file finalizes. NOTE: Recorder::Stop blocks
-  // the platform thread (joins the encoder + finalizes), so the pulse animates
-  // only AFTER Stop returns -- it then runs >= 1 full cycle (mac's pulse-during-
-  // finalize would need an async finalize; the long-GIF finalize freeze is a
-  // documented platform deviation, see memory glimpr-windows-recording).
+  // so it does NOT ease and fight the pulse), the chrome drops IMMEDIATELY, and
+  // the logo-gradient "processing" pulse runs on the tray while the file
+  // finalizes. The blocking RecorderClient::Stop (encoder join + finalize; a
+  // long GIF takes tens of seconds) runs on a worker thread and marshals its
+  // result back via kAsyncStopDone -- the platform thread (all engines' UI)
+  // stays live during the finalize, full macOS parity.
   NotifyState(false, false);
   NotifyProcessing(true);
   if (chrome_) chrome_->Hide();  // the strip is in the recording's chrome; drop it first
   Emit("onRecordStopping");
   perf::Mark("recordStopBegin");
-  std::string path, error;
-  const bool ok = recorder_->Stop(&path, &error);
-  perf::Mark(ok ? "recordFinalized ok=1" : "recordFinalized ok=0");
-  NotifyProcessing(false);  // ends at the next pulse low (>= 1 full cycle)
-  if (ok) {
-    Emit("onRecordFinished",
-         EncodableValue(EncodableMap{
-             {EncodableValue("path"), EncodableValue(path)}}));
-  } else {
-    Emit("onRecordFailed",
-         EncodableValue(EncodableMap{
-             {EncodableValue("message"), EncodableValue(error)}}));
-  }
+  std::thread([this]() {
+    std::string path, error;
+    const bool ok = recorder_->Stop(&path, &error);
+    {
+      std::lock_guard<std::mutex> lock(stop_mu_);
+      stop_ok_ = ok;
+      stop_path_ = std::move(path);
+      stop_error_ = std::move(error);
+    }
+    PostMessage(control_hwnd_, WM_GLIMPR_RECORD, Recorder::kAsyncStopDone, 0);
+  }).detach();
 }
 
 void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
@@ -331,6 +341,10 @@ void RecordChannel::RelaySelection(EncodableValue args) {
 
 void RecordChannel::OnNativeEvent(uint32_t code) {
   if (code == Recorder::kAsyncFailed) {
+    // While an async stop is finalizing, a worker failure surfaces through the
+    // stop thread's result (Stop unblocks with the error) -- swallowing here
+    // avoids a double onRecordFailed.
+    if (finishing_.load()) return;
     std::string error = recorder_->TakeAsyncError();
     if (error.empty()) error = "recording failed";
     if (recorder_->active()) recorder_->Abort();  // discard the partial file
@@ -343,5 +357,29 @@ void RecordChannel::OnNativeEvent(uint32_t code) {
   } else if (code == Recorder::kAsyncAutoStop) {
     // The auto-stop poller hit maxDuration: finalize like a user stop.
     FinishActive();
+  } else if (code == Recorder::kAsyncStopDone) {
+    // The async-stop worker finished finalizing: emit the outcome on the
+    // platform thread (FinishActive already dropped the chrome + started the
+    // pulse when the stop began).
+    bool ok = false;
+    std::string path, error;
+    {
+      std::lock_guard<std::mutex> lock(stop_mu_);
+      ok = stop_ok_;
+      path = std::move(stop_path_);
+      error = std::move(stop_error_);
+    }
+    perf::Mark(ok ? "recordFinalized ok=1" : "recordFinalized ok=0");
+    NotifyProcessing(false);  // pulse ends at the next low (>= 1 full cycle)
+    if (ok) {
+      Emit("onRecordFinished",
+           EncodableValue(EncodableMap{
+               {EncodableValue("path"), EncodableValue(path)}}));
+    } else {
+      Emit("onRecordFailed",
+           EncodableValue(EncodableMap{
+               {EncodableValue("message"), EncodableValue(error)}}));
+    }
+    finishing_.store(false);
   }
 }

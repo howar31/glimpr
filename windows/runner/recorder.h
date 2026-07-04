@@ -55,6 +55,9 @@ class Recorder {
   // Async event codes posted to the control window (wparam of |async_msg|).
   static constexpr uint32_t kAsyncFailed = 1;
   static constexpr uint32_t kAsyncAutoStop = 2;
+  // RecordChannel's async-stop completion (the blocking Stop runs on a worker
+  // thread so a long GIF finalize no longer freezes the platform thread).
+  static constexpr uint32_t kAsyncStopDone = 3;
 
   Recorder();
   ~Recorder();

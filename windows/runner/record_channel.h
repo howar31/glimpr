@@ -7,8 +7,10 @@
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "record_chrome.h"
@@ -95,6 +97,16 @@ class RecordChannel {
   bool pending_scrim_ = true;
   std::function<void(bool, bool)> on_state_;       // recording-state -> tray
   std::function<void(bool)> on_processing_;        // finalize pulse -> tray
+
+  // Async-stop state: FinishActive hides the chrome and returns immediately;
+  // a worker thread runs the blocking RecorderClient::Stop (a long GIF
+  // finalize takes tens of seconds and used to freeze every engine) and posts
+  // Recorder::kAsyncStopDone with the result stored here.
+  std::atomic<bool> finishing_{false};
+  std::mutex stop_mu_;
+  bool stop_ok_ = false;
+  std::string stop_path_;
+  std::string stop_error_;
 };
 
 #endif  // RUNNER_RECORD_CHANNEL_H_
