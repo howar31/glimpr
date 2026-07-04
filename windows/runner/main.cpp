@@ -12,18 +12,14 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  // Refuse legacy extension-point injection (global SetWindowsHookEx hooks,
-  // AppInit DLLs, Winsock LSPs) into this process. Third-party window managers /
-  // overlays (DisplayFusion, RTSS, ...) inject a hook DLL this way and subclass
-  // our windows; when such a tool is unstable its injected code faults INSIDE our
-  // process and takes us down with a STATUS_FATAL_USER_CALLBACK_EXCEPTION (seen
-  // with DisplayFusion). Keeping foreign hook DLLs out of our address space stops
-  // that whole class of crash. NOTE: this also blocks LEGACY (extension-point)
-  // IMEs; modern TSF text services are unaffected. Set before any window exists.
-  PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY ext_policy = {};
-  ext_policy.DisableExtensionPoints = TRUE;
-  ::SetProcessMitigationPolicy(ProcessExtensionPointDisablePolicy, &ext_policy,
-                               sizeof(ext_policy));
+  // NO ProcessExtensionPointDisablePolicy here -- it was tried (to keep
+  // DisplayFusion-class hook injectors from crashing us in-process) and
+  // REMOVED 2026-07-04: the policy also blocks third-party TSF input methods'
+  // in-process keystroke layer, so IMEs like Boshiamy/GoingIME showed in the
+  // taskbar but never composed (probe-proven: WM_IME_SETCONTEXT/NOTIFY arrive,
+  // composition never starts, keys land raw). Every input method must work.
+  // Crash containment stays with InstallCrashHandler below; if injector
+  // crashes recur, the plan is a HWND_MESSAGE-only hub window, not the policy.
 
   // Best-effort crash capture (minidump next to the exe) for both this process
   // and the record worker below.
