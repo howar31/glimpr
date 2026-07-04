@@ -12,6 +12,8 @@
 #include <cstring>
 #include <string>
 
+#include "utils.h"
+
 // NOTE on DrawText: windows.h defines DrawText -> DrawTextW, and d2d1.h is parsed
 // with that macro active, so the render-target method is declared as DrawTextW.
 // We therefore call dc_->DrawText(...), which the macro expands to the matching
@@ -524,15 +526,7 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
   last_detail_ms_ = 0;
 
   // Widen the (UTF-8) output path once for the mp4 on-disk size poll.
-  out_path_w_.clear();
-  if (!output_path.empty()) {
-    int n = MultiByteToWideChar(CP_UTF8, 0, output_path.c_str(), -1, nullptr, 0);
-    if (n > 0) {
-      out_path_w_.resize(static_cast<size_t>(n - 1), L'\0');
-      MultiByteToWideChar(CP_UTF8, 0, output_path.c_str(), -1, out_path_w_.data(),
-                          n);
-    }
-  }
+  out_path_w_ = Utf16FromUtf8(output_path);
 
   HMONITOR mon = reinterpret_cast<HMONITOR>(static_cast<intptr_t>(display_id));
   MONITORINFO mi{};

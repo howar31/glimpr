@@ -9,6 +9,7 @@
 
 #include "perf_log.h"
 #include "pin_window.h"
+#include "utils.h"
 #include "win_reveal.h"
 
 using flutter::EncodableList;
@@ -225,13 +226,7 @@ bool EditorWindow::OnCreate() {
           // caption follows the language setting; native owns no l10n strings.
           if (const auto* s = std::get_if<std::string>(call.arguments())) {
             if (GetHandle() && !s->empty()) {
-              int n = MultiByteToWideChar(CP_UTF8, 0, s->c_str(),
-                                          static_cast<int>(s->size()), nullptr,
-                                          0);
-              std::wstring w(static_cast<size_t>(n), L'\0');
-              MultiByteToWideChar(CP_UTF8, 0, s->c_str(),
-                                  static_cast<int>(s->size()), w.data(), n);
-              SetWindowTextW(GetHandle(), w.c_str());
+              SetWindowTextW(GetHandle(), Utf16FromUtf8(*s).c_str());
             }
           }
           result->Success();

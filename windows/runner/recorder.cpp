@@ -4,6 +4,7 @@
 #include "hdr_util.h"
 #include "record_audio.h"
 #include "record_gif.h"
+#include "utils.h"
 
 #include <codecapi.h>
 #include <d3d11.h>
@@ -974,16 +975,7 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
       spec.gif ? static_cast<uint32_t>((100 + gfps / 2) / gfps) : 0;
 
   // Widen the (Dart-built, ASCII/path-safe) output path once, for either encoder.
-  {
-    int n = MultiByteToWideChar(CP_UTF8, 0, spec.output_path.c_str(), -1,
-                                nullptr, 0);
-    impl_->output_path_w.clear();
-    if (n > 0) {
-      std::wstring w(static_cast<size_t>(n - 1), L'\0');
-      MultiByteToWideChar(CP_UTF8, 0, spec.output_path.c_str(), -1, w.data(), n);
-      impl_->output_path_w = std::move(w);
-    }
-  }
+  impl_->output_path_w = Utf16FromUtf8(spec.output_path);
 
   // ---- WASAPI audio sources (mp4 only; GIF has no audio) -----------------
   // Started BEFORE the writer's audio streams so only sources that actually open
@@ -1314,17 +1306,7 @@ bool Recorder::Stop(std::string* out_path, std::string* error) {
     }
   }
 
-  const std::wstring path_w = impl_->output_path_w;
-  std::string path_utf8;
-  if (!path_w.empty()) {
-    int n = WideCharToMultiByte(CP_UTF8, 0, path_w.c_str(),
-                                static_cast<int>(path_w.size()), nullptr, 0,
-                                nullptr, nullptr);
-    path_utf8.resize(static_cast<size_t>(n), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, path_w.c_str(),
-                        static_cast<int>(path_w.size()), path_utf8.data(), n,
-                        nullptr, nullptr);
-  }
+  const std::string path_utf8 = Utf8FromUtf16(impl_->output_path_w);
 
   impl_->Cleanup();
   if (ok && out_path) *out_path = path_utf8;

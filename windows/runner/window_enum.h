@@ -5,6 +5,7 @@
 
 #include <flutter/encodable_value.h>
 
+#include <string>
 #include <vector>
 
 // Snappable top-level windows for the overlay's window-snap, mirroring the
@@ -20,6 +21,11 @@ namespace win_enum {
 // snappableWindows.
 flutter::EncodableList SnappableWindows(HMONITOR mon,
                                         const std::vector<HWND>& overlays);
+
+// Title / owning-process name of a top-level window (UTF-8), shared by the
+// snap list above and the direct window capture's reply metadata.
+std::string WindowTitle(HWND hwnd);
+std::string ProcessName(HWND hwnd);
 
 }  // namespace win_enum
 

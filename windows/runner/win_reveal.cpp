@@ -4,12 +4,11 @@
 
 #include <shlobj.h>
 
+#include "utils.h"
+
 void RevealInExplorer(const std::string& utf8_path) {
-  if (utf8_path.empty()) return;
-  int n = MultiByteToWideChar(CP_UTF8, 0, utf8_path.c_str(), -1, nullptr, 0);
-  if (n <= 0) return;
-  std::wstring w(static_cast<size_t>(n - 1), L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, utf8_path.c_str(), -1, w.data(), n);
+  const std::wstring w = Utf16FromUtf8(utf8_path);
+  if (w.empty()) return;
 
   // SHOpenFolderAndSelectItems needs COM on this thread; balance the ref count.
   const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));

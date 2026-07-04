@@ -13,6 +13,7 @@
 
 #include "hdr_util.h"
 #include "image_codec.h"
+#include "utils.h"
 
 namespace {
 
@@ -176,15 +177,7 @@ bool PinWindow::Create(const std::string& image_path,
                        std::function<void(PinWindow*)> on_closed) {
   on_closed_ = std::move(on_closed);
 
-  // UTF-8 path -> wide.
-  std::wstring wpath;
-  if (!image_path.empty()) {
-    int n = MultiByteToWideChar(CP_UTF8, 0, image_path.c_str(),
-                                static_cast<int>(image_path.size()), nullptr, 0);
-    wpath.resize(static_cast<size_t>(n));
-    MultiByteToWideChar(CP_UTF8, 0, image_path.c_str(),
-                        static_cast<int>(image_path.size()), wpath.data(), n);
-  }
+  const std::wstring wpath = Utf16FromUtf8(image_path);
   if (!InitGraphics(wpath)) return false;
 
   // Resolve placement (physical pixels).

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "resource.h"
+#include "utils.h"
 
 TrayIcon* TrayIcon::s_record_instance_ = nullptr;
 
@@ -52,21 +53,8 @@ constexpr char kActOpenEditor[] = "global.openEditor";
 constexpr char kActOpenEditorClipboard[] = "global.openEditorClipboard";
 constexpr char kActOpenSaveFolder[] = "menu.openSaveFolder";
 
-// UTF-8 -> UTF-16 (recent filenames may be non-ASCII, unlike the ASCII menu
-// labels). The naive widening in AppendItem is ASCII-only, so recents convert
-// properly here.
-std::wstring Utf8ToWide(const std::string& s) {
-  if (s.empty()) return {};
-  int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()),
-                              nullptr, 0);
-  std::wstring w(static_cast<size_t>(n), L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()),
-                      w.data(), n);
-  return w;
-}
-
 std::wstring Basename(const std::string& path) {
-  std::wstring w = Utf8ToWide(path);
+  std::wstring w = Utf16FromUtf8(path);
   size_t slash = w.find_last_of(L"\\/");
   return slash == std::wstring::npos ? w : w.substr(slash + 1);
 }
@@ -98,7 +86,7 @@ void AppendItem(HMENU menu, UINT id, const std::string& label,
     text += "\t";
     text += accel;
   }
-  std::wstring wide = Utf8ToWide(text);
+  std::wstring wide = Utf16FromUtf8(text);
   UINT flags = MF_STRING | (enabled ? MF_ENABLED : MF_GRAYED);
   AppendMenuW(menu, flags, id, wide.c_str());
 }
@@ -283,9 +271,9 @@ void TrayIcon::ShowMenu() {
     }
     AppendMenuW(recent, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(recent, MF_STRING, kCmdClearRecent,
-                Utf8ToWide(L("clearRecent", "Clear Recent")).c_str());
+                Utf16FromUtf8(L("clearRecent", "Clear Recent")).c_str());
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
-                Utf8ToWide(L("openRecent", "Open Recent")).c_str());
+                Utf16FromUtf8(L("openRecent", "Open Recent")).c_str());
   }
   AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
              "", true);
@@ -628,7 +616,7 @@ void TrayIcon::SetProcessing(bool active, const std::string& tip_utf8,
     proc_unbounded_ = proc_unbounded_ || unbounded;
     // Hover tooltip: WHAT is being processed. Set on every activation so an
     // overlapping source updates it; OnProcTick's end path restores "Glimpr".
-    if (!tip_utf8.empty()) SetTip(Utf8ToWide(tip_utf8));
+    if (!tip_utf8.empty()) SetTip(Utf16FromUtf8(tip_utf8));
     if (processing_) return;  // already pulsing -> keep it alive
     processing_ = true;
     proc_start_ms_ = GetTickCount64();

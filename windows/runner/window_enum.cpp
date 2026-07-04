@@ -6,11 +6,16 @@
 #include <algorithm>
 #include <string>
 
+#include "utils.h"
+
 namespace {
 
 using flutter::EncodableList;
 using flutter::EncodableMap;
 using flutter::EncodableValue;
+
+using win_enum::ProcessName;
+using win_enum::WindowTitle;
 
 double MonitorScale(HMONITOR mon) {
   UINT dpi_x = 96, dpi_y = 96;
@@ -18,48 +23,6 @@ double MonitorScale(HMONITOR mon) {
     dpi_x = 96;
   }
   return dpi_x / 96.0;
-}
-
-std::string Utf8(const std::wstring& w) {
-  if (w.empty()) return {};
-  int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()),
-                              nullptr, 0, nullptr, nullptr);
-  std::string s(static_cast<size_t>(n), '\0');
-  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()),
-                      s.data(), n, nullptr, nullptr);
-  return s;
-}
-
-std::string WindowTitle(HWND hwnd) {
-  int len = GetWindowTextLengthW(hwnd);
-  if (len <= 0) return {};
-  std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
-  int got = GetWindowTextW(hwnd, buf.data(), len + 1);
-  buf.resize(static_cast<size_t>(got));
-  return Utf8(buf);
-}
-
-std::string ProcessName(HWND hwnd) {
-  DWORD pid = 0;
-  GetWindowThreadProcessId(hwnd, &pid);
-  if (!pid) return {};
-  HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-  if (!h) return {};
-  std::string name;
-  wchar_t path[MAX_PATH] = {};
-  DWORD sz = MAX_PATH;
-  if (QueryFullProcessImageNameW(h, 0, path, &sz)) {
-    std::wstring p(path, sz);
-    size_t slash = p.find_last_of(L"\\/");
-    std::wstring base = (slash == std::wstring::npos) ? p : p.substr(slash + 1);
-    if (base.size() > 4 &&
-        _wcsicmp(base.c_str() + base.size() - 4, L".exe") == 0) {
-      base = base.substr(0, base.size() - 4);
-    }
-    name = Utf8(base);
-  }
-  CloseHandle(h);
-  return name;
 }
 
 bool IsCloaked(HWND hwnd) {
@@ -127,6 +90,38 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
 }  // namespace
 
 namespace win_enum {
+
+std::string WindowTitle(HWND hwnd) {
+  int len = GetWindowTextLengthW(hwnd);
+  if (len <= 0) return {};
+  std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
+  int got = GetWindowTextW(hwnd, buf.data(), len + 1);
+  buf.resize(static_cast<size_t>(got));
+  return Utf8FromUtf16(buf);
+}
+
+std::string ProcessName(HWND hwnd) {
+  DWORD pid = 0;
+  GetWindowThreadProcessId(hwnd, &pid);
+  if (!pid) return {};
+  HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (!h) return {};
+  std::string name;
+  wchar_t path[MAX_PATH] = {};
+  DWORD sz = MAX_PATH;
+  if (QueryFullProcessImageNameW(h, 0, path, &sz)) {
+    std::wstring p(path, sz);
+    size_t slash = p.find_last_of(L"\\/");
+    std::wstring base = (slash == std::wstring::npos) ? p : p.substr(slash + 1);
+    if (base.size() > 4 &&
+        _wcsicmp(base.c_str() + base.size() - 4, L".exe") == 0) {
+      base = base.substr(0, base.size() - 4);
+    }
+    name = Utf8FromUtf16(base);
+  }
+  CloseHandle(h);
+  return name;
+}
 
 EncodableList SnappableWindows(HMONITOR mon,
                                const std::vector<HWND>& overlays) {

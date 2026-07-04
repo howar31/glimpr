@@ -25,7 +25,9 @@
 #include "overlay_manager.h"
 #include "perf_log.h"
 #include "pin_window.h"
+#include "utils.h"
 #include "wgc_capturer.h"
+#include "window_enum.h"
 
 namespace {
 
@@ -41,47 +43,8 @@ double MonitorScale(HMONITOR mon) {
   return dpi_x / 96.0;
 }
 
-std::string Utf8(const std::wstring& w) {
-  if (w.empty()) return {};
-  int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()),
-                              nullptr, 0, nullptr, nullptr);
-  std::string s(static_cast<size_t>(n), '\0');
-  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()),
-                      s.data(), n, nullptr, nullptr);
-  return s;
-}
-
-std::string WindowTitle(HWND hwnd) {
-  int len = GetWindowTextLengthW(hwnd);
-  if (len <= 0) return {};
-  std::wstring buf(static_cast<size_t>(len) + 1, L'\0');
-  int got = GetWindowTextW(hwnd, buf.data(), len + 1);
-  buf.resize(static_cast<size_t>(got));
-  return Utf8(buf);
-}
-
-std::string ProcessName(HWND hwnd) {
-  DWORD pid = 0;
-  GetWindowThreadProcessId(hwnd, &pid);
-  if (!pid) return {};
-  HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-  if (!h) return {};
-  std::string name;
-  wchar_t path[MAX_PATH] = {};
-  DWORD sz = MAX_PATH;
-  if (QueryFullProcessImageNameW(h, 0, path, &sz)) {
-    std::wstring p(path, sz);
-    size_t slash = p.find_last_of(L"\\/");
-    std::wstring base = (slash == std::wstring::npos) ? p : p.substr(slash + 1);
-    if (base.size() > 4 &&
-        _wcsicmp(base.c_str() + base.size() - 4, L".exe") == 0) {
-      base = base.substr(0, base.size() - 4);
-    }
-    name = Utf8(base);
-  }
-  CloseHandle(h);
-  return name;
-}
+using win_enum::ProcessName;
+using win_enum::WindowTitle;
 
 // The topmost real, foreign top-level window (skip our own windows + tool
 // windows + invisible/tiny), so the in-app test button captures the window
@@ -244,12 +207,7 @@ void CaptureChannel::HandleMethodCall(
     if (const auto* v = Find(map, "message")) {
       if (const auto* s = std::get_if<std::string>(v)) msg = *s;
     }
-    std::wstring wmsg;
-    int n = MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, nullptr, 0);
-    if (n > 0) {
-      wmsg.resize(static_cast<size_t>(n - 1));
-      MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, wmsg.data(), n);
-    }
+    const std::wstring wmsg = Utf16FromUtf8(msg);
     MessageBoxW(nullptr, wmsg.c_str(), L"Glimpr", MB_OK | MB_ICONWARNING);
     result->Success();
     return;

@@ -15,6 +15,7 @@
 
 #include "channel_args.h"
 #include "cursor_image.h"
+#include "utils.h"
 #include "editor_window.h"
 #include "hdr_compose.h"
 #include "hdr_util.h"
@@ -45,26 +46,6 @@ double MonitorScale(HMONITOR mon) {
     dpi_x = 96;
   }
   return dpi_x / 96.0;
-}
-
-std::wstring Wide(const std::string& s) {
-  if (s.empty()) return {};
-  int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(),
-                              static_cast<int>(s.size()), nullptr, 0);
-  std::wstring w(static_cast<size_t>(n), L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()),
-                      w.data(), n);
-  return w;
-}
-
-std::string Utf8(const std::wstring& w) {
-  if (w.empty()) return {};
-  int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()),
-                              nullptr, 0, nullptr, nullptr);
-  std::string s(static_cast<size_t>(n), '\0');
-  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()),
-                      s.data(), n, nullptr, nullptr);
-  return s;
 }
 
 BOOL CALLBACK CollectMonitor(HMONITOR mon, HDC, LPRECT, LPARAM lp) {
@@ -102,7 +83,8 @@ EncodableValue EnumerateFontFamilies() {
                       reinterpret_cast<LPARAM>(&families), 0);
   ReleaseDC(nullptr, hdc);
   EncodableList list;
-  for (const auto& f : families) list.push_back(EncodableValue(Utf8(f)));
+  for (const auto& f : families)
+    list.push_back(EncodableValue(Utf8FromUtf16(f)));
   cached = EncodableValue(std::move(list));
   have_cached = true;
   return cached;
@@ -973,7 +955,8 @@ void OverlayManager::HandleOverlayCapture(
     return;
   }
   if (method == "showError") {
-    MessageBoxW(nullptr, Wide(GetString(args, "message")).c_str(), L"Glimpr",
+    MessageBoxW(nullptr, Utf16FromUtf8(GetString(args, "message")).c_str(),
+                L"Glimpr",
                 MB_OK | MB_ICONWARNING);
     result->Success();
     return;

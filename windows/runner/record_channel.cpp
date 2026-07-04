@@ -9,6 +9,7 @@
 
 #include "channel_args.h"
 #include "perf_log.h"
+#include "utils.h"
 
 namespace {
 
@@ -169,18 +170,10 @@ void RecordChannel::HandleMethodCall(
     // (and the buttons sized) on the next Show.
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     if (args && chrome_) {
-      auto W = [](const std::string& s) -> std::wstring {
-        if (s.empty()) return std::wstring();
-        int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
-        if (n <= 0) return std::wstring();
-        std::wstring w(static_cast<size_t>(n - 1), L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n);
-        return w;
-      };
       RecordChrome::Labels lbl;  // English defaults
       auto get = [&](const char* k, const std::wstring& dflt) {
         const std::string s = GetString(*args, k, "");
-        return s.empty() ? dflt : W(s);
+        return s.empty() ? dflt : Utf16FromUtf8(s);
       };
       lbl.finish = get("finish", lbl.finish);
       lbl.pause = get("pause", lbl.pause);

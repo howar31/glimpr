@@ -12,6 +12,13 @@ void CreateAndAttachConsole();
 // encoded in UTF-8. Returns an empty std::string on failure.
 std::string Utf8FromUtf16(const wchar_t* utf16_string);
 
+// UTF-8 <-> UTF-16 for std::string / std::wstring values (paths, labels,
+// window titles). Unlike the strict wchar_t* overload above, these use the
+// default conversion flags, so invalid sequences degrade to replacement
+// characters instead of failing the whole string.
+std::string Utf8FromUtf16(const std::wstring& utf16);
+std::wstring Utf16FromUtf8(const std::string& utf8);
+
 // Gets the command line arguments passed in as a std::vector<std::string>,
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();
