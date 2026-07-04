@@ -101,11 +101,17 @@ Future<DeliveryResult> deliverCapture({
 
   var copied = false;
   if (copyToClipboard) {
-    try {
-      await clip(pngBytes);
+    if (preCopied) {
+      // Already on the clipboard (Windows native capture wrote it from the
+      // raw BGRA) -- a second write would just decode the bytes again.
       copied = true;
-    } catch (e) {
-      errors['clipboard'] = '$e';
+    } else {
+      try {
+        await clip(pngBytes);
+        copied = true;
+      } catch (e) {
+        errors['clipboard'] = '$e';
+      }
     }
   }
 
