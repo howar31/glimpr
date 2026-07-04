@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 /// Glimpr design-system tokens, ported verbatim from the design handoff's
@@ -154,6 +156,12 @@ class GlimprTokens {
   /// approximates the macOS light-glass tone over a typical desktop.
   Color get winBase =>
       isDark ? const Color(0xFF000000) : const Color(0xFFEEF0F4);
+
+  /// Top inset for window-root headers: clears the macOS traffic-light zone
+  /// (frameless .fullSizeContentView); Windows has a standard OS caption above
+  /// the client area, so it only needs a small breathing inset. ONE shared
+  /// value — settings_app and licenses_page drifted when they each kept a copy.
+  static double get titleBarInset => Platform.isWindows ? 16.0 : 52.0;
 
   // ========================== DARK (canonical) ===========================
   static const GlimprTokens dark = GlimprTokens(

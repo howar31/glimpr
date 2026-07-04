@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../theme/glimpr_theme.dart';
 
-// The macOS traffic-light zone height; the header insets past it so the back
-// button never sits under the red/yellow/green controls (mirrors settings_app's
-// _kTitleBarInset).
-const double _kTitleBarInset = 52.0;
+// The header insets past the macOS traffic-light zone (small caption inset on
+// Windows) so the back button never sits under the window controls — the ONE
+// shared value settings_app uses too (they drifted when each kept a copy).
+double get _kTitleBarInset => GlimprTokens.titleBarInset;
 
 /// A package and the license entries that name it, collected from the
 /// auto-generated NOTICES via [LicenseRegistry] — the SAME source Flutter's
@@ -186,7 +186,7 @@ class _LicenseHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: _kTitleBarInset),
+      padding: EdgeInsets.only(top: _kTitleBarInset),
       child: SizedBox(
         height: 48,
         child: Stack(

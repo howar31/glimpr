@@ -12,7 +12,8 @@ import 'package:path/path.dart' as p;
 ///
 /// Entries are keyed by (source path, mtime, size): a changed source gets a
 /// new key and its stale generations are pruned via the shared path-hash
-/// prefix. Lives under ~/Library/Caches — safe to delete at any time.
+/// prefix. Lives under ~/Library/Caches (macOS) / %LOCALAPPDATA% (Windows) —
+/// safe to delete at any time.
 class ThumbCache {
   ThumbCache({Directory? dir, this.height = 256, this.maxConcurrent = 2})
       : dir = dir ?? _defaultDir();
@@ -26,6 +27,14 @@ class ThumbCache {
   final Map<String, Future<File?>> _inflight = {};
 
   static Directory _defaultDir() {
+    if (Platform.isWindows) {
+      // HOME is normally unset on Windows and ~/Library/Caches is a macOS
+      // convention — the old path fell back to the periodically-cleaned %TEMP%,
+      // losing the cache's persistence. LOCALAPPDATA is the Windows analogue.
+      final base = Platform.environment['LOCALAPPDATA'] ??
+          Directory.systemTemp.path;
+      return Directory(p.join(base, 'com.howar31.glimpr', 'thumbs'));
+    }
     final home = Platform.environment['HOME'] ?? Directory.systemTemp.path;
     return Directory(
         p.join(home, 'Library', 'Caches', 'com.howar31.glimpr', 'thumbs'));

@@ -64,10 +64,7 @@ class SettingsApp extends StatefulWidget {
 // frameless .fullSizeContentView). Windows has a standard OS caption above the
 // client area, so it only needs a small breathing inset, not the traffic-light
 // clearance.
-const _kTitleBarInset = 52.0;
-const _kTitleBarInsetWin = 16.0;
-double get _titleBarInset =>
-    Platform.isWindows ? _kTitleBarInsetWin : _kTitleBarInset;
+double get _titleBarInset => GlimprTokens.titleBarInset;
 
 // Side of the square Loupe preview frame. A loupe larger than this is scaled
 // down to fit (and flagged), so the section never reflows while dragging.
@@ -767,9 +764,18 @@ class _SettingsAppState extends State<SettingsApp>
           const Spacer(),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(
-              'Glimpr 1.0.0',
-              style: GlimprType.sansStyle(11.5, 500, t.fg4),
+            // The real bundle version (same source as the About pane), so the
+            // caption can never go stale on a version bump. The About pane
+            // shows the full "x.y.z (build)"; the sidebar keeps just x.y.z.
+            child: FutureBuilder<String>(
+              future: _appVersionFuture,
+              builder: (_, snap) {
+                final v = (snap.data ?? '').split(' ').first;
+                return Text(
+                  v.isEmpty ? 'Glimpr' : 'Glimpr $v',
+                  style: GlimprType.sansStyle(11.5, 500, t.fg4),
+                );
+              },
             ),
           ),
         ],
