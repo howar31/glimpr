@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../channels.dart';
+
 /// Native CG decoration + encode bridge over `glimpr/encode` (registered on
 /// EVERY engine). Wraps the composited content (raw RGBA8888, premultiplied) in
 /// the decoration [spec] (margin + rounded corners / alpha-shape + drop shadow
@@ -18,8 +20,7 @@ Future<Uint8List?> decorateNative({
   required int quality,
 }) async {
   try {
-    final res =
-        await const MethodChannel('glimpr/encode').invokeMethod('decorate', {
+    final res = await kEncodeChannel.invokeMethod('decorate', {
       'rgba': rgba,
       'width': width,
       'height': height,

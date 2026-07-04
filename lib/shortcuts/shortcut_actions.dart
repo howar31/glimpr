@@ -331,6 +331,12 @@ HotkeyModifier editorCommandModifier({bool? isWindows}) =>
         ? HotkeyModifier.control
         : HotkeyModifier.meta;
 
+/// Whether the platform command modifier ([editorCommandModifier]) is held
+/// right now: meta on macOS, control on Windows (meta there is the Win key).
+bool isCommandModifierPressed() => Platform.isWindows
+    ? HardwareKeyboard.instance.isControlPressed
+    : HardwareKeyboard.instance.isMetaPressed;
+
 /// Keys reserved as WHOLE keys (rejected with any modifier combination). Esc =
 /// safety Cancel/Exit; arrows = crosshair nudge.
 final kEditorReservedKeys = <LogicalKeyboardKey>{

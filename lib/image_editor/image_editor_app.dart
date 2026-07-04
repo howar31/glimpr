@@ -984,9 +984,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       autofocus: true,
       onKeyEvent: (node, e) {
         // The command modifier is platform-aware: ⌘ on macOS, Ctrl on Windows.
-        final cmd = Platform.isWindows
-            ? HardwareKeyboard.instance.isControlPressed
-            : HardwareKeyboard.instance.isMetaPressed;
+        final cmd = isCommandModifierPressed();
         if (e is KeyDownEvent &&
             cmd &&
             e.logicalKey == LogicalKeyboardKey.comma) {

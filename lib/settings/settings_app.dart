@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
 
 import 'licenses_page.dart';
+import '../channels.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -214,7 +215,7 @@ class _SettingsAppState extends State<SettingsApp>
 
   // Cmd-W hides the settings window (the native control window handles it the
   // same way as the close button — see MainFlutterWindow's role channel).
-  static const _roleChannel = MethodChannel('glimpr/role');
+  static const _roleChannel = kRoleChannel;
   void _close() => _roleChannel.invokeMethod('closeSettings');
 
   @override

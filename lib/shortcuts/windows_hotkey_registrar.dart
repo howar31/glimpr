@@ -7,42 +7,29 @@ import 'windows_hotkey_codes.dart';
 /// Windows registrar over native Win32 RegisterHotKey (`glimpr/hotkeys` channel).
 /// RegisterHotKey is system-global; a successful native registration returns
 /// [RegisterResult.ok], a failure (e.g. ERROR_HOTKEY_ALREADY_REGISTERED) or an
-/// unmappable key returns [UnavailableReason.error]. The native side fires
-/// `onHotkey(actionKey)`, dispatched here to the stored callback (or [fallback]
-/// for a menu item whose action has no bound hotkey). Mirrors NativeHotkeyRegistrar.
-class WindowsHotkeyRegistrar implements HotkeyRegistrar, HotkeyKeyCapture {
-  WindowsHotkeyRegistrar([MethodChannel? channel])
-      : _channel = channel ?? const MethodChannel('glimpr/hotkeys') {
-    _channel.setMethodCallHandler(_onNative);
-  }
-
-  final MethodChannel _channel;
-  final _byAction = <String, void Function()>{};
-
-  /// Catch-all for actions fired natively (a tray menu item) with NO registered
-  /// hotkey callback (the shortcut is unbound). Set by main()'s bootstrap.
-  void Function(String actionKey)? fallback;
+/// unmappable key returns [UnavailableReason.error]. The shared channel plumbing
+/// (onHotkey dispatch, register skeleton, fallback) lives in
+/// [ChannelHotkeyRegistrar]; this adds the Win32 payload and the recorder's
+/// native key-capture session.
+class WindowsHotkeyRegistrar extends ChannelHotkeyRegistrar
+    implements HotkeyKeyCapture {
+  WindowsHotkeyRegistrar([super.channel]);
 
   // Active recorder capture session (only one field records at a time).
   void Function(int vk, int modifierMask, bool available)? _onCaptureKey;
   void Function()? _onCaptureCancel;
 
-  Future<dynamic> _onNative(MethodCall call) async {
+  @override
+  Future<dynamic> onNativeCall(MethodCall call) async {
     switch (call.method) {
-      case 'onHotkey':
-        final key = call.arguments as String;
-        final cb = _byAction[key];
-        if (cb != null) {
-          cb();
-        } else {
-          fallback?.call(key);
-        }
       case 'onCaptureKey':
         final a = (call.arguments as Map).cast<String, dynamic>();
         _onCaptureKey?.call(
             a['vk'] as int, a['modifiers'] as int, a['available'] as bool? ?? true);
       case 'onCaptureCancel':
         _onCaptureCancel?.call();
+      default:
+        return super.onNativeCall(call);
     }
     return null;
   }
@@ -54,48 +41,25 @@ class WindowsHotkeyRegistrar implements HotkeyRegistrar, HotkeyKeyCapture {
   ) async {
     _onCaptureKey = onKey;
     _onCaptureCancel = onCancel;
-    await _channel.invokeMethod('beginCaptureKeys');
+    await channel.invokeMethod('beginCaptureKeys');
   }
 
   @override
   Future<void> endKeyCapture() async {
     _onCaptureKey = null;
     _onCaptureCancel = null;
-    await _channel.invokeMethod('endCaptureKeys');
+    await channel.invokeMethod('endCaptureKeys');
   }
 
   @override
-  Future<RegisterResult> register(
-    String actionKey,
-    HotkeyBinding binding,
-    void Function() onTrigger,
-  ) async {
+  Map<String, Object?>? registerArgs(HotkeyBinding binding) {
     final vk = win32VirtualKey(binding.physicalKey);
-    if (vk == null) {
-      return const RegisterResult.unavailable(UnavailableReason.error);
-    }
-    _byAction[actionKey] = onTrigger;
-    final ok = await _channel.invokeMethod<bool>('register', {
-      'id': actionKey,
+    if (vk == null) return null;
+    return {
       'vk': vk,
       'modifiers': win32ModifierMask(binding.modifiers),
       // Full accelerator hint for the native tray menu, e.g. "Ctrl+Alt+Win+1".
       'keyLabel': binding.label(TargetPlatform.windows),
-    });
-    if (ok == true) return const RegisterResult.ok();
-    _byAction.remove(actionKey);
-    return const RegisterResult.unavailable(UnavailableReason.error);
-  }
-
-  @override
-  Future<void> unregister(String actionKey) async {
-    _byAction.remove(actionKey);
-    await _channel.invokeMethod('unregister', {'id': actionKey});
-  }
-
-  @override
-  Future<void> unregisterAll() async {
-    _byAction.clear();
-    await _channel.invokeMethod('unregisterAll');
+    };
   }
 }

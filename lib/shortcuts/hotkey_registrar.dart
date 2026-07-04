@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'hotkey_binding.dart';
 import 'macos_hotkey_codes.dart';
@@ -34,26 +35,35 @@ abstract interface class HotkeyKeyCapture {
   Future<void> endKeyCapture();
 }
 
-/// macOS registrar over native Carbon (`glimpr/hotkeys` channel). Carbon
-/// RegisterEventHotKey is non-exclusive and cannot find a third-party owner, so
-/// a successful native registration returns [RegisterResult.ok]; an unmappable
-/// key or a native failure returns [UnavailableReason.error]. The native side
-/// fires `onHotkey(actionKey)`, dispatched here to the stored callback.
-class NativeHotkeyRegistrar implements HotkeyRegistrar {
-  NativeHotkeyRegistrar([MethodChannel? channel])
-      : _channel = channel ?? const MethodChannel('glimpr/hotkeys') {
-    _channel.setMethodCallHandler(_onNative);
+/// Shared `glimpr/hotkeys` channel plumbing for the two native registrars:
+/// the action->callback map, the onHotkey dispatch (with [fallback]), the
+/// register skeleton (map the key, store the callback, roll back on a native
+/// refusal), and unregister/unregisterAll. Subclasses provide the platform
+/// 'register' payload via [registerArgs] and may extend [onNativeCall] for
+/// extra channel methods.
+abstract class ChannelHotkeyRegistrar implements HotkeyRegistrar {
+  ChannelHotkeyRegistrar([MethodChannel? channel])
+      : channel = channel ?? const MethodChannel('glimpr/hotkeys') {
+    this.channel.setMethodCallHandler(onNativeCall);
   }
 
-  final MethodChannel _channel;
+  @protected
+  final MethodChannel channel;
   final _byAction = <String, void Function()>{};
 
-  /// Catch-all for actions fired natively (a menu-bar item) that have NO
+  /// Catch-all for actions fired natively (a menu item) that have NO
   /// registered hotkey callback (the user unbound the shortcut) — the menu
   /// item must still work. Set by main()'s control-engine bootstrap.
   void Function(String actionKey)? fallback;
 
-  Future<dynamic> _onNative(MethodCall call) async {
+  /// The platform-specific 'register' payload for [binding] (merged with the
+  /// action id), or null when the key has no native mapping.
+  @protected
+  Map<String, Object?>? registerArgs(HotkeyBinding binding);
+
+  @protected
+  @mustCallSuper
+  Future<dynamic> onNativeCall(MethodCall call) async {
     if (call.method == 'onHotkey') {
       final key = call.arguments as String;
       final cb = _byAction[key];
@@ -72,21 +82,13 @@ class NativeHotkeyRegistrar implements HotkeyRegistrar {
     HotkeyBinding binding,
     void Function() onTrigger,
   ) async {
-    final keyCode = macOSKeyCode(binding.physicalKey);
-    if (keyCode == null) {
+    final args = registerArgs(binding);
+    if (args == null) {
       return const RegisterResult.unavailable(UnavailableReason.error);
     }
     _byAction[actionKey] = onTrigger;
-    final label = binding.logicalKey.keyLabel;
-    final ok = await _channel.invokeMethod<bool>('register', {
-      'id': actionKey,
-      'keyCode': keyCode,
-      'modifiers': carbonModifierMask(binding.modifiers),
-      // Menu key-equivalent hint: a one-character key shows ⌘⌥7-style hints
-      // on the menu-bar items; anything else shows no hint.
-      'keyChar': label.length == 1 ? label.toLowerCase() : '',
-      'cocoaMods': cocoaModifierMask(binding.modifiers),
-    });
+    final ok = await channel
+        .invokeMethod<bool>('register', {'id': actionKey, ...args});
     if (ok == true) return const RegisterResult.ok();
     _byAction.remove(actionKey);
     return const RegisterResult.unavailable(UnavailableReason.error);
@@ -95,12 +97,36 @@ class NativeHotkeyRegistrar implements HotkeyRegistrar {
   @override
   Future<void> unregister(String actionKey) async {
     _byAction.remove(actionKey);
-    await _channel.invokeMethod('unregister', {'id': actionKey});
+    await channel.invokeMethod('unregister', {'id': actionKey});
   }
 
   @override
   Future<void> unregisterAll() async {
     _byAction.clear();
-    await _channel.invokeMethod('unregisterAll');
+    await channel.invokeMethod('unregisterAll');
+  }
+}
+
+/// macOS registrar over native Carbon (`glimpr/hotkeys` channel). Carbon
+/// RegisterEventHotKey is non-exclusive and cannot find a third-party owner, so
+/// a successful native registration returns [RegisterResult.ok]; an unmappable
+/// key or a native failure returns [UnavailableReason.error]. The native side
+/// fires `onHotkey(actionKey)`, dispatched to the stored callback.
+class NativeHotkeyRegistrar extends ChannelHotkeyRegistrar {
+  NativeHotkeyRegistrar([super.channel]);
+
+  @override
+  Map<String, Object?>? registerArgs(HotkeyBinding binding) {
+    final keyCode = macOSKeyCode(binding.physicalKey);
+    if (keyCode == null) return null;
+    final label = binding.logicalKey.keyLabel;
+    return {
+      'keyCode': keyCode,
+      'modifiers': carbonModifierMask(binding.modifiers),
+      // Menu key-equivalent hint: a one-character key shows ⌘⌥7-style hints
+      // on the menu-bar items; anything else shows no hint.
+      'keyChar': label.length == 1 ? label.toLowerCase() : '',
+      'cocoaMods': cocoaModifierMask(binding.modifiers),
+    };
   }
 }

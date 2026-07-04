@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../channels.dart';
+
 /// Native JPEG encoder bridge. The `glimpr/encode` channel is registered on
 /// EVERY engine (control / overlay / image editor), so the editor layer can
 /// call it host-agnostically. Returns null when the channel is unavailable
@@ -8,8 +10,7 @@ import 'package:flutter/services.dart';
 Future<Uint8List?> encodeJpegNative(
     Uint8List rgba, int width, int height, int quality) async {
   try {
-    final res =
-        await const MethodChannel('glimpr/encode').invokeMethod('jpeg', {
+    final res = await kEncodeChannel.invokeMethod('jpeg', {
       'rgba': rgba,
       'width': width,
       'height': height,
@@ -27,7 +28,7 @@ Future<Uint8List?> encodeJpegNative(
 Future<Uint8List?> encodePngNative(
     Uint8List rgba, int width, int height) async {
   try {
-    final res = await const MethodChannel('glimpr/encode').invokeMethod('png', {
+    final res = await kEncodeChannel.invokeMethod('png', {
       'rgba': rgba,
       'width': width,
       'height': height,

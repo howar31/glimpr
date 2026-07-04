@@ -97,16 +97,9 @@ class KeyCapChips extends StatelessWidget {
     final platform = Theme.of(context).platform;
     final caps = <Widget>[
       for (final m in b.orderedModifiers)
-        KeyCap(_modSymbol(m, platform == TargetPlatform.macOS)),
+        KeyCap(modifierSymbol(m, mac: platform == TargetPlatform.macOS)),
       KeyCap(keyLabelOf(b.logicalKey)),
     ];
     return Wrap(spacing: 5, children: caps);
   }
 }
-
-String _modSymbol(HotkeyModifier m, bool mac) => switch (m) {
-      HotkeyModifier.control => mac ? '⌃' : 'Ctrl',
-      HotkeyModifier.alt => mac ? '⌥' : 'Alt',
-      HotkeyModifier.shift => mac ? '⇧' : 'Shift',
-      HotkeyModifier.meta => mac ? '⌘' : 'Win',
-    };

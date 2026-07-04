@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/services.dart'
-    show Clipboard, ClipboardData, MethodChannel;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../capture/capture_bridge.dart';
+import '../channels.dart';
 import 'deliver.dart';
 import 'filename.dart';
 
@@ -271,8 +271,7 @@ String _siblingPath(String savedPath, String ext) {
 Future<void> revealInFileManager(String path) async {
   if (Platform.isWindows) {
     try {
-      await const MethodChannel('glimpr/role')
-          .invokeMethod('revealInExplorer', {'path': path});
+      await kRoleChannel.invokeMethod('revealInExplorer', {'path': path});
     } catch (_) {}
   } else {
     await Process.run('open', ['-R', path]);

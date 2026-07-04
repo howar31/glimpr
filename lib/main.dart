@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:glimpr_pro/glimpr_pro.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
+import 'channels.dart';
 import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
 import 'output/deliver.dart' show effectiveSaveDir;
@@ -54,7 +55,7 @@ Future<void> main() async {
   final recordAvailable = await RecordBridge().isAvailable();
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
-  const control = MethodChannel('glimpr/role');
+  const control = kRoleChannel;
   void dispatchAction(String actionKey) {
     switch (actionKey) {
       case kCaptureAreaKey:
@@ -200,7 +201,7 @@ Future<void> _openSaveFolder() async {
 /// at controller creation, but retry a few times in case Dart wins the race;
 /// default to the control engine if the channel never answers.
 Future<String> _getRole() async {
-  const channel = MethodChannel('glimpr/role');
+  const channel = kRoleChannel;
   for (var attempt = 0; attempt < 10; attempt++) {
     try {
       final role = await channel.invokeMethod<String>('getRole');

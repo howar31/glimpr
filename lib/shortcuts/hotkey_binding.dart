@@ -52,8 +52,11 @@ class HotkeyBinding {
   String label([TargetPlatform? platform]) {
     final p = platform ?? defaultTargetPlatform;
     final sb = StringBuffer();
+    final mac = p == TargetPlatform.macOS;
     for (final m in _canonicalOrder) {
-      if (modifiers.contains(m)) sb.write(_modifierSymbol(m, p));
+      if (modifiers.contains(m)) {
+        sb.write(modifierSymbol(m, mac: mac, joiner: !mac));
+      }
     }
     sb.write(_keyLabel(logicalKey));
     return sb.toString();
@@ -85,14 +88,17 @@ const _canonicalOrder = [
   HotkeyModifier.meta,
 ];
 
-String _modifierSymbol(HotkeyModifier m, TargetPlatform p) {
-  final mac = p == TargetPlatform.macOS;
-  return switch (m) {
-    HotkeyModifier.control => mac ? '⌃' : 'Ctrl+',
-    HotkeyModifier.alt => mac ? '⌥' : 'Alt+',
-    HotkeyModifier.shift => mac ? '⇧' : 'Shift+',
-    HotkeyModifier.meta => mac ? '⌘' : 'Win+',
+/// Platform symbol for a modifier: mac glyphs, Windows key names. [joiner]
+/// appends the Windows "+" for run-together string labels; key-cap chips
+/// render each symbol as its own cap and pass joiner: false.
+String modifierSymbol(HotkeyModifier m, {required bool mac, bool joiner = false}) {
+  final base = switch (m) {
+    HotkeyModifier.control => mac ? '⌃' : 'Ctrl',
+    HotkeyModifier.alt => mac ? '⌥' : 'Alt',
+    HotkeyModifier.shift => mac ? '⇧' : 'Shift',
+    HotkeyModifier.meta => mac ? '⌘' : 'Win',
   };
+  return joiner && !mac ? '$base+' : base;
 }
 
 /// Friendly single-token label for the main key (chips show one cap per token).

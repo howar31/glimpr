@@ -455,11 +455,9 @@ class _EditorCoreState extends State<EditorCore> {
       return;
     }
     if (!_interactive || e is! PointerScrollEvent) return;
-    // Cmd+scroll zooms on macOS; on Windows meta is the Win key, so the
-    // conventional zoom modifier is Ctrl.
-    final zoomPressed = Platform.isWindows
-        ? HardwareKeyboard.instance.isControlPressed
-        : HardwareKeyboard.instance.isMetaPressed;
+    // Cmd+scroll zooms on macOS; on Windows the conventional zoom modifier is
+    // Ctrl (shared platform rule).
+    final zoomPressed = isCommandModifierPressed();
     if (zoomPressed) {
       final ns = (_viewport.scale * (1 - e.scrollDelta.dy * 0.0015))
           .clamp(_kMinScale, _kMaxScale);
