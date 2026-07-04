@@ -294,7 +294,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     recordingChannel?.onRecordingProcessingChange = { [weak self] active in
       self?.statusItem?.setProcessing(
-        active, label: L.s("Processing recording…", "正在處理錄影…"))
+        active, label: L.s("Processing recording…", "正在處理錄影…"),
+        unbounded: true)
     }
     captureChannel?.onCaptureProcessingChange = { [weak self] active, label in
       self?.statusItem?.setProcessing(active, label: label)

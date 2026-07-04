@@ -553,13 +553,16 @@ void TrayIcon::OnProcTick() {
   const int cycle = static_cast<int>(phase / period);
   // End at a pulse low (cycle boundary), once stopped and after >= 1 full cycle.
   // The 10s ceiling is a safety net so the pulse never gets stuck if a "stop" is
-  // ever missed on an error path.
+  // ever missed on an error path. Recording-initiated pulses are exempt
+  // (unbounded): the finalize can legitimately exceed it and native always
+  // delivers the stop.
   const bool end_now =
       (processing_stop_ && cycle >= 1 && cycle > proc_last_cycle_) ||
-      phase > 10000.0;
+      (!proc_unbounded_ && phase > 10000.0);
   proc_last_cycle_ = cycle;
   if (end_now) {
     processing_ = false;
+    proc_unbounded_ = false;
     if (proc_timer_) {
       KillTimer(nullptr, proc_timer_);
       proc_timer_ = 0;
@@ -596,10 +599,12 @@ void TrayIcon::SetTip(const std::wstring& tip) {
   Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
-void TrayIcon::SetProcessing(bool active, const std::string& tip_utf8) {
+void TrayIcon::SetProcessing(bool active, const std::string& tip_utf8,
+                             bool unbounded) {
   if (active) {
     if (recording_) return;  // the recording-red breath owns the mark
     processing_stop_ = false;
+    proc_unbounded_ = proc_unbounded_ || unbounded;
     // Hover tooltip: WHAT is being processed. Set on every activation so an
     // overlapping source updates it; OnProcTick's end path restores "Glimpr".
     if (!tip_utf8.empty()) SetTip(Utf8ToWide(tip_utf8));

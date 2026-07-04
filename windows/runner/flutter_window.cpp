@@ -380,7 +380,8 @@ bool FlutterWindow::OnCreate() {
     if (tray_icon_) {
       tray_icon_->SetProcessing(
           active,
-          tray_icon_->Label("processingRecording", "Processing recording..."));
+          tray_icon_->Label("processingRecording", "Processing recording..."),
+          /*unbounded=*/true);
     }
   });
   capture_channel_->SetProcessingCallback(

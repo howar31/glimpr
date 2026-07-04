@@ -212,6 +212,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     recordingTimer?.invalidate() // also cancels an in-flight ease-back
     recordingTimer = nil
     if active {
+      // A recording start takes the mark over from any in-flight processing
+      // pulse (Windows rule, mirrored) — two 20 Hz animators must never
+      // interleave on the same button image.
+      if let pulse = processingTimer {
+        pulse.invalidate()
+        processingTimer = nil
+        processingUnbounded = false
+        item.button?.toolTip = nil
+      }
       recordingPhase = 0
       if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
         recordingMix = 1 // solid red, no movement — state stays legible
@@ -314,6 +323,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private var processingPhase: Double = 0
   private var processingStop = false
   private var processingLastCycle = 0
+  private var processingUnbounded = false
   private static let kProcessingPeriod = 0.5 // ~3.4× faster than the 1.7s breath
 
   /// Shared capture/recording "processing" state: the brand mark fills with the
@@ -325,9 +335,21 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// the next pulse low after ≥ 1 cycle). Reduced motion holds a static fill.
   /// [label] (localized, e.g. "Processing screenshot…") becomes the icon's
   /// hover tooltip while the pulse runs, so hovering says WHAT is processing.
-  func setProcessing(_ active: Bool, label: String? = nil) {
+  /// [unbounded] exempts the pulse from the 10s safety ceiling: the recording
+  /// finalize legitimately runs longer (a long GIF encodes for tens of
+  /// seconds) and its native start/stop pair can never miss, so the ceiling
+  /// would end the pulse (and clear the tooltip) mid-finalize.
+  func setProcessing(_ active: Bool, label: String? = nil,
+                     unbounded: Bool = false) {
     if active {
+      // The recording-red breath owns the mark (Windows rule, mirrored): a
+      // screenshot/editor pulse DURING a recording would interleave with the
+      // breath at 20 Hz and its end path would reset the icon/tooltip to idle
+      // while still recording. The finalize flow is unaffected — it snaps the
+      // red off before requesting the pulse.
+      if isRecordingState { return }
       processingStop = false
+      processingUnbounded = processingUnbounded || unbounded
       // Set on every activation so an overlapping source updates the tooltip;
       // cleared when the pulse ends.
       item.button?.toolTip = label ?? L.s("Processing…", "正在處理…")
@@ -351,13 +373,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.item.button?.image = self.processingIcon(intensity: intensity)
         // End at a pulse low (cycle boundary), once stopped and ≥ 1 full cycle.
         // The 10s ceiling is a safety net in case a "stop" is ever missed on a
-        // capture error path — the pulse never gets stuck.
+        // capture error path — the pulse never gets stuck. Recording-initiated
+        // pulses are exempt (unbounded): the finalize can legitimately exceed
+        // it and native always delivers the stop.
         let cycle = Int(self.processingPhase / period)
         let endNow = (self.processingStop && cycle >= 1
-          && cycle > self.processingLastCycle) || self.processingPhase > 10
+          && cycle > self.processingLastCycle)
+          || (!self.processingUnbounded && self.processingPhase > 10)
         if endNow {
           tm.invalidate()
           if self.processingTimer === tm { self.processingTimer = nil }
+          self.processingUnbounded = false
           self.item.button?.image = self.normalImage
           self.item.button?.toolTip = nil
           self.item.button?.setAccessibilityLabel("Glimpr")

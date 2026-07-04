@@ -73,7 +73,11 @@ class TrayIcon {
   // [tip_utf8] (localized, e.g. "Processing screenshot...") becomes the tray
   // tooltip while the pulse runs, so hovering says WHAT is processing; the
   // tooltip reverts to "Glimpr" when the pulse ends. Empty = keep the tooltip.
-  void SetProcessing(bool active, const std::string& tip_utf8 = std::string());
+  // [unbounded] exempts the pulse from the 10s safety ceiling: the recording
+  // finalize legitimately runs longer (a long GIF encodes for tens of seconds)
+  // and its native start/stop pair can never miss.
+  void SetProcessing(bool active, const std::string& tip_utf8 = std::string(),
+                     bool unbounded = false);
 
   // A pushed localized label by id (see SetLabels), or [fallback] when absent.
   // Used for tips whose trigger is native-initiated (recording finalize), where
@@ -119,6 +123,7 @@ class TrayIcon {
   bool processing_ = false;
   bool processing_stop_ = false;   // a stop was requested; end at the next low
   bool proc_reduce_ = false;       // reduced motion -> static fill
+  bool proc_unbounded_ = false;    // recording finalize: no 10s ceiling
   unsigned long long proc_start_ms_ = 0;
   int proc_last_cycle_ = 0;
 
