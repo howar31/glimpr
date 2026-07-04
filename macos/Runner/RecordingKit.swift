@@ -31,8 +31,7 @@ final class LiveFrameSource: NSObject, SCStreamOutput, SCStreamDelegate {
           excludingWindowNumbers.contains(Int($0.windowID))
         }
         let scale = NSScreen.screens.first(where: {
-          ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-            as? NSNumber)?.uint32Value == displayID
+          ScreenCapturer.screenNumber($0) == displayID
         })?.backingScaleFactor ?? 2
         let cfg = SCStreamConfiguration()
         cfg.width = Int(CGFloat(d.width) * scale)
@@ -1664,8 +1663,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
         chromeRegionGlobal = wrect
         screen = NSScreen.screens.first(where: { $0.frame.intersects(wrect) })
           ?? NSScreen.main ?? NSScreen.screens[0]
-        reportedDisplayID = (screen.deviceDescription[
-          NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+        reportedDisplayID = ScreenCapturer.screenNumber(screen) ?? 0
         // The window's display-local rect at start. The recording follows the
         // window, but "last region" remembers this fixed rect (parity with the
         // screenshot window capture).
@@ -1691,8 +1689,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
         // down — closing the mask-less flash on the picker -> record transition.
         let displayID = spec.displayID ?? Self.cursorDisplayID()
         guard let nsScreen = NSScreen.screens.first(where: {
-                ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                  as? NSNumber)?.uint32Value == displayID
+                ScreenCapturer.screenNumber($0) == displayID
               })
         else { throw RecordingError.message("display not found") }
         screen = nsScreen
@@ -2186,10 +2183,7 @@ final class RecordingController: NSObject, SCStreamDelegate {
   private static func cursorDisplayID() -> CGDirectDisplayID {
     let mouse = NSEvent.mouseLocation
     for screen in NSScreen.screens where NSMouseInRect(mouse, screen.frame, false) {
-      if let n = (screen.deviceDescription[
-        NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value {
-        return CGDirectDisplayID(n)
-      }
+      if let n = ScreenCapturer.screenNumber(screen) { return n }
     }
     return CGMainDisplayID()
   }

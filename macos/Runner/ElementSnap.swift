@@ -101,15 +101,15 @@ enum ElementSnap {
 
   // MARK: - AX helpers
 
-  // The layers element snap targets: normal app windows (0), floating panels (3),
-  // modal alerts (8) — exactly the snappableWindows set. Higher layers
-  // (Dock/notifications/menus, the Window Server cursor at ~2.1e9, our overlay)
-  // are EXCLUDED: they are a poor fit for a live-AX-over-frozen-image snap —
-  // MENUS close on the screenshot trigger, so the live AX tree no longer has them
-  // even though the freeze captured them; NOTIFICATIONS need a full-screen backing
-  // container whose PID would shadow every point; the cursor window sits at the
-  // cursor and shadowed every query. Owner reverted high-layer support 2026-06-16.
-  private static let appLevels: Set<Int> = [0, 3, 8]
+  // The layers element snap targets: the shared snappableWindowLevels set
+  // ({0, 3, 8}). Higher layers (Dock/notifications/menus, the Window Server
+  // cursor at ~2.1e9, our overlay) are EXCLUDED: they are a poor fit for a
+  // live-AX-over-frozen-image snap — MENUS close on the screenshot trigger, so
+  // the live AX tree no longer has them even though the freeze captured them;
+  // NOTIFICATIONS need a full-screen backing container whose PID would shadow
+  // every point; the cursor window sits at the cursor and shadowed every
+  // query. Owner reverted high-layer support 2026-06-16.
+  private static let appLevels = ScreenCapturer.snappableWindowLevels
 
   /// The owning PID to AX-query for the frontmost snappable window (layers
   /// {0,3,8}, visible) under [pt]. Our OWN windows are NOT skipped past: if our
@@ -131,14 +131,10 @@ enum ElementSnap {
             alpha > 0.05,
             let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             appLevels.contains(layer),
-            let b = w[kCGWindowBounds as String] as? [String: Any],
-            let x = (b["X"] as? NSNumber)?.doubleValue,
-            let y = (b["Y"] as? NSNumber)?.doubleValue,
-            let ww = (b["Width"] as? NSNumber)?.doubleValue,
-            let hh = (b["Height"] as? NSNumber)?.doubleValue,
+            let r = ScreenCapturer.windowBounds(w),
             let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value
       else { continue }
-      guard CGRect(x: x, y: y, width: ww, height: hh).contains(pt) else { continue }
+      guard r.contains(pt) else { continue }
       // First snappable window under the point = the visual top. If it's ours,
       // nil -> Dart whole-window snap; otherwise AX-query that app.
       return pid == selfPID ? nil : pid

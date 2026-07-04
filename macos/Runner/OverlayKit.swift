@@ -129,16 +129,8 @@ final class ScreenCapturer {
     // corners + drop shadow) before encoding — the direct path never hands the
     // pixels back to Dart. A render failure (rare) degrades to the plain image.
     let image = decoration.flatMap { Decoration.render(cg, spec: $0, scale: scale) } ?? cg
-    let rep = NSBitmapImageRep(cgImage: image)
-    let data: Data?
-    if jpeg {
-      let q = max(0, min(100, jpegQuality))
-      data = rep.representation(
-        using: .jpeg, properties: [.compressionFactor: Double(q) / 100.0])
-    } else {
-      data = rep.representation(using: .png, properties: [:])
-    }
-    guard let bytes = data else { return nil }
+    guard let bytes = Decoration.encode(image, jpeg: jpeg, quality: jpegQuality)
+    else { return nil }
     PerfLog.mark("regionEncodeEnd display=\(d.displayID) bytes=\(bytes.count)")
     let frame = d.frame
     var dict: [String: Any] = [
@@ -568,30 +560,38 @@ final class ScreenCapturer {
   /// NOTE: notifications can't be snapped — their on-screen CGWindow is the
   /// full-screen Notification Center container (layer 21), not the banner rect,
   /// so admitting that level would only yield a whole-screen target.
+  /// Window levels a snap may target: normal app windows (0), floating panels
+  /// (kCGFloatingWindowLevel 3), and standalone modal alerts
+  /// (kCGModalPanelWindowLevel 8). Higher levels are deliberately excluded:
+  /// Dock (20), notifications (21), menu bar (24), status items (25), pop-up
+  /// menus (101), and our own freeze overlay. Shared with ElementSnap's
+  /// target-PID resolution so both snap paths admit the same windows.
+  static let snappableWindowLevels: Set<Int> = [0, 3, 8]
+
+  /// The CG-global bounds of a CGWindowList info dict, or nil.
+  static func windowBounds(_ w: [String: Any]) -> CGRect? {
+    guard let b = w[kCGWindowBounds as String] as? [String: Any],
+          let x = (b["X"] as? NSNumber)?.doubleValue,
+          let y = (b["Y"] as? NSNumber)?.doubleValue,
+          let ww = (b["Width"] as? NSNumber)?.doubleValue,
+          let hh = (b["Height"] as? NSNumber)?.doubleValue else { return nil }
+    return CGRect(x: x, y: y, width: ww, height: hh)
+  }
+
   static func snappableWindows(displayID: CGDirectDisplayID) -> [[String: Any]] {
     let dispBounds = CGDisplayBounds(displayID)
     guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
       as? [[String: Any]] else { return [] }
-    // Normal app windows (0), floating panels (kCGFloatingWindowLevel 3), and
-    // standalone modal alerts (kCGModalPanelWindowLevel 8). Higher levels are
-    // deliberately excluded: Dock (20), notifications (21), menu bar (24),
-    // status items (25), pop-up menus (101), and our own freeze overlay.
-    let snappableLevels: Set<Int> = [0, 3, 8]
     var out: [[String: Any]] = []
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
-            snappableLevels.contains(layer) else { continue }
+            snappableWindowLevels.contains(layer) else { continue }
       // Skip effectively-invisible windows (e.g. our own warm control window at
       // alpha 0) so they don't become phantom snap targets.
       guard let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05 else { continue }
-      guard let b = w[kCGWindowBounds as String] as? [String: Any],
-            let x = (b["X"] as? NSNumber)?.doubleValue,
-            let y = (b["Y"] as? NSNumber)?.doubleValue,
-            let ww = (b["Width"] as? NSNumber)?.doubleValue,
-            let hh = (b["Height"] as? NSNumber)?.doubleValue else { continue }
-      if ww < 40 || hh < 40 { continue }
-      let r = CGRect(x: x, y: y, width: ww, height: hh)
+      guard let r = windowBounds(w) else { continue }
+      if r.width < 40 || r.height < 40 { continue }
       let inter = r.intersection(dispBounds)
       if inter.isNull || inter.width < 1 || inter.height < 1 { continue }
       // Window title (kCGWindowName needs Screen-Recording permission, which we
@@ -651,14 +651,9 @@ final class ScreenCapturer {
             !matchFrontApp || owner == frontPid,
             let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05,
-            let b = w[kCGWindowBounds as String] as? [String: Any],
-            let x = (b["X"] as? NSNumber)?.doubleValue,
-            let y = (b["Y"] as? NSNumber)?.doubleValue,
-            let ww = (b["Width"] as? NSNumber)?.doubleValue,
-            let hh = (b["Height"] as? NSNumber)?.doubleValue
+            let r = windowBounds(w)
       else { continue }
-      if ww < 40 || hh < 40 { continue }
-      let r = CGRect(x: x, y: y, width: ww, height: hh)
+      if r.width < 40 || r.height < 40 { continue }
       guard let displayID = displayForRect(r) else { continue }
       let dispBounds = CGDisplayBounds(displayID)
       let inter = r.intersection(dispBounds)
@@ -680,9 +675,8 @@ final class ScreenCapturer {
   }
 
   static func scaleFactor(for displayID: CGDirectDisplayID) -> CGFloat {
-    for screen in NSScreen.screens {
-      if let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
-         num.uint32Value == displayID { return screen.backingScaleFactor }
+    for screen in NSScreen.screens where screenNumber(screen) == displayID {
+      return screen.backingScaleFactor
     }
     return 1.0
   }
@@ -690,10 +684,6 @@ final class ScreenCapturer {
   /// CGDirectDisplayID for an NSScreen (its "NSScreenNumber" device key).
   static func screenNumber(_ screen: NSScreen) -> CGDirectDisplayID? {
     (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
-  }
-
-  static func pngData(from cgImage: CGImage) -> Data? {
-    NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
   }
 
   /// CGImage -> tightly-packed BGRA8888 (premultipliedFirst, little-endian),
@@ -899,7 +889,7 @@ final class OverlayManager {
   }
 
   private func displayID(of screen: NSScreen) -> CGDirectDisplayID {
-    (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+    ScreenCapturer.screenNumber(screen) ?? 0
   }
 
   private func buildUnits() {

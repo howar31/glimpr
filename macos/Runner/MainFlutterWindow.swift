@@ -1100,7 +1100,7 @@ final class HotkeyController {
 /// a reference snippet that stays over everything until closed. The window is
 /// LARGER than the image by a transparent margin so the hover corona can glow
 /// OUTWARD past the image edge. Drag anywhere to move; scroll wheel zooms
-/// 25%–300%; hovering for 2s reveals the Aurora corona (rotating brand-gradient
+/// 25%–300%; hovering for 1s reveals the Aurora corona (rotating brand-gradient
 /// halo radiating out from the edge) + a glass close button (top-right, hover-
 /// reactive, follows light/dark). Right-click: Reset Size / Save As / Copy /
 /// Close. Pure AppKit BY NECESSITY: pins are created at runtime and post-launch

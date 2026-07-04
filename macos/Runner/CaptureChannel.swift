@@ -385,21 +385,9 @@ enum EncodeChannel {
   private static func encodeJpeg(
     rgba: Data, width: Int, height: Int, quality: Int
   ) -> Data? {
-    var pixels = rgba
-    let rowBytes = width * 4
-    let cg: CGImage? = pixels.withUnsafeMutableBytes { buf in
-      guard let ctx = CGContext(
-        data: buf.baseAddress, width: width, height: height,
-        bitsPerComponent: 8, bytesPerRow: rowBytes,
-        space: CGColorSpace(name: CGColorSpace.sRGB)!,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-      else { return nil }
-      return ctx.makeImage()
-    }
-    guard let image = cg else { return nil }
-    return NSBitmapImageRep(cgImage: image).representation(
-      using: .jpeg,
-      properties: [.compressionFactor: Double(quality) / 100.0])
+    guard let image = Decoration.cgImage(rgba: rgba, width: width, height: height)
+    else { return nil }
+    return Decoration.encode(image, jpeg: true, quality: quality)
   }
 }
 
