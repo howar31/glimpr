@@ -90,6 +90,22 @@ final class CaptureChannel {
           PerfLog.mark(label)
         }
         result(nil)
+      // The control engine (direct capture, RecordController, clipboard paste)
+      // surfaces errors here. Without this case the call returned
+      // NotImplemented and the unawaited Future swallowed it, so a failed
+      // direct capture / recording looked like "no response" (the Windows
+      // control channel gained the same handler in 46adffb). Mirrors the
+      // overlay engine's showError alert (OverlayManager.showError).
+      case "showError":
+        let msg = (call.arguments as? [String: Any])?["message"] as? String ?? ""
+        DispatchQueue.main.async {
+          let alert = NSAlert()
+          alert.messageText = "Glimpr"
+          alert.informativeText = msg
+          alert.alertStyle = .warning
+          alert.runModal()
+        }
+        result(nil)
       // Precise element snap (Advanced): does the app hold AX permission?
       case "accessibilityTrusted":
         result(ElementSnap.trusted())

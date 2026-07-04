@@ -327,8 +327,14 @@ class CaptureBridge {
 
   /// Show a native error alert — used when a BACKGROUND export fails after the
   /// overlay was already hidden (so the in-overlay toast is no longer available).
-  Future<void> showError(String message) =>
-      _channel.invokeMethod('showError', {'message': message});
+  /// Fire-and-forget: never throws (absent in tests / stub engines).
+  Future<void> showError(String message) async {
+    try {
+      await _channel.invokeMethod('showError', {'message': message});
+    } catch (_) {
+      // Fire-and-forget.
+    }
+  }
 
   /// Signal that this overlay engine has rasterized its first frame, so native
   /// may order its window front (capture-then-show).
