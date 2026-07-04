@@ -303,8 +303,11 @@ class _EditorCoreState extends State<EditorCore> {
   /// accepting it would silently undo the nudge by one native pixel in a
   /// seemingly random direction (verified: the echo lands in the same
   /// millisecond as the press). A REAL move lands on a different integer and
-  /// passes through.
+  /// passes through. macOS-only: Windows delivers FRACTIONAL positions at
+  /// non-integer DPI scales, so a real move can legitimately land exactly on
+  /// floor(cursor) and must not be snapped back.
   bool _isQuantizedEcho(Offset p) =>
+      Platform.isMacOS &&
       p != _cursor &&
       p == Offset(_cursor.dx.floorToDouble(), _cursor.dy.floorToDouble());
 
