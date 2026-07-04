@@ -75,6 +75,7 @@ class PinWindow {
 
   bool revealed_ = false;       // hover-reveal target
   float reveal_t_ = 0.0f;        // current reveal fade (0..1)
+  bool glow_enabled_ = true;     // pin_hover_glow setting, read per hover-dwell
   bool close_hover_ = false;
   bool tracking_leave_ = false;
   bool dwell_pending_ = false;   // the 1s hover-dwell timer is armed

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "hdr_util.h"
 #include "image_codec.h"
 
 namespace {
@@ -324,8 +325,9 @@ void PinWindow::Render() {
                                            target_props, target.put()));
 
     // Vapor glow (revealed): an opaque rounded-rect silhouette of the image,
-    // cast as 3 drifting/breathing colored Direct2D shadows.
-    if (reveal_t_ > 0.01f) {
+    // cast as 3 drifting/breathing colored Direct2D shadows. Skipped when the
+    // pin_hover_glow setting is off (the close button still reveals).
+    if (reveal_t_ > 0.01f && glow_enabled_) {
       com_ptr<ID2D1Bitmap1> sil;
       winrt::check_hresult(dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0,
                                              target_props, sil.put()));
@@ -642,6 +644,11 @@ LRESULT PinWindow::MessageHandler(HWND hwnd, UINT message, WPARAM wparam,
       if (wparam == kDwellTimer) {
         KillTimer(hwnd, kDwellTimer);
         dwell_pending_ = false;
+        // Owner setting: the hover corona/glow. Read live (per dwell) so a
+        // toggle applies on the next hover even for already-open pins,
+        // mirroring macOS PinPanel.glowEnabled. When off, only the close
+        // control reveals.
+        glow_enabled_ = hdr::ReadPrefsBool("pin_hover_glow", true);
         Reveal(true);
         return 0;
       }

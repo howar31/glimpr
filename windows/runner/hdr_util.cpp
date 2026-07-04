@@ -139,31 +139,38 @@ MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor) {
   return info;  // monitor not found (e.g. session 0) -> non-HDR defaults
 }
 
-bool ReadHdrScreenshotSetting() {
+bool ReadPrefsBool(const char* key_name, bool dflt) {
   PWSTR roaming = nullptr;
   if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr,
                                   &roaming))) {
-    return false;
+    return dflt;
   }
   std::wstring path(roaming);
   CoTaskMemFree(roaming);
   path += L"\\com.example\\glimpr\\shared_preferences.json";
   FILE* f = nullptr;
-  if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return false;
+  if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return dflt;
   std::string json;
   char buf[4096];
   size_t n;
   while ((n = fread(buf, 1, sizeof(buf), f)) > 0) json.append(buf, n);
   fclose(f);
   // Flat compact JSON from shared_preferences: a dumb substring probe is
-  // enough (the key is ASCII and unique).
-  const size_t key = json.find("\"hdr_screenshot\"");
-  if (key == std::string::npos) return false;
+  // enough (the keys are ASCII and unique).
+  const std::string quoted = std::string("\"") + key_name + "\"";
+  const size_t key = json.find(quoted);
+  if (key == std::string::npos) return dflt;
   const size_t colon = json.find(':', key);
-  if (colon == std::string::npos) return false;
+  if (colon == std::string::npos) return dflt;
   size_t v = colon + 1;
   while (v < json.size() && (json[v] == ' ' || json[v] == '\t')) ++v;
-  return json.compare(v, 4, "true") == 0;
+  if (json.compare(v, 4, "true") == 0) return true;
+  if (json.compare(v, 5, "false") == 0) return false;
+  return dflt;
+}
+
+bool ReadHdrScreenshotSetting() {
+  return ReadPrefsBool("hdr_screenshot", false);
 }
 
 float HalfToFloatScalar(uint16_t h) { return HalfToFloat(h); }

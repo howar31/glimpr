@@ -31,10 +31,14 @@ struct MonitorHdrInfo {
 // DXGI outputs (SSH session 0) by returning a default non-HDR info.
 MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor);
 
-// The Dart `hdr_screenshot` setting, read straight from the shared_preferences
-// JSON (%APPDATA%\com.example\glimpr\shared_preferences.json) -- the native
-// freeze must decide HDR-base retention before any Dart runs. False when the
-// file/key is missing.
+// A Dart bool setting, read straight from the shared_preferences JSON
+// (%APPDATA%\com.example\glimpr\shared_preferences.json) -- for native code
+// that must decide before any Dart runs (HDR-base retention) or without a
+// channel (the pin windows). [dflt] when the file/key is missing.
+bool ReadPrefsBool(const char* key_name, bool dflt);
+
+// ReadPrefsBool("hdr_screenshot", false): the native freeze's HDR-base
+// retention decision.
 bool ReadHdrScreenshotSetting();
 
 // Scalar half <-> float (the HDR compositor works in float).
