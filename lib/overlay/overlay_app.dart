@@ -263,10 +263,7 @@ class _OverlayAppState extends State<OverlayApp> {
           // No live session, or cap 1: the live layer is replaced (cap 1 has
           // no suspended layer to evict, the pre-stack behavior exactly).
           replaced = live;
-          _detachShared();
-          _editor?.dispose();
-          _frozen?.dispose();
-          _cursorImage?.dispose();
+          _disposeLiveObjects();
         }
         _pinOnly = pinOnly;
         // Reseed BEFORE building the controller so the freshly-loaded styles
@@ -540,10 +537,7 @@ class _OverlayAppState extends State<OverlayApp> {
   /// beneath it (the overlay window stays up for RS).
   void _clearLiveSession() {
     _lastKnownDisplay = _display ?? _lastKnownDisplay;
-    _detachShared();
-    _editor?.dispose();
-    _frozen?.dispose();
-    _cursorImage?.dispose();
+    _disposeLiveObjects();
     _remoteDirty.clear();
     _localDirty = false;
     _opLog = SessionOpLog();
@@ -624,14 +618,11 @@ class _OverlayAppState extends State<OverlayApp> {
   }
 
   void _resetState() {
-    _detachShared();
+    _disposeLiveObjects();
     _remoteDirty.clear();
     _localDirty = false;
     _opLog.clear();
     _lastDepth = 1;
-    _editor?.dispose();
-    _frozen?.dispose();
-    _cursorImage?.dispose();
     // Whole-session teardown: every suspended layer goes too.
     for (final l in _layers.drain()) {
       l.disposeAll();
@@ -674,6 +665,18 @@ class _OverlayAppState extends State<OverlayApp> {
     _editor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _editor?.undoOverride = null;
     _editor?.redoOverride = null;
+  }
+
+  /// Detach the cross-display listeners and dispose the live trio (editor /
+  /// frozen frame / cursor image) — the fragment every teardown path shares.
+  /// Callers own everything else (dirty/op-log resets, field nulling, RS, the
+  /// layer stack, setState): the transition rules differ per path, see the
+  /// coexistence model before changing any of them.
+  void _disposeLiveObjects() {
+    _detachShared();
+    _editor?.dispose();
+    _frozen?.dispose();
+    _cursorImage?.dispose();
   }
 
   /// Session op-log bookkeeping for THIS display's document: an unguarded
@@ -783,10 +786,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _broadcastTimer?.cancel();
     _persistTimer?.cancel();
     _layerNoticeTimer?.cancel();
-    _detachShared();
-    _editor?.dispose();
-    _frozen?.dispose();
-    _cursorImage?.dispose();
+    _disposeLiveObjects();
     _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
@@ -1058,10 +1058,7 @@ class _OverlayAppState extends State<OverlayApp> {
   /// just this window and go idle; the session continues elsewhere.
   void _restoreSuspended() {
     final l = _layers.resume();
-    _detachShared();
-    _editor?.dispose();
-    _frozen?.dispose();
-    _cursorImage?.dispose();
+    _disposeLiveObjects();
     if (l == null) {
       _remoteDirty.clear();
       _localDirty = false;
