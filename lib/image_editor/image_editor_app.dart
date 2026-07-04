@@ -843,7 +843,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                         child:
                             (image == null || bytes == null || controller == null)
                             ? _landing(tokens)
-                            : _editor(tokens, image, bytes, controller),
+                            : _editor(tokens, image, controller),
                       ),
                     ],
                   ),
@@ -1155,12 +1155,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Widget _editor(
     GlimprTokens t,
     ui.Image image,
-    Uint8List bytes,
     EditorController controller,
   ) {
     return Stack(
       children: [
-        Positioned.fill(child: _canvas(t, image, bytes, controller)),
+        Positioned.fill(child: _canvas(t, image, controller)),
         // Fixed, centered floating pill ~18px from the bottom — not draggable.
         Positioned(
           left: 0,
@@ -1180,12 +1179,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Widget _canvas(
     GlimprTokens t,
     ui.Image image,
-    Uint8List bytes,
     EditorController controller,
   ) {
     final host = ImageEditorHost(
       image: image,
-      bytes: bytes,
       onComplete: _done,
       activeSignal: _active,
       onOpenSettings: _openSettings,

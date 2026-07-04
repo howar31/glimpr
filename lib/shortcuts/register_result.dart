@@ -1,7 +1,7 @@
-/// Why a hotkey could not be registered. macOS never produces these this slice
-/// (it cannot detect conflicts); reserved for Windows (Phase 6 = alreadyInUse)
-/// and a future macOS system-shortcut check (systemReserved).
-enum UnavailableReason { alreadyInUse, systemReserved, error }
+/// Why a hotkey could not be registered. Both platforms currently report only
+/// [error] (an unmappable key or a native registration failure); the enum stays
+/// so a finer-grained reason can be added without reshaping RegisterResult.
+enum UnavailableReason { error }
 
 /// Result of a registration attempt. macOS returns [ok] (or [error] on an
 /// exception); the unavailable reasons are populated by other platforms.

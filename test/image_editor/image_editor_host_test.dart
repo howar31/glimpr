@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +15,6 @@ void main() {
     var completed = false;
     final host = ImageEditorHost(
       image: image,
-      bytes: Uint8List.fromList([1, 2, 3]),
       onComplete: () async => completed = true,
       activeSignal: ValueNotifier((
         id: ImageEditorHost.kImageEditorHostId,
@@ -44,7 +42,6 @@ void main() {
     var closed = false;
     final host = ImageEditorHost(
       image: image,
-      bytes: Uint8List.fromList([0]),
       onComplete: () async {},
       activeSignal: ValueNotifier((
         id: ImageEditorHost.kImageEditorHostId,

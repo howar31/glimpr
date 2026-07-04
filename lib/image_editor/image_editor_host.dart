@@ -18,7 +18,6 @@ import '../settings/settings.dart';
 /// State) so that the stable notifier survives per-build host reconstruction.
 class ImageEditorHost implements EditorHost {
   final ui.Image image;
-  final Uint8List bytes;
   final Future<void> Function() onComplete;
   final VoidCallback? onClose;
   final VoidCallback? onOpenSettings;
@@ -27,7 +26,6 @@ class ImageEditorHost implements EditorHost {
 
   ImageEditorHost({
     required this.image,
-    required this.bytes,
     required this.onComplete,
     required this.activeSignal,
     this.onClose,

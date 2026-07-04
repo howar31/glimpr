@@ -43,9 +43,8 @@ class EditorDocument {
 
   /// Undo-history depth including the current snapshot. Lets a host detect a
   /// newly-committed op (depth grows by exactly one) without hooking every
-  /// mutator — silent backfills keep the depth unchanged.
+  /// mutator.
   int get historyDepth => _past.length;
-  int get redoDepth => _future.length;
 
   /// Drop the redo tail without touching the history. A session-global op on
   /// ANOTHER display invalidates redo everywhere, mirroring how a local
@@ -100,18 +99,6 @@ class EditorDocument {
   /// Replace the whole drawable list as ONE undoable step. Used by the spotlight
   /// layer-wide restyle (every hole updates together) and commitSpotlight.
   EditorDocument withDrawables(List<Drawable> next) => _commit(next);
-
-  /// Replace [i] in the CURRENT state WITHOUT creating an undo step. For async
-  /// cosmetic backfills (e.g. a pixelate mosaic finishing after the region was
-  /// already committed) that must not become a separate undo entry.
-  EditorDocument replaceAtSilent(int i, Drawable d) {
-    final cur = _past.last;
-    if (i < 0 || i >= cur.drawables.length) return this;
-    final next = [...cur.drawables]..[i] = d;
-    final past = [..._past]
-      ..[_past.length - 1] = _Snapshot(next, cur.canvasImage, cur.canvasSize);
-    return EditorDocument._(past, _future);
-  }
 
   /// Destructive crop-trim (image editor only): push a snapshot carrying the new
   /// (already-shifted) [drawables] AND the cropped [image] + [size]. Undo

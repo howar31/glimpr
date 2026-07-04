@@ -323,9 +323,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSaveFolderChoose => '選擇…';
 
   @override
-  String get settingsSaveFolderReset => '重設';
-
-  @override
   String get settingsSaveFolderDefault => '預設 · ~/Pictures/Glimpr';
 
   @override
@@ -462,26 +459,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tokUser => '使用者名稱';
 
   @override
-  String get settingsFilenamePlaceholders => '可用變數';
-
-  @override
-  String get settingsFilenameTokenWindowDesc => '視窗標題；若沒有標題則為 App 名稱';
-
-  @override
-  String get settingsFilenameTokenAppDesc => '應用程式名稱（例如 Safari）';
-
-  @override
-  String get settingsFilenameTokenDateDesc => '擷取日期，例如 2026-06-03';
-
-  @override
-  String get settingsFilenameTokenTimeDesc => '擷取時間，例如 15-04-09';
-
-  @override
-  String settingsFilenameNote(String windowToken, String appToken) {
-    return '使用截圖結束時游標所在的視窗。在桌面上時，$windowToken 與 $appToken 會被省略。';
-  }
-
-  @override
   String get settingsDecorationSnap => '吸附';
 
   @override
@@ -535,12 +512,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsRecordingUnavailable => '螢幕錄影需要 macOS 15 或更新版本。';
-
-  @override
-  String get settingsRecordingCodec => '編碼格式';
-
-  @override
-  String get settingsRecordingCodecHint => 'H.264 相容性最佳；HEVC 檔案較小';
 
   @override
   String get settingsRecordingFps => '影格率';

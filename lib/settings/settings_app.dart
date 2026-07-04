@@ -72,17 +72,18 @@ const double _kLoupePreviewStage = 200;
 
 // Sidebar order follows the user's pipeline: how to capture -> what gets
 // produced (and where) -> what happens on completion; General keeps the
-// app-level items, Advanced the expert/danger zone.
-const _kSections = <(String, IconData)>[
-  ('General', Icons.tune),
-  ('Screenshot', Icons.photo_camera_outlined),
-  ('Recording', Icons.videocam_outlined),
-  ('Image Editor', Icons.brush_outlined),
-  ('Selection & HUD', Icons.center_focus_strong_outlined),
-  ('Output', Icons.folder_outlined),
-  ('Shortcuts', Icons.keyboard),
-  ('Advanced', Icons.memory),
-  ('About', Icons.info_outline),
+// app-level items, Advanced the expert/danger zone. Icons only; the displayed
+// titles are localized in _sectionTitle (same order).
+const _kSections = <IconData>[
+  Icons.tune, // General
+  Icons.photo_camera_outlined, // Screenshot
+  Icons.videocam_outlined, // Recording
+  Icons.brush_outlined, // Image Editor
+  Icons.center_focus_strong_outlined, // Selection & HUD
+  Icons.folder_outlined, // Output
+  Icons.keyboard, // Shortcuts
+  Icons.memory, // Advanced
+  Icons.info_outline, // About
 ];
 
 // The About pane's section index (last entry of [_kSections]).
@@ -752,7 +753,7 @@ class _SettingsAppState extends State<SettingsApp>
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 1.5),
                     child: NavItem(
-                      icon: _kSections[i].$2,
+                      icon: _kSections[i],
                       label: _sectionTitle(i),
                       active: _section == i,
                       onTap: () => setState(() => _section = i),

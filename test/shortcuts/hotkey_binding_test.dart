@@ -36,16 +36,15 @@ void main() {
     expect(b!.modifiers, {HotkeyModifier.meta});
   });
 
-  test('isComplete (bare keys are valid bindings)', () {
-    expect(cmdOpt1.isComplete, isTrue);
-    // Modifier requirement was dropped (ShareX parity): a bare key is a
-    // complete binding too.
+  test('bare keys are valid bindings (ShareX parity)', () {
+    // Modifier requirement was dropped: a modifier-less binding constructs and
+    // round-trips like any other.
     const bareC = HotkeyBinding(
       physicalKey: PhysicalKeyboardKey.keyC,
       logicalKey: LogicalKeyboardKey.keyC,
       modifiers: {},
     );
-    expect(bareC.isComplete, isTrue);
+    expect(HotkeyBinding.fromJson(bareC.toJson()), bareC);
   });
 
   test('equality by value', () {

@@ -296,12 +296,11 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
       {HotkeyModifier.control}),
 };
 
-/// Global actions NOT available on Windows yet (greyed in the tray, hidden in the
-/// Shortcuts pane, disabled as hotkeys). Pin + open-editor went live in S4;
-/// recording lands in S6.
-const _kWindowsUnavailableGlobals = <String>{
-  // All recording modes are wired on Windows now (S6); nothing is unavailable.
-};
+/// Global actions not available on Windows (greyed in the tray, hidden in the
+/// Shortcuts pane, disabled as hotkeys). Empty since Phase 6 completed -- every
+/// global action is wired on Windows; the seam stays for any future
+/// platform-gated action.
+const _kWindowsUnavailableGlobals = <String>{};
 
 /// Whether a Tier-1 global action is available on the current platform. macOS:
 /// always. Windows: everything except the not-yet-built globals.

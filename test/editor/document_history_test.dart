@@ -10,16 +10,14 @@ RectangleDrawable _rect() =>
 
 void main() {
   group('EditorDocument history depth', () {
-    test('grows by one per commit; silent replace keeps it', () {
+    test('grows by one per commit; undo shrinks it', () {
       var doc = const EditorDocument();
       expect(doc.historyDepth, 1);
       doc = doc.add(_rect());
       expect(doc.historyDepth, 2);
-      doc = doc.replaceAtSilent(0, _rect());
-      expect(doc.historyDepth, 2);
       doc = doc.undo();
       expect(doc.historyDepth, 1);
-      expect(doc.redoDepth, 1);
+      expect(doc.canRedo, isTrue);
     });
 
     test('clearedRedo drops the redo tail only', () {

@@ -196,8 +196,6 @@ class PenDrawable extends Drawable {
   PenDrawable moved(Offset d) =>
       PenDrawable([for (final p in points) p + d], style);
 
-  PenDrawable appended(Offset p) => PenDrawable([...points, p], style);
-
   PenDrawable withStyle(DrawStyle s) => PenDrawable(points, s);
 }
 
@@ -388,9 +386,6 @@ class ArrowDrawable extends Drawable implements Segmented {
   ArrowDrawable withPoints(List<Offset> p) => ArrowDrawable(
       p.first, p.last, style,
       mids: p.length > 2 ? p.sublist(1, p.length - 1) : const []);
-
-  ArrowDrawable resized(Rect r) =>
-      ArrowDrawable(r.topLeft, r.bottomRight, style);
 
   ArrowDrawable withStyle(DrawStyle s) => ArrowDrawable(start, end, s, mids: mids);
 }

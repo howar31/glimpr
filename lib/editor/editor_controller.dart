@@ -176,7 +176,6 @@ class EditorController {
   /// The current "stamp" image (file-loaded) the stamp tool places, or null
   /// until one is chosen. Session-scoped; not persisted across captures.
   final stampImage = ValueNotifier<Image?>(null);
-  void setStampImage(Image? img) => stampImage.value = img;
 
   /// The encoded bytes of [stampImage], kept so the overlay can BROADCAST the
   /// stamp to the other displays (each decodes its own ui.Image — images cannot
@@ -480,11 +479,6 @@ class EditorController {
   /// (already-shifted) drawables AND the cropped canvas [image] + [size].
   void commitTrim(List<Drawable> shifted, Image image, Size size) =>
       document.value = document.value.trimmed(shifted, image, size);
-
-  void replaceSelected(Drawable d) {
-    final i = selectedIndex.value;
-    if (i != null) document.value = document.value.replaceAt(i, d);
-  }
 
   void deleteSelected() {
     final i = selectedIndex.value;

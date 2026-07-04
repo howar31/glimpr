@@ -274,12 +274,14 @@ void main() {
     return done.future;
   }
 
-  test('stamp image defaults null; setStampImage stores it', () async {
+  test('stamp image defaults null; setStamp stores the pair', () async {
     final c = EditorController();
     expect(c.stampImage.value, isNull);
     final img = await testImage(2, 1);
-    c.setStampImage(img);
+    final bytes = Uint8List.fromList([1, 2, 3]);
+    c.setStamp(img, bytes);
     expect(c.stampImage.value, same(img));
+    expect(c.stampBytes, same(bytes));
     c.dispose();
   });
 

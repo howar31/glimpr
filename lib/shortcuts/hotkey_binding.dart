@@ -23,10 +23,6 @@ class HotkeyBinding {
   final LogicalKeyboardKey logicalKey;
   final Set<HotkeyModifier> modifiers;
 
-  /// A usable binding has a non-modifier main key. (The recorder never produces
-  /// a modifier-only binding, but persisted data could.)
-  bool get isComplete => true; // a constructed binding always has a main key
-
   Map<String, dynamic> toJson() => {
         'phys': physicalKey.usbHidUsage,
         'logi': logicalKey.keyId,

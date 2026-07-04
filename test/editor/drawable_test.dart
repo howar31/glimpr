@@ -97,7 +97,7 @@ void main() {
   });
 
   test(
-    'pen bounds is the point cloud bbox; move shifts every point; appended',
+    'pen bounds is the point cloud bbox; move shifts every point',
     () {
       const d = PenDrawable([
         Offset(0, 0),
@@ -108,7 +108,6 @@ void main() {
       final m = d.moved(const Offset(1, 2));
       expect(m.points.first, const Offset(1, 2));
       expect(m.points.last, const Offset(21, 7));
-      expect(d.appended(const Offset(30, 30)).points.length, 4);
     },
   );
 

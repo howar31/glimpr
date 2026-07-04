@@ -395,10 +395,6 @@
   "@settingsSaveFolderChoose": {
     "description": "Settings > Output > Save location: choose directory button label"
   },
-  "settingsSaveFolderReset": "Reset",
-  "@settingsSaveFolderReset": {
-    "description": "Settings > Output > Save location: reset to default button label"
-  },
   "settingsSaveFolderDefault": "Default · ~/Pictures/Glimpr",
   "@settingsSaveFolderDefault": {
     "description": "Settings > Output > Save location: shown when no custom folder is set"
@@ -456,38 +452,6 @@
   "tokGuid": "Random GUID",
   "tokHost": "Computer name",
   "tokUser": "User name",
-  "settingsFilenamePlaceholders": "Placeholders",
-  "@settingsFilenamePlaceholders": {
-    "description": "Settings > Output > Filename: placeholders section label"
-  },
-  "settingsFilenameTokenWindowDesc": "The window title, or the app name if it has none",
-  "@settingsFilenameTokenWindowDesc": {
-    "description": "Settings > Output > Filename: description for the {window} token"
-  },
-  "settingsFilenameTokenAppDesc": "The application name (e.g. Safari)",
-  "@settingsFilenameTokenAppDesc": {
-    "description": "Settings > Output > Filename: description for the {app} token"
-  },
-  "settingsFilenameTokenDateDesc": "Capture date, e.g. 2026-06-03",
-  "@settingsFilenameTokenDateDesc": {
-    "description": "Settings > Output > Filename: description for the {date} token"
-  },
-  "settingsFilenameTokenTimeDesc": "Capture time, e.g. 15-04-09",
-  "@settingsFilenameTokenTimeDesc": {
-    "description": "Settings > Output > Filename: description for the {time} token"
-  },
-  "settingsFilenameNote": "Uses the window under the cursor when the screenshot ends. On bare desktop, {windowToken} and {appToken} are left out.",
-  "@settingsFilenameNote": {
-    "description": "Settings > Output > Filename: note about window/app token behavior",
-    "placeholders": {
-      "windowToken": {
-        "type": "String"
-      },
-      "appToken": {
-        "type": "String"
-      }
-    }
-  },
   "settingsDecorationSnap": "Snap",
   "@settingsDecorationSnap": {
     "description": "Settings > Screenshot > Decoration: interactive-overlay snap toggle title (snaps to a window or AX element)"
@@ -559,14 +523,6 @@
   "settingsRecordingUnavailable": "Screen recording needs macOS 15 or later.",
   "@settingsRecordingUnavailable": {
     "description": "Settings > Capture > Screen recording: shown on macOS 14"
-  },
-  "settingsRecordingCodec": "Codec",
-  "@settingsRecordingCodec": {
-    "description": "Settings > Capture > Screen recording: codec row title"
-  },
-  "settingsRecordingCodecHint": "H.264 is most compatible; HEVC makes smaller files",
-  "@settingsRecordingCodecHint": {
-    "description": "Settings > Capture > Screen recording: codec row hint"
   },
   "settingsRecordingFps": "Frame rate",
   "@settingsRecordingFps": {

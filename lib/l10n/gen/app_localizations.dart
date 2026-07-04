@@ -686,12 +686,6 @@ abstract class AppLocalizations {
   /// **'Choose…'**
   String get settingsSaveFolderChoose;
 
-  /// Settings > Output > Save location: reset to default button label
-  ///
-  /// In en, this message translates to:
-  /// **'Reset'**
-  String get settingsSaveFolderReset;
-
   /// Settings > Output > Save location: shown when no custom folder is set
   ///
   /// In en, this message translates to:
@@ -962,42 +956,6 @@ abstract class AppLocalizations {
   /// **'User name'**
   String get tokUser;
 
-  /// Settings > Output > Filename: placeholders section label
-  ///
-  /// In en, this message translates to:
-  /// **'Placeholders'**
-  String get settingsFilenamePlaceholders;
-
-  /// Settings > Output > Filename: description for the {window} token
-  ///
-  /// In en, this message translates to:
-  /// **'The window title, or the app name if it has none'**
-  String get settingsFilenameTokenWindowDesc;
-
-  /// Settings > Output > Filename: description for the {app} token
-  ///
-  /// In en, this message translates to:
-  /// **'The application name (e.g. Safari)'**
-  String get settingsFilenameTokenAppDesc;
-
-  /// Settings > Output > Filename: description for the {date} token
-  ///
-  /// In en, this message translates to:
-  /// **'Capture date, e.g. 2026-06-03'**
-  String get settingsFilenameTokenDateDesc;
-
-  /// Settings > Output > Filename: description for the {time} token
-  ///
-  /// In en, this message translates to:
-  /// **'Capture time, e.g. 15-04-09'**
-  String get settingsFilenameTokenTimeDesc;
-
-  /// Settings > Output > Filename: note about window/app token behavior
-  ///
-  /// In en, this message translates to:
-  /// **'Uses the window under the cursor when the screenshot ends. On bare desktop, {windowToken} and {appToken} are left out.'**
-  String settingsFilenameNote(String windowToken, String appToken);
-
   /// Settings > Screenshot > Decoration: interactive-overlay snap toggle title (snaps to a window or AX element)
   ///
   /// In en, this message translates to:
@@ -1105,18 +1063,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Screen recording needs macOS 15 or later.'**
   String get settingsRecordingUnavailable;
-
-  /// Settings > Capture > Screen recording: codec row title
-  ///
-  /// In en, this message translates to:
-  /// **'Codec'**
-  String get settingsRecordingCodec;
-
-  /// Settings > Capture > Screen recording: codec row hint
-  ///
-  /// In en, this message translates to:
-  /// **'H.264 is most compatible; HEVC makes smaller files'**
-  String get settingsRecordingCodecHint;
 
   /// Settings > Capture > Screen recording: fps row title
   ///

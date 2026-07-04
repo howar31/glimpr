@@ -336,9 +336,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSaveFolderChoose => 'Choose…';
 
   @override
-  String get settingsSaveFolderReset => 'Reset';
-
-  @override
   String get settingsSaveFolderDefault => 'Default · ~/Pictures/Glimpr';
 
   @override
@@ -477,28 +474,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tokUser => 'User name';
 
   @override
-  String get settingsFilenamePlaceholders => 'Placeholders';
-
-  @override
-  String get settingsFilenameTokenWindowDesc =>
-      'The window title, or the app name if it has none';
-
-  @override
-  String get settingsFilenameTokenAppDesc =>
-      'The application name (e.g. Safari)';
-
-  @override
-  String get settingsFilenameTokenDateDesc => 'Capture date, e.g. 2026-06-03';
-
-  @override
-  String get settingsFilenameTokenTimeDesc => 'Capture time, e.g. 15-04-09';
-
-  @override
-  String settingsFilenameNote(String windowToken, String appToken) {
-    return 'Uses the window under the cursor when the screenshot ends. On bare desktop, $windowToken and $appToken are left out.';
-  }
-
-  @override
   String get settingsDecorationSnap => 'Snap';
 
   @override
@@ -559,13 +534,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsRecordingUnavailable =>
       'Screen recording needs macOS 15 or later.';
-
-  @override
-  String get settingsRecordingCodec => 'Codec';
-
-  @override
-  String get settingsRecordingCodecHint =>
-      'H.264 is most compatible; HEVC makes smaller files';
 
   @override
   String get settingsRecordingFps => 'Frame rate';
