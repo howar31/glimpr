@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
 
 /// Enumerates system-installed font families via the native glimpr/fonts
-/// channel. Fonts are NOT bundled; macOS resolves them through CoreText.
-/// The list is fetched once and cached for the engine's lifetime.
+/// channel. Fonts are NOT bundled; the OS resolves them (CoreText on macOS,
+/// GDI font enumeration on Windows). Fetched once, cached per engine.
 class FontBridge {
   static const _channel = MethodChannel('glimpr/fonts');
   List<String>? _cache;

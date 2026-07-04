@@ -1299,7 +1299,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get popoverTextureStreaks => 'Streaks';
 
   @override
-  String get popoverTextureFraged => 'Frayed';
+  String get popoverTextureFrayed => 'Frayed';
 
   @override
   String get popoverArrowHeadEnd => 'End';

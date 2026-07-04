@@ -1805,8 +1805,8 @@ class _OptionsRowState extends State<_OptionsRow> {
   }
 }
 
-/// Highlighter-only: a compact pill showing the current brush texture name;
-/// tapping opens the [TexturePickerPopover] (a named menu with previews).
+/// A compact pill showing a named option's current value (brush texture,
+/// line style, arrowheads, ...); tapping opens the matching picker popover.
 class _TextureButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;

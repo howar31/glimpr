@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Capture feedback cues, played NATIVELY: NSSound on macOS, PlaySound on
+/// Capture feedback cues, played NATIVELY: NSSound on macOS, XAudio2 on
 /// Windows, over the per-engine `glimpr/sound` channel (registered on every
 /// engine, like `glimpr/clipboard`). This replaces the `audioplayers` package,
 /// whose Windows backend raised an access violation when a cue played while a

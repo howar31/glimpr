@@ -1944,7 +1944,8 @@ class _SettingsAppState extends State<SettingsApp>
   /// capture mode — revealing the DISPLAY / LAST / RECORDING labels substituted
   /// for %title/%app when there is no real window, and the date-only collapse on
   /// the bare desktop — plus the _NNN same-name collision rule (via the real
-  /// [uniqueName]). A fixed sample time + counter keep the rows stable.
+  /// [uniqueName]). Counter and rand are fixed so the rows stay stable; the
+  /// timestamp is the build-time [DateTime.now] (a live preview, like ShareX).
   Widget _previewBody(GlimprTokens t) {
     final ext = _format == ImageFormat.jpeg ? 'jpg' : 'png';
     final fnPattern = _filenameTemplate.trim().isEmpty

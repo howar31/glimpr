@@ -1486,8 +1486,8 @@
   "@popoverTextureStreaks": {
     "description": "Highlighter texture picker: streaks texture option"
   },
-  "popoverTextureFraged": "Frayed",
-  "@popoverTextureFraged": {
+  "popoverTextureFrayed": "Frayed",
+  "@popoverTextureFrayed": {
     "description": "Highlighter texture picker: frayed texture option"
   },
   "popoverArrowHeadEnd": "End",

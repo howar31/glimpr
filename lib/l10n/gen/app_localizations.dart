@@ -2490,7 +2490,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Frayed'**
-  String get popoverTextureFraged;
+  String get popoverTextureFrayed;
 
   /// Arrowheads picker: arrowhead at end only
   ///

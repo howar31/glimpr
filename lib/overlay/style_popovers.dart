@@ -877,7 +877,7 @@ class _FontRow extends StatelessWidget {
 String textureLabel(AppLocalizations l10n, HighlighterTexture t) => switch (t) {
   HighlighterTexture.clean => l10n.popoverTextureClean,
   HighlighterTexture.streaks => l10n.popoverTextureStreaks,
-  HighlighterTexture.frayed => l10n.popoverTextureFraged,
+  HighlighterTexture.frayed => l10n.popoverTextureFrayed,
 };
 
 /// A small menu listing the highlighter brush textures by name, each with a
