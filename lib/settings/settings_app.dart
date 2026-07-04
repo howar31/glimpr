@@ -2207,62 +2207,67 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 15),
-      SectionLabel(_l.settingsSectionElementSnap, icon: Icons.ads_click),
-      GlassCard.padded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _l.settingsElementSnapTitle,
-                    style: GlimprType.sansStyle(14.5, 600, t.fg1),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                GlassToggle(
-                  value: _snapElementMode,
-                  onChanged: _setSnapElementMode,
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _l.settingsElementSnapBody,
-              style: GlimprType.sansStyle(12.5, 400, t.fg3),
-            ),
-            if (_snapElementMode && !_axTrusted) ...[
-              const SizedBox(height: 12),
+      // Element snap: macOS only (the Windows overlay's elementSnapAt is a
+      // deliberate null stub and there is no AX permission to grant), so the
+      // whole section is hidden on Windows like the warm-engines one.
+      if (!Platform.isWindows) ...[
+        SectionLabel(_l.settingsSectionElementSnap, icon: Icons.ads_click),
+        GlassCard.padded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 children: [
-                  const Icon(
-                    Icons.lock_outline,
-                    size: 15,
-                    color: GlimprTokens.danger,
-                  ),
-                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      _l.settingsElementSnapNeedsPermission,
-                      style:
-                          GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
+                      _l.settingsElementSnapTitle,
+                      style: GlimprType.sansStyle(14.5, 600, t.fg1),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  GhostButton(
-                    _l.settingsElementSnapGrant,
-                    onTap: () async {
-                      await CaptureBridge().requestAccessibility();
-                      _recheckAxTrusted();
-                    },
+                  const SizedBox(width: 12),
+                  GlassToggle(
+                    value: _snapElementMode,
+                    onChanged: _setSnapElementMode,
                   ),
                 ],
               ),
+              const SizedBox(height: 4),
+              Text(
+                _l.settingsElementSnapBody,
+                style: GlimprType.sansStyle(12.5, 400, t.fg3),
+              ),
+              if (_snapElementMode && !_axTrusted) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.lock_outline,
+                      size: 15,
+                      color: GlimprTokens.danger,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _l.settingsElementSnapNeedsPermission,
+                        style:
+                            GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GhostButton(
+                      _l.settingsElementSnapGrant,
+                      onTap: () async {
+                        await CaptureBridge().requestAccessibility();
+                        _recheckAxTrusted();
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
+      ],
     ];
   }
 
@@ -2440,13 +2445,13 @@ class _SettingsAppState extends State<SettingsApp>
           title: _l.settingsReservedCloseWindow,
           hint: _l.settingsReservedHintEditorSettings,
           tag: _scopeChip(_l.scopeEditor),
-          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('W')]),
+          trailing: _reservedField(t, [KeyCap(_cmdCap), const KeyCap('W')]),
         ),
         SettingRow(
           title: _l.settingsReservedOpenSettings,
           hint: _l.settingsReservedHintOverlayEditor,
           tag: _scopeChip(_l.scopeEditor),
-          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap(',')]),
+          trailing: _reservedField(t, [KeyCap(_cmdCap), const KeyCap(',')]),
         ),
         SettingRow(
           title: _l.settingsReservedNudgeCrosshair,
@@ -2457,12 +2462,14 @@ class _SettingsAppState extends State<SettingsApp>
             const [KeyCap('←'), KeyCap('↑'), KeyCap('↓'), KeyCap('→')],
           ),
         ),
-        SettingRow(
-          title: _l.settingsReservedElementSnapLevel,
-          hint: _l.settingsReservedElementSnapLevelHint,
-          tag: _scopeChip(_l.scopeOverlay),
-          trailing: _reservedField(t, const [KeyCap(','), KeyCap('.')]),
-        ),
+        // Element-snap walk keys: macOS only, like the Advanced section.
+        if (!Platform.isWindows)
+          SettingRow(
+            title: _l.settingsReservedElementSnapLevel,
+            hint: _l.settingsReservedElementSnapLevelHint,
+            tag: _scopeChip(_l.scopeOverlay),
+            trailing: _reservedField(t, const [KeyCap(','), KeyCap('.')]),
+          ),
         SettingRow(
           title: _l.settingsCycleLoupeInfo,
           hint: _l.settingsCycleLoupeInfoHint,
@@ -2474,13 +2481,13 @@ class _SettingsAppState extends State<SettingsApp>
           title: _l.settingsReservedFitToWindow,
           hint: _l.settingsReservedHintImageEditor,
           tag: _scopeChip(_l.scopeImage),
-          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('1')]),
+          trailing: _reservedField(t, [KeyCap(_cmdCap), const KeyCap('1')]),
         ),
         SettingRow(
           title: _l.settingsReservedZoomTo100,
           hint: _l.settingsReservedHintImageEditor,
           tag: _scopeChip(_l.scopeImage),
-          trailing: _reservedField(t, const [KeyCap('⌘'), KeyCap('2')]),
+          trailing: _reservedField(t, [KeyCap(_cmdCap), const KeyCap('2')]),
         ),
         // Text-input semantics, fixed while editing a text annotation — one row
         // per action so the keys don't read as a single chord.
@@ -2661,6 +2668,10 @@ class _SettingsAppState extends State<SettingsApp>
       style: GlimprType.sansStyle(25, 700, t.fg1, letterSpacing: -0.5),
     ),
   );
+
+  // The command-modifier cap for reserved rows: the real chords are Ctrl-based
+  // on Windows (Ctrl+W close, Ctrl+, settings, Ctrl+1/2 zoom), ⌘ on macOS.
+  String get _cmdCap => Platform.isWindows ? 'Ctrl' : '⌘';
 
   // A read-only, field-shaped box for reserved (fixed) keys, mirroring the
   // HotkeyRecorderField's idle look (same height / bg / border) so the reserved
