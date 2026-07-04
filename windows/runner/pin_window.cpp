@@ -573,7 +573,13 @@ LRESULT PinWindow::MessageHandler(HWND hwnd, UINT message, WPARAM wparam,
         GetCursorPos(&cur);
         win_x_ = cur.x - drag_offset_.x;
         win_y_ = cur.y - drag_offset_.y;
-        Render();
+        // Reposition only: a layered window retains its content, so moving
+        // needs no repaint. The previous full Render() per mouse-move was a
+        // whole-pin GPU->CPU readback (~35MB per event on a 4K-region pin) at
+        // pointer-event rate; the reveal animation timer still repaints while
+        // the glow is shown (it reads the updated win_x_/win_y_).
+        SetWindowPos(hwnd, nullptr, win_x_, win_y_, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         return 0;
       }
       if (!tracking_leave_) {
