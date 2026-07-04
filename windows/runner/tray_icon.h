@@ -91,6 +91,11 @@ class TrayIcon {
   void OnProcTick();                        // one processing-pulse frame
   HICON MakeTintedIcon(double mix) const;   // the base mark blended toward red
   HICON MakeProcessingIcon(double intensity) const;  // mark filled w/ logo gradient
+  // The theme mark's decoded BGRA pixels + mask, cached so the 20 Hz animation
+  // ticks only tint (the resource load + GetDIBits ran per frame before).
+  // Invalidated on OnThemeChanged; rebuilt lazily by the next tick.
+  bool EnsureMarkPixels() const;
+  void InvalidateMarkCache();
   void ApplyIcon(HICON icon);               // NIM_MODIFY + take ownership of icon_
   void SetTip(const std::wstring& tip);     // NIM_MODIFY the hover tooltip
   static void CALLBACK RecordTimerProc(HWND, UINT, UINT_PTR, DWORD);
@@ -126,6 +131,12 @@ class TrayIcon {
   bool proc_unbounded_ = false;    // recording finalize: no 10s ceiling
   unsigned long long proc_start_ms_ = 0;
   int proc_last_cycle_ = 0;
+
+  // Cached theme-mark pixels for the animators (see EnsureMarkPixels).
+  mutable std::vector<uint8_t> mark_px_;
+  mutable int mark_w_ = 0;
+  mutable int mark_h_ = 0;
+  mutable HBITMAP mark_mask_ = nullptr;
 
   static TrayIcon* s_record_instance_;  // the single tray; routes BOTH timers
 };

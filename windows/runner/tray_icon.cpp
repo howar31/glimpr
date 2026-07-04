@@ -127,6 +127,49 @@ TrayIcon::~TrayIcon() {
   if (s_record_instance_ == this) s_record_instance_ = nullptr;
   Remove();
   if (icon_) DestroyIcon(icon_);
+  if (mark_mask_) DeleteObject(mark_mask_);
+}
+
+// Decode the theme mark ONCE into mark_px_ (BGRA) + mark_mask_; the 20 Hz
+// animators then only run their per-pixel tint. Rebuilt after
+// InvalidateMarkCache (theme change).
+bool TrayIcon::EnsureMarkPixels() const {
+  if (!mark_px_.empty()) return true;
+  HICON base = LoadThemeIcon();
+  if (!base) return false;
+  ICONINFO ii = {};
+  if (!GetIconInfo(base, &ii)) {
+    DestroyIcon(base);
+    return false;
+  }
+  BITMAP bm = {};
+  GetObject(ii.hbmColor, sizeof(bm), &bm);
+  mark_w_ = bm.bmWidth;
+  mark_h_ = bm.bmHeight;
+  BITMAPINFO bi = {};
+  bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bi.bmiHeader.biWidth = mark_w_;
+  bi.bmiHeader.biHeight = -mark_h_;  // top-down
+  bi.bmiHeader.biPlanes = 1;
+  bi.bmiHeader.biBitCount = 32;
+  bi.bmiHeader.biCompression = BI_RGB;
+  mark_px_.assign(static_cast<size_t>(mark_w_) * mark_h_ * 4, 0);
+  HDC dc = GetDC(nullptr);
+  GetDIBits(dc, ii.hbmColor, 0, mark_h_, mark_px_.data(), &bi, DIB_RGB_COLORS);
+  ReleaseDC(nullptr, dc);
+  if (mark_mask_) DeleteObject(mark_mask_);
+  mark_mask_ = ii.hbmMask;  // keep the mask; hbmColor + the icon are done
+  if (ii.hbmColor) DeleteObject(ii.hbmColor);
+  DestroyIcon(base);
+  return !mark_px_.empty();
+}
+
+void TrayIcon::InvalidateMarkCache() {
+  mark_px_.clear();
+  if (mark_mask_) {
+    DeleteObject(mark_mask_);
+    mark_mask_ = nullptr;
+  }
 }
 
 // The viewfinder mark tinted for the current taskbar theme, at small-icon size.
@@ -140,9 +183,11 @@ HICON TrayIcon::LoadThemeIcon() const {
 
 void TrayIcon::OnThemeChanged() {
   if (!added_) return;
-  // While recording OR processing, the animation tick re-tints from the live
-  // theme each frame (MakeTintedIcon / MakeProcessingIcon -> LoadThemeIcon), so
-  // leave the running animation alone here.
+  // Drop the cached mark pixels: the next animation tick (or idle repaint
+  // below) rebuilds them from the new theme's resource.
+  InvalidateMarkCache();
+  // While recording OR processing, the animation tick repaints from the
+  // (now-invalidated) cache each frame, so leave the running animation alone.
   if (recording_ || ease_out_ || processing_) return;
   HICON next = LoadThemeIcon();
   if (!next) return;
@@ -335,16 +380,8 @@ void TrayIcon::ApplyIcon(HICON icon) {
 // Reads the icon's 32bpp color bitmap (alpha = the mark's coverage) and reuses
 // its mask. Caller-independent; ApplyIcon takes ownership of the result.
 HICON TrayIcon::MakeTintedIcon(double mix) const {
-  HICON base = LoadThemeIcon();
-  if (!base) return nullptr;
-  ICONINFO ii = {};
-  if (!GetIconInfo(base, &ii)) {
-    DestroyIcon(base);
-    return nullptr;
-  }
-  BITMAP bm = {};
-  GetObject(ii.hbmColor, sizeof(bm), &bm);
-  const int w = bm.bmWidth, h = bm.bmHeight;
+  if (!EnsureMarkPixels()) return nullptr;
+  const int w = mark_w_, h = mark_h_;
   BITMAPINFO bi = {};
   bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
   bi.bmiHeader.biWidth = w;
@@ -352,9 +389,7 @@ HICON TrayIcon::MakeTintedIcon(double mix) const {
   bi.bmiHeader.biPlanes = 1;
   bi.bmiHeader.biBitCount = 32;
   bi.bmiHeader.biCompression = BI_RGB;
-  std::vector<uint8_t> px(static_cast<size_t>(w) * h * 4, 0);
-  HDC dc = GetDC(nullptr);
-  GetDIBits(dc, ii.hbmColor, 0, h, px.data(), &bi, DIB_RGB_COLORS);
+  std::vector<uint8_t> px = mark_px_;  // tint a copy of the cached mark
   const double tr = 0xFF, tg = 0x45, tb = 0x3A;  // recording red #FF453A
   for (size_t i = 0; i < px.size(); i += 4) {
     if (px[i + 3] == 0) continue;  // transparent pixel -> leave it
@@ -364,20 +399,18 @@ HICON TrayIcon::MakeTintedIcon(double mix) const {
   }
   HICON out = nullptr;
   void* bits = nullptr;
+  HDC dc = GetDC(nullptr);
   HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
   if (color && bits) {
     std::memcpy(bits, px.data(), px.size());
     ICONINFO ni = {};
     ni.fIcon = TRUE;
     ni.hbmColor = color;
-    ni.hbmMask = ii.hbmMask;  // reuse the base mask
+    ni.hbmMask = mark_mask_;  // reuse the cached mask
     out = CreateIconIndirect(&ni);
   }
   if (color) DeleteObject(color);
   ReleaseDC(nullptr, dc);
-  if (ii.hbmColor) DeleteObject(ii.hbmColor);
-  if (ii.hbmMask) DeleteObject(ii.hbmMask);
-  DestroyIcon(base);
   return out;
 }
 
@@ -469,16 +502,8 @@ void TrayIcon::SetRecordingState(bool active, bool graceful) {
 // own coverage * intensity, fading the whole mark toward transparent at a pulse
 // low. Caller-independent; ApplyIcon takes ownership of the result.
 HICON TrayIcon::MakeProcessingIcon(double intensity) const {
-  HICON base = LoadThemeIcon();
-  if (!base) return nullptr;
-  ICONINFO ii = {};
-  if (!GetIconInfo(base, &ii)) {
-    DestroyIcon(base);
-    return nullptr;
-  }
-  BITMAP bm = {};
-  GetObject(ii.hbmColor, sizeof(bm), &bm);
-  const int w = bm.bmWidth, h = bm.bmHeight;
+  if (!EnsureMarkPixels()) return nullptr;
+  const int w = mark_w_, h = mark_h_;
   BITMAPINFO bi = {};
   bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
   bi.bmiHeader.biWidth = w;
@@ -486,9 +511,7 @@ HICON TrayIcon::MakeProcessingIcon(double intensity) const {
   bi.bmiHeader.biPlanes = 1;
   bi.bmiHeader.biBitCount = 32;
   bi.bmiHeader.biCompression = BI_RGB;
-  std::vector<uint8_t> px(static_cast<size_t>(w) * h * 4, 0);
-  HDC dc = GetDC(nullptr);
-  GetDIBits(dc, ii.hbmColor, 0, h, px.data(), &bi, DIB_RGB_COLORS);
+  std::vector<uint8_t> px = mark_px_;  // fill a copy of the cached mark
   const double clamp_i = intensity < 0 ? 0 : (intensity > 1 ? 1 : intensity);
   // Logo gradient stops (memory glimpr-brand-logo): cyan @0, blue @0.52, violet @1.
   const double span = (w + h > 2) ? static_cast<double>(w + h - 2) : 1.0;
@@ -522,20 +545,18 @@ HICON TrayIcon::MakeProcessingIcon(double intensity) const {
   }
   HICON out = nullptr;
   void* bits = nullptr;
+  HDC dc = GetDC(nullptr);
   HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
   if (color && bits) {
     std::memcpy(bits, px.data(), px.size());
     ICONINFO ni = {};
     ni.fIcon = TRUE;
     ni.hbmColor = color;
-    ni.hbmMask = ii.hbmMask;  // reuse the base mask
+    ni.hbmMask = mark_mask_;  // reuse the cached mask
     out = CreateIconIndirect(&ni);
   }
   if (color) DeleteObject(color);
   ReleaseDC(nullptr, dc);
-  if (ii.hbmColor) DeleteObject(ii.hbmColor);
-  if (ii.hbmMask) DeleteObject(ii.hbmMask);
-  DestroyIcon(base);
   return out;
 }
 
