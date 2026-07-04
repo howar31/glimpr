@@ -10,8 +10,11 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
+
+#include <winrt/base.h>
 
 #include "decoration.h"
 #include "editor_window.h"
@@ -225,7 +228,9 @@ void CaptureChannel::HandleMethodCall(
     const flutter::MethodCall<EncodableValue>& call,
     std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
   if (call.method_name() == "captureRegion") {
-    HandleCaptureRegion(call, std::move(result));
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    RunCaptureAsync(args ? *args : EncodableMap(), /*window_leg=*/false,
+                    std::move(result));
     return;
   }
   if (call.method_name() == "focusedWindow") {
@@ -233,7 +238,9 @@ void CaptureChannel::HandleMethodCall(
     return;
   }
   if (call.method_name() == "captureWindowDelivered") {
-    HandleCaptureWindowDelivered(call, std::move(result));
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    RunCaptureAsync(args ? *args : EncodableMap(), /*window_leg=*/true,
+                    std::move(result));
     return;
   }
   if (call.method_name() == "beginCapture") {
@@ -354,13 +361,49 @@ void CaptureChannel::HandleMethodCall(
   result->NotImplemented();
 }
 
-void CaptureChannel::HandleCaptureRegion(
-    const flutter::MethodCall<EncodableValue>& call,
+void CaptureChannel::RunCaptureAsync(
+    EncodableMap args, bool window_leg,
     std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
-  const EncodableMap empty;
-  const auto* args = std::get_if<EncodableMap>(call.arguments());
-  const EncodableMap& map = args ? *args : empty;
+  if (!control_hwnd_) {
+    // No marshal target yet (never in practice: SetControlHwnd runs at window
+    // creation) -> the old synchronous path.
+    EncodableValue reply =
+        window_leg ? ComputeWindowDelivered(args) : ComputeRegionCapture(args);
+    result->Success(std::move(reply));
+    return;
+  }
+  // The result must complete on the platform thread; hand it to a worker via
+  // shared_ptr, marshal the finished reply back with WM_GLIMPR_CAPTURE.
+  std::shared_ptr<flutter::MethodResult<EncodableValue>> shared(
+      result.release());
+  std::thread([this, args = std::move(args), shared, window_leg]() {
+    try {
+      winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    } catch (...) {
+    }
+    EncodableValue reply =
+        window_leg ? ComputeWindowDelivered(args) : ComputeRegionCapture(args);
+    {
+      std::lock_guard<std::mutex> lock(done_mutex_);
+      done_.emplace_back(shared, std::move(reply));
+    }
+    PostMessage(control_hwnd_, WM_GLIMPR_CAPTURE, 0, 0);
+    winrt::uninit_apartment();
+  }).detach();
+}
 
+void CaptureChannel::OnAsyncDone() {
+  std::vector<std::pair<std::shared_ptr<flutter::MethodResult<EncodableValue>>,
+                        EncodableValue>>
+      jobs;
+  {
+    std::lock_guard<std::mutex> lock(done_mutex_);
+    jobs.swap(done_);
+  }
+  for (auto& job : jobs) job.first->Success(std::move(job.second));
+}
+
+EncodableValue CaptureChannel::ComputeRegionCapture(const EncodableMap& map) {
   perf::Mark("regionCaptureBegin");
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
@@ -384,10 +427,7 @@ void CaptureChannel::HandleCaptureRegion(
     GetCursorPos(&pt);
     mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
   }
-  if (!mon) {
-    result->Success(EncodableValue());
-    return;
-  }
+  if (!mon) return EncodableValue();
 
   MONITORINFO mi{};
   mi.cbSize = sizeof(MONITORINFO);
@@ -395,10 +435,7 @@ void CaptureChannel::HandleCaptureRegion(
   const double scale = MonitorScale(mon);
 
   auto frame = wgc::CaptureMonitor(mon, show_cursor, want_hdr);
-  if (!frame) {
-    result->Success(EncodableValue());
-    return;
-  }
+  if (!frame) return EncodableValue();
   perf::Mark("regionWgcFrame w=" + std::to_string(frame->width) +
              " h=" + std::to_string(frame->height));
 
@@ -449,10 +486,7 @@ void CaptureChannel::HandleCaptureRegion(
                                to_encode->height, to_encode->stride, quality)
            : codec::EncodePng(to_encode->bgra.data(), to_encode->width,
                               to_encode->height, to_encode->stride);
-  if (bytes.empty()) {
-    result->Success(EncodableValue());
-    return;
-  }
+  if (bytes.empty()) return EncodableValue();
   perf::Mark("regionEncodeDone bytes=" + std::to_string(bytes.size()));
 
   // The HDR sibling: the UNDECORATED fp16 crop as JPEG XR (empty when the
@@ -485,7 +519,7 @@ void CaptureChannel::HandleCaptureRegion(
     reply[EncodableValue("hdrBytes")] = EncodableValue(std::move(hdr_bytes));
     reply[EncodableValue("hdrExt")] = EncodableValue("jxr");
   }
-  result->Success(EncodableValue(std::move(reply)));
+  return EncodableValue(std::move(reply));
 }
 
 void CaptureChannel::HandleFocusedWindow(
@@ -527,18 +561,10 @@ void CaptureChannel::HandleFocusedWindow(
   result->Success(EncodableValue(std::move(reply)));
 }
 
-void CaptureChannel::HandleCaptureWindowDelivered(
-    const flutter::MethodCall<EncodableValue>& call,
-    std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
-  const EncodableMap empty;
-  const auto* args = std::get_if<EncodableMap>(call.arguments());
-  const EncodableMap& map = args ? *args : empty;
-
+EncodableValue CaptureChannel::ComputeWindowDelivered(
+    const EncodableMap& map) {
   const auto wid = GetInt64(map, "windowId");
-  if (!wid || *wid == 0) {
-    result->Success(EncodableValue());
-    return;
-  }
+  if (!wid || *wid == 0) return EncodableValue();
   HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(*wid));
   perf::Mark("windowCaptureBegin");
   const bool show_cursor = GetBool(map, "showsCursor", false);
@@ -570,10 +596,7 @@ void CaptureChannel::HandleCaptureWindowDelivered(
       if (!cropped.bgra.empty()) frame = std::move(cropped);
     }
   }
-  if (!frame) {
-    result->Success(EncodableValue());
-    return;
-  }
+  if (!frame) return EncodableValue();
   perf::Mark("windowWgcFrame w=" + std::to_string(frame->width) +
              " h=" + std::to_string(frame->height));
 
@@ -603,10 +626,7 @@ void CaptureChannel::HandleCaptureWindowDelivered(
                                to_encode->height, to_encode->stride, quality)
            : codec::EncodePng(to_encode->bgra.data(), to_encode->width,
                               to_encode->height, to_encode->stride);
-  if (bytes.empty()) {
-    result->Success(EncodableValue());
-    return;
-  }
+  if (bytes.empty()) return EncodableValue();
   perf::Mark("windowEncodeDone bytes=" + std::to_string(bytes.size()));
   // The HDR sibling: the UNDECORATED fp16 window capture as JPEG XR.
   std::vector<uint8_t> hdr_bytes;
@@ -623,5 +643,5 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     reply[EncodableValue("hdrBytes")] = EncodableValue(std::move(hdr_bytes));
     reply[EncodableValue("hdrExt")] = EncodableValue("jxr");
   }
-  result->Success(EncodableValue(std::move(reply)));
+  return EncodableValue(std::move(reply));
 }

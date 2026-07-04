@@ -321,6 +321,9 @@ bool FlutterWindow::OnCreate() {
   // the overlay's openSettings can raise it.
   overlay_manager_ = std::make_unique<OverlayManager>(project_, GetHandle());
   capture_channel_->SetOverlayManager(overlay_manager_.get());
+  // Async direct-capture completions marshal back through this window
+  // (WM_GLIMPR_CAPTURE in MessageHandler).
+  capture_channel_->SetControlHwnd(GetHandle());
   // The record-select picker lives on an overlay engine; its confirm/cancel
   // relays to the control engine's record channel (-> Dart RecordController).
   overlay_manager_->SetRecordRelay([this](flutter::EncodableValue args) {
@@ -481,6 +484,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     // A background recorder thread marshalled an async event (e.g. an encode
     // failure) back to the platform thread so the Dart event is safe to emit.
     record_channel_->OnNativeEvent(static_cast<uint32_t>(wparam));
+    return 0;
+  }
+  if (message == WM_GLIMPR_CAPTURE && capture_channel_) {
+    // A direct-capture worker finished: complete its method result on the
+    // platform thread (Flutter method results are not thread-safe).
+    capture_channel_->OnAsyncDone();
     return 0;
   }
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
