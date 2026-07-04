@@ -1616,14 +1616,16 @@ class _OptionsRowState extends State<_OptionsRow> {
                   ],
                   if (showsFont) ...[
                     const SizedBox(width: 10),
+                    // Size is in IMAGE PIXELS (ShareX semantics): the same
+                    // number bakes the same glyph height on every platform.
                     _NumberStepper(
                       controller: _c,
                       read: (s) => s.fontSize,
                       write: _c.setFontSize,
                       min: 8,
-                      max: 200,
+                      max: 1000,
                       step: 2,
-                      suffix: 'pt',
+                      suffix: 'px',
                       leadingIcon: Icons.format_size,
                       leadingTooltip:
                           tool == ToolKind.text ? l10n.toolbarFontSize : l10n.toolbarBadgeSize,

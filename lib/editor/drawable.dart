@@ -208,7 +208,10 @@ class StepDrawable extends Drawable {
   final int number;
   const StepDrawable(this.center, this.number, DrawStyle style) : super(style);
 
-  double get radius => style.fontSize.clamp(10.0, 80.0);
+  // The 10..80 cap is in IMAGE pixels (like fontSize); canvas radius scales.
+  double get radius =>
+      style.fontSize.clamp(10.0, 80.0) /
+      (canvasFontScale > 0 ? canvasFontScale : 1.0);
 
   @override
   Rect get bounds => Rect.fromCircle(center: center, radius: radius);
@@ -406,7 +409,7 @@ class TextDrawable extends Drawable {
     // A visible background pill grows the selectable / hittable area to wrap it;
     // with no background the bounds are the bare text rect (byte-identical).
     return style.fillColor.a > 0
-        ? textBackgroundRect(textRect, style.fontSize)
+        ? textBackgroundRect(textRect, style.fontSizeCanvas)
         : textRect;
   }
 

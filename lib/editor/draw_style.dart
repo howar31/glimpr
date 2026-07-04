@@ -159,10 +159,24 @@ SpotlightEffect _spotlightEffectFromName(Object? name) {
   return SpotlightEffect.none;
 }
 
+/// The canvas's font pixel scale: how many NATIVE image pixels one logical
+/// canvas unit bakes to. [DrawStyle.fontSize] is specified in IMAGE PIXELS
+/// (ShareX semantics: the same number bakes the same glyph height on every
+/// platform/display), so canvas-space consumers divide by this. Set once per
+/// engine by EditorCore from its host (overlay = the display's scaleFactor;
+/// the standalone editor's canvas IS the pixel grid = 1.0). A deliberate
+/// engine-global, like the loupe info mode: threading it through every
+/// painter/bounds/hit-test signature would touch dozens of pure call chains.
+double canvasFontScale = 1.0;
+
 /// Immutable style shared by all drawables.
 class DrawStyle {
   final Color color;
   final double strokeWidth;
+
+  /// Text / step-badge size in IMAGE PIXELS (not logical points): the baked
+  /// output glyph height is exactly this many pixels on any platform. Canvas
+  /// painting/measuring uses [fontSizeCanvas].
   final double fontSize;
   final String? fontFamily; // null = system default
   final HighlighterTexture texture; // highlighter-only; ignored by other tools
@@ -205,6 +219,12 @@ class DrawStyle {
     this.spotlightEffect = SpotlightEffect.none,
     this.spotlightFeather = kSpotlightFeatherDefault,
   });
+
+  /// [fontSize] converted to CANVAS units for painting / measuring / bounds:
+  /// the export composite scales canvas -> native by the same factor, so the
+  /// baked glyph height lands at exactly [fontSize] pixels.
+  double get fontSizeCanvas =>
+      canvasFontScale > 0 ? fontSize / canvasFontScale : fontSize;
 
   DrawStyle copyWith({
     Color? color,

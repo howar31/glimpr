@@ -410,10 +410,10 @@ class DrawablePainter extends CustomPainter {
         // -> byte-identical. The text stays at d.position; the pill draws around it.
         // When shadow is on, the pill casts it (a blurred, offset rrect).
         if (hasFill) {
-          final bg = textBackgroundRect(d.position & tp.size, d.style.fontSize);
+          final bg = textBackgroundRect(d.position & tp.size, d.style.fontSizeCanvas);
           final rrect = RRect.fromRectAndRadius(
             bg,
-            Radius.circular(textBackgroundRadius(bg, d.style.fontSize)),
+            Radius.circular(textBackgroundRadius(bg, d.style.fontSizeCanvas)),
           );
           if (d.style.shadow) {
             canvas.save();
@@ -443,7 +443,7 @@ class DrawablePainter extends CustomPainter {
               text: TextSpan(
                 text: d.text.isEmpty ? ' ' : d.text,
                 style: TextStyle(
-                  fontSize: d.style.fontSize,
+                  fontSize: d.style.fontSizeCanvas,
                   height: kTextLineHeight,
                   fontFamily: d.style.fontFamily,
                   foreground: fg,
@@ -455,7 +455,7 @@ class DrawablePainter extends CustomPainter {
               ..paint(canvas, d.position);
           }
 
-          final w = textOutlineWidth(d.style.fontSize);
+          final w = textOutlineWidth(d.style.fontSizeCanvas);
           // The outline casts the drop shadow when no pill does. A TextStyle.shadows
           // on a stroke run renders as the narrower glyph FILL (hidden behind the
           // wider outline), so paint an explicit stroke-shaped shadow instead — its

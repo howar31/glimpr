@@ -702,6 +702,13 @@ class _EditorCoreState extends State<EditorCore> {
   @override
   void initState() {
     super.initState();
+    // Text/step sizes are specified in IMAGE PIXELS (ShareX semantics); the
+    // canvas divides by this engine's pixel scale so preview == baked size.
+    // Engine-global by design (see draw_style.dart canvasFontScale): one
+    // engine paints exactly one canvas scale (overlay = its display; the
+    // standalone editor = 1.0), and the export composite on this engine uses
+    // the same value.
+    canvasFontScale = widget.host.pixelScale;
     _restoreLoupeInfoMode();
     // Seed the crosshair at the real cursor (native passes its display-local
     // position on the cursor display), not the display centre.

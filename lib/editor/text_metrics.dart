@@ -6,10 +6,11 @@ import 'drawable.dart';
 /// committed text is pixel-identical to what was typed (WYSIWYG).
 const double kTextLineHeight = 1.3;
 
-/// Text style for a [DrawStyle] (colour + size + font family).
+/// Text style for a [DrawStyle] (colour + size + font family). [fontSizeCanvas]
+/// converts the IMAGE-PIXEL size to canvas units (see draw_style.dart).
 TextStyle textStyleOf(DrawStyle s) => TextStyle(
       color: s.color,
-      fontSize: s.fontSize,
+      fontSize: s.fontSizeCanvas,
       height: kTextLineHeight,
       fontFamily: s.fontFamily,
     );
