@@ -15,6 +15,7 @@
 
 #include "channel_args.h"
 #include "cursor_image.h"
+#include "dpi_util.h"
 #include "utils.h"
 #include "editor_window.h"
 #include "hdr_compose.h"
@@ -38,14 +39,6 @@ inline int64_t MonId(HMONITOR m) {
 }
 inline HMONITOR HMon(int64_t id) {
   return reinterpret_cast<HMONITOR>(static_cast<intptr_t>(id));
-}
-
-double MonitorScale(HMONITOR mon) {
-  UINT dpi_x = 96, dpi_y = 96;
-  if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {
-    dpi_x = 96;
-  }
-  return dpi_x / 96.0;
 }
 
 BOOL CALLBACK CollectMonitor(HMONITOR mon, HDC, LPRECT, LPARAM lp) {

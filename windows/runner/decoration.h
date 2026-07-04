@@ -8,6 +8,12 @@
 
 namespace deco {
 
+// CLSID_D2D1Shadow value with our own storage: d2d1effects.h declares the
+// symbol extern but no import lib provides it, so referencing the header
+// symbol fails to link. {C67EA361-1863-4E69-89DB-695D3E9A5B6B}. Shared by the
+// decoration and pin shadow effects.
+extern const GUID kCLSID_D2D1Shadow;
+
 // Decoration appearance (lengths LOGICAL; scaled by the display scale in
 // Decorate). Mirrors the macOS Decoration.Spec.
 struct DecoSpec {

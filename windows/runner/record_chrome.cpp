@@ -12,6 +12,7 @@
 #include <cstring>
 #include <string>
 
+#include "dpi_util.h"
 #include "utils.h"
 
 // NOTE on DrawText: windows.h defines DrawText -> DrawTextW, and d2d1.h is parsed
@@ -50,12 +51,6 @@ constexpr int kBtnGap = 10;    // gap between Pause / Abort / Finish (macOS)
 constexpr int kBtnPadGhost = 14;  // h-padding inside a ghost button (Pause/Abort)
 constexpr int kBtnPadAccent = 16; // h-padding inside the Finish accent button
 constexpr int kGapBelow = 10;  // gap below the recorded rect
-
-double MonScale(HMONITOR mon) {
-  UINT dx = 96, dy = 96;
-  if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy))) dx = 96;
-  return dx / 96.0;
-}
 
 // The app-content theme (mirrors the editor/overlay windows + tray): HKCU
 // Personalize\AppsUseLightTheme. True = light. The strip follows it like the
@@ -537,7 +532,7 @@ void RecordChrome::Show(int64_t display_id, double x, double y, double w,
     mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     GetMonitorInfo(mon, &mi);
   }
-  scale_ = MonScale(mon);
+  scale_ = MonitorScale(mon);
   auto S = [this](double v) { return static_cast<int>(std::lround(v * scale_)); };
 
   // The D2D/DWrite graphics (text formats) must exist before measuring the
@@ -854,7 +849,7 @@ void RecordChrome::ShowCountdown(int64_t display_id, double x, double y,
     mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     GetMonitorInfo(mon, &mi);
   }
-  scale_ = MonScale(mon);
+  scale_ = MonitorScale(mon);
   auto S = [this](double v) { return static_cast<int>(std::lround(v * scale_)); };
   // Show the recorded-rect frame (border + scrims) NOW so it is visible during
   // the countdown (macOS parity); it persists into recording (frame_up_).

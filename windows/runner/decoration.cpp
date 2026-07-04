@@ -13,16 +13,17 @@
 
 #include "wgc_capturer.h"
 
-namespace {
-
-// CLSID_D2D1Shadow value, defined locally: the header declares it extern but no
-// import lib provides the storage, so referencing the header symbol fails to
-// link. {C67EA361-1863-4E69-89DB-695D3E9A5B6B}.
+namespace deco {
 const GUID kCLSID_D2D1Shadow = {
     0xC67EA361,
     0x1863,
     0x4E69,
     {0x89, 0xDB, 0x69, 0x5D, 0x3E, 0x9A, 0x5B, 0x6B}};
+}  // namespace deco
+
+namespace {
+
+using deco::kCLSID_D2D1Shadow;
 
 D2D1_COLOR_F ColorFromArgb(uint32_t argb) {
   return D2D1::ColorF(((argb >> 16) & 0xFF) / 255.0f,

@@ -8,39 +8,8 @@
 #include <cstring>
 #include <thread>
 
-namespace {
-
-// COM smart-release helper kept local (the runner does not pull in a COM wrapper
-// for these). Releases on scope exit.
-template <typename T>
-struct ComPtr {
-  T* p = nullptr;
-  ~ComPtr() {
-    if (p) p->Release();
-  }
-  T** put() { return &p; }
-  T* operator->() const { return p; }
-  explicit operator bool() const { return p != nullptr; }
-};
-
-// QueryPerformanceCounter as 100ns ticks -- the SAME clock + formula the video
-// capture uses (recorder.cpp Qpc100ns), so audio and video timestamps are
-// comparable. Read at packet receipt rather than trusting the driver's
-// u64QPCPosition (some drivers leave it 0 / on a different epoch).
-int64_t Qpc100ns() {
-  static const int64_t freq = [] {
-    LARGE_INTEGER f{};
-    QueryPerformanceFrequency(&f);
-    return f.QuadPart ? f.QuadPart : 10000000LL;
-  }();
-  LARGE_INTEGER c{};
-  QueryPerformanceCounter(&c);
-  // Split seconds + remainder so QuadPart * 1e7 cannot overflow int64.
-  return (c.QuadPart / freq) * 10000000LL +
-         (c.QuadPart % freq) * 10000000LL / freq;
-}
-
-}  // namespace
+#include "com_ptr_lite.h"
+#include "record_clock.h"
 
 struct WasapiCapture::Impl {
   std::thread thread;
@@ -166,7 +135,7 @@ void WasapiCapture::Impl::Run() {
           if (FAILED(hr)) break;
           if (frames > 0) {
             AudioPacket pkt;
-            pkt.qpc100ns = Qpc100ns();  // shared QPC clock (see recorder.cpp)
+            pkt.qpc100ns = Qpc100ns();  // shared QPC clock (record_clock.h)
             const size_t count = static_cast<size_t>(frames) * kChannels;
             pkt.samples.resize(count);
             if (buf_flags & AUDCLNT_BUFFERFLAGS_SILENT) {

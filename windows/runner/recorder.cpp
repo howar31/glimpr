@@ -1,8 +1,10 @@
 #include "recorder.h"
 
+#include "dpi_util.h"
 #include "hdr_convert_gpu.h"
 #include "hdr_util.h"
 #include "record_audio.h"
+#include "record_clock.h"
 #include "record_gif.h"
 #include "utils.h"
 
@@ -46,31 +48,6 @@ double BppFor(const std::string& q) {
 }
 
 uint32_t EvenDown(uint32_t v) { return v & ~1u; }
-
-// QueryPerformanceCounter as 100ns ticks. ONE clock shared by the video capture
-// (WGC) and the audio capture (WASAPI) so their timestamps are comparable: WGC
-// SystemRelativeTime and WASAPI u64QPCPosition are on DIFFERENT epochs, and
-// subtracting one from the other produced a giant-negative audio pts -> clamped
-// to 0 -> the whole audio track crammed at pts~0 ("mic only plays ~1 second").
-LONGLONG Qpc100ns() {
-  static const LONGLONG freq = [] {
-    LARGE_INTEGER f{};
-    QueryPerformanceFrequency(&f);
-    return f.QuadPart ? f.QuadPart : 10000000LL;
-  }();
-  LARGE_INTEGER c{};
-  QueryPerformanceCounter(&c);
-  // Split seconds + remainder so QuadPart * 1e7 cannot overflow int64 (QuadPart
-  // is ~1e12 on a machine up for a day; *1e7 would exceed int64 max).
-  return (c.QuadPart / freq) * 10000000LL +
-         (c.QuadPart % freq) * 10000000LL / freq;
-}
-
-double MonScale(HMONITOR mon) {
-  UINT dx_ = 96, dy_ = 96;
-  if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx_, &dy_))) dx_ = 96;
-  return dx_ / 96.0;
-}
 
 winrt::com_ptr<ID3D11Device> CreateD3DDevice() {
   winrt::com_ptr<ID3D11Device> device;
@@ -853,7 +830,7 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   MONITORINFO mi{};
   mi.cbSize = sizeof(MONITORINFO);
   GetMonitorInfo(mon, &mi);
-  const double scale = MonScale(mon);
+  const double scale = MonitorScale(mon);
 
   // HDR-ness is decided by the START monitor and never mid-switches (a
   // followed window that crosses displays keeps its starting pipeline).

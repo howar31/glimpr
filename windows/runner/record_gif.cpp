@@ -4,21 +4,7 @@
 
 #include <algorithm>
 
-namespace {
-
-template <typename T>
-struct ComPtr {
-  T* p = nullptr;
-  ~ComPtr() {
-    if (p) p->Release();
-  }
-  T** put() { return &p; }
-  T* get() const { return p; }
-  T* operator->() const { return p; }
-  explicit operator bool() const { return p != nullptr; }
-};
-
-}  // namespace
+#include "com_ptr_lite.h"
 
 struct GifSink::Impl {
   ComPtr<IWICImagingFactory> factory;

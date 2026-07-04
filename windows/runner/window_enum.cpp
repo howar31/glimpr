@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <string>
 
+#include "dpi_util.h"
 #include "utils.h"
 
 namespace {
@@ -16,14 +17,6 @@ using flutter::EncodableValue;
 
 using win_enum::ProcessName;
 using win_enum::WindowTitle;
-
-double MonitorScale(HMONITOR mon) {
-  UINT dpi_x = 96, dpi_y = 96;
-  if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {
-    dpi_x = 96;
-  }
-  return dpi_x / 96.0;
-}
 
 bool IsCloaked(HWND hwnd) {
   DWORD cloaked = 0;

@@ -11,6 +11,8 @@
 #include <cmath>
 #include <cstring>
 
+#include "decoration.h"
+#include "dpi_util.h"
 #include "hdr_util.h"
 #include "image_codec.h"
 #include "utils.h"
@@ -18,6 +20,8 @@
 namespace {
 
 using winrt::com_ptr;
+
+using deco::kCLSID_D2D1Shadow;
 
 constexpr double kMarginLogical = 56.0;  // the vapor halo reach (logical pts)
 constexpr double kMinZoom = 0.25;
@@ -31,26 +35,12 @@ constexpr float kRevealStep = 0.10f;  // reveal fade per tick (~0.3s)
 constexpr const wchar_t kPinClassName[] = L"GLIMPR_PIN_WINDOW";
 bool g_pin_class_registered = false;
 
-// CLSID_D2D1Shadow, defined locally (the header declares it extern but no import
-// lib provides storage). {C67EA361-1863-4E69-89DB-695D3E9A5B6B}.
-const GUID kCLSID_D2D1Shadow = {
-    0xC67EA361, 0x1863, 0x4E69,
-    {0x89, 0xDB, 0x69, 0x5D, 0x3E, 0x9A, 0x5B, 0x6B}};
-
 // The brand cyan / blue / violet vapor colors (match macOS PinPanel).
 struct Brand {
   float r, g, b;
 };
 constexpr Brand kBrand[3] = {
     {0.13f, 0.83f, 0.93f}, {0.38f, 0.65f, 0.98f}, {0.65f, 0.55f, 0.98f}};
-
-double MonitorScaleOf(HMONITOR mon) {
-  UINT dpi_x = 96, dpi_y = 96;
-  if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {
-    dpi_x = 96;
-  }
-  return dpi_x / 96.0;
-}
 
 com_ptr<ID3D11Device> CreateD3D() {
   com_ptr<ID3D11Device> d;
@@ -80,7 +70,7 @@ double ResolveScaleForLogical(double lx, double ly) {
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         if (!GetMonitorInfo(mon, &mi)) return TRUE;
-        double s = MonitorScaleOf(mon);
+        double s = MonitorScale(mon);
         double l = mi.rcMonitor.left / s, t = mi.rcMonitor.top / s;
         double r = mi.rcMonitor.right / s, b = mi.rcMonitor.bottom / s;
         if (c->lx >= l && c->lx < r && c->ly >= t && c->ly < b) {
@@ -198,7 +188,7 @@ bool PinWindow::Create(const std::string& image_path,
     POINT cur{};
     GetCursorPos(&cur);
     HMONITOR mon = MonitorFromPoint(cur, MONITOR_DEFAULTTONEAREST);
-    monitor_scale_ = MonitorScaleOf(mon);
+    monitor_scale_ = MonitorScale(mon);
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     GetMonitorInfo(mon, &mi);

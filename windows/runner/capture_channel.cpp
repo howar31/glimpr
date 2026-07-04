@@ -19,6 +19,7 @@
 #include "channel_args.h"
 #include "clipboard_channel.h"
 #include "deco_args.h"
+#include "dpi_util.h"
 #include "decoration.h"
 #include "editor_window.h"
 #include "image_codec.h"
@@ -34,14 +35,6 @@ namespace {
 using flutter::EncodableMap;
 using flutter::EncodableValue;
 using namespace chanarg;
-
-double MonitorScale(HMONITOR mon) {
-  UINT dpi_x = 96, dpi_y = 96;
-  if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {
-    dpi_x = 96;
-  }
-  return dpi_x / 96.0;
-}
 
 using win_enum::ProcessName;
 using win_enum::WindowTitle;
