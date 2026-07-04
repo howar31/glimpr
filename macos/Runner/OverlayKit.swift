@@ -1006,6 +1006,16 @@ final class OverlayManager {
             PerfLog.mark(label)
           }
           result(nil)
+        // An overlay-engine capture flow wrote the shared recent-images store:
+        // forward a refresh to the editor engine (gallery + Open Recent menu).
+        // Windows always relayed this; macOS only had the control-engine relay,
+        // so interactive captures did not live-refresh until the editor window
+        // became key.
+        case "recentChanged":
+          DispatchQueue.main.async {
+            MainFlutterWindow.shared?.notifyRecentChanged()
+          }
+          result(nil)
         // After-capture flow (overlay engine): open the exported file in the
         // image editor — routed to the control window's warm editor.
         case "openInEditor":
