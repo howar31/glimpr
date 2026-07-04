@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "image_codec.h"
+#include "perf_log.h"
 
 namespace {
 
@@ -233,7 +234,9 @@ void ClipboardChannel::HandleMethodCall(
       result->Error("bad_args", "writeImage expects non-empty bytes");
       return;
     }
-    if (WriteImageToClipboard(bytes->data(), bytes->size())) {
+    const bool ok = WriteImageToClipboard(bytes->data(), bytes->size());
+    perf::Mark(ok ? "clipboardDone ok=1" : "clipboardDone ok=0");
+    if (ok) {
       result->Success(EncodableValue());
     } else {
       result->Error("clipboard_failed", "could not write image to clipboard");

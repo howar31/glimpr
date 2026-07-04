@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "perf_log.h"
 #include "pin_window.h"
 #include "win_reveal.h"
 
@@ -197,6 +198,19 @@ bool EditorWindow::OnCreate() {
             }
           }
           if (proc_cb_) proc_cb_(active, label);
+          result->Success();
+        } else if (m == "perfMark") {
+          // Dart-side perf marks (editor first-frame/open/export timing) land
+          // on the same timeline as the native marks. Inert unless the
+          // debugHooks gate is on.
+          if (const auto* a = std::get_if<EncodableMap>(call.arguments())) {
+            auto it = a->find(EncodableValue(std::string("label")));
+            if (it != a->end()) {
+              if (const auto* s = std::get_if<std::string>(&it->second)) {
+                perf::Mark(*s);
+              }
+            }
+          }
           result->Success();
         } else if (m == "shareSheet") {
           result->Success();  // Windows v1: no system share surface

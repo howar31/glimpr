@@ -17,6 +17,7 @@
 #include "editor_window.h"
 #include "image_codec.h"
 #include "overlay_manager.h"
+#include "perf_log.h"
 #include "pin_window.h"
 #include "wgc_capturer.h"
 
@@ -311,6 +312,18 @@ void CaptureChannel::HandleMethodCall(
     result->Success();
     return;
   }
+  if (call.method_name() == "perfMark") {
+    // Dart-side perf marks (direct-capture delivery etc.) land on the same
+    // timeline as the native marks. Inert unless the debugHooks gate is on.
+    const EncodableMap empty;
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const EncodableMap& map = args ? *args : empty;
+    if (const auto* v = Find(map, "label")) {
+      if (const auto* s = std::get_if<std::string>(v)) perf::Mark(*s);
+    }
+    result->Success();
+    return;
+  }
   if (call.method_name() == "pinImage") {
     // The capture flow's pin leg: float [path] as a pin, in place over the
     // captured region when x/y/w/h are present, else centered.
@@ -348,6 +361,7 @@ void CaptureChannel::HandleCaptureRegion(
   const auto* args = std::get_if<EncodableMap>(call.arguments());
   const EncodableMap& map = args ? *args : empty;
 
+  perf::Mark("regionCaptureBegin");
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
   const bool show_cursor = GetBool(map, "showsCursor", false);
@@ -385,6 +399,8 @@ void CaptureChannel::HandleCaptureRegion(
     result->Success(EncodableValue());
     return;
   }
+  perf::Mark("regionWgcFrame w=" + std::to_string(frame->width) +
+             " h=" + std::to_string(frame->height));
 
   // The captured region: the whole frame, or a crop of the requested
   // display-local logical rect (converted to physical pixels). Echo the rect
@@ -437,6 +453,7 @@ void CaptureChannel::HandleCaptureRegion(
     result->Success(EncodableValue());
     return;
   }
+  perf::Mark("regionEncodeDone bytes=" + std::to_string(bytes.size()));
 
   // The HDR sibling: the UNDECORATED fp16 crop as JPEG XR (empty when the
   // monitor is SDR or the encode fails -> the reply simply omits it).
@@ -523,6 +540,7 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     return;
   }
   HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(*wid));
+  perf::Mark("windowCaptureBegin");
   const bool show_cursor = GetBool(map, "showsCursor", false);
   const bool jpeg = GetBool(map, "jpeg", false);
   const int quality = GetInt(map, "quality", 90);
@@ -556,6 +574,8 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     result->Success(EncodableValue());
     return;
   }
+  perf::Mark("windowWgcFrame w=" + std::to_string(frame->width) +
+             " h=" + std::to_string(frame->height));
 
   // Optional native decoration (window silhouette via shapeFromAlpha); the pin
   // leg consumes the plain rendition when requested.
@@ -587,6 +607,7 @@ void CaptureChannel::HandleCaptureWindowDelivered(
     result->Success(EncodableValue());
     return;
   }
+  perf::Mark("windowEncodeDone bytes=" + std::to_string(bytes.size()));
   // The HDR sibling: the UNDECORATED fp16 window capture as JPEG XR.
   std::vector<uint8_t> hdr_bytes;
   if (want_hdr && !frame->f16.empty()) {

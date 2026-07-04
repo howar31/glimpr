@@ -18,6 +18,7 @@
 #include "hdr_compose.h"
 #include "hdr_util.h"
 #include "image_codec.h"
+#include "perf_log.h"
 #include "pin_window.h"
 #include "wgc_capturer.h"
 #include "win_reveal.h"
@@ -174,12 +175,14 @@ OverlayManager::Unit* OverlayManager::EnsureUnit(HMONITOR mon) {
   mi.cbSize = sizeof(MONITORINFO);
   if (!GetMonitorInfo(mon, &mi)) return nullptr;
 
+  perf::Mark("engineWarmBegin id=" + std::to_string(id));
   Unit unit;
   unit.display_id = id;
   unit.window = std::make_unique<OverlayWindow>();
   if (!unit.window->Create(project_, mi.rcMonitor)) return nullptr;
   RegisterUnitChannels(unit);
   auto inserted = units_.emplace(id, std::move(unit));
+  perf::Mark("engineWarmDone id=" + std::to_string(id));
   return &inserted.first->second;
 }
 
@@ -256,6 +259,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     // or the overlay is dismissed.
     return;
   }
+  perf::Mark(live_select ? "captureAllBegin live=1" : "captureAllBegin live=0");
   SyncUnitsToScreens();
   POINT cursor{};
   GetCursorPos(&cursor);
@@ -359,6 +363,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     }
     for (auto& t : workers) t.join();
   }
+  perf::Mark("captureAllJoined n=" + std::to_string(mons.size()));
   if (unexclude_for_grab) {
     // Restore the resting exclusion so the RS loupe feed is clean when RS
     // resurfaces (record hotkey while suspended, or the freeze layer draining).
@@ -388,6 +393,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
       dict[EncodableValue("hdrGen")] = EncodableValue(hdr_bases_[id].gen);
     }
     PresentFrame(id, std::move(dict), pin_only, false);
+    perf::Mark("presentFrame id=" + std::to_string(id));
     ++presented;
   }
   // Block re-triggers until every presented display has been shown (or the
@@ -541,6 +547,7 @@ void OverlayManager::Show(int64_t display_id) {
   const bool activate =
       (display_id == key_display_id_) || key_display_id_ == 0;
   u->window->Show(mi.rcMonitor, activate);
+  perf::Mark("overlayShown id=" + std::to_string(display_id));
   // One presented display shown; when the last one is up the capture chain has
   // settled -> release the guard so the next trigger (deliberate layer-stack /
   // re-capture) can proceed without overlapping this chain.
@@ -591,11 +598,13 @@ void OverlayManager::TeardownUnits() {
     teardown_timer_ = 0;
   }
   if (presenting_) return;  // a new capture started in the gap -- leave it intact
+  perf::Mark("teardownBegin");
   hdr_bases_.clear();  // the annotated export consumed (or forfeited) them
   units_.clear();  // ~Unit -> ~OverlayWindow destroys each Flutter engine + window;
                    // releasing the engine is what repairs the other apps' islands.
   WarmUp();        // recreate warm engines so the NEXT capture stays instant (a
                    // fresh engine that has not capture-rendered does not re-break).
+  perf::Mark("teardownEnd");
 }
 
 // static
@@ -1016,8 +1025,15 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();
     return;
   }
-  if (method == "requestAccessibility" || method == "perfMark" ||
-      method == "shareSheet" || method == "recordSelectHotkey") {
+  if (method == "perfMark") {
+    // Dart-side perf marks (overlay frame stats, export timing) land on the
+    // same timeline as the native marks. Inert unless debugHooks is on.
+    perf::Mark(GetString(args, "label"));
+    result->Success();
+    return;
+  }
+  if (method == "requestAccessibility" || method == "shareSheet" ||
+      method == "recordSelectHotkey") {
     result->Success();
     return;
   }

@@ -5,6 +5,8 @@
 #include <optional>
 #include <string>
 
+#include "perf_log.h"
+
 namespace {
 
 using flutter::EncodableMap;
@@ -244,8 +246,10 @@ void RecordChannel::FinishActive() {
   NotifyProcessing(true);
   if (chrome_) chrome_->Hide();  // the strip is in the recording's chrome; drop it first
   Emit("onRecordStopping");
+  perf::Mark("recordStopBegin");
   std::string path, error;
   const bool ok = recorder_->Stop(&path, &error);
+  perf::Mark(ok ? "recordFinalized ok=1" : "recordFinalized ok=0");
   NotifyProcessing(false);  // ends at the next pulse low (>= 1 full cycle)
   if (ok) {
     Emit("onRecordFinished",
@@ -261,8 +265,10 @@ void RecordChannel::FinishActive() {
 void RecordChannel::DoStart(const Recorder::Spec& spec, bool show_scrim) {
   Recorder::StartedInfo info;
   std::string error;
+  perf::Mark("recordStartBegin");
   const bool ok =
       recorder_->Start(spec, control_hwnd_, WM_GLIMPR_RECORD, &info, &error);
+  perf::Mark(ok ? "recordWorkerStarted ok=1" : "recordWorkerStarted ok=0");
   if (ok) {
     NotifyState(true, true);  // recording started -> tray goes recording-red
     Emit("onRecordStarted",

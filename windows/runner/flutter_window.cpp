@@ -14,6 +14,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "perf_log.h"
 #include "win_reveal.h"
 
 using flutter::EncodableMap;
@@ -415,6 +416,7 @@ bool FlutterWindow::OnCreate() {
   // the tray) without frames; the first frame is produced on the first
   // RevealControlWindow (tray double-click / "Settings" / overlay openSettings).
 
+  perf::Mark("trayReady");
   return true;
 }
 
@@ -482,8 +484,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
     KillTimer(GetHandle(), kWarmupTimerId);  // one-shot
+    perf::Mark("warmupBegin");
     if (overlay_manager_) overlay_manager_->WarmUp();
     if (editor_window_) editor_window_->WarmUp();  // instant first editor open
+    perf::Mark("warmupEnd");
     return 0;
   }
   if (message == WM_CLOSE) {

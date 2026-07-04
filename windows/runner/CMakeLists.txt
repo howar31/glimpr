@@ -24,6 +24,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "overlay_manager.cpp"
   "overlay_window.cpp"
+  "perf_log.cpp"
   "pin_window.cpp"
   "record_audio.cpp"
   "record_channel.cpp"

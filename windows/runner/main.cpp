@@ -6,6 +6,7 @@
 
 #include "crash_dump.h"
 #include "flutter_window.h"
+#include "perf_log.h"
 #include "record_worker.h"
 #include "utils.h"
 
@@ -43,6 +44,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     if (argv) ::LocalFree(argv);
     if (is_worker) return RecordWorkerMain();
   }
+
+  // Debug-gated perf marks (inert unless the shared debugHooks prefs key is
+  // true). After the worker branch on purpose: the worker never logs.
+  perf::Init();
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
