@@ -2535,7 +2535,7 @@ class _EditorCoreState extends State<EditorCore> {
   /// The annotation layer, masked to the image rect for the editor (so a drawing
   /// dragged past the edge is hidden + clipped on export) and left unwrapped for
   /// the overlay (full-screen, structurally identical).
-  Widget _annotationLayer(bool inCrop) {
+  Widget _annotationLayer() {
     final layer = CustomPaint(
       painter: DrawablePainter(
         // Annotations always paint (so an inactive display still shows its
@@ -2544,9 +2544,7 @@ class _EditorCoreState extends State<EditorCore> {
         drawables: _effectiveDrawables(),
         effectImage: _lookupEffect,
         // The magnify tool samples the base image directly.
-        baseImage: _interactive
-            ? (c.document.value.canvasImage ?? widget.host.baseImage)
-            : widget.host.baseImage,
+        baseImage: _canvasImage,
         baseScale: widget.host.pixelScale,
         spotlightImage: _spotlightLayerImage(),
       ),
@@ -2878,53 +2876,22 @@ class _EditorCoreState extends State<EditorCore> {
         copied: _eyedropper ? _copiedFormat : null,
       );
 
-  /// A small eyedropper glyph pinned to the lower-right of the aim reticle while
-  /// sampling. The eyedropper reuses the region-tool crosshair/reticle/loupe HUD,
-  /// which alone looks identical to crop — this badge makes "picking a colour"
-  /// unmistakable so it never reads as a tool switch. [at] is the reticle point in
-  /// the host stack's coordinate space (canvas-local for the overlay, screen-local
-  /// for the editor).
-  Widget _eyedropperBadge(Offset at) => Positioned(
+  /// A small mode glyph pinned to the lower-right of the aim reticle. The
+  /// region tools share one crosshair/reticle/loupe HUD, so aiming alone looks
+  /// identical to crop — the badge makes the mode unmistakable: eyedropper
+  /// (colorize) while sampling, pin (push_pin) while the crop slot selects a
+  /// pin region, record (videocam) during the recording live-select session.
+  /// [at] is the reticle point in the host stack's coordinate space
+  /// (canvas-local for the overlay, screen-local for the editor).
+  Widget _aimBadge(Offset at, IconData icon) => Positioned(
         left: at.dx + 11,
         top: at.dy + 11,
-        child: const IgnorePointer(
+        child: IgnorePointer(
           child: Icon(
-            Icons.colorize,
+            icon,
             size: 18,
-            color: Color(0xFFFFFFFF),
-            shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
-          ),
-        ),
-      );
-
-  /// The same badge language for pin mode: a small pin glyph at the reticle's
-  /// lower-right while the crop slot (= the pin region selector there) is
-  /// aimed, so "selecting what to pin" never reads as a normal crop/export.
-  /// Overlay only — pin mode never exists in the standalone editor.
-  Widget _pinBadge(Offset at) => Positioned(
-        left: at.dx + 11,
-        top: at.dy + 11,
-        child: const IgnorePointer(
-          child: Icon(
-            Icons.push_pin,
-            size: 18,
-            color: Color(0xFFFFFFFF),
-            shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
-          ),
-        ),
-      );
-
-  /// The record-mode aim badge (videocam beside the reticle) — the pin
-  /// badge's language for the recording live-select session.
-  Widget _recordBadge(Offset at) => Positioned(
-        left: at.dx + 11,
-        top: at.dy + 11,
-        child: const IgnorePointer(
-          child: Icon(
-            Icons.videocam,
-            size: 18,
-            color: Color(0xFFFFFFFF),
-            shadows: [Shadow(color: Color(0xCC000000), blurRadius: 3)],
+            color: const Color(0xFFFFFFFF),
+            shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 3)],
           ),
         ),
       );
@@ -3257,7 +3224,7 @@ class _EditorCoreState extends State<EditorCore> {
                       ),
                     ),
                   ),
-                RepaintBoundary(child: _annotationLayer(inCrop)),
+                RepaintBoundary(child: _annotationLayer()),
                 // Selection highlight (flowing marching-ants outline + handles),
                 // separate from the annotation layer so it animates cheaply.
                 _selectionHighlight(inCrop),
@@ -3393,7 +3360,8 @@ class _EditorCoreState extends State<EditorCore> {
                   ),
                 // Eyedropper badge beside the reticle so colour-sampling mode is
                 // visually distinct from the region tools' identical HUD.
-                if (_eyedropper && !_interactive) _eyedropperBadge(_cursor),
+                if (_eyedropper && !_interactive)
+                  _aimBadge(_cursor, Icons.colorize),
                 // Pin badge beside the reticle while pin mode aims its region
                 // selector (the crop slot) — same language as the eyedropper
                 // badge. The eyedropper wins when both could apply.
@@ -3402,13 +3370,13 @@ class _EditorCoreState extends State<EditorCore> {
                     !_interactive &&
                     !_eyedropper &&
                     c.tool.value == ToolKind.crop)
-                  _pinBadge(_cursor),
+                  _aimBadge(_cursor, Icons.push_pin),
                 // Record mode aims with the same badge language (videocam).
                 if (widget.recordMode &&
                     showHud &&
                     !_interactive &&
                     c.tool.value == ToolKind.crop)
-                  _recordBadge(_cursor),
+                  _aimBadge(_cursor, Icons.videocam),
                 // Gesture layer: the overlay keeps it here (full display, box ==
                 // logical 1:1). For the editor it is lifted to a sibling scoped to
                 // the on-screen image rect (see the return below). The stable key
@@ -3589,7 +3557,7 @@ class _EditorCoreState extends State<EditorCore> {
                     ),
                   ),
                 // Eyedropper badge beside the reticle (screen space) — see overlay.
-                if (_eyedropper) _eyedropperBadge(v.toLocal(_cursor)),
+                if (_eyedropper) _aimBadge(v.toLocal(_cursor), Icons.colorize),
                 if (showLoupe) _editorLoupe(v),
                 // Crop readouts in screen space (constant size under zoom): start
                 // coordinate at the start corner, W×H at the cursor corner.

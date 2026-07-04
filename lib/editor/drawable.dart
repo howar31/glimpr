@@ -147,18 +147,7 @@ class HighlighterDrawable extends Drawable implements Segmented {
       HighlighterDrawable(p, style, seed: seed);
 
   @override
-  Rect get bounds {
-    if (points.isEmpty) return Rect.zero;
-    var minX = points.first.dx, minY = points.first.dy;
-    var maxX = minX, maxY = minY;
-    for (final p in points) {
-      if (p.dx < minX) minX = p.dx;
-      if (p.dy < minY) minY = p.dy;
-      if (p.dx > maxX) maxX = p.dx;
-      if (p.dy > maxY) maxY = p.dy;
-    }
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
+  Rect get bounds => _pointsBounds(points);
 
   @override
   HighlighterDrawable moved(Offset d) =>
@@ -179,18 +168,7 @@ class PenDrawable extends Drawable {
   const PenDrawable(this.points, DrawStyle style) : super(style);
 
   @override
-  Rect get bounds {
-    if (points.isEmpty) return Rect.zero;
-    var minX = points.first.dx, minY = points.first.dy;
-    var maxX = minX, maxY = minY;
-    for (final p in points) {
-      if (p.dx < minX) minX = p.dx;
-      if (p.dy < minY) minY = p.dy;
-      if (p.dx > maxX) maxX = p.dx;
-      if (p.dy > maxY) maxY = p.dy;
-    }
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
+  Rect get bounds => _pointsBounds(points);
 
   @override
   PenDrawable moved(Offset d) =>
@@ -345,8 +323,9 @@ class SpotlightDrawable extends Drawable implements RectShaped {
   SpotlightDrawable withStyle(DrawStyle s) => SpotlightDrawable(rect, s);
 }
 
-/// Bounding box of a list of control points (>= 1).
+/// Bounding box of a list of control points (empty -> Rect.zero).
 Rect _pointsBounds(List<Offset> pts) {
+  if (pts.isEmpty) return Rect.zero;
   var minX = pts.first.dx, minY = pts.first.dy;
   var maxX = minX, maxY = minY;
   for (final p in pts) {
