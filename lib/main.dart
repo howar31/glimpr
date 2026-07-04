@@ -8,6 +8,7 @@ import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
 import 'output/deliver.dart' show effectiveSaveDir;
 import 'output/filename.dart';
+import 'output/flow.dart' show openFolderInFileManager;
 import 'overlay/overlay_app.dart';
 import 'record/record_bridge.dart';
 import 'record/record_controller.dart';
@@ -192,11 +193,7 @@ Future<void> _openSaveFolder() async {
   try {
     await dir.create(recursive: true); // ensure it exists before opening
   } catch (_) {}
-  if (Platform.isWindows) {
-    await Process.run('explorer', [dir.path]);
-  } else {
-    await Process.run('open', [dir.path]);
-  }
+  await openFolderInFileManager(dir.path);
 }
 
 /// Resolves this engine's role. The native handler is registered synchronously

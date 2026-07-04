@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -233,10 +234,21 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     if (!_dirty && mounted) setState(() => _dirty = true);
   }
 
-  /// Open the native file-picker panel; the native side returns the chosen path.
+  /// Open a file picker; macOS uses the native NSOpenPanel (openPanel channel
+  /// method), Windows the cross-platform file_selector dialog (the runner has
+  /// no openPanel — the same picker the stamp tool uses).
   Future<void> _openPanel() async {
     // Confirm BEFORE the file picker appears, so unsaved work isn't lost behind it.
     if (!await _confirmDiscardIfDirty()) return;
+    if (Platform.isWindows) {
+      const group = XTypeGroup(
+        label: 'Images',
+        extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'],
+      );
+      final file = await openFile(acceptedTypeGroups: [group]);
+      if (file != null && mounted) await _loadPath(file.path, confirmed: true);
+      return;
+    }
     try {
       final path = await _channel.invokeMethod<String>('openPanel');
       if (path != null && mounted) await _loadPath(path, confirmed: true);
@@ -319,16 +331,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     await _refreshRecent();
   }
 
-  /// Reveal a recent file in Finder (tile context menu). Same mechanism as the
-  /// completion flow's showInFinder leg.
+  /// Reveal a recent file in Finder/Explorer (tile context menu). Same
+  /// mechanism as the completion flow's showInFinder leg.
   void _revealRecent(String path) {
-    Process.run('open', ['-R', path]);
+    revealInFileManager(path);
   }
 
-  /// The gallery's trailing "More…" tile: open the save folder in Finder —
-  /// the gallery shows the capped recents, the folder holds everything.
+  /// The gallery's trailing "More…" tile: open the save folder in
+  /// Finder/Explorer — the gallery shows the capped recents, the folder holds
+  /// everything.
   void _openSaveFolder() {
-    Process.run('open', [effectiveSaveDir(_cap.saveDir).path]);
+    openFolderInFileManager(effectiveSaveDir(_cap.saveDir).path);
   }
 
   /// Copy a recent file's image to the clipboard (tile context menu). Same

@@ -276,6 +276,14 @@ Future<void> revealInFileManager(String path) async {
   }
 }
 
+/// Open a folder in the OS file manager (no selection). The folder-opening
+/// sibling of [revealInFileManager], shared by every surface (tray "Open Save
+/// Folder", the editor gallery's "More..." tile) so there is ONE platform-aware
+/// implementation.
+Future<void> openFolderInFileManager(String dirPath) async {
+  await Process.run(Platform.isWindows ? 'explorer' : 'open', [dirPath]);
+}
+
 /// Temp file for opening an UNSAVED result in the editor. Extension follows the
 /// flow's [fileName] so a JPEG flow yields a .jpg temp.
 Future<String> _writeTemp(Uint8List bytes, String? fileName,
