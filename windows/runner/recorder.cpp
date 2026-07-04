@@ -7,6 +7,7 @@
 #include "record_clock.h"
 #include "record_gif.h"
 #include "utils.h"
+#include "wgc_capturer.h"
 
 #include <codecapi.h>
 #include <d3d11.h>
@@ -49,29 +50,6 @@ double BppFor(const std::string& q) {
 
 uint32_t EvenDown(uint32_t v) { return v & ~1u; }
 
-winrt::com_ptr<ID3D11Device> CreateD3DDevice() {
-  winrt::com_ptr<ID3D11Device> device;
-  const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1,
-                                      D3D_FEATURE_LEVEL_11_0};
-  HRESULT hr = D3D11CreateDevice(
-      nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-      D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2, D3D11_SDK_VERSION,
-      device.put(), nullptr, nullptr);
-  if (FAILED(hr)) {
-    hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-                           D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
-                           D3D11_SDK_VERSION, device.put(), nullptr, nullptr);
-  }
-  return SUCCEEDED(hr) ? device : nullptr;
-}
-
-d3d::IDirect3DDevice WrapDevice(winrt::com_ptr<ID3D11Device> const& device) {
-  auto dxgi = device.as<IDXGIDevice>();
-  winrt::com_ptr<::IInspectable> inspectable;
-  winrt::check_hresult(
-      CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(), inspectable.put()));
-  return inspectable.as<d3d::IDirect3DDevice>();
-}
 
 winrt::com_ptr<IGraphicsCaptureItemInterop> GetInterop() {
   auto factory = winrt::get_activation_factory<cap::GraphicsCaptureItem>();
@@ -848,10 +826,10 @@ bool Recorder::Start(const Spec& spec, HWND async_target, UINT async_msg,
   // ---- D3D + capture item ------------------------------------------------
   uint32_t src_w = 0, src_h = 0;
   try {
-    impl_->device = CreateD3DDevice();
+    impl_->device = wgc::CreateFreshD3DDevice();
     if (!impl_->device) return fail("no d3d device");
     impl_->device->GetImmediateContext(impl_->context.put());
-    auto rtDevice = WrapDevice(impl_->device);
+    auto rtDevice = wgc::WrapDevice(impl_->device);
 
     // The fp16 pipeline needs the GPU converter; if its shaders fail to build,
     // fall back to the plain BGRA capture (recording still works, the HDR

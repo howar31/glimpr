@@ -11,6 +11,10 @@
 
 struct ID3D11Device;
 
+namespace winrt::Windows::Graphics::DirectX::Direct3D11 {
+struct IDirect3DDevice;
+}
+
 // A single captured frame: tightly-packed BGRA8888 (premultiplied, sRGB),
 // stride == width * 4. On an HDR monitor the capture runs in fp16 scRGB and
 // |bgra| holds the tone-mapped SDR rendition (the wash-out fix); |f16| then
@@ -36,6 +40,12 @@ namespace wgc {
 // (creating one measured tens of ms per capture); do not share instances
 // across subsystems, the immediate context is not thread-safe.
 winrt::com_ptr<ID3D11Device> CreateFreshD3DDevice();
+
+// Wrap a D3D11 device as the WinRT IDirect3DDevice that
+// Windows.Graphics.Capture consumes. Shared by the capture, the recorder, and
+// the live loupe feeds (callers include the WinRT Direct3D11 headers).
+winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice WrapDevice(
+    winrt::com_ptr<ID3D11Device> const& device);
 
 // Capture a whole monitor. nullopt on failure (caller may fall back).
 // [keep_f16]: retain the raw fp16 pixels when the monitor is HDR.

@@ -51,14 +51,6 @@ winrt::com_ptr<ID3D11Device> CreateD3DDevice() {
   return SUCCEEDED(hr) ? device : nullptr;
 }
 
-d3d::IDirect3DDevice WrapDevice(winrt::com_ptr<ID3D11Device> const& device) {
-  auto dxgi = device.as<IDXGIDevice>();
-  winrt::com_ptr<::IInspectable> inspectable;
-  winrt::check_hresult(
-      CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(), inspectable.put()));
-  return inspectable.as<d3d::IDirect3DDevice>();
-}
-
 // Session-long cached capture device (creating one measured tens of ms per
 // capture, on the hotkey->frozen critical path). D3D11 devices are
 // free-threaded so the parallel per-monitor capture workers may share it, but
@@ -81,7 +73,7 @@ bool SharedDevice(bool recreate, winrt::com_ptr<ID3D11Device>* out_d3d,
     g_shared_device = CreateD3DDevice();
     if (!g_shared_device) return false;
     try {
-      g_shared_rt_device = WrapDevice(g_shared_device);
+      g_shared_rt_device = wgc::WrapDevice(g_shared_device);
     } catch (...) {
       g_shared_device = nullptr;
       return false;
@@ -222,6 +214,14 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
 namespace wgc {
 
 winrt::com_ptr<ID3D11Device> CreateFreshD3DDevice() { return CreateD3DDevice(); }
+
+d3d::IDirect3DDevice WrapDevice(winrt::com_ptr<ID3D11Device> const& device) {
+  auto dxgi = device.as<IDXGIDevice>();
+  winrt::com_ptr<::IInspectable> inspectable;
+  winrt::check_hresult(
+      CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(), inspectable.put()));
+  return inspectable.as<d3d::IDirect3DDevice>();
+}
 
 std::optional<CaptureFrame> CaptureMonitor(HMONITOR monitor, bool show_cursor,
                                            bool keep_f16,

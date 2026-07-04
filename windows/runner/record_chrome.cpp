@@ -14,6 +14,7 @@
 
 #include "dpi_util.h"
 #include "utils.h"
+#include "wgc_capturer.h"
 
 // NOTE on DrawText: windows.h defines DrawText -> DrawTextW, and d2d1.h is parsed
 // with that macro active, so the render-target method is declared as DrawTextW.
@@ -275,21 +276,6 @@ BOOL CALLBACK ScrimMonitorProc(HMONITOR mon, HDC, LPRECT, LPARAM lp) {
   return TRUE;
 }
 
-com_ptr<ID3D11Device> CreateD3D() {
-  com_ptr<ID3D11Device> dev;
-  const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1,
-                                      D3D_FEATURE_LEVEL_11_0};
-  HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                                 D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
-                                 D3D11_SDK_VERSION, dev.put(), nullptr, nullptr);
-  if (FAILED(hr)) {
-    hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-                           D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
-                           D3D11_SDK_VERSION, dev.put(), nullptr, nullptr);
-  }
-  return SUCCEEDED(hr) ? dev : nullptr;
-}
-
 }  // namespace
 
 RecordChrome::RecordChrome() {}
@@ -409,7 +395,7 @@ LRESULT CALLBACK RecordChrome::WndProc(HWND hwnd, UINT msg, WPARAM wp,
 bool RecordChrome::EnsureGraphics() {
   if (dc_) return true;
   try {
-    auto d3d = CreateD3D();
+    auto d3d = wgc::CreateFreshD3DDevice();
     if (!d3d) return false;
     auto dxgi = d3d.as<IDXGIDevice>();
     D2D1_FACTORY_OPTIONS fo{};

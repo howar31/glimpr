@@ -42,18 +42,6 @@ struct Brand {
 constexpr Brand kBrand[3] = {
     {0.13f, 0.83f, 0.93f}, {0.38f, 0.65f, 0.98f}, {0.65f, 0.55f, 0.98f}};
 
-com_ptr<ID3D11Device> CreateD3D() {
-  com_ptr<ID3D11Device> d;
-  if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                               D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
-                               D3D11_SDK_VERSION, d.put(), nullptr, nullptr))) {
-    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-                      D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
-                      D3D11_SDK_VERSION, d.put(), nullptr, nullptr);
-  }
-  return d;
-}
-
 // Map a Glimpr-logical global point to physical pixels: physical = logical *
 // (the containing monitor's scale). BuildDisplayDict defines logical = physical
 // / scale per monitor, so this inverts it. Falls back to the primary scale.
@@ -263,7 +251,7 @@ bool PinWindow::InitGraphics(const std::wstring& path) {
       pm[i + 3] = static_cast<uint8_t>(a);
     }
 
-    auto d3d = CreateD3D();
+    auto d3d = wgc::CreateFreshD3DDevice();
     if (!d3d) return false;
     auto dxgi = d3d.as<IDXGIDevice>();
     D2D1_FACTORY_OPTIONS fo{};

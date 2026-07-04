@@ -13,36 +13,13 @@
 #include <mutex>
 
 #include "hdr_util.h"
+#include "wgc_capturer.h"
 
 namespace {
 
 namespace cap = winrt::Windows::Graphics::Capture;
 namespace dx = winrt::Windows::Graphics::DirectX;
 namespace d3d = winrt::Windows::Graphics::DirectX::Direct3D11;
-
-winrt::com_ptr<ID3D11Device> CreateD3DDevice() {
-  winrt::com_ptr<ID3D11Device> device;
-  const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1,
-                                      D3D_FEATURE_LEVEL_11_0};
-  HRESULT hr = D3D11CreateDevice(
-      nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-      D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2, D3D11_SDK_VERSION,
-      device.put(), nullptr, nullptr);
-  if (FAILED(hr)) {
-    hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-                           D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
-                           D3D11_SDK_VERSION, device.put(), nullptr, nullptr);
-  }
-  return SUCCEEDED(hr) ? device : nullptr;
-}
-
-d3d::IDirect3DDevice WrapDevice(winrt::com_ptr<ID3D11Device> const& device) {
-  auto dxgi = device.as<IDXGIDevice>();
-  winrt::com_ptr<::IInspectable> inspectable;
-  winrt::check_hresult(
-      CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(), inspectable.put()));
-  return inspectable.as<d3d::IDirect3DDevice>();
-}
 
 }  // namespace
 
@@ -108,10 +85,10 @@ LiveFrameSource::~LiveFrameSource() { Stop(); }
 
 bool LiveFrameSource::Start(HMONITOR monitor) {
   try {
-    impl_->device = CreateD3DDevice();
+    impl_->device = wgc::CreateFreshD3DDevice();
     if (!impl_->device) return false;
     impl_->device->GetImmediateContext(impl_->context.put());
-    auto rtDevice = WrapDevice(impl_->device);
+    auto rtDevice = wgc::WrapDevice(impl_->device);
 
     auto factory = winrt::get_activation_factory<cap::GraphicsCaptureItem>();
     auto interop = factory.as<IGraphicsCaptureItemInterop>();
