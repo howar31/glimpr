@@ -218,6 +218,36 @@ class _SettingsAppState extends State<SettingsApp>
   static const _roleChannel = kRoleChannel;
   void _close() => _roleChannel.invokeMethod('closeSettings');
 
+  /// The restart-effective hint + two-step Restart button, shown while a
+  /// restart-effective setting (app language, warm target) differs from its
+  /// launch value. One click instead of quit-from-the-tray + reopen: the
+  /// native side re-opens the bundle after this process exits; two-step
+  /// (arm -> confirm) because it kills the running app.
+  List<Widget> _restartNotice() => [
+        Row(
+          children: [
+            const Icon(
+              Icons.restart_alt,
+              size: 15,
+              color: GlimprTokens.danger,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _l.settingsRestartNotice,
+                style: GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ConfirmGhostButton(
+          _l.settingsRestartNow,
+          confirmLabel: _l.settingsRestartNowConfirm,
+          onConfirmed: () => _roleChannel.invokeMethod('relaunch'),
+        ),
+      ];
+
   @override
   void initState() {
     super.initState();
@@ -974,29 +1004,7 @@ class _SettingsAppState extends State<SettingsApp>
             if (_appLanguageInitial != null &&
                 _appLanguage != _appLanguageInitial) ...[
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.restart_alt,
-                    size: 15,
-                    color: GlimprTokens.danger,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _l.settingsRestartNotice,
-                      style:
-                          GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              ConfirmGhostButton(
-                _l.settingsRestartNow,
-                confirmLabel: _l.settingsRestartNowConfirm,
-                onConfirmed: () => _roleChannel.invokeMethod('relaunch'),
-              ),
+              ..._restartNotice(),
             ],
           ],
         ),
@@ -2156,31 +2164,7 @@ class _SettingsAppState extends State<SettingsApp>
             ),
             const SizedBox(height: 12),
             if (_warmTargetInitial != null && _warmTarget != _warmTargetInitial) ...[
-              Row(
-                children: [
-                  const Icon(
-                    Icons.restart_alt,
-                    size: 15,
-                    color: GlimprTokens.danger,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _l.settingsRestartNotice,
-                      style: GlimprType.sansStyle(12.5, 600, GlimprTokens.danger),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // One click instead of quit-from-the-menu-bar + reopen: the native
-              // side re-opens the bundle after this process exits. Two-step
-              // (arm -> confirm) because it kills the running app.
-              ConfirmGhostButton(
-                _l.settingsRestartNow,
-                confirmLabel: _l.settingsRestartNowConfirm,
-                onConfirmed: () => _roleChannel.invokeMethod('relaunch'),
-              ),
+              ..._restartNotice(),
             ] else
               Text(
                 _l.settingsWarmEnginesDefault,
@@ -2911,6 +2895,27 @@ class _CropPinGlyph extends StatelessWidget {
   const _CropPinGlyph({required this.t});
   final GlimprTokens t;
 
+  // The 8-offset zero-blur outline ring shared by both corner badges.
+  static const _outlineOffsets = [
+    Offset(0.7, 0),
+    Offset(-0.7, 0),
+    Offset(0, 0.7),
+    Offset(0, -0.7),
+    Offset(0.7, 0.7),
+    Offset(0.7, -0.7),
+    Offset(-0.7, 0.7),
+    Offset(-0.7, -0.7),
+  ];
+
+  Widget _badge(IconData icon, Color outline) => Icon(
+        icon,
+        size: 11,
+        color: t.accentFg,
+        shadows: [
+          for (final o in _outlineOffsets) Shadow(color: outline, offset: o),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     final outline =
@@ -2922,46 +2927,12 @@ class _CropPinGlyph extends StatelessWidget {
         Positioned(
           right: -4,
           top: -3,
-          child: Icon(
-            Icons.videocam,
-            size: 11,
-            color: t.accentFg,
-            shadows: [
-              for (final o in const [
-                Offset(0.7, 0),
-                Offset(-0.7, 0),
-                Offset(0, 0.7),
-                Offset(0, -0.7),
-                Offset(0.7, 0.7),
-                Offset(0.7, -0.7),
-                Offset(-0.7, 0.7),
-                Offset(-0.7, -0.7),
-              ])
-                Shadow(color: outline, offset: o),
-            ],
-          ),
+          child: _badge(Icons.videocam, outline),
         ),
         Positioned(
           right: -4,
           bottom: -3,
-          child: Icon(
-            Icons.push_pin,
-            size: 11,
-            color: t.accentFg,
-            shadows: [
-              for (final o in const [
-                Offset(0.7, 0),
-                Offset(-0.7, 0),
-                Offset(0, 0.7),
-                Offset(0, -0.7),
-                Offset(0.7, 0.7),
-                Offset(0.7, -0.7),
-                Offset(-0.7, 0.7),
-                Offset(-0.7, -0.7),
-              ])
-                Shadow(color: outline, offset: o),
-            ],
-          ),
+          child: _badge(Icons.push_pin, outline),
         ),
       ],
     );

@@ -923,9 +923,21 @@ class _OptionsRowState extends State<_OptionsRow> {
 
   // --- popover openers (async work happens HERE, on tap, not at build) -------
 
-  Future<void> _openColorPopover() async {
+  /// Shared skeleton for the three colour pickers (stroke / fill / text
+  /// outline): toggle-off if already open, load the recent colours, then a
+  /// 242px [ColorPickerPopover]. [pushTransparent] is false for fill/outline
+  /// (a cleared alpha-0 colour isn't worth recalling); [onPickFromScreen] is
+  /// the stroke picker's eyedropper only.
+  Future<void> _openColorPickerPopover(
+    _OpenPopover kind, {
+    required Color color,
+    required List<Color> presets,
+    required ValueChanged<Color> onChanged,
+    bool pushTransparent = true,
+    VoidCallback? onPickFromScreen,
+  }) async {
     // Toggle off if already open; ensure only one popover at a time.
-    if (_open == _OpenPopover.color) {
+    if (_open == kind) {
       _closePopover();
       return;
     }
@@ -935,14 +947,31 @@ class _OptionsRowState extends State<_OptionsRow> {
     ).loadRecentColors();
     if (!mounted) return;
     _showPopover(
-      _OpenPopover.color,
+      kind,
       _barLink,
       // Exact fit for the 7 preset swatches: 7*26 + 6*6 = 218px content + the
       // 12px L/R padding = 242, so the row spans the panel with equal margins.
       width: 242,
       child: ColorPickerPopover(
-        color: _c.style.value.color,
+        color: color,
         recents: recents,
+        presets: presets,
+        onChanged: onChanged,
+        onCommit: (color) {
+          if (pushTransparent || color.a > 0) {
+            ToolStyleStore(
+              Settings.instance.store,
+            ).pushRecentColor(color.toARGB32());
+          }
+        },
+        onPickFromScreen: onPickFromScreen,
+      ),
+    );
+  }
+
+  Future<void> _openColorPopover() => _openColorPickerPopover(
+        _OpenPopover.color,
+        color: _c.style.value.color,
         // The highlighter shows its translucent quick-picks; everything else the
         // standard palette. Keyed off the EFFECTIVE type so editing a selected
         // highlighter via the Select tool still shows the translucent presets.
@@ -950,84 +979,34 @@ class _OptionsRowState extends State<_OptionsRow> {
             ? kHighlighterPresets
             : kColorPresets,
         onChanged: _c.setColor,
-        onCommit: (color) => ToolStyleStore(
-          Settings.instance.store,
-        ).pushRecentColor(color.toARGB32()),
         // Start eyedropper sampling on the canvas; close the popover so the
         // whole frozen frame / editor image is pickable.
         onPickFromScreen: () {
           _c.startEyedropper();
           _closePopover();
         },
-      ),
-    );
-  }
+      );
 
-  // The fill picker (rect/ellipse only). Mirrors the outline picker but seeds and
-  // writes [DrawStyle.fillColor]; the alpha slider doubles as "drag to 0 = no
-  // fill". No eyedropper — that path targets the outline colour.
-  Future<void> _openFillPopover() async {
-    if (_open == _OpenPopover.fill) {
-      _closePopover();
-      return;
-    }
-    _closePopover();
-    final recents = await ToolStyleStore(
-      Settings.instance.store,
-    ).loadRecentColors();
-    if (!mounted) return;
-    _showPopover(
-      _OpenPopover.fill,
-      _barLink,
-      width: 242,
-      child: ColorPickerPopover(
+  // The fill picker (rect/ellipse only). Mirrors the stroke picker but seeds
+  // and writes [DrawStyle.fillColor]; the alpha slider doubles as "drag to 0 =
+  // no fill". No eyedropper — that path targets the outline colour.
+  Future<void> _openFillPopover() => _openColorPickerPopover(
+        _OpenPopover.fill,
         color: _c.style.value.fillColor,
-        recents: recents,
         presets: kColorPresets,
         onChanged: _c.setFillColor,
-        // A cleared (transparent) fill isn't a colour worth recalling.
-        onCommit: (color) {
-          if (color.a > 0) {
-            ToolStyleStore(
-              Settings.instance.store,
-            ).pushRecentColor(color.toARGB32());
-          }
-        },
-      ),
-    );
-  }
+        pushTransparent: false,
+      );
 
-  // The text-outline picker (Text tool only). Mirrors the fill picker but writes
-  // [DrawStyle.outlineColor]; alpha 0 = no outline.
-  Future<void> _openOutlinePopover() async {
-    if (_open == _OpenPopover.outline) {
-      _closePopover();
-      return;
-    }
-    _closePopover();
-    final recents = await ToolStyleStore(
-      Settings.instance.store,
-    ).loadRecentColors();
-    if (!mounted) return;
-    _showPopover(
-      _OpenPopover.outline,
-      _barLink,
-      width: 242,
-      child: ColorPickerPopover(
+  // The text-outline picker (Text tool only). Mirrors the fill picker but
+  // writes [DrawStyle.outlineColor]; alpha 0 = no outline.
+  Future<void> _openOutlinePopover() => _openColorPickerPopover(
+        _OpenPopover.outline,
         color: _c.style.value.outlineColor,
-        recents: recents,
         presets: kColorPresets,
         onChanged: _c.setOutlineColor,
-        onCommit: (color) {
-          if (color.a > 0) {
-            ToolStyleStore(
-              Settings.instance.store,
-            ).pushRecentColor(color.toARGB32());
-          }
-        },
-      ),
-    );
-  }
+        pushTransparent: false,
+      );
 
   // The corner-radius picker (rectangle only): a slider plus an Auto toggle. The
   // child listens to the style so dragging the slider moves its own knob live.
