@@ -335,11 +335,6 @@ class _OverlayAppState extends State<OverlayApp> {
           _seedHudToggles(_editor, h);
         });
       },
-      onCaptureFailed: (reason, msg) {
-        // A failed RE-trigger mid-session keeps the live session untouched;
-        // only reset when nothing was on screen anyway.
-        if (mounted && _editor == null) _resetState();
-      },
       onActiveDisplay: (activeId, cursor) {
         if (mounted) _activeSignal.value = (id: activeId, cursor: cursor);
       },

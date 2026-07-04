@@ -2270,12 +2270,6 @@ final class RecordingChannel {
       case "resume":
         if #available(macOS 15.0, *) { self.current()?.resume() }
         result(nil)
-      case "isRecording":
-        if #available(macOS 15.0, *) {
-          result(self.current()?.isRecording ?? false)
-        } else {
-          result(false)
-        }
       default:
         result(FlutterMethodNotImplemented)
       }

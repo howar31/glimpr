@@ -147,20 +147,8 @@ final class CaptureChannel {
         }
       case "focusedWindow":
         result(ScreenCapturer.focusedWindow())
-      case "captureWindowImage":
-        let a = call.arguments as? [String: Any]
-        let wid = (a?["windowId"] as? NSNumber)?.uint32Value ?? 0
-        let cursor = (a?["showsCursor"] as? Bool) ?? false
-        Task { @MainActor in
-          do {
-            let img = try await self?.capture.captureWindowImage(
-              windowID: CGWindowID(wid), showsCursor: cursor)
-            result(img) // nil -> Dart treats as "no image" and falls back
-          } catch {
-            result(FlutterError(
-              code: "capture_failed", message: "\(error)", details: nil))
-          }
-        }
+      // (captureWindowImage lives on the OVERLAY engine's channel only — the
+      // window-snap leg; no control-engine Dart ever called the copy here.)
       case "captureWindowDelivered":
         let a = call.arguments as? [String: Any]
         let wid = (a?["windowId"] as? NSNumber)?.uint32Value ?? 0

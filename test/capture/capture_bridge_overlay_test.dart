@@ -42,14 +42,12 @@ void main() {
   );
 
   test(
-    'registerOverlayHandlers decodes onCaptureReady and onCaptureFailed',
+    'registerOverlayHandlers decodes onCaptureReady',
     () async {
       CapturedDisplay? ready;
-      String? failReason;
       final bridge = CaptureBridge();
       bridge.registerOverlayHandlers(
         onCaptureReady: (d, pinOnly, liveSelect) => ready = d,
-        onCaptureFailed: (reason, msg) => failReason = reason,
       );
 
       Future<void> send(String method, Object? args) async {
@@ -64,12 +62,6 @@ void main() {
       expect(ready, isNotNull);
       expect(ready!.displayId, 1);
       expect(ready!.scaleFactor, 2.0);
-
-      await send('onCaptureFailed', {
-        'reason': 'permissionDenied',
-        'message': 'x',
-      });
-      expect(failReason, 'permissionDenied');
     },
   );
 }

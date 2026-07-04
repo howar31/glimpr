@@ -374,7 +374,6 @@ class CaptureBridge {
     required void Function(
             CapturedDisplay display, bool pinOnly, bool liveSelect)
         onCaptureReady,
-    required void Function(String reason, String message) onCaptureFailed,
     void Function(int activeId, Offset cursor)? onActiveDisplay,
     void Function(Map<String, dynamic> state)? onEditorState,
     void Function()? onSettingsOpen,
@@ -390,13 +389,6 @@ class CaptureBridge {
             CapturedDisplay.fromMap(map),
             (args['pinOnly'] as bool?) ?? false,
             (args['liveSelect'] as bool?) ?? false,
-          );
-          return null;
-        case 'onCaptureFailed':
-          final args = (call.arguments as Map);
-          onCaptureFailed(
-            args['reason'] as String,
-            (args['message'] as String?) ?? '',
           );
           return null;
         case 'onActiveDisplay':
