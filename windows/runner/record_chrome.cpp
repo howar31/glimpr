@@ -296,7 +296,93 @@ com_ptr<ID3D11Device> CreateD3D() {
 }  // namespace
 
 RecordChrome::RecordChrome() {}
-RecordChrome::~RecordChrome() { Hide(); }
+RecordChrome::~RecordChrome() {
+  Hide();
+  DropRenderCache();
+}
+
+bool RecordChrome::EnsureRenderCache(UINT w, UINT h) {
+  if (cache_dc_ == dc_.get() && cache_w_ == w && cache_h_ == h &&
+      cache_target_ && cache_readback_ && cache_dib_) {
+    return true;
+  }
+  DropRenderCache();
+  if (!dc_) return false;
+  const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                    D2D1_ALPHA_MODE_PREMULTIPLIED);
+  const auto tp = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf);
+  if (FAILED(dc_->CreateBitmap(D2D1::SizeU(w, h), nullptr, 0, tp,
+                               cache_target_.put()))) {
+    return false;
+  }
+  const auto rp = D2D1::BitmapProperties1(
+      D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf);
+  if (FAILED(dc_->CreateBitmap(D2D1::SizeU(w, h), nullptr, 0, rp,
+                               cache_readback_.put()))) {
+    DropRenderCache();
+    return false;
+  }
+  dc_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0), cache_brush_.put());
+  // Breathing-dot glow: fixed stops (peak alpha 0.55 -> 0); the per-tick
+  // breath modulates via SetOpacity, the geometry via SetCenter/SetRadius.
+  {
+    D2D1_GRADIENT_STOP gg[2] = {{0.0f, D2D1::ColorF(0xFF453A, 0.55f)},
+                                {1.0f, D2D1::ColorF(0xFF453A, 0.0f)}};
+    com_ptr<ID2D1GradientStopCollection> gc;
+    if (SUCCEEDED(dc_->CreateGradientStopCollection(gg, 2, gc.put()))) {
+      dc_->CreateRadialGradientBrush(
+          D2D1::RadialGradientBrushProperties(D2D1::Point2F(0, 0),
+                                              D2D1::Point2F(0, 0), 1, 1),
+          gc.get(), cache_glow_brush_.put());
+    }
+  }
+  // Finish button gradient: fixed stops; start/end points set per draw.
+  {
+    D2D1_GRADIENT_STOP gs[2] = {{0.0f, D2D1::ColorF(0xFF453A, 1.0f)},
+                                {1.0f, D2D1::ColorF(0xFF6A60, 1.0f)}};
+    com_ptr<ID2D1GradientStopCollection> coll;
+    if (SUCCEEDED(dc_->CreateGradientStopCollection(gs, 2, coll.put()))) {
+      dc_->CreateLinearGradientBrush(
+          D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, 0),
+                                              D2D1::Point2F(1, 1)),
+          coll.get(), cache_finish_brush_.put());
+    }
+  }
+  BITMAPINFO bmi{};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = static_cast<LONG>(w);
+  bmi.bmiHeader.biHeight = -static_cast<LONG>(h);  // top-down
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+  HDC screen = GetDC(nullptr);
+  cache_dib_ = CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &cache_dib_bits_,
+                                nullptr, 0);
+  ReleaseDC(nullptr, screen);
+  if (!cache_dib_ || !cache_dib_bits_ || !cache_brush_) {
+    DropRenderCache();
+    return false;
+  }
+  cache_dc_ = dc_.get();
+  cache_w_ = w;
+  cache_h_ = h;
+  return true;
+}
+
+void RecordChrome::DropRenderCache() {
+  cache_target_ = nullptr;
+  cache_readback_ = nullptr;
+  cache_brush_ = nullptr;
+  cache_glow_brush_ = nullptr;
+  cache_finish_brush_ = nullptr;
+  if (cache_dib_) {
+    DeleteObject(cache_dib_);
+    cache_dib_ = nullptr;
+  }
+  cache_dib_bits_ = nullptr;
+  cache_dc_ = nullptr;
+  cache_w_ = cache_h_ = 0;
+}
 
 void RecordChrome::EnsureClass() {
   static bool reg = false;
@@ -1118,18 +1204,13 @@ void RecordChrome::Render() {
   }
 
   try {
-    const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                      D2D1_ALPHA_MODE_PREMULTIPLIED);
-    const auto tp = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf);
-    com_ptr<ID2D1Bitmap1> target;
-    winrt::check_hresult(
-        dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, tp, target.put()));
+    if (!EnsureRenderCache(W, H)) return;
+    com_ptr<ID2D1Bitmap1>& target = cache_target_;
     dc_->SetTarget(target.get());
     dc_->BeginDraw();
     dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
 
-    com_ptr<ID2D1SolidColorBrush> brush;
-    dc_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0), brush.put());
+    com_ptr<ID2D1SolidColorBrush>& brush = cache_brush_;
     auto fill = [&](const D2D1_RECT_F& r, float rad, const D2D1_COLOR_F& c) {
       brush->SetColor(c);
       dc_->FillRoundedRectangle(D2D1::RoundedRect(r, rad, rad), brush.get());
@@ -1168,22 +1249,16 @@ void RecordChrome::Render() {
       const double tri = t < 0.5 ? t * 2.0 : 2.0 - t * 2.0;  // 0..1..0
       e = tri * tri * (3.0 - 2.0 * tri);                     // smoothstep ease
     }
-    if (e > 0.01) {  // soft radial glow halo
+    if (e > 0.01 && cache_glow_brush_) {  // soft radial glow halo
       const float gr = S(5) + S(1.5) + static_cast<float>(e) * S(4.5);
-      D2D1_GRADIENT_STOP gg[2] = {
-          {0.0f, D2D1::ColorF(0xFF453A, static_cast<float>(e) * 0.55f)},
-          {1.0f, D2D1::ColorF(0xFF453A, 0.0f)}};
-      com_ptr<ID2D1GradientStopCollection> gc;
-      if (SUCCEEDED(dc_->CreateGradientStopCollection(gg, 2, gc.put()))) {
-        com_ptr<ID2D1RadialGradientBrush> rb;
-        if (SUCCEEDED(dc_->CreateRadialGradientBrush(
-                D2D1::RadialGradientBrushProperties(D2D1::Point2F(dotx, cy),
-                                                    D2D1::Point2F(0, 0), gr, gr),
-                gc.get(), rb.put()))) {
-          dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotx, cy), gr, gr),
-                           rb.get());
-        }
-      }
+      // Cached brush: fixed 0.55->0 stops; the breath modulates via opacity
+      // (0.55 * e overall, matching the old per-tick stop alpha).
+      cache_glow_brush_->SetCenter(D2D1::Point2F(dotx, cy));
+      cache_glow_brush_->SetRadiusX(gr);
+      cache_glow_brush_->SetRadiusY(gr);
+      cache_glow_brush_->SetOpacity(static_cast<float>(e));
+      dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotx, cy), gr, gr),
+                       cache_glow_brush_.get());
     }
     brush->SetColor(D2D1::ColorF(0xFF453A, paused_ ? 0.45f : 1.0f));
     dc_->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotx, cy), S(5), S(5)),
@@ -1253,22 +1328,12 @@ void RecordChrome::Render() {
           static_cast<float>(rc.left), static_cast<float>(rc.top),
           static_cast<float>(rc.right), static_cast<float>(rc.bottom));
       const float br = S(9);
-      D2D1_GRADIENT_STOP gs[2] = {{0.0f, D2D1::ColorF(0xFF453A, 1.0f)},
-                                  {1.0f, D2D1::ColorF(0xFF6A60, 1.0f)}};
-      com_ptr<ID2D1GradientStopCollection> coll;
-      if (SUCCEEDED(dc_->CreateGradientStopCollection(gs, 2, coll.put()))) {
-        com_ptr<ID2D1LinearGradientBrush> lg;
-        if (SUCCEEDED(dc_->CreateLinearGradientBrush(
-                D2D1::LinearGradientBrushProperties(
-                    D2D1::Point2F(r.left, r.top),
-                    D2D1::Point2F(r.right, r.bottom)),
-                coll.get(), lg.put()))) {
-          com_ptr<ID2D1RoundedRectangleGeometry> geo;
-          if (SUCCEEDED(factory_->CreateRoundedRectangleGeometry(
-                  D2D1::RoundedRect(r, br, br), geo.put()))) {
-            dc_->FillGeometry(geo.get(), lg.get());
-          }
-        }
+      if (cache_finish_brush_) {
+        // Cached gradient brush; only the endpoints move with the rect.
+        cache_finish_brush_->SetStartPoint(D2D1::Point2F(r.left, r.top));
+        cache_finish_brush_->SetEndPoint(D2D1::Point2F(r.right, r.bottom));
+        dc_->FillRoundedRectangle(D2D1::RoundedRect(r, br, br),
+                                  cache_finish_brush_.get());
       }
       if (hover) {
         brush->SetColor(D2D1::ColorF(0xFFFFFF, 0.12f));
@@ -1308,50 +1373,33 @@ void RecordChrome::Render() {
 
 void RecordChrome::PresentLayered(HWND hwnd, ID2D1Bitmap1* target, int x, int y,
                                   UINT W, UINT H) {
-  const auto pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                    D2D1_ALPHA_MODE_PREMULTIPLIED);
-  const auto rp = D2D1::BitmapProperties1(
-      D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf);
-  com_ptr<ID2D1Bitmap1> readback;
-  if (FAILED(dc_->CreateBitmap(D2D1::SizeU(W, H), nullptr, 0, rp,
-                               readback.put()))) {
-    return;
-  }
+  // The readback bitmap + DIB section come from the render cache (rebuilt on a
+  // size change; the countdown HUD and the strip use different sizes but never
+  // interleave, so the swap costs one rebuild per phase, not per tick).
+  if (!EnsureRenderCache(W, H)) return;
   D2D1_POINT_2U dst = D2D1::Point2U(0, 0);
   D2D1_RECT_U src = D2D1::RectU(0, 0, W, H);
-  if (FAILED(readback->CopyFromBitmap(&dst, target, &src))) return;
+  if (FAILED(cache_readback_->CopyFromBitmap(&dst, target, &src))) return;
   D2D1_MAPPED_RECT mapped{};
-  if (FAILED(readback->Map(D2D1_MAP_OPTIONS_READ, &mapped))) return;
+  if (FAILED(cache_readback_->Map(D2D1_MAP_OPTIONS_READ, &mapped))) return;
 
-  BITMAPINFO bmi{};
-  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-  bmi.bmiHeader.biWidth = static_cast<LONG>(W);
-  bmi.bmiHeader.biHeight = -static_cast<LONG>(H);  // top-down
-  bmi.bmiHeader.biPlanes = 1;
-  bmi.bmiHeader.biBitCount = 32;
-  bmi.bmiHeader.biCompression = BI_RGB;
-  HDC screen = GetDC(nullptr);
-  void* bits = nullptr;
-  HBITMAP dib =
-      CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-  if (dib && bits) {
-    for (UINT row = 0; row < H; ++row) {
-      std::memcpy(static_cast<uint8_t*>(bits) + static_cast<size_t>(row) * W * 4,
-                  mapped.bits + static_cast<size_t>(row) * mapped.pitch,
-                  static_cast<size_t>(W) * 4);
-    }
-    HDC mem = CreateCompatibleDC(screen);
-    HBITMAP old = static_cast<HBITMAP>(SelectObject(mem, dib));
-    POINT src_pt = {0, 0};
-    SIZE size = {static_cast<LONG>(W), static_cast<LONG>(H)};
-    POINT dst_pt = {x, y};
-    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(hwnd, screen, &dst_pt, &size, mem, &src_pt, 0, &bf,
-                        ULW_ALPHA);
-    SelectObject(mem, old);
-    DeleteDC(mem);
+  for (UINT row = 0; row < H; ++row) {
+    std::memcpy(
+        static_cast<uint8_t*>(cache_dib_bits_) + static_cast<size_t>(row) * W * 4,
+        mapped.bits + static_cast<size_t>(row) * mapped.pitch,
+        static_cast<size_t>(W) * 4);
   }
-  if (dib) DeleteObject(dib);
+  HDC screen = GetDC(nullptr);
+  HDC mem = CreateCompatibleDC(screen);
+  HBITMAP old = static_cast<HBITMAP>(SelectObject(mem, cache_dib_));
+  POINT src_pt = {0, 0};
+  SIZE size = {static_cast<LONG>(W), static_cast<LONG>(H)};
+  POINT dst_pt = {x, y};
+  BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+  UpdateLayeredWindow(hwnd, screen, &dst_pt, &size, mem, &src_pt, 0, &bf,
+                      ULW_ALPHA);
+  SelectObject(mem, old);
+  DeleteDC(mem);
   ReleaseDC(nullptr, screen);
-  readback->Unmap();
+  cache_readback_->Unmap();
 }

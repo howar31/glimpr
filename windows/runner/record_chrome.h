@@ -189,6 +189,23 @@ class RecordChrome {
   winrt::com_ptr<IDWriteTextFormat> btn_lead_fmt_;    // leading label (Finish glyph)
   winrt::com_ptr<IDWriteTextFormat> size_fmt_;  // file-size / frame-count readout
   winrt::com_ptr<IDWriteTextFormat> cd_fmt_;  // big countdown number
+
+  // Per-tick render cache: the strip repaints at ~30 Hz for the whole
+  // recording, and each tick used to create a fresh target bitmap, readback
+  // bitmap, DIB section, and gradient brushes. Keyed by (dc, W, H); rebuilt
+  // when the device context or size changes. The DIB section is GDI-owned
+  // (freed in the destructor / on rebuild).
+  bool EnsureRenderCache(UINT w, UINT h);
+  void DropRenderCache();
+  ID2D1DeviceContext* cache_dc_ = nullptr;  // identity key only, not owned
+  UINT cache_w_ = 0, cache_h_ = 0;
+  winrt::com_ptr<ID2D1Bitmap1> cache_target_;
+  winrt::com_ptr<ID2D1Bitmap1> cache_readback_;
+  winrt::com_ptr<ID2D1SolidColorBrush> cache_brush_;
+  winrt::com_ptr<ID2D1RadialGradientBrush> cache_glow_brush_;
+  winrt::com_ptr<ID2D1LinearGradientBrush> cache_finish_brush_;
+  HBITMAP cache_dib_ = nullptr;
+  void* cache_dib_bits_ = nullptr;
 };
 
 #endif  // RUNNER_RECORD_CHROME_H_
