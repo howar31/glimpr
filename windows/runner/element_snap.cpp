@@ -58,8 +58,14 @@ winrt::com_ptr<IUIAutomationElement> ChildAtPoint(
   winrt::com_ptr<IUIAutomationElement> best;
   LONG64 best_area = 0;
   for (int i = 0; child && i < kMaxSiblings; ++i) {
+    // Skip elements that exist in the tree but are not actually shown (a
+    // closed menu keeps stale bounds, for instance) -- they hit-test smaller
+    // than the real content and would win the specificity rule with a frame
+    // that visibly matches nothing.
+    BOOL offscreen = FALSE;
     RECT rc{};
-    if (SUCCEEDED(child->get_CachedBoundingRectangle(&rc)) &&
+    if ((FAILED(child->get_CachedIsOffscreen(&offscreen)) || !offscreen) &&
+        SUCCEEDED(child->get_CachedBoundingRectangle(&rc)) &&
         !IsRectEmpty(&rc) && PtInRect(&rc, pt)) {
       const LONG64 area = static_cast<LONG64>(rc.right - rc.left) *
                           (rc.bottom - rc.top);
@@ -368,6 +374,7 @@ struct Host::Impl {
         cache->AddProperty(UIA_BoundingRectanglePropertyId);
         cache->AddProperty(UIA_NamePropertyId);
         cache->AddProperty(UIA_LocalizedControlTypePropertyId);
+        cache->AddProperty(UIA_IsOffscreenPropertyId);
       }
     }
 
