@@ -1,4 +1,4 @@
-import 'dart:io';
+import '../platform_gate.dart';
 
 import 'package:flutter/material.dart';
 
@@ -161,7 +161,7 @@ class GlimprTokens {
   /// (frameless .fullSizeContentView); Windows has a standard OS caption above
   /// the client area, so it only needs a small breathing inset. ONE shared
   /// value — settings_app and licenses_page drifted when they each kept a copy.
-  static double get titleBarInset => Platform.isWindows ? 16.0 : 52.0;
+  static double get titleBarInset => platformIsWindows ? 16.0 : 52.0;
 
   // ========================== DARK (canonical) ===========================
   static const GlimprTokens dark = GlimprTokens(

@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../platform_gate.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:glimpr_pro/glimpr_pro.dart';
@@ -93,7 +94,7 @@ Future<void> main() async {
   // the fallback keeps them working when an action's shortcut is unbound. The
   // registrar is platform-specific: macOS uses Carbon, Windows uses Win32
   // RegisterHotKey (the macOS one is unchanged from before).
-  final HotkeyRegistrar registrar = Platform.isWindows
+  final HotkeyRegistrar registrar = platformIsWindows
       ? (WindowsHotkeyRegistrar()..fallback = dispatchAction)
       : (NativeHotkeyRegistrar()..fallback = dispatchAction);
   final hotkeyService = HotkeyService(
@@ -122,7 +123,7 @@ Future<void> main() async {
   // ASCII-only (cp950), so it cannot hold the zh strings — Dart owns l10n and
   // sends them. Global-action items reuse the Shortcuts-pane action labels;
   // menu-only items use dedicated keys. Sent once at boot (restart-effective).
-  if (Platform.isWindows) {
+  if (platformIsWindows) {
     final l = appL10n;
     control.invokeMethod('setTrayLabels', <String, String>{
       'captureArea': globalActionLabel(l, kCaptureAreaKey),

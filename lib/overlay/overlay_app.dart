@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import '../platform_gate.dart';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -68,7 +68,7 @@ class _OverlayAppState extends State<OverlayApp> {
   /// worth a setting (owner 2026-07-06). macOS follows the Advanced
   /// snapElementMode toggle (AX requires the TCC Accessibility grant).
   bool get _elementSnapEnabled =>
-      Platform.isWindows || _capture.snapElementMode;
+      platformIsWindows || _capture.snapElementMode;
   // Effective editor.* hotkey bindings, prefetched per capture (in onCaptured)
   // so EditorCanvas's _onKey reads them live on each rebuild without awaiting.
   // Seeded with the factory defaults so editor shortcuts work the instant the

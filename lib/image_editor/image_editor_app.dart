@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../platform_gate.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:file_selector/file_selector.dart';
@@ -240,7 +241,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   Future<void> _openPanel() async {
     // Confirm BEFORE the file picker appears, so unsaved work isn't lost behind it.
     if (!await _confirmDiscardIfDirty()) return;
-    if (Platform.isWindows) {
+    if (platformIsWindows) {
       const group = XTypeGroup(
         label: 'Images',
         extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'],
@@ -521,7 +522,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Windows only: push the localized editor title to the native OS caption (no
   /// Flutter title bar there). Sent once per locale; restart-effective anyway.
   void _syncWindowTitle() {
-    if (!Platform.isWindows) return;
+    if (!platformIsWindows) return;
     final title = _l.editorTitleBar;
     if (title == _sentWindowTitle) return;
     _sentWindowTitle = title;
@@ -665,7 +666,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         r.errors.containsKey('copyPath') ? _l.editorToastCopyPathFailed : _l.editorToastPathCopied,
       if (actions.contains(FlowAction.showInFinder))
         if (r.errors.containsKey('showInFinder'))
-          Platform.isWindows
+          platformIsWindows
               ? _l.editorToastRevealFailedWin
               : _l.editorToastRevealFailed,
       if (actions.contains(FlowAction.shareSheet))
@@ -811,7 +812,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         // (CallbackShortcuts over the focused subtree), not a raw Focus handler.
         child: CallbackShortcuts(
           bindings: {
-            if (Platform.isWindows)
+            if (platformIsWindows)
               const SingleActivator(LogicalKeyboardKey.keyW, control: true):
                   () => _requestClose(),
           },
@@ -821,7 +822,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           // which only LOOKS right under the dark palette); macOS stays pure
           // vibrancy. The loaded-state canvas covers it with the checkerboard.
           backgroundColor:
-              Platform.isWindows ? tokens.winBase : Colors.transparent,
+              platformIsWindows ? tokens.winBase : Colors.transparent,
           // A 44px Flutter title bar runs across the top in BOTH states (the OS
           // title is hidden + transparent), with the state content filling below.
           body: Builder(
@@ -838,7 +839,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                       // .fullSizeContentView chrome). Windows keeps the standard
                       // OS caption, so the content fills from the top and Home
                       // becomes a floating button over the canvas (below).
-                      if (!Platform.isWindows) _titleBar(tokens),
+                      if (!platformIsWindows) _titleBar(tokens),
                       Expanded(
                         child:
                             (image == null || bytes == null || controller == null)
@@ -849,7 +850,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                   ),
                   // Windows: a floating glass Home button at the canvas top-left
                   // while editing (the landing/gallery is itself "home").
-                  if (Platform.isWindows && image != null)
+                  if (platformIsWindows && image != null)
                     Positioned(
                       top: 12,
                       left: 12,
@@ -1265,13 +1266,13 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                   {FlowAction.save, FlowAction.copyPath}),
               _oneOff(
                   t,
-                  Platform.isWindows
+                  platformIsWindows
                       ? _l.editorMenuShowInFinderWin
                       : _l.editorMenuShowInFinder,
                   Icons.folder_outlined,
                   {FlowAction.save, FlowAction.showInFinder}),
               // Share is macOS-only (no system share surface wired on Windows v1).
-              if (!Platform.isWindows)
+              if (!platformIsWindows)
                 _oneOff(t, _l.editorMenuShare, Icons.ios_share,
                     {FlowAction.shareSheet}),
               _oneOff(t, _l.editorMenuPinToScreen, Icons.push_pin_outlined,
@@ -1361,7 +1362,7 @@ class _MoreTileState extends State<_MoreTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: Platform.isWindows
+          message: platformIsWindows
               ? l.editorGalleryMoreTooltipWin
               : l.editorGalleryMoreTooltip,
           waitDuration: const Duration(milliseconds: 400),
@@ -1821,12 +1822,12 @@ class _RecentTileState extends State<_RecentTile> {
         _menuItem(t, l.editorContextCopyImage, Icons.copy_outlined, widget.onCopy),
         _menuItem(t, l.editorContextCopyPath, Icons.link, widget.onCopyPath),
         // Share is macOS-only (no system share surface wired on Windows v1).
-        if (!Platform.isWindows)
+        if (!platformIsWindows)
           _menuItem(t, l.editorContextShare, Icons.ios_share, widget.onShare),
         _menuItem(t, l.editorContextPinToScreen, Icons.push_pin_outlined, widget.onPin),
         _menuItem(
             t,
-            Platform.isWindows
+            platformIsWindows
                 ? l.editorContextShowInFinderWin
                 : l.editorContextShowInFinder,
             Icons.folder_outlined,

@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import '../platform_gate.dart';
 
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:shared_preferences_windows/shared_preferences_windows.dart';
@@ -19,7 +19,7 @@ import 'package:shared_preferences_windows/shared_preferences_windows.dart';
 /// this before such a cross-engine read. Best-effort: any failure leaves the
 /// existing cached values (a stale read is acceptable; a crash is not).
 Future<void> reloadSettingsCache() async {
-  if (!Platform.isWindows) return;
+  if (!platformIsWindows) return;
   final platform = SharedPreferencesAsyncPlatform.instance;
   if (platform is SharedPreferencesAsyncWindows) {
     try {

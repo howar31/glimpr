@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'dart:ui' show Offset, Rect;
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/capture/capture_kind.dart';
 import 'package:glimpr/capture/captured_display.dart';
 import 'package:glimpr/capture/direct_capture.dart';
@@ -27,6 +29,7 @@ void main() {
     late List<({int? displayId, Rect? rect})> regionCalls;
     late List<Map<String, dynamic>?> regionDecorations;
     late List<bool> regionAlsoPlain;
+    late List<bool> regionAlsoCopy;
     late List<({RegionCapture c, CaptureKind kind, String? title, String? app})>
         delivered;
     late int shutters;
@@ -45,6 +48,7 @@ void main() {
       regionCalls = [];
       regionDecorations = [];
       regionAlsoPlain = [];
+      regionAlsoCopy = [];
       delivered = [];
       shutters = 0;
       completes = 0;
@@ -57,6 +61,7 @@ void main() {
           regionCalls.add((displayId: displayId, rect: rect));
           regionDecorations.add(decoration);
           regionAlsoPlain.add(alsoPlain);
+          regionAlsoCopy.add(alsoCopy);
           if (onRegion != null) return onRegion(displayId, rect);
           return _rc(displayId ?? 1, rect);
         },
@@ -89,6 +94,24 @@ void main() {
       final saved = await regionStore.load();
       expect(saved!.displayId, 1);
       expect(saved.rect, const Rect.fromLTWH(0, 0, 1920, 1080));
+    });
+
+    test('windows: the native capture is asked to also write the clipboard',
+        () async {
+      debugPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformOverride = null);
+      final dc = build();
+      await dc.screen();
+      // The default flow contains copy -> the native alsoCopy fast path.
+      expect(regionAlsoCopy.single, isTrue);
+    });
+
+    test('macOS: the Dart copy leg keeps the clipboard write', () async {
+      debugPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugPlatformOverride = null);
+      final dc = build();
+      await dc.screen();
+      expect(regionAlsoCopy.single, isFalse);
     });
 
     test('decoration off (default): no decoration spec passed to captureRegion',

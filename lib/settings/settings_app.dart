@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import '../platform_gate.dart';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -479,11 +479,11 @@ class _SettingsAppState extends State<SettingsApp>
       ),
       SettingRow(
         divider: true,
-        title: Platform.isWindows
+        title: platformIsWindows
             ? _l.settingsFlowShowInFinderWin
             : _l.settingsFlowShowInFinder,
         hint: hasSave
-            ? (Platform.isWindows
+            ? (platformIsWindows
                 ? _l.settingsFlowShowInFinderHintWin
                 : _l.settingsFlowShowInFinderHint)
             : _l.settingsFlowCopyFilePathNeedsSave,
@@ -497,7 +497,7 @@ class _SettingsAppState extends State<SettingsApp>
           trailing: toggle(FlowAction.openEditor),
         ),
       // Share is macOS-only (no system share surface wired on Windows v1).
-      if (!Platform.isWindows)
+      if (!platformIsWindows)
         SettingRow(
           divider: true,
           title: _l.settingsFlowShareSheet,
@@ -705,14 +705,14 @@ class _SettingsAppState extends State<SettingsApp>
         // surface, which only LOOKS right under the dark palette). macOS stays
         // pure vibrancy (transparent over NSVisualEffectView).
         child: ColoredBox(
-          color: Platform.isWindows ? tokens.winBase : Colors.transparent,
+          color: platformIsWindows ? tokens.winBase : Colors.transparent,
           child: CallbackShortcuts(
           bindings: {
             // Close the Settings window: Ctrl+W on Windows, Cmd-W on macOS.
             // (meta = the Win key on Windows, and Win+W is a reserved system
             // shortcut that never reaches the app, so Windows binds Ctrl+W.)
             SingleActivator(LogicalKeyboardKey.keyW,
-                meta: !Platform.isWindows, control: Platform.isWindows): _close,
+                meta: !platformIsWindows, control: platformIsWindows): _close,
           },
           child: Focus(
             autofocus: true,
@@ -1120,7 +1120,7 @@ class _SettingsAppState extends State<SettingsApp>
           title: _l.settingsHdrScreenshot,
           // Platform-specific wording: each platform names only its own HDR
           // file format (owner feedback 2026-07-03).
-          hint: Platform.isWindows
+          hint: platformIsWindows
               ? _l.settingsHdrScreenshotHintWindows
               : _l.settingsHdrScreenshotHintMac,
           trailing: GlassToggle(
@@ -1489,7 +1489,7 @@ class _SettingsAppState extends State<SettingsApp>
                 // Windows always mixes both sources into ONE track (a two-track
                 // mp4 is unplayable in common Windows players), so this toggle is
                 // a no-op there -- hide it. macOS keeps the two-track option.
-                if (!Platform.isWindows)
+                if (!platformIsWindows)
                   SettingRow(
                     divider: true,
                     title: _l.settingsRecordingMergeAudio,
@@ -1584,16 +1584,16 @@ class _SettingsAppState extends State<SettingsApp>
           ),
           SettingRow(
             divider: true,
-            title: Platform.isWindows
+            title: platformIsWindows
                 ? _l.settingsFlowShowInFinderWin
                 : _l.settingsFlowShowInFinder,
-            hint: Platform.isWindows
+            hint: platformIsWindows
                 ? _l.settingsFlowShowInFinderHintWin
                 : _l.settingsFlowShowInFinderHint,
             trailing: _recordingFlowToggle(FlowAction.showInFinder),
           ),
           // Share is macOS-only (no system share surface wired on Windows v1).
-          if (!Platform.isWindows)
+          if (!platformIsWindows)
             SettingRow(
               divider: true,
               title: _l.settingsFlowShareSheet,
@@ -2140,7 +2140,7 @@ class _SettingsAppState extends State<SettingsApp>
       _h1(_l.settingsPaneAdvanced, t),
       // Multi-display warm engines: macOS only (the Windows overlay is lazy with
       // no warm pool), so the whole section is hidden on Windows.
-      if (!Platform.isWindows) ...[
+      if (!platformIsWindows) ...[
         SectionLabel(_l.settingsSectionMultiDisplay, icon: Icons.memory),
       GlassCard.padded(
         child: Column(
@@ -2204,7 +2204,7 @@ class _SettingsAppState extends State<SettingsApp>
       // ALWAYS ON with no setting (UIA needs no permission and the hover cost
       // is insignificant — owner 2026-07-06); only macOS needs this toggle,
       // because AX requires the TCC Accessibility grant flow below.
-      if (!Platform.isWindows) ...[
+      if (!platformIsWindows) ...[
         SectionLabel(_l.settingsSectionElementSnap, icon: Icons.ads_click),
         GlassCard.padded(
           child: Column(
@@ -2457,7 +2457,7 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
         // Element-snap walk keys: macOS only, like the Advanced section.
-        if (!Platform.isWindows)
+        if (!platformIsWindows)
           SettingRow(
             title: _l.settingsReservedElementSnapLevel,
             hint: _l.settingsReservedElementSnapLevelHint,
@@ -2665,7 +2665,7 @@ class _SettingsAppState extends State<SettingsApp>
 
   // The command-modifier cap for reserved rows: the real chords are Ctrl-based
   // on Windows (Ctrl+W close, Ctrl+, settings, Ctrl+1/2 zoom), ⌘ on macOS.
-  String get _cmdCap => Platform.isWindows ? 'Ctrl' : '⌘';
+  String get _cmdCap => platformIsWindows ? 'Ctrl' : '⌘';
 
   // A read-only, field-shaped box for reserved (fixed) keys, mirroring the
   // HotkeyRecorderField's idle look (same height / bg / border) so the reserved

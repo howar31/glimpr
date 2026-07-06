@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import '../platform_gate.dart';
 
 import 'package:flutter/services.dart';
 import '../editor/editor_controller.dart';
@@ -305,7 +305,7 @@ const _kWindowsUnavailableGlobals = <String>{};
 /// Whether a Tier-1 global action is available on the current platform. macOS:
 /// always. Windows: everything except the not-yet-built globals.
 bool isGlobalActionAvailable(String actionKey, {bool? isWindows}) =>
-    !(isWindows ?? Platform.isWindows) ||
+    !(isWindows ?? platformIsWindows) ||
     !_kWindowsUnavailableGlobals.contains(actionKey);
 
 /// The effective default bindings for [isWindows]: the macOS map, with the
@@ -316,7 +316,7 @@ Map<String, HotkeyBinding?> defaultBindingsFor(bool isWindows) => isWindows
 
 /// The effective default bindings on THIS platform.
 Map<String, HotkeyBinding?> effectiveDefaultBindings() =>
-    defaultBindingsFor(Platform.isWindows);
+    defaultBindingsFor(platformIsWindows);
 
 /// The platform-effective default binding for [actionKey] (null = disabled).
 HotkeyBinding? defaultBindingFor(String actionKey) =>
@@ -327,13 +327,13 @@ HotkeyBinding? defaultBindingFor(String actionKey) =>
 /// Win+W/Win+, are OS shortcuts). Pure (testable) — pass [isWindows] to override
 /// the host platform.
 HotkeyModifier editorCommandModifier({bool? isWindows}) =>
-    (isWindows ?? Platform.isWindows)
+    (isWindows ?? platformIsWindows)
         ? HotkeyModifier.control
         : HotkeyModifier.meta;
 
 /// Whether the platform command modifier ([editorCommandModifier]) is held
 /// right now: meta on macOS, control on Windows (meta there is the Win key).
-bool isCommandModifierPressed() => Platform.isWindows
+bool isCommandModifierPressed() => platformIsWindows
     ? HardwareKeyboard.instance.isControlPressed
     : HardwareKeyboard.instance.isMetaPressed;
 
@@ -384,7 +384,7 @@ bool isEditorReservedCombo(
   bool? isWindows,
 }) {
   if (kEditorReservedKeys.contains(key)) return true;
-  for (final (k, mods) in _editorReservedCombos(isWindows ?? Platform.isWindows)) {
+  for (final (k, mods) in _editorReservedCombos(isWindows ?? platformIsWindows)) {
     if (k == key &&
         mods.length == modifiers.length &&
         mods.containsAll(modifiers)) {

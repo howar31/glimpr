@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import '../platform_gate.dart';
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 import '../editor/decoration.dart';
@@ -200,7 +200,7 @@ class DirectCapture {
           hdr: cap.hdrScreenshot,
           // Windows: the native capture writes the clipboard itself (no
           // decode); the flow's copy leg then just reports it (preCopied).
-          alsoCopy: Platform.isWindows && actions.contains(FlowAction.copy),
+          alsoCopy: platformIsWindows && actions.contains(FlowAction.copy),
         );
       } catch (_) {
         delivered = null; // fall through to the rectangular crop
@@ -316,7 +316,7 @@ class DirectCapture {
         hdr: cap.hdrScreenshot,
         // Windows: native writes the clipboard from the captured BGRA; the
         // flow's copy leg reports it via RegionCapture.copiedNative.
-        alsoCopy: Platform.isWindows && actions.contains(FlowAction.copy),
+        alsoCopy: platformIsWindows && actions.contains(FlowAction.copy),
       );
     } catch (e) {
       _showError(appL10n.errorCaptureFailedDetail('$e'));

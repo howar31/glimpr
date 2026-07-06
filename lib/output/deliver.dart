@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../platform_gate.dart';
 import 'dart:typed_data';
 import 'clipboard.dart';
 import 'filename.dart';
@@ -47,7 +48,7 @@ Directory effectiveSaveDir(Directory? configured) {
   if (configured != null) return configured;
   // Windows GUI processes do not get HOME (that is a Unix/msys var); use
   // USERPROFILE there. macOS/Linux keep HOME and the '/' separator.
-  final home = Platform.isWindows
+  final home = platformIsWindows
       ? (Platform.environment['USERPROFILE'] ??
           Platform.environment['HOME'] ??
           '.')

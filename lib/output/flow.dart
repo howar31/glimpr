@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../platform_gate.dart';
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../capture/capture_bridge.dart';
@@ -239,7 +240,7 @@ Future<FlowResult> runFlow({
   }
   // Share is macOS-only (no system share surface on Windows v1); the toggles are
   // hidden there, but guard the action so a stale setting can't invoke it.
-  if (!Platform.isWindows && actions.contains(FlowAction.shareSheet)) {
+  if (!platformIsWindows && actions.contains(FlowAction.shareSheet)) {
     try {
       await share(await ensureFile());
     } catch (e) {
@@ -269,7 +270,7 @@ String _siblingPath(String savedPath, String ext) {
 /// calls, unlike `explorer /select,<path>` which misparses a quoted space-
 /// containing arg and falls back to the default folder. macOS uses `open -R`.
 Future<void> revealInFileManager(String path) async {
-  if (Platform.isWindows) {
+  if (platformIsWindows) {
     try {
       await kRoleChannel.invokeMethod('revealInExplorer', {'path': path});
     } catch (_) {}
@@ -283,7 +284,7 @@ Future<void> revealInFileManager(String path) async {
 /// Folder", the editor gallery's "More..." tile) so there is ONE platform-aware
 /// implementation.
 Future<void> openFolderInFileManager(String dirPath) async {
-  await Process.run(Platform.isWindows ? 'explorer' : 'open', [dirPath]);
+  await Process.run(platformIsWindows ? 'explorer' : 'open', [dirPath]);
 }
 
 /// Temp file for opening an UNSAVED result in the editor. Extension follows the

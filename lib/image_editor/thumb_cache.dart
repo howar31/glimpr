@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../platform_gate.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:path/path.dart' as p;
@@ -27,7 +28,7 @@ class ThumbCache {
   final Map<String, Future<File?>> _inflight = {};
 
   static Directory _defaultDir() {
-    if (Platform.isWindows) {
+    if (platformIsWindows) {
       // HOME is normally unset on Windows and ~/Library/Caches is a macOS
       // convention — the old path fell back to the periodically-cleaned %TEMP%,
       // losing the cache's persistence. LOCALAPPDATA is the Windows analogue.

@@ -1,4 +1,4 @@
-import 'dart:io';
+import '../platform_gate.dart';
 import 'dart:ui' show Rect;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:path/path.dart' as p;
@@ -349,7 +349,7 @@ class RecordController {
     }
     // Share is macOS-only (no system share surface on Windows v1); the toggle is
     // hidden there, but guard the action too so a stale setting can't invoke it.
-    if (!Platform.isWindows && flow.contains(FlowAction.shareSheet)) {
+    if (!platformIsWindows && flow.contains(FlowAction.shareSheet)) {
       try {
         await _share(path);
       } catch (_) {}
