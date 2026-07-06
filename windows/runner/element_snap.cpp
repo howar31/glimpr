@@ -39,8 +39,11 @@ std::string Utf8FromBstr(BSTR s) {
   return Utf8FromUtf16(std::wstring(s, SysStringLen(s)));
 }
 
-// The first child of [parent] (control view, cached bounds) whose bounding
-// rectangle contains [pt]; null when none does.
+// The SMALLEST child of [parent] (control view, cached bounds) whose bounding
+// rectangle contains [pt]; null when none does. Smallest = most specific:
+// siblings can overlap (e.g. Chrome's client-wide "Intermediate D3D Window"
+// pane overlaps the page's render-host child) and the first-in-tree-order one
+// may be the coarse cover, which would end the descent one level too early.
 winrt::com_ptr<IUIAutomationElement> ChildAtPoint(
     IUIAutomationTreeWalker* walker, IUIAutomationCacheRequest* cache,
     IUIAutomationElement* parent, POINT pt) {
@@ -50,11 +53,18 @@ winrt::com_ptr<IUIAutomationElement> ChildAtPoint(
       !child) {
     return nullptr;
   }
+  winrt::com_ptr<IUIAutomationElement> best;
+  LONG64 best_area = 0;
   for (int i = 0; child && i < kMaxSiblings; ++i) {
     RECT rc{};
     if (SUCCEEDED(child->get_CachedBoundingRectangle(&rc)) &&
         !IsRectEmpty(&rc) && PtInRect(&rc, pt)) {
-      return child;
+      const LONG64 area = static_cast<LONG64>(rc.right - rc.left) *
+                          (rc.bottom - rc.top);
+      if (!best || area < best_area) {
+        best = child;
+        best_area = area;
+      }
     }
     winrt::com_ptr<IUIAutomationElement> next;
     if (FAILED(walker->GetNextSiblingElementBuildCache(child.get(), cache,
@@ -63,7 +73,7 @@ winrt::com_ptr<IUIAutomationElement> ChildAtPoint(
     }
     child = std::move(next);
   }
-  return nullptr;
+  return best;
 }
 
 struct Job {
@@ -104,13 +114,47 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
   // topmost overlay shadows our own tree -- the mac ruling carried over).
   if (pid == GetCurrentProcessId()) return std::nullopt;
 
+  // Descend the HWND layer first: the SMALLEST visible descendant window
+  // containing the point (ShareX's control-detection granularity is exactly
+  // these child windows; smallest = most specific, the same rule the snap
+  // list uses). Input-style hit tests (ChildWindowFromPointEx) do NOT work
+  // here: e.g. BOTH of Chrome's big children -- the client-wide "Intermediate
+  // D3D Window" cover and the page's Chrome_RenderWidgetHostHWND -- are
+  // WS_EX_TRANSPARENT (input goes to the top-level), and the UIA element tree
+  // does not expose the page child while the app's accessibility is dormant.
+  // Starting the element query AT the page child gives the page rect as the
+  // floor, and its own subtree once accessibility wakes.
+  struct HwndHit {
+    POINT pt;
+    HWND best;
+    LONG64 best_area;
+  } hit{pt, nullptr, 0};
+  EnumChildWindows(
+      target,
+      [](HWND child, LPARAM lp) -> BOOL {
+        auto* h = reinterpret_cast<HwndHit*>(lp);
+        if (!IsWindowVisible(child)) return TRUE;
+        RECT r{};
+        if (!GetWindowRect(child, &r) || IsRectEmpty(&r)) return TRUE;
+        if (!PtInRect(&r, h->pt)) return TRUE;
+        const LONG64 area =
+            static_cast<LONG64>(r.right - r.left) * (r.bottom - r.top);
+        if (!h->best || area < h->best_area) {
+          h->best = child;
+          h->best_area = area;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&hit));
+  const HWND hwnd = hit.best ? hit.best : target;
+
   winrt::com_ptr<IUIAutomationElement> el;
-  if (FAILED(ua->ElementFromHandleBuildCache(target, cache, el.put())) || !el) {
+  if (FAILED(ua->ElementFromHandleBuildCache(hwnd, cache, el.put())) || !el) {
     perf::Mark("elsnapDbg noRoot");
     return std::nullopt;
   }
 
-  // Descend to the element at the point (the app-scoped hit test).
+  // Then descend the element tree to the point (the app-scoped hit test).
   int depth = 0;
   for (int d = 0; d < kMaxDepth; ++d) {
     auto child = ChildAtPoint(walker, cache, el.get(), pt);
@@ -168,6 +212,18 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
   if (FAILED(el->get_CachedBoundingRectangle(&rc)) || IsRectEmpty(&rc)) {
     perf::Mark("elsnapDbg noRect depth=" + std::to_string(depth));
     return std::nullopt;
+  }
+  // Web content can report UNCLIPPED layout bounds (an image wider than the
+  // viewport); the user can only mean the visible part, so clip to the window
+  // that hosts the element.
+  RECT host{};
+  if (GetWindowRect(hwnd, &host)) {
+    RECT clipped{};
+    if (!IntersectRect(&clipped, &rc, &host)) {
+      perf::Mark("elsnapDbg offscreen depth=" + std::to_string(depth));
+      return std::nullopt;
+    }
+    rc = clipped;
   }
 
   BSTR name = nullptr;
