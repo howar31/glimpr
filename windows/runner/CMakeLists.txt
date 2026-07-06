@@ -90,6 +90,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dbghelp.lib")
 # Window subclassing (SetWindowSubclass/DefSubclassProc) for the recorder's
 # native key capture.
 target_link_libraries(${BINARY_NAME} PRIVATE "comctl32.lib")
+# AccessibleObjectFromWindow: the element snap's browser accessibility wake.
+target_link_libraries(${BINARY_NAME} PRIVATE "oleacc.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

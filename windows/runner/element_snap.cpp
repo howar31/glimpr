@@ -1,5 +1,6 @@
 #include "element_snap.h"
 
+#include <oleacc.h>
 #include <uiautomation.h>
 
 #include <winrt/base.h>
@@ -10,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 
 #include "dpi_util.h"
@@ -84,6 +86,25 @@ struct Job {
   Host::Reply reply;
 };
 
+// Browsers keep their accessibility tree DORMANT until an assistive-technology
+// client announces itself. The classic signal both Gecko and Chromium listen
+// for is an MSAA OBJID_CLIENT request on the window that owns the content
+// (Gecko: the top-level; Chromium: the render-host child, which our scoped
+// ElementFromHandle already touches). Fire it once per top-level window; the
+// tree materializes asynchronously, so the 30 Hz hover naturally picks it up
+// a beat later.
+void WakeAccessibility(HWND hwnd) {
+  static thread_local std::unordered_set<HWND> woken;
+  if (!woken.insert(hwnd).second) return;
+  IAccessible* acc = nullptr;
+  if (SUCCEEDED(AccessibleObjectFromWindow(
+          hwnd, static_cast<DWORD>(OBJID_CLIENT), IID_IAccessible,
+          reinterpret_cast<void**>(&acc))) &&
+      acc) {
+    acc->Release();
+  }
+}
+
 // One query, on the worker thread. Null = fall back to window snap.
 std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
                                      IUIAutomationTreeWalker* walker,
@@ -147,6 +168,7 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
       },
       reinterpret_cast<LPARAM>(&hit));
   const HWND hwnd = hit.best ? hit.best : target;
+  WakeAccessibility(target);
 
   winrt::com_ptr<IUIAutomationElement> el;
   if (FAILED(ua->ElementFromHandleBuildCache(hwnd, cache, el.put())) || !el) {
@@ -161,6 +183,41 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
     if (!child) break;
     el = std::move(child);
     ++depth;
+  }
+
+  // A bare child-window pane (no elements inside) does not always mean there
+  // is nothing finer: Gecko hangs its whole web tree off the TOP-LEVEL
+  // element, not off the compositor child the HWND scoping picked. Retry from
+  // the top level and keep whichever result is more specific (smaller).
+  if (depth == 0 && hwnd != target) {
+    winrt::com_ptr<IUIAutomationElement> root;
+    if (SUCCEEDED(ua->ElementFromHandleBuildCache(target, cache,
+                                                  root.put())) &&
+        root) {
+      int root_depth = 0;
+      for (int d = 0; d < kMaxDepth; ++d) {
+        auto child = ChildAtPoint(walker, cache, root.get(), pt);
+        if (!child) break;
+        root = std::move(child);
+        ++root_depth;
+      }
+      RECT child_rc{}, root_rc{};
+      if (root_depth > 0 &&
+          SUCCEEDED(el->get_CachedBoundingRectangle(&child_rc)) &&
+          SUCCEEDED(root->get_CachedBoundingRectangle(&root_rc)) &&
+          !IsRectEmpty(&root_rc)) {
+        const LONG64 child_area =
+            static_cast<LONG64>(child_rc.right - child_rc.left) *
+            (child_rc.bottom - child_rc.top);
+        const LONG64 root_area =
+            static_cast<LONG64>(root_rc.right - root_rc.left) *
+            (root_rc.bottom - root_rc.top);
+        if (IsRectEmpty(&child_rc) || root_area < child_area) {
+          el = std::move(root);
+          depth = root_depth;
+        }
+      }
+    }
   }
 
   // Climb out of sub-minimum noise to the first sensibly-sized element.
