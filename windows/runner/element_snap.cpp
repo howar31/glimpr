@@ -46,9 +46,13 @@ std::string Utf8FromBstr(BSTR s) {
 // siblings can overlap (e.g. Chrome's client-wide "Intermediate D3D Window"
 // pane overlaps the page's render-host child) and the first-in-tree-order one
 // may be the coarse cover, which would end the descent one level too early.
+// [include_offscreen]: the auto descent stays strict (never frame something
+// invisible), but an EXPLICIT walk-down admits offscreen-flagged candidates --
+// Gecko flags even visible containers offscreen generously, and the user is
+// looking at the frame and can judge (owner design, 2026-07-06).
 winrt::com_ptr<IUIAutomationElement> ChildAtPoint(
     IUIAutomationTreeWalker* walker, IUIAutomationCacheRequest* cache,
-    IUIAutomationElement* parent, POINT pt) {
+    IUIAutomationElement* parent, POINT pt, bool include_offscreen = false) {
   winrt::com_ptr<IUIAutomationElement> child;
   if (FAILED(walker->GetFirstChildElementBuildCache(parent, cache,
                                                     child.put())) ||
@@ -64,7 +68,8 @@ winrt::com_ptr<IUIAutomationElement> ChildAtPoint(
     // that visibly matches nothing.
     BOOL offscreen = FALSE;
     RECT rc{};
-    if ((FAILED(child->get_CachedIsOffscreen(&offscreen)) || !offscreen) &&
+    if ((include_offscreen ||
+         FAILED(child->get_CachedIsOffscreen(&offscreen)) || !offscreen) &&
         SUCCEEDED(child->get_CachedBoundingRectangle(&rc)) &&
         !IsRectEmpty(&rc) && PtInRect(&rc, pt)) {
       const LONG64 area = static_cast<LONG64>(rc.right - rc.left) *
@@ -264,7 +269,8 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
     }
   } else if (job.walk < 0) {
     for (int i = 0; i < -job.walk; ++i) {
-      auto child = ChildAtPoint(walker, cache, el.get(), pt);
+      auto child =
+          ChildAtPoint(walker, cache, el.get(), pt, /*include_offscreen=*/true);
       if (!child) break;
       el = std::move(child);
       --applied;
