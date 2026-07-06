@@ -52,17 +52,14 @@ struct EnumCtx {
   EncodableList* out;  // front-to-back (EnumWindows order)
 };
 
-BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
-  auto* ctx = reinterpret_cast<EnumCtx*>(lp);
-  // Only our own freeze overlays are excluded; glimpr's normal windows
-  // (Settings / editor) are snappable, matching macOS.
-  RECT r{};
-  if (!SnappableWindow(hwnd, *ctx->overlays, &r)) return TRUE;
-
+// Append one display-local logical entry to the snap list. [title]/[app] for
+// child-control entries are the top-level window's (a child's own text, e.g.
+// Chrome's "Chrome Legacy Window", is useless for the %title filename).
+void AppendEntry(EnumCtx* ctx, HWND hwnd, const RECT& physical,
+                 const std::string& title, const std::string& app) {
   RECT inter{};
-  if (!IntersectRect(&inter, &r, &ctx->monitor)) return TRUE;
-  if (inter.right - inter.left < 1 || inter.bottom - inter.top < 1) return TRUE;
-
+  if (!IntersectRect(&inter, &physical, &ctx->monitor)) return;
+  if (inter.right - inter.left < 1 || inter.bottom - inter.top < 1) return;
   const double scale = ctx->scale;
   EncodableMap w;
   w[EncodableValue("x")] =
@@ -71,11 +68,91 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
       EncodableValue((inter.top - ctx->monitor.top) / scale);
   w[EncodableValue("w")] = EncodableValue((inter.right - inter.left) / scale);
   w[EncodableValue("h")] = EncodableValue((inter.bottom - inter.top) / scale);
-  w[EncodableValue("title")] = EncodableValue(WindowTitle(hwnd));
-  w[EncodableValue("app")] = EncodableValue(ProcessName(hwnd));
+  w[EncodableValue("title")] = EncodableValue(title);
+  w[EncodableValue("app")] = EncodableValue(app);
   w[EncodableValue("windowNumber")] =
       EncodableValue(static_cast<int64_t>(reinterpret_cast<intptr_t>(hwnd)));
   ctx->out->push_back(EncodableValue(std::move(w)));
+}
+
+BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
+  auto* ctx = reinterpret_cast<EnumCtx*>(lp);
+  // Only our own freeze overlays are excluded; glimpr's normal windows
+  // (Settings / editor) are snappable, matching macOS.
+  RECT r{};
+  if (!SnappableWindow(hwnd, *ctx->overlays, &r)) return TRUE;
+
+  const std::string title = WindowTitle(hwnd);
+  const std::string app = ProcessName(hwnd);
+
+  // ShareX-parity control detection (WindowsRectangleList.IncludeChildWindows):
+  // every visible descendant HWND is a snap target too -- that is how ShareX
+  // frames e.g. Chrome's page area without the tab bar / toolbar (the render
+  // host child window). Children are appended BEFORE their top-level window,
+  // smallest first, so topmostWindowAt's first-containing scan picks the most
+  // specific rect; z-ordering across windows is preserved by the outer
+  // front-to-back EnumWindows. Rects are clipped to the parent (a scrolled-out
+  // child must not snap outside the window).
+  struct Child {
+    HWND hwnd;
+    RECT rect;
+  };
+  struct ChildCtx {
+    RECT parent;
+    std::vector<Child> out;
+  } cc{r, {}};
+  EnumChildWindows(
+      hwnd,
+      [](HWND child, LPARAM lp2) -> BOOL {
+        auto* c = reinterpret_cast<ChildCtx*>(lp2);
+        if (!IsWindowVisible(child)) return TRUE;
+        RECT cr{};
+        if (!GetWindowRect(child, &cr)) return TRUE;
+        RECT inter{};
+        if (!IntersectRect(&inter, &cr, &c->parent)) return TRUE;
+        // Skip degenerate slivers; anything with real area is a target
+        // (ShareX includes small controls too).
+        if (inter.right - inter.left < 8 || inter.bottom - inter.top < 8) {
+          return TRUE;
+        }
+        // A child covering (nearly) the whole window adds nothing over the
+        // window entry itself and would shadow it in the first-containing
+        // scan order below.
+        if (EqualRect(&inter, &c->parent)) return TRUE;
+        c->out.push_back({child, inter});
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&cc));
+  std::stable_sort(cc.out.begin(), cc.out.end(),
+                   [](const Child& a, const Child& b) {
+                     const LONG64 aa =
+                         static_cast<LONG64>(a.rect.right - a.rect.left) *
+                         (a.rect.bottom - a.rect.top);
+                     const LONG64 bb =
+                         static_cast<LONG64>(b.rect.right - b.rect.left) *
+                         (b.rect.bottom - b.rect.top);
+                     return aa < bb;
+                   });
+  for (const Child& c : cc.out) AppendEntry(ctx, c.hwnd, c.rect, title, app);
+
+  // The client area (window minus caption/borders) as its own target, like
+  // ShareX's client-rect entry. Skipped when it equals the window rect
+  // (borderless / custom-frame apps).
+  RECT client{};
+  if (GetClientRect(hwnd, &client)) {
+    POINT tl{client.left, client.top};
+    POINT br{client.right, client.bottom};
+    if (ClientToScreen(hwnd, &tl) && ClientToScreen(hwnd, &br)) {
+      RECT screen_client{tl.x, tl.y, br.x, br.y};
+      if (!EqualRect(&screen_client, &r) &&
+          screen_client.right - screen_client.left > 0 &&
+          screen_client.bottom - screen_client.top > 0) {
+        AppendEntry(ctx, hwnd, screen_client, title, app);
+      }
+    }
+  }
+
+  AppendEntry(ctx, hwnd, r, title, app);
   return TRUE;
 }
 
