@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "dpi_util.h"
+#include "perf_log.h"
 #include "record_clock.h"
 #include "utils.h"
 #include "window_enum.h"
@@ -92,7 +93,10 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
   // UIA ElementFromPoint would hit OUR topmost overlay instead -- scope the
   // query to this window's tree.
   HWND target = win_enum::TopWindowAt(pt, job.exclude);
-  if (!target) return std::nullopt;
+  if (!target) {
+    perf::Mark("elsnapDbg noTarget");
+    return std::nullopt;
+  }
   DWORD pid = 0;
   GetWindowThreadProcessId(target, &pid);
   // Our own window (Settings / editor / pin) on top: null -> Dart whole-window
@@ -102,14 +106,17 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
 
   winrt::com_ptr<IUIAutomationElement> el;
   if (FAILED(ua->ElementFromHandleBuildCache(target, cache, el.put())) || !el) {
+    perf::Mark("elsnapDbg noRoot");
     return std::nullopt;
   }
 
   // Descend to the element at the point (the app-scoped hit test).
+  int depth = 0;
   for (int d = 0; d < kMaxDepth; ++d) {
     auto child = ChildAtPoint(walker, cache, el.get(), pt);
     if (!child) break;
     el = std::move(child);
+    ++depth;
   }
 
   // Climb out of sub-minimum noise to the first sensibly-sized element.
@@ -159,6 +166,7 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
 
   RECT rc{};
   if (FAILED(el->get_CachedBoundingRectangle(&rc)) || IsRectEmpty(&rc)) {
+    perf::Mark("elsnapDbg noRect depth=" + std::to_string(depth));
     return std::nullopt;
   }
 
@@ -170,6 +178,18 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
   el->get_CachedLocalizedControlType(&type);
   const std::string role = Utf8FromBstr(type);
   if (type) SysFreeString(type);
+
+  if (perf::Enabled()) {
+    wchar_t cls[128] = L"";
+    GetClassNameW(target, cls, 128);
+    perf::Mark("elsnapDbg pt=" + std::to_string(pt.x) + "," +
+               std::to_string(pt.y) + " target=" + Utf8FromUtf16(cls) + "/" +
+               win_enum::ProcessName(target) + " depth=" +
+               std::to_string(depth) + " role=" + role + " rect=" +
+               std::to_string(rc.left) + "," + std::to_string(rc.top) + "," +
+               std::to_string(rc.right - rc.left) + "x" +
+               std::to_string(rc.bottom - rc.top));
+  }
 
   const auto logical = [&](LONG v, LONG origin) {
     return (static_cast<double>(v) - origin) / scale;

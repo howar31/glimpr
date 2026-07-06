@@ -28,9 +28,10 @@ bool IsCloaked(HWND hwnd) {
 }
 
 // Whether [hwnd] passes the shared snappable-window filters (visible,
-// non-minimized, non-cloaked, not a tool window, at least 40 px on a side),
-// excluding our own freeze [overlays]. Shared by SnappableWindows' collector
-// and TopWindowAt's hit test; [bounds] receives the DWM visible bounds.
+// non-minimized, non-cloaked, not a tool window, not an invisible overlay,
+// at least 40 px on a side), excluding our own freeze [overlays]. Shared by
+// SnappableWindows' collector and TopWindowAt's hit test; [bounds] receives
+// the DWM visible bounds.
 bool SnappableWindow(HWND hwnd, const std::vector<HWND>& overlays,
                      RECT* bounds) {
   if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return false;
@@ -38,7 +39,27 @@ bool SnappableWindow(HWND hwnd, const std::vector<HWND>& overlays,
   if (std::find(overlays.begin(), overlays.end(), hwnd) != overlays.end()) {
     return false;
   }
-  if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return false;
+  const LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+  if (ex & WS_EX_TOOLWINDOW) return false;
+  // A layered window faded to (near-)zero alpha is invisible on screen but
+  // still enumerable and high in z -- it would swallow every snap beneath it.
+  // The macOS list's alpha > 0.05 filter, ported. GetLayeredWindowAttributes
+  // fails for per-pixel (UpdateLayeredWindow) surfaces; treat those as opaque.
+  if (ex & WS_EX_LAYERED) {
+    BYTE alpha = 255;
+    DWORD flags = 0;
+    if (GetLayeredWindowAttributes(hwnd, nullptr, &alpha, &flags) &&
+        (flags & LWA_ALPHA) && alpha <= 12) {
+      return false;
+    }
+  }
+  // The NVIDIA GeForce overlay: a full-screen always-on-top layer that sits
+  // above every app while drawing nothing most of the time. ShareX
+  // ignore-lists the same class (WindowsRectangleList.IgnoreClassNameList).
+  wchar_t cls[64] = L"";
+  if (GetClassNameW(hwnd, cls, 64) && wcscmp(cls, L"CEF-OSC-WIDGET") == 0) {
+    return false;
+  }
   const RECT r = win_enum::VisibleWindowBounds(hwnd);
   if (r.right - r.left < 40 || r.bottom - r.top < 40) return false;
   *bounds = r;
