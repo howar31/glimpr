@@ -8,6 +8,7 @@ import 'package:glimpr/editor/drawable.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/editor/loupe_config.dart';
 import 'package:glimpr/overlay/crop_hud.dart';
+import 'package:glimpr/platform_gate.dart';
 
 import '../support/fake_editor_host.dart';
 
@@ -17,11 +18,14 @@ Future<void> chord(
   LogicalKeyboardKey key, {
   bool meta = false,
   bool shift = false,
+  bool control = false,
 }) async {
   if (meta) await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+  if (control) await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
   if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
   await tester.sendKeyEvent(key);
   if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+  if (control) await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
   if (meta) await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
   await tester.pump();
 }
@@ -239,10 +243,27 @@ void main() {
     });
 
     testWidgets('Cmd+, opens Settings through the host', (tester) async {
+      // The settings chord is platform-shaped (Ctrl+, on Windows) — pin the
+      // mac chord so the expectation holds on the Windows box too.
+      debugPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugPlatformOverride = null);
       final host = FakeEditorHost(baseImage: baseImage);
       await pumpEditorCore(tester, host);
 
       await chord(tester, LogicalKeyboardKey.comma, meta: true);
+
+      expect(host.openSettingsCount, 1);
+      expect(host.cancelCount, 0);
+    });
+
+    testWidgets('windows: Ctrl+, opens Settings through the host',
+        (tester) async {
+      debugPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformOverride = null);
+      final host = FakeEditorHost(baseImage: baseImage);
+      await pumpEditorCore(tester, host);
+
+      await chord(tester, LogicalKeyboardKey.comma, control: true);
 
       expect(host.openSettingsCount, 1);
       expect(host.cancelCount, 0);
