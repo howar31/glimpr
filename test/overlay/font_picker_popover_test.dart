@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/overlay/style_popovers.dart';
+
+import '../support/localized_app.dart';
 
 void main() {
   testWidgets('search filters the family list (case-insensitive)', (t) async {
-    await t.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
+    await t.pumpWidget(localizedApp(
+      Scaffold(
         body: FontPickerPopover(
           families: const ['Helvetica Neue', 'PingFang TC', 'Menlo'],
           selected: null,
@@ -25,10 +24,8 @@ void main() {
 
   testWidgets('tapping System selects null', (t) async {
     String? picked = 'unset';
-    await t.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
+    await t.pumpWidget(localizedApp(
+      Scaffold(
         body: FontPickerPopover(
           families: const ['Helvetica Neue'],
           selected: 'Helvetica Neue',

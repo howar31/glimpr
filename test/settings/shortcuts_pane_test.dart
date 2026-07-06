@@ -4,28 +4,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
-import 'package:glimpr/settings/settings_store.dart';
 import 'package:glimpr/shortcuts/widgets/hotkey_recorder_field.dart';
 import 'package:glimpr/shortcuts/widgets/key_cap_chips.dart';
 import 'package:glimpr/theme/glimpr_controls.dart';
 
-class FakeStore implements SettingsStore {
-  final Map<String, Object> _m = {};
-  @override
-  Future<String?> getString(String key) async => _m[key] as String?;
-  @override
-  Future<void> setString(String key, String value) async => _m[key] = value;
-  @override
-  Future<bool?> getBool(String key) async => _m[key] as bool?;
-  @override
-  Future<void> setBool(String key, bool value) async => _m[key] = value;
-  @override
-  Future<int?> getInt(String key) async => _m[key] as int?;
-  @override
-  Future<void> setInt(String key, int value) async => _m[key] = value;
-  @override
-  Future<void> remove(String key) async => _m.remove(key);
-}
+import '../support/fake_store.dart';
 
 // Opens the Shortcuts pane in a freshly pumped SettingsApp.
 Future<void> _openShortcuts(WidgetTester tester, Settings settings) async {

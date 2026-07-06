@@ -1,26 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/capture/capture_kind.dart';
 import 'package:glimpr/settings/settings.dart';
-import 'package:glimpr/settings/settings_store.dart';
 
-/// In-memory SettingsStore for tests.
-class _MapStore implements SettingsStore {
-  final _m = <String, Object>{};
-  @override
-  Future<bool?> getBool(String k) async => _m[k] as bool?;
-  @override
-  Future<void> setBool(String k, bool v) async => _m[k] = v;
-  @override
-  Future<int?> getInt(String k) async => _m[k] as int?;
-  @override
-  Future<void> setInt(String k, int v) async => _m[k] = v;
-  @override
-  Future<String?> getString(String k) async => _m[k] as String?;
-  @override
-  Future<void> setString(String k, String v) async => _m[k] = v;
-  @override
-  Future<void> remove(String k) async => _m.remove(k);
-}
+import '../support/fake_store.dart';
 
 void main() {
   test('defaults: every scenario off, white fill', () {
@@ -49,13 +31,13 @@ void main() {
 
   test('captureCursor defaults false and round-trips', () async {
     expect(const CaptureSettings().captureCursor, false);
-    final settings = Settings(_MapStore());
+    final settings = Settings(FakeStore());
     await settings.setCaptureCursor(true);
     expect((await settings.loadCapture()).captureCursor, true);
   });
 
   test('Settings round-trips the flags + fill into a snapshot', () async {
-    final settings = Settings(_MapStore());
+    final settings = Settings(FakeStore());
     await settings.setDecorateSnap(true);
     await settings.setDecorateLastRegion(true);
     await settings.setDecorationJpegFill(0xFF202020);

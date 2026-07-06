@@ -2,26 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/loupe_config.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/settings/settings.dart';
-import 'package:glimpr/settings/settings_store.dart';
 
-/// In-memory store so the settings logic is tested without the platform plugin.
-class FakeStore implements SettingsStore {
-  final Map<String, Object> _m = {};
-  @override
-  Future<String?> getString(String key) async => _m[key] as String?;
-  @override
-  Future<void> setString(String key, String value) async => _m[key] = value;
-  @override
-  Future<bool?> getBool(String key) async => _m[key] as bool?;
-  @override
-  Future<void> setBool(String key, bool value) async => _m[key] = value;
-  @override
-  Future<int?> getInt(String key) async => _m[key] as int?;
-  @override
-  Future<void> setInt(String key, int value) async => _m[key] = value;
-  @override
-  Future<void> remove(String key) async => _m.remove(key);
-}
+import '../support/fake_store.dart';
 
 void main() {
   test('save directory round-trips and clears', () async {

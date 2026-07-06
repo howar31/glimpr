@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/shortcuts/widgets/hotkey_recorder_field.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
 import 'package:glimpr/theme/glimpr_theme.dart';
 
+import '../support/localized_app.dart';
+
 // The field renders KeyCapChips (which read GlimprTheme.of), so the test widget
 // is wrapped in a GlimprTheme ancestor (mirrors settings_app.dart's provider).
-Widget _wrap(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: GlimprTheme(
+Widget _wrap(Widget child) => localizedApp(
+      GlimprTheme(
         tokens: GlimprTokens.dark,
         child: Scaffold(body: child),
       ),

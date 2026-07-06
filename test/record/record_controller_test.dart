@@ -7,28 +7,8 @@ import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/record/record_bridge.dart';
 import 'package:glimpr/record/record_controller.dart';
 import 'package:glimpr/settings/settings.dart';
-import 'package:glimpr/settings/settings_store.dart';
 
-class _FakeStore implements SettingsStore {
-  _FakeStore([Map<String, Object>? seed]) {
-    if (seed != null) _m.addAll(seed);
-  }
-  final Map<String, Object> _m = {};
-  @override
-  Future<String?> getString(String k) async => _m[k] as String?;
-  @override
-  Future<void> setString(String k, String v) async => _m[k] = v;
-  @override
-  Future<bool?> getBool(String k) async => _m[k] as bool?;
-  @override
-  Future<void> setBool(String k, bool v) async => _m[k] = v;
-  @override
-  Future<int?> getInt(String k) async => _m[k] as int?;
-  @override
-  Future<void> setInt(String k, int v) async => _m[k] = v;
-  @override
-  Future<void> remove(String k) async => _m.remove(k);
-}
+import '../support/fake_store.dart';
 
 /// Captures start/stop calls and exposes the registered event callbacks so
 /// tests can drive the native lifecycle.
@@ -121,7 +101,7 @@ class _FakeBridge extends RecordBridge {
 }
 
 void main() {
-  late _FakeStore store;
+  late FakeStore store;
   late _FakeBridge bridge;
   late List<String> errors;
   late List<String> revealed;
@@ -134,7 +114,7 @@ void main() {
   RecordController build({FocusedWindowInfo? window}) {
     // Seed a temp save folder so the output-path leg never touches the real
     // ~/Pictures default from a unit test.
-    store = _FakeStore({
+    store = FakeStore({
       'save_directory':
           Directory.systemTemp.createTempSync('glimpr_rec_test').path,
     });
@@ -579,7 +559,7 @@ void main() {
 
   group('recording settings', () {
     test('setAfterRecordingFlow strips non-applicable legs', () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       await s.setAfterRecordingFlow({
         FlowAction.copy, // inapplicable to video
         FlowAction.save,
@@ -592,7 +572,7 @@ void main() {
     });
 
     test('loadRecording round-trips and clamps fps', () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       await s.setRecordFps(45); // not a supported step -> clamps to 30
       var r = await s.loadRecording();
       expect(r.fps, 30);
@@ -605,7 +585,7 @@ void main() {
     });
 
     test('record_format round-trips and defaults to h264', () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       expect((await s.loadRecording()).format, RecordFormat.h264);
       await s.setRecordFormat(RecordFormat.gif);
       expect((await s.loadRecording()).format, RecordFormat.gif);
@@ -613,7 +593,7 @@ void main() {
 
     test('record_max_duration round-trips, defaults 0, clamps off-steps',
         () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       expect((await s.loadRecording()).maxDuration, 0);
       await s.setRecordMaxDuration(15);
       expect((await s.loadRecording()).maxDuration, 15);
@@ -622,7 +602,7 @@ void main() {
     });
 
     test('record_merge_audio round-trips and defaults to false', () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       expect((await s.loadRecording()).mergeAudio, isFalse); // default: two tracks
       await s.setRecordMergeAudio(true);
       expect((await s.loadRecording()).mergeAudio, isTrue);
@@ -631,7 +611,7 @@ void main() {
 
     test('record_countdown round-trips, defaults 0, clamps off-steps',
         () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       expect((await s.loadRecording()).countdown, 0);
       await s.setRecordCountdown(3);
       expect((await s.loadRecording()).countdown, 3);
@@ -640,7 +620,7 @@ void main() {
     });
 
     test('record_scrim round-trips and defaults to on', () async {
-      final s = Settings(_FakeStore());
+      final s = Settings(FakeStore());
       expect((await s.loadRecording()).scrim, isTrue);
       await s.setRecordScrim(false);
       expect((await s.loadRecording()).scrim, isFalse);

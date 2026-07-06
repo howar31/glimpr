@@ -9,25 +9,8 @@ import 'package:glimpr/editor/decoration.dart';
 import 'package:glimpr/output/deliver.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/settings/settings.dart';
-import 'package:glimpr/settings/settings_store.dart';
 
-class _FakeStore implements SettingsStore {
-  final Map<String, Object> _m = {};
-  @override
-  Future<String?> getString(String k) async => _m[k] as String?;
-  @override
-  Future<void> setString(String k, String v) async => _m[k] = v;
-  @override
-  Future<bool?> getBool(String k) async => _m[k] as bool?;
-  @override
-  Future<void> setBool(String k, bool v) async => _m[k] = v;
-  @override
-  Future<int?> getInt(String k) async => _m[k] as int?;
-  @override
-  Future<void> setInt(String k, int v) async => _m[k] = v;
-  @override
-  Future<void> remove(String k) async => _m.remove(k);
-}
+import '../support/fake_store.dart';
 
 RegionCapture _rc(int displayId, Rect? rect) => RegionCapture(
       bytes: Uint8List(0),
@@ -39,7 +22,7 @@ RegionCapture _rc(int displayId, Rect? rect) => RegionCapture(
 
 void main() {
   group('DirectCapture orchestrator', () {
-    late _FakeStore store;
+    late FakeStore store;
     late LastRegionStore regionStore;
     late List<({int? displayId, Rect? rect})> regionCalls;
     late List<Map<String, dynamic>?> regionDecorations;
@@ -57,7 +40,7 @@ void main() {
       // call (return null = "display gone").
       RegionCapture? Function(int? displayId, Rect? rect)? onRegion,
     }) {
-      store = _FakeStore();
+      store = FakeStore();
       regionStore = LastRegionStore(store);
       regionCalls = [];
       regionDecorations = [];
@@ -212,7 +195,7 @@ void main() {
 
     test('window(): delivers the native final bytes when a windowId is present',
         () async {
-      final s = _FakeStore();
+      final s = FakeStore();
       Uint8List? deliveredBytes;
       Map<String, dynamic>? passedDecoration;
       var completes = 0;
@@ -263,7 +246,7 @@ void main() {
     });
 
     test('window(): decoration on -> alpha-shape spec passed to native', () async {
-      final s = _FakeStore();
+      final s = FakeStore();
       await Settings(s).setDecorateWindow(true);
       Map<String, dynamic>? passedDecoration;
       final dc = DirectCapture(
@@ -311,7 +294,7 @@ void main() {
 
     test('window(): decoration on + pin in flow -> alsoPlain, plain bytes '
         'reach delivery', () async {
-      final s = _FakeStore();
+      final s = FakeStore();
       await Settings(s).setDecorateWindow(true);
       await Settings(s)
           .setAfterCaptureFlow({FlowAction.save, FlowAction.pin});

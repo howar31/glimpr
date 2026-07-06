@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/overlay/toolbar.dart';
 
-Widget _host(EditorController c) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(
+import '../support/localized_app.dart';
+
+Widget _host(EditorController c) => localizedApp(
+  Scaffold(
     // The real toolbar lives in a window sized to its content; give it natural
     // (unbounded) width here too so the tool row never overflows the test surface.
     body: SingleChildScrollView(
@@ -51,10 +50,8 @@ void main() {
       c.selectTool(ToolKind.rectangle);
       var commits = 0;
       await t.pumpWidget(
-        MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
+        localizedApp(
+          Scaffold(
             body: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: EditorToolbar(

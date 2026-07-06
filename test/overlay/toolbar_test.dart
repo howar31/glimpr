@@ -8,6 +8,8 @@ import 'package:glimpr/overlay/toolbar.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
 
+import '../support/localized_app.dart';
+
 // Tests run in the English (template) locale; label assertions are English.
 final AppLocalizations l10n = lookupAppLocalizations(const Locale('en'));
 
@@ -21,10 +23,8 @@ Future<EditorController> _pumpToolbar(
   final c = EditorController();
   addTearDown(c.dispose);
   await tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
+    localizedApp(
+      Scaffold(
         body: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: EditorToolbar(
@@ -135,10 +135,8 @@ void main() {
     final c = EditorController();
     addTearDown(c.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
+      localizedApp(
+        Scaffold(
           body: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: EditorToolbar(
@@ -175,10 +173,8 @@ void main() {
     Future<void> pump(
             {String? caption, bool accent = false, bool pin = false}) =>
         tester.pumpWidget(
-          MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
+          localizedApp(
+            Scaffold(
               body: Stack(
                 children: [
                   Positioned(

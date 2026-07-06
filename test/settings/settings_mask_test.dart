@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/settings/settings_mask.dart';
 import 'package:glimpr/theme/glimpr_theme.dart';
+
+import '../support/localized_app.dart';
 
 // The mask must follow the system appearance like the rest of the chrome
 // (toolbar/popovers/confirm dialog): a navy card + light text in dark mode,
@@ -13,9 +14,7 @@ void main() {
     tester.platformDispatcher.platformBrightnessTestValue = brightness;
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     await tester.pumpWidget(
-      const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,home: Stack(children: [SettingsMask()])),
+      localizedApp(Stack(children: [SettingsMask()])),
     );
   }
 
