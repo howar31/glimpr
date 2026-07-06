@@ -2200,9 +2200,10 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 15),
-      // Element snap: macOS only (the Windows overlay's elementSnapAt is a
-      // deliberate null stub and there is no AX permission to grant), so the
-      // whole section is hidden on Windows like the warm-engines one.
+      // Element snap: the SECTION is macOS-only. On Windows the feature is
+      // ALWAYS ON with no setting (UIA needs no permission and the hover cost
+      // is insignificant — owner 2026-07-06); only macOS needs this toggle,
+      // because AX requires the TCC Accessibility grant flow below.
       if (!Platform.isWindows) ...[
         SectionLabel(_l.settingsSectionElementSnap, icon: Icons.ads_click),
         GlassCard.padded(

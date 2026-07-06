@@ -480,6 +480,23 @@ std::vector<HWND> OverlayManager::OverlayHwnds() const {
   return out;
 }
 
+void OverlayManager::OnElementSnapDone() {
+  std::vector<std::pair<std::shared_ptr<flutter::MethodResult<EncodableValue>>,
+                        EncodableValue>>
+      jobs;
+  {
+    std::lock_guard<std::mutex> lock(elsnap_mutex_);
+    jobs.swap(elsnap_done_);
+  }
+  for (auto& job : jobs) {
+    if (job.second.IsNull()) {
+      job.first->Success();  // null -> Dart falls back to window snap
+    } else {
+      job.first->Success(std::move(job.second));
+    }
+  }
+}
+
 void OverlayManager::PresentBegin(int64_t cursor_display_id) {
   key_display_id_ = cursor_display_id;
   StartCursorTracking();
@@ -954,9 +971,11 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();
     return;
   }
-  // Booleans the Dart overlay path may query.
+  // Booleans the Dart overlay path may query. UI Automation needs NO
+  // permission grant on Windows (unlike the macOS Accessibility TCC), so the
+  // element snap is always "trusted" here.
   if (method == "accessibilityTrusted") {
-    result->Success(EncodableValue(false));
+    result->Success(EncodableValue(true));
     return;
   }
   if (method == "loupeSample") {
@@ -983,10 +1002,40 @@ void OverlayManager::HandleOverlayCapture(
     result->Success();  // null -> blank loupe until a live frame arrives
     return;
   }
-  // Methods still deferred on Windows (element snap, window-alpha snap mask): a
-  // safe null reply so the shared Dart degrades (rect snap).
-  if (method == "captureWindowImage" || method == "elementSnapAt") {
+  // Still deferred on Windows (window-alpha snap mask): a safe null reply so
+  // the shared Dart degrades (rect snap).
+  if (method == "captureWindowImage") {
     result->Success();  // null -> Dart falls back (rect snap)
+    return;
+  }
+  if (method == "elementSnapAt") {
+    // Precise element snap: the UIA element under a display-local LOGICAL
+    // point. The UIA round-trips run on a dedicated worker thread (a hung
+    // target app degrades to a null reply -> Dart falls back to window snap;
+    // the overlay never blocks); the finished reply marshals back via
+    // WM_GLIMPR_ELSNAP. See element_snap.h for the topmost-overlay gotcha
+    // this path exists to dodge.
+    const auto id = GetInt64(args, "displayId");
+    if (!id || !control_hwnd_) {
+      result->Success();
+      return;
+    }
+    if (!element_snap_) element_snap_ = std::make_unique<elsnap::Host>();
+    std::shared_ptr<flutter::MethodResult<EncodableValue>> shared(
+        result.release());
+    element_snap_->Query(
+        HMon(*id), GetDouble(args, "x", 0), GetDouble(args, "y", 0),
+        GetInt(args, "walk", 0), OverlayHwnds(),
+        [this, shared](std::optional<EncodableMap> out) {
+          {
+            std::lock_guard<std::mutex> lock(elsnap_mutex_);
+            elsnap_done_.emplace_back(shared, out
+                                                  ? EncodableValue(
+                                                        std::move(*out))
+                                                  : EncodableValue());
+          }
+          PostMessage(control_hwnd_, WM_GLIMPR_ELSNAP, 0, 0);
+        });
     return;
   }
   if (method == "recordSelection") {

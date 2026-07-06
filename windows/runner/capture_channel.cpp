@@ -152,6 +152,13 @@ void CaptureChannel::HandleMethodCall(
     result->Success();
     return;
   }
+  if (call.method_name() == "accessibilityTrusted") {
+    // Element snap runs on UI Automation, which needs NO permission grant on
+    // Windows (unlike the macOS Accessibility TCC) -- always "trusted", so the
+    // Settings pane never shows a permission row here.
+    result->Success(EncodableValue(true));
+    return;
+  }
   if (call.method_name() == "openInEditor") {
     // The direct-capture flow's open-in-editor leg: reveal the editor + load the
     // saved/temp file.

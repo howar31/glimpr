@@ -27,6 +27,16 @@ flutter::EncodableList SnappableWindows(HMONITOR mon,
 std::string WindowTitle(HWND hwnd);
 std::string ProcessName(HWND hwnd);
 
+// A window's on-screen bounds (DWM extended frame; physical, virtual-screen).
+RECT VisibleWindowBounds(HWND hwnd);
+
+// The frontmost snappable top-level window under the PHYSICAL point (the same
+// visibility/tool-window/size filters as SnappableWindows), skipping our own
+// freeze [overlays]. Null when nothing real is under the point. Used by the
+// element snap to scope its UIA query to the window the user actually aims at
+// (a global hit test would return our topmost overlay instead).
+HWND TopWindowAt(POINT pt, const std::vector<HWND>& overlays);
+
 }  // namespace win_enum
 
 #endif  // RUNNER_WINDOW_ENUM_H_

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -61,6 +62,13 @@ class _OverlayAppState extends State<OverlayApp> {
   // Capture-time settings, prefetched per capture (in onCaptured) so the
   // shutter sound + delivery never await the store on the commit hot path.
   CaptureSettings _capture = CaptureSettings.defaults;
+
+  /// Element snap gate: Windows is ALWAYS ON — UIA needs no permission grant
+  /// and the measured hover cost (~10 ms, off the platform thread) is not
+  /// worth a setting (owner 2026-07-06). macOS follows the Advanced
+  /// snapElementMode toggle (AX requires the TCC Accessibility grant).
+  bool get _elementSnapEnabled =>
+      Platform.isWindows || _capture.snapElementMode;
   // Effective editor.* hotkey bindings, prefetched per capture (in onCaptured)
   // so EditorCanvas's _onKey reads them live on each rebuild without awaiting.
   // Seeded with the factory defaults so editor shortcuts work the instant the
@@ -1366,11 +1374,12 @@ class _OverlayAppState extends State<OverlayApp> {
                       // The freeze retained an HDR base for this display ->
                       // toolbar shows the per-take HDR-sibling toggle.
                       hdrToggle: d.hdrGen != null,
-                      // Precise element snap (Advanced experiment): only on the
-                      // frozen screenshot session, only when the setting is on.
-                      // Native returns null without the AX permission -> the
-                      // window snap stands.
-                      elementSnapAt: _capture.snapElementMode
+                      // Precise element snap: macOS gates on the Advanced
+                      // toggle (AX needs the TCC permission; native returns
+                      // null without it -> window snap stands). Windows runs
+                      // UIA -- no permission, ~10ms/hover off-thread -- so it
+                      // is ALWAYS ON with no setting (owner 2026-07-06).
+                      elementSnapAt: _elementSnapEnabled
                           ? (Offset p, {int walk = 0}) => _bridge.elementSnapAt(
                               d.displayId, p.dx, p.dy, walk: walk)
                           : null,
@@ -1404,11 +1413,11 @@ class _OverlayAppState extends State<OverlayApp> {
                     recordMode: true,
                     liveLoupeSample: _bridge.loupeSample,
                     recordOverrides: _recordOverrides,
-                    // Element snap for recording live-select: same hook + setting.
+                    // Element snap for recording live-select: same hook + gate.
                     // Cleaner here than screenshots — the picker is over the LIVE
                     // screen, so there is no frozen-vs-live divergence. A snapped
                     // element commits as the fixed record region.
-                    elementSnapAt: _capture.snapElementMode
+                    elementSnapAt: _elementSnapEnabled
                         ? (Offset p, {int walk = 0}) => _bridge.elementSnapAt(
                             _recordDisplay!.displayId, p.dx, p.dy, walk: walk)
                         : null,

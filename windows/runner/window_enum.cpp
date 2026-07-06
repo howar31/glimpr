@@ -27,13 +27,22 @@ bool IsCloaked(HWND hwnd) {
   return false;
 }
 
-RECT VisibleBounds(HWND hwnd) {
-  RECT rc{};
-  if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
-                                   sizeof(rc)))) {
-    GetWindowRect(hwnd, &rc);
+// Whether [hwnd] passes the shared snappable-window filters (visible,
+// non-minimized, non-cloaked, not a tool window, at least 40 px on a side),
+// excluding our own freeze [overlays]. Shared by SnappableWindows' collector
+// and TopWindowAt's hit test; [bounds] receives the DWM visible bounds.
+bool SnappableWindow(HWND hwnd, const std::vector<HWND>& overlays,
+                     RECT* bounds) {
+  if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return false;
+  if (IsCloaked(hwnd)) return false;
+  if (std::find(overlays.begin(), overlays.end(), hwnd) != overlays.end()) {
+    return false;
   }
-  return rc;
+  if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return false;
+  const RECT r = win_enum::VisibleWindowBounds(hwnd);
+  if (r.right - r.left < 40 || r.bottom - r.top < 40) return false;
+  *bounds = r;
+  return true;
 }
 
 struct EnumCtx {
@@ -45,20 +54,10 @@ struct EnumCtx {
 
 BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
   auto* ctx = reinterpret_cast<EnumCtx*>(lp);
-  if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
-  if (IsCloaked(hwnd)) return TRUE;
   // Only our own freeze overlays are excluded; glimpr's normal windows
   // (Settings / editor) are snappable, matching macOS.
-  if (std::find(ctx->overlays->begin(), ctx->overlays->end(), hwnd) !=
-      ctx->overlays->end()) {
-    return TRUE;
-  }
-  // Skip tool windows (palettes / our own helper windows) and zero-size.
-  LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-  if (ex & WS_EX_TOOLWINDOW) return TRUE;
-
-  RECT r = VisibleBounds(hwnd);
-  if (r.right - r.left < 40 || r.bottom - r.top < 40) return TRUE;
+  RECT r{};
+  if (!SnappableWindow(hwnd, *ctx->overlays, &r)) return TRUE;
 
   RECT inter{};
   if (!IntersectRect(&inter, &r, &ctx->monitor)) return TRUE;
@@ -114,6 +113,34 @@ std::string ProcessName(HWND hwnd) {
   }
   CloseHandle(h);
   return name;
+}
+
+RECT VisibleWindowBounds(HWND hwnd) {
+  RECT rc{};
+  if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
+                                   sizeof(rc)))) {
+    GetWindowRect(hwnd, &rc);
+  }
+  return rc;
+}
+
+HWND TopWindowAt(POINT pt, const std::vector<HWND>& overlays) {
+  struct Ctx {
+    POINT pt;
+    const std::vector<HWND>* overlays;
+    HWND out;
+  } ctx{pt, &overlays, nullptr};
+  EnumWindows(
+      [](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        RECT r{};
+        if (!SnappableWindow(hwnd, *c->overlays, &r)) return TRUE;
+        if (!PtInRect(&r, c->pt)) return TRUE;
+        c->out = hwnd;  // front-to-back: the first hit is the visual top
+        return FALSE;
+      },
+      reinterpret_cast<LPARAM>(&ctx));
+  return ctx.out;
 }
 
 EncodableList SnappableWindows(HMONITOR mon,

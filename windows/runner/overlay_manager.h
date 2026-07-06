@@ -11,13 +11,20 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <utility>
 #include <vector>
 
 #include "clipboard_channel.h"
+#include "element_snap.h"
 #include "encode_channel.h"
 #include "sound_channel.h"
 #include "live_frame_source.h"
 #include "overlay_window.h"
+
+// An element-snap UIA reply finished on the worker thread; the platform thread
+// completes the pending MethodResults (FlutterWindow routes it here).
+#define WM_GLIMPR_ELSNAP (WM_APP + 4)
 
 // Owns the per-display overlay windows + their Flutter engines and drives the
 // capture-then-show / dismiss lifecycle, the single-authority cursor poll, the
@@ -77,6 +84,11 @@ class OverlayManager {
   // picker per its own state (the shared Dart decides). Mirrors the macOS
   // relayRecordSelectHotkey. Called from the control engine's capture channel.
   void RelayRecordSelectHotkey();
+
+  // Routed from FlutterWindow::MessageHandler on WM_GLIMPR_ELSNAP: completes
+  // the element-snap MethodResults the UIA worker finished, on the platform
+  // thread (the RunCaptureAsync marshal idiom).
+  void OnElementSnapDone();
 
  private:
   using EncodableValue = flutter::EncodableValue;
@@ -198,6 +210,17 @@ class OverlayManager {
   // transparent picker session is up (empty otherwise).
   bool live_select_ = false;
   std::map<int64_t, std::unique_ptr<LiveFrameSource>> live_sources_;
+
+  // Precise element snap: the UIA worker (lazy -- most sessions never use it)
+  // and the replies finished on the worker, drained by OnElementSnapDone on
+  // the platform thread. The host is declared LAST so its destructor (which
+  // joins the worker, flushing pending replies into the queue) runs while the
+  // queue and mutex are still alive.
+  std::mutex elsnap_mutex_;
+  std::vector<std::pair<std::shared_ptr<flutter::MethodResult<EncodableValue>>,
+                        EncodableValue>>
+      elsnap_done_;
+  std::unique_ptr<elsnap::Host> element_snap_;
 
   int64_t key_display_id_ = 0;     // cursor display at capture (takes focus)
   int64_t active_display_id_ = 0;  // current active (cursor poll authority)

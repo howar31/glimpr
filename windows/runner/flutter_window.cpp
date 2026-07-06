@@ -492,6 +492,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     capture_channel_->OnAsyncDone();
     return 0;
   }
+  if (message == WM_GLIMPR_ELSNAP && overlay_manager_) {
+    // The element-snap UIA worker finished a query: complete its method
+    // result on the platform thread.
+    overlay_manager_->OnElementSnapDone();
+    return 0;
+  }
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
     KillTimer(GetHandle(), kWarmupTimerId);  // one-shot
     perf::Mark("warmupBegin");
