@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/drawable.dart';
 import 'package:glimpr/editor/drawable_painter.dart';
 import 'package:glimpr/editor/editor_controller.dart';
+import 'package:glimpr/platform_gate.dart';
 
 import '../support/fake_editor_host.dart';
 
@@ -477,6 +478,34 @@ void main() {
 
       expect(host.exports, hasLength(1));
       expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 340, 280));
+    });
+
+    testWidgets('windows: a tiny record marquee is clamped to the 80pt floor',
+        (tester) async {
+      // The Windows Media Foundation H.264 encoder rejects tiny frames; the
+      // marquee refuses to shrink below the floor DURING the drag.
+      debugPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformOverride = null);
+      final host = FakeEditorHost(baseImage: baseImage, liveSelect: true);
+      await pumpEditorCore(tester, host, recordMode: true);
+
+      await drag(tester, const Offset(100, 100), const Offset(120, 115));
+
+      expect(host.exports, hasLength(1));
+      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 180, 180));
+    });
+
+    testWidgets('macOS: no record marquee floor (VideoToolbox takes tiny '
+        'frames)', (tester) async {
+      debugPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugPlatformOverride = null);
+      final host = FakeEditorHost(baseImage: baseImage, liveSelect: true);
+      await pumpEditorCore(tester, host, recordMode: true);
+
+      await drag(tester, const Offset(100, 100), const Offset(120, 115));
+
+      expect(host.exports, hasLength(1));
+      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 120, 115));
     });
   });
 

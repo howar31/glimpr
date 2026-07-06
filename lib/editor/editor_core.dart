@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import '../platform_gate.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
@@ -307,7 +307,7 @@ class _EditorCoreState extends State<EditorCore> {
   /// non-integer DPI scales, so a real move can legitimately land exactly on
   /// floor(cursor) and must not be snapped back.
   bool _isQuantizedEcho(Offset p) =>
-      Platform.isMacOS &&
+      platformIsMacOS &&
       p != _cursor &&
       p == Offset(_cursor.dx.floorToDouble(), _cursor.dy.floorToDouble());
 
@@ -2231,7 +2231,7 @@ class _EditorCoreState extends State<EditorCore> {
         // limit instead of a silent no-record. Windows only (its Media Foundation
         // H.264 encoder rejects tiny frames); macOS's VideoToolbox has no such
         // floor, and screenshots are unaffected on both.
-        if (widget.recordMode && a != null && Platform.isWindows) {
+        if (widget.recordMode && a != null && platformIsWindows) {
           to = _recordMinCornerIn(a, to, _canvasSize, _kMinRecordSide);
         }
         _crop.update(to);
