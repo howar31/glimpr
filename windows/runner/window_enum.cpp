@@ -7,6 +7,7 @@
 #include <string>
 
 #include "dpi_util.h"
+#include "snap_filter.h"
 #include "utils.h"
 
 namespace {
@@ -34,34 +35,33 @@ bool IsCloaked(HWND hwnd) {
 // the DWM visible bounds.
 bool SnappableWindow(HWND hwnd, const std::vector<HWND>& overlays,
                      RECT* bounds) {
-  if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return false;
-  if (IsCloaked(hwnd)) return false;
-  if (std::find(overlays.begin(), overlays.end(), hwnd) != overlays.end()) {
-    return false;
-  }
+  snapfilter::Candidate c;
+  c.visible = IsWindowVisible(hwnd) != FALSE;
+  c.iconic = IsIconic(hwnd) != FALSE;
+  c.cloaked = IsCloaked(hwnd);
+  c.is_own_overlay =
+      std::find(overlays.begin(), overlays.end(), hwnd) != overlays.end();
   const LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-  if (ex & WS_EX_TOOLWINDOW) return false;
-  // A layered window faded to (near-)zero alpha is invisible on screen but
-  // still enumerable and high in z -- it would swallow every snap beneath it.
-  // The macOS list's alpha > 0.05 filter, ported. GetLayeredWindowAttributes
-  // fails for per-pixel (UpdateLayeredWindow) surfaces; treat those as opaque.
-  if (ex & WS_EX_LAYERED) {
+  c.tool_window = (ex & WS_EX_TOOLWINDOW) != 0;
+  c.layered = (ex & WS_EX_LAYERED) != 0;
+  // GetLayeredWindowAttributes fails for per-pixel (UpdateLayeredWindow)
+  // surfaces; leaving has_layered_alpha false treats those as opaque.
+  if (c.layered) {
     BYTE alpha = 255;
     DWORD flags = 0;
     if (GetLayeredWindowAttributes(hwnd, nullptr, &alpha, &flags) &&
-        (flags & LWA_ALPHA) && alpha <= 12) {
-      return false;
+        (flags & LWA_ALPHA)) {
+      c.has_layered_alpha = true;
+      c.layered_alpha = alpha;
     }
   }
-  // The NVIDIA GeForce overlay: a full-screen always-on-top layer that sits
-  // above every app while drawing nothing most of the time. ShareX
-  // ignore-lists the same class (WindowsRectangleList.IgnoreClassNameList).
   wchar_t cls[64] = L"";
-  if (GetClassNameW(hwnd, cls, 64) && wcscmp(cls, L"CEF-OSC-WIDGET") == 0) {
-    return false;
-  }
+  GetClassNameW(hwnd, cls, 64);
+  c.class_name = cls;
   const RECT r = win_enum::VisibleWindowBounds(hwnd);
-  if (r.right - r.left < 40 || r.bottom - r.top < 40) return false;
+  c.width = r.right - r.left;
+  c.height = r.bottom - r.top;
+  if (!snapfilter::Passes(c)) return false;
   *bounds = r;
   return true;
 }

@@ -15,9 +15,12 @@
 #include <vector>
 
 #include "base64.h"
+#include "capture_key_rule.h"
 #include "hdr_util.h"
 #include "pixel_swizzle.h"
 #include "record_args.h"
+#include "record_clock.h"
+#include "snap_filter.h"
 #include "wav_parse.h"
 
 namespace {
@@ -245,6 +248,100 @@ void TestToneMapLut() {
   CHECK(rgba[0] == bgra[2] && rgba[2] == bgra[0] && rgba[1] == bgra[1]);
 }
 
+// --- QPC 100ns overflow-split ----------------------------------------------
+
+void TestQpc100nsFrom() {
+  g_case = "qpc-100ns";
+  // At 10 MHz the counter IS already 100ns units.
+  CHECK(Qpc100nsFrom(10000000, 10000000) == 10000000);
+  // 1 second at a 3.32 MHz timer = 1e7 100ns units, exactly.
+  CHECK(Qpc100nsFrom(3320000, 3320000) == 10000000);
+  // Half a second.
+  CHECK(Qpc100nsFrom(1660000, 3320000) == 5000000);
+  // A day's worth of ticks at 10 MHz must not overflow int64 (the split's job):
+  // counter * 1e7 would exceed int64 max, but the result stays exact.
+  const int64_t day = 86400LL * 10000000LL;  // 100ns units in a day
+  CHECK(Qpc100nsFrom(day, 10000000) == day * 1LL);
+  // Remainder is carried: (freq + half) ticks -> 1.5s.
+  CHECK(Qpc100nsFrom(4980000, 3320000) == 15000000);
+  // Degenerate freq falls back to 10 MHz (counter passes through).
+  CHECK(Qpc100nsFrom(1234567, 0) == 1234567);
+}
+
+// --- snappable-window filter -----------------------------------------------
+
+snapfilter::Candidate GoodWindow() {
+  snapfilter::Candidate c;
+  c.visible = true;
+  c.class_name = L"SomeAppClass";
+  c.width = 800;
+  c.height = 600;
+  return c;
+}
+
+void TestSnapFilter() {
+  g_case = "snap-filter";
+  CHECK(snapfilter::Passes(GoodWindow()));
+
+  auto invisible = GoodWindow();
+  invisible.visible = false;
+  CHECK(!snapfilter::Passes(invisible));
+
+  auto iconic = GoodWindow();
+  iconic.iconic = true;
+  CHECK(!snapfilter::Passes(iconic));
+
+  auto cloaked = GoodWindow();
+  cloaked.cloaked = true;
+  CHECK(!snapfilter::Passes(cloaked));
+
+  auto own = GoodWindow();
+  own.is_own_overlay = true;
+  CHECK(!snapfilter::Passes(own));
+
+  auto tool = GoodWindow();
+  tool.tool_window = true;
+  CHECK(!snapfilter::Passes(tool));
+
+  // Near-zero layered alpha is rejected; a higher alpha passes; a layered
+  // window with NO LWA_ALPHA (per-pixel) is treated as opaque.
+  auto faded = GoodWindow();
+  faded.layered = true;
+  faded.has_layered_alpha = true;
+  faded.layered_alpha = 8;
+  CHECK(!snapfilter::Passes(faded));
+  faded.layered_alpha = 13;
+  CHECK(snapfilter::Passes(faded));
+  auto perPixel = GoodWindow();
+  perPixel.layered = true;
+  perPixel.has_layered_alpha = false;
+  CHECK(snapfilter::Passes(perPixel));
+
+  auto nvidia = GoodWindow();
+  nvidia.class_name = L"CEF-OSC-WIDGET";
+  CHECK(!snapfilter::Passes(nvidia));
+
+  auto tiny = GoodWindow();
+  tiny.width = 39;
+  CHECK(!snapfilter::Passes(tiny));
+  tiny.width = 40;
+  tiny.height = 39;
+  CHECK(!snapfilter::Passes(tiny));
+}
+
+// --- hotkey capture commit rule --------------------------------------------
+
+void TestCaptureKeyRule() {
+  g_case = "capture-key";
+  // A normal key commits on down (not up), and not on auto-repeat.
+  CHECK(ShouldCommitCaptureKey('A', /*down*/ true, /*up*/ false, false));
+  CHECK(!ShouldCommitCaptureKey('A', false, true, false));
+  CHECK(!ShouldCommitCaptureKey('A', true, false, /*repeat*/ true));
+  // PrintScreen commits on UP only (it never delivers a key-down).
+  CHECK(ShouldCommitCaptureKey(VK_SNAPSHOT, false, true, false));
+  CHECK(!ShouldCommitCaptureKey(VK_SNAPSHOT, true, false, false));
+}
+
 }  // namespace
 
 int main() {
@@ -260,6 +357,8 @@ int main() {
       {"wav", TestParseWav},             {"parsespec-def", TestParseSpecDefaults},
       {"parsespec-full", TestParseSpecFull}, {"half", TestHalfFloatRoundTrip},
       {"ext-srgb", TestExtSrgb},         {"tonemap", TestToneMapLut},
+      {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
+      {"capture-key", TestCaptureKeyRule},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

@@ -2,6 +2,7 @@
 
 #include <flutter/standard_method_codec.h>
 
+#include "capture_key_rule.h"
 #include "channel_args.h"
 
 using flutter::EncodableMap;
@@ -110,12 +111,10 @@ bool HotkeyHost::HandleCaptureMessage(UINT message, WPARAM wparam,
     if (is_down) channel_->InvokeMethod("onCaptureCancel", nullptr);
     return true;
   }
-  // PrintScreen (VK_SNAPSHOT) is delivered as a key-UP only; every other key
-  // commits on key-DOWN. Skip auto-repeat (lparam bit 30) so a held key fires
-  // once.
+  // Commit rule (PrintScreen on up, others on down, no auto-repeat) lives in
+  // ShouldCommitCaptureKey so it is unit-testable; bit 30 = auto-repeat.
   const bool is_repeat = is_down && (lparam & (1LL << 30)) != 0;
-  const bool commit = (vk == VK_SNAPSHOT) ? is_up : (is_down && !is_repeat);
-  if (commit) EmitCaptureKey(vk);
+  if (ShouldCommitCaptureKey(vk, is_down, is_up, is_repeat)) EmitCaptureKey(vk);
   return true;  // consume every key while capturing
 }
 
