@@ -13,7 +13,9 @@ void main() {
       final path = await saveBytes(dir: dir, fileName: 'a.png', bytes: bytes);
       expect(File(path).existsSync(), isTrue);
       expect(await File(path).readAsBytes(), bytes);
-      expect(path.endsWith('/Screenshots/a.png'), isTrue);
+      // Separator-agnostic: the box (Windows) joins with backslashes.
+      expect(path.endsWith('Screenshots${Platform.pathSeparator}a.png'),
+          isTrue);
       await tmp.delete(recursive: true);
     },
   );
@@ -23,8 +25,8 @@ void main() {
     final bytes = Uint8List.fromList([9]);
     final p1 = await saveBytes(dir: dir, fileName: 'b.png', bytes: bytes);
     final p2 = await saveBytes(dir: dir, fileName: 'b.png', bytes: bytes);
-    expect(p1.endsWith('/b.png'), isTrue);
-    expect(p2.endsWith('/b_001.png'), isTrue);
+    expect(p1.endsWith('${Platform.pathSeparator}b.png'), isTrue);
+    expect(p2.endsWith('${Platform.pathSeparator}b_001.png'), isTrue);
     await tmp.delete(recursive: true);
   });
 }

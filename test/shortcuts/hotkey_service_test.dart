@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/shortcuts/hotkey_service.dart';
 import 'package:glimpr/shortcuts/hotkey_registrar.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
@@ -23,6 +24,15 @@ class _FakeRegistrar implements HotkeyRegistrar {
 }
 
 void main() {
+  // These suites assert the macOS bindings/behavior; pin the platform so
+  // the expectations hold when the suite runs on the Windows box too.
+  setUp(() {
+    debugPlatformOverride = TargetPlatform.macOS;
+  });
+  tearDown(() {
+    debugPlatformOverride = null;
+  });
+
   test('start registers the captureArea default', () async {
     final reg = _FakeRegistrar();
     final svc = HotkeyService(registrar: reg, bindings: {}, onAction: (_) {});

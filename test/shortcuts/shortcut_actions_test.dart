@@ -1,10 +1,20 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
 
 void main() {
+  // These suites assert the macOS bindings/behavior; pin the platform so
+  // the expectations hold when the suite runs on the Windows box too.
+  setUp(() {
+    debugPlatformOverride = TargetPlatform.macOS;
+  });
+  tearDown(() {
+    debugPlatformOverride = null;
+  });
+
   test('every editor ToolKind has a default binding', () {
     for (final t in ToolKind.values) {
       expect(kEditorToolActionKey.containsKey(t), isTrue, reason: '$t');

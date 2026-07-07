@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/shortcuts/shortcut_store.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
@@ -7,6 +8,15 @@ import 'package:flutter/services.dart';
 import '../support/fake_store.dart';
 
 void main() {
+  // These suites assert the macOS bindings/behavior; pin the platform so
+  // the expectations hold when the suite runs on the Windows box too.
+  setUp(() {
+    debugPlatformOverride = TargetPlatform.macOS;
+  });
+  tearDown(() {
+    debugPlatformOverride = null;
+  });
+
   test('returns defaults when unset', () async {
     final s = ShortcutStore(FakeStore());
     expect(

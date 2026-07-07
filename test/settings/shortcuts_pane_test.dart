@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
 import 'package:glimpr/shortcuts/widgets/hotkey_recorder_field.dart';
@@ -46,6 +47,15 @@ Future<void> _scrollToFooter(WidgetTester tester) async {
 }
 
 void main() {
+  // These suites assert the macOS bindings/behavior; pin the platform so
+  // the expectations hold when the suite runs on the Windows box too.
+  setUp(() {
+    debugPlatformOverride = TargetPlatform.macOS;
+  });
+  tearDown(() {
+    debugPlatformOverride = null;
+  });
+
   testWidgets('captureArea row shows the default ⌘⌥1 binding', (tester) async {
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);

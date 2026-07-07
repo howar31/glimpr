@@ -1,8 +1,18 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/output/flow.dart';
 
 void main() {
+  // These suites assert the macOS bindings/behavior; pin the platform so
+  // the expectations hold when the suite runs on the Windows box too.
+  setUp(() {
+    debugPlatformOverride = TargetPlatform.macOS;
+  });
+  tearDown(() {
+    debugPlatformOverride = null;
+  });
+
   final bytes = Uint8List.fromList([1, 2, 3]);
 
   group('parse / serialize', () {
