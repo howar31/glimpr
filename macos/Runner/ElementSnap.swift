@@ -109,7 +109,7 @@ enum ElementSnap {
   // NOTIFICATIONS need a full-screen backing container whose PID would shadow
   // every point; the cursor window sits at the cursor and shadowed every
   // query. Owner reverted high-layer support 2026-06-16.
-  private static let appLevels = ScreenCapturer.snappableWindowLevels
+  static let appLevels = ScreenCapturer.snappableWindowLevels
 
   /// The owning PID to AX-query for the frontmost snappable window (layers
   /// {0,3,8}, visible) under [pt]. Our OWN windows are NOT skipped past: if our

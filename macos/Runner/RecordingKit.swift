@@ -713,8 +713,8 @@ final class RecordingChrome {
   /// region (outside); when there is no room below on screen (e.g. a maximized
   /// window whose bottom hugs the screen edge) the strip tucks just INSIDE the
   /// region's bottom — it NEVER flips to the top. Final clamp keeps it on screen.
-  private static func stripOrigin(forRegion region: NSRect, on screen: NSScreen,
-                                  stripSize: NSSize) -> NSPoint {
+  static func stripOrigin(forRegion region: NSRect, on screen: NSScreen,
+                          stripSize: NSSize) -> NSPoint {
     let vf = screen.visibleFrame
     var x = region.midX - stripSize.width / 2
     var y = region.minY - stripSize.height - 8
@@ -761,7 +761,7 @@ final class RecordingChrome {
   }
 
   /// MM:SS for a whole-second count.
-  private func mmss(_ seconds: Int) -> String {
+  func mmss(_ seconds: Int) -> String {
     String(format: "%02d:%02d", seconds / 60, seconds % 60)
   }
 
@@ -1130,20 +1130,38 @@ final class AudioMixer {
   private func mixIn(left: UnsafePointer<Float>, right: UnsafePointer<Float>,
                      frames: Int, startFrame: Int64) {
     if baseFrame < 0 { baseFrame = startFrame }
-    let needEnd = startFrame + Int64(frames)
-    let curEnd = baseFrame + Int64(accL.count)
-    if needEnd > curEnd {
-      let add = Int(needEnd - curEnd)
-      accL.append(contentsOf: repeatElement(0, count: add))
-      accR.append(contentsOf: repeatElement(0, count: add))
-    }
     let offset = Int(startFrame - baseFrame)
-    guard offset >= 0 else { return } // a few ms before base: drop (sub-buffer)
-    for i in 0..<frames {
-      accL[offset + i] += left[i]
-      accR[offset + i] += right[i]
-    }
+    Self.accumulate(&accL, at: offset, from: left, frames: frames)
+    Self.accumulate(&accR, at: offset, from: right, frames: frames)
   }
+
+  /// Pure accumulate-with-offset (extracted from mixIn for unit tests): grow
+  /// [acc] with zeros so it covers offset+frames, then sum [frames] samples
+  /// in at [offset]. A negative offset (a sub-buffer from a few ms before the
+  /// accumulator's base) only pads — its samples are dropped.
+  static func accumulate(_ acc: inout [Float], at offset: Int,
+                         from src: UnsafePointer<Float>, frames: Int) {
+    let need = offset + frames
+    if need > acc.count {
+      acc.append(contentsOf: repeatElement(0, count: need - acc.count))
+    }
+    guard offset >= 0 else { return } // a few ms before base: drop (sub-buffer)
+    for i in 0..<frames { acc[offset + i] += src[i] }
+  }
+
+  /// Non-final flush watermark (extracted from flush for unit tests): the
+  /// lower of the two sources' high-water marks, but never more than [lag]
+  /// behind the higher — a silent source (SCStream may emit nothing during
+  /// pure silence) must not stall the flush.
+  static func flushWatermark(sys: Int64, mic: Int64, lag: Int64) -> Int64 {
+    var w = min(sys, mic)
+    let hi = max(sys, mic)
+    if hi - w > lag { w = hi - lag } // silence-gap safety
+    return w
+  }
+
+  /// Sum clamp to the legal [-1, 1] PCM range (extracted for unit tests).
+  static func clamp(_ v: Float) -> Float { min(max(v, -1), 1) }
 
   private func flush(final: Bool) {
     guard baseFrame >= 0, !accL.isEmpty else { return }
@@ -1151,10 +1169,7 @@ final class AudioMixer {
     if final {
       watermark = baseFrame + Int64(accL.count)
     } else {
-      var w = min(sysHWM, micHWM)
-      let hi = max(sysHWM, micHWM)
-      if hi - w > lagFrames { w = hi - lagFrames } // silence-gap safety
-      watermark = w
+      watermark = Self.flushWatermark(sys: sysHWM, mic: micHWM, lag: lagFrames)
     }
     let count = Int(watermark - baseFrame)
     guard count > 0, output.isReadyForMoreMediaData,
@@ -1163,8 +1178,8 @@ final class AudioMixer {
           let ch = pcm.floatChannelData else { return }
     pcm.frameLength = AVAudioFrameCount(count)
     for i in 0..<count {
-      ch[0][i] = min(max(accL[i], -1), 1) // sum, clamped to [-1, 1]
-      ch[1][i] = min(max(accR[i], -1), 1)
+      ch[0][i] = Self.clamp(accL[i]) // sum, clamped to [-1, 1]
+      ch[1][i] = Self.clamp(accR[i])
     }
     let pts = CMTime(value: baseFrame, timescale: 48_000)
     if let out = Self.makeSampleBuffer(pcm, pts: pts) {
@@ -2118,12 +2133,12 @@ final class RecordingController: NSObject, SCStreamDelegate {
     perfSampler = nil
   }
 
-  private static func even(_ v: Int) -> Int { max(2, v - (v % 2)) }
+  static func even(_ v: Int) -> Int { max(2, v - (v % 2)) }
 
   /// Downscale [cfg]'s width/height so the longer side is ≤ [maxLong] (even
   /// dimensions kept). [maxLong] == 0 means no cap. SCStreamConfiguration is a
   /// class, so this mutates the passed instance.
-  private static func capLongSide(_ cfg: SCStreamConfiguration, to maxLong: Int) {
+  static func capLongSide(_ cfg: SCStreamConfiguration, to maxLong: Int) {
     guard maxLong > 0 else { return }
     let long = max(cfg.width, cfg.height)
     guard long > maxLong else { return }
@@ -2314,13 +2329,11 @@ final class RecordingChannel {
     return c
   }
 
+  /// Pure mapping of the channel `start` args onto a recording Spec (defaults
+  /// applied); nil when the required outputPath is missing/empty. Extracted
+  /// from start() so the parsing is unit-testable without starting a recording.
   @available(macOS 15.0, *)
-  private func start(args: [String: Any]) {
-    guard let controller = current(), !controller.isRecording else {
-      channel.invokeMethod(
-        "onRecordFailed", arguments: ["message": "already recording"])
-      return
-    }
+  static func parseSpec(args: [String: Any]) -> RecordingController.Spec? {
     let mode = (args["mode"] as? String) ?? "display"
     let fps = (args["fps"] as? Int) ?? 30
     let hevc = (args["hevc"] as? Bool) ?? false
@@ -2337,11 +2350,7 @@ final class RecordingChannel {
     let maxLongSide = (args["maxLongSide"] as? Int) ?? 0
     let gifFps = (args["gifFps"] as? Int) ?? 15
     let outputPath = (args["outputPath"] as? String) ?? ""
-    guard !outputPath.isEmpty else {
-      channel.invokeMethod(
-        "onRecordFailed", arguments: ["message": "missing outputPath"])
-      return
-    }
+    guard !outputPath.isEmpty else { return nil }
 
     func specRect() -> CGRect? {
       guard let x = args["x"] as? Double, let y = args["y"] as? Double,
@@ -2355,23 +2364,32 @@ final class RecordingChannel {
     let windowID = (args["windowId"] as? NSNumber).map {
       CGWindowID($0.uint32Value)
     }
+    return RecordingController.Spec(
+      mode: mode, displayID: displayID, rect: specRect(), windowID: windowID,
+      fps: fps, hevc: hevc, hdr: hdr, gif: gif, showsCursor: showsCursor,
+      showScrim: showScrim,
+      systemAudio: systemAudio, microphone: microphone,
+      mergeAudio: mergeAudio,
+      maxDuration: maxDuration, countdown: countdown,
+      videoQuality: videoQuality, maxLongSide: maxLongSide, gifFps: gifFps,
+      outputPath: outputPath)
+  }
 
-    func begin(rect: CGRect?, display: CGDirectDisplayID?) {
-      let spec = RecordingController.Spec(
-        mode: mode, displayID: display, rect: rect, windowID: windowID,
-        fps: fps, hevc: hevc, hdr: hdr, gif: gif, showsCursor: showsCursor,
-        showScrim: showScrim,
-        systemAudio: systemAudio, microphone: microphone,
-        mergeAudio: mergeAudio,
-        maxDuration: maxDuration, countdown: countdown,
-        videoQuality: videoQuality, maxLongSide: maxLongSide, gifFps: gifFps,
-        outputPath: outputPath)
-      Task { await controller.start(spec) }
+  @available(macOS 15.0, *)
+  private func start(args: [String: Any]) {
+    guard let controller = current(), !controller.isRecording else {
+      channel.invokeMethod(
+        "onRecordFailed", arguments: ["message": "already recording"])
+      return
     }
-
     // Region selection happens in the Flutter overlay's live-select session
     // (owner mandate: capture/recording share ONE selection UI); every mode
     // arrives here fully resolved.
-    begin(rect: specRect(), display: displayID)
+    guard let spec = Self.parseSpec(args: args) else {
+      channel.invokeMethod(
+        "onRecordFailed", arguments: ["message": "missing outputPath"])
+      return
+    }
+    Task { await controller.start(spec) }
   }
 }

@@ -1412,7 +1412,7 @@ final class PinPanel: NSPanel {
     setZoom(min(3, max(0.25, zoom * factor)))
   }
 
-  private func setZoom(_ z: CGFloat) {
+  func setZoom(_ z: CGFloat) {
     zoom = z
     let m = Self.margin
     let s = NSSize(
@@ -1496,15 +1496,21 @@ enum PerfLog {
 /// read once at launch. The language applies on restart, so a static snapshot
 /// is correct by design. Only English and Traditional Chinese exist.
 enum L {
-  static let zh: Bool = {
-    switch UserDefaults.standard.string(forKey: "app_language") {
+  /// Pure resolution of the stored preference ("system"/nil falls back to
+  /// [systemLanguages]). Extracted from the `zh` initializer so the mapping
+  /// is unit-testable (the cached `zh` resolves only once per launch).
+  static func resolveZh(pref: String?, systemLanguages: [String]) -> Bool {
+    switch pref {
     case "zh": return true
     case "en": return false
     default:
       // System: any Chinese UI language resolves to Traditional Chinese,
       // mirroring the Dart-side resolveAppLocale.
-      return Locale.preferredLanguages.first?.hasPrefix("zh") == true
+      return systemLanguages.first?.hasPrefix("zh") == true
     }
-  }()
+  }
+  static let zh: Bool = resolveZh(
+    pref: UserDefaults.standard.string(forKey: "app_language"),
+    systemLanguages: Locale.preferredLanguages)
   static func s(_ en: String, _ zhHant: String) -> String { zh ? zhHant : en }
 }
