@@ -53,7 +53,10 @@ Write-Host "--- launching worker ---"
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $Exe
-foreach ($a in $argList) { [void]$psi.ArgumentList.Add($a) }
+# NB: ProcessStartInfo.ArgumentList is null under Windows PowerShell 5.1
+# (.NET Framework), so build a single Arguments string. Every arg here is
+# space-free (flags + base64 output path), so a plain space-join is safe.
+$psi.Arguments = ($argList -join ' ')
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardInput = $true
 $psi.UseShellExecute = $false
