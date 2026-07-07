@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "wav_parse.h"
+
 namespace {
 
 using flutter::EncodableMap;
@@ -19,38 +21,7 @@ using flutter::EncodableValue;
 // Parse a RIFF/WAVE image: locate the 'fmt ' and 'data' chunks. Returns false
 // if it is not a usable PCM WAV. `fmt` receives the format; `pcm`/`pcm_len` the
 // sample bytes (pointing into the caller's buffer, which must outlive playback).
-bool ParseWav(const uint8_t* d, size_t n, WAVEFORMATEX& fmt, const uint8_t*& pcm,
-              uint32_t& pcm_len) {
-  if (n < 12 || std::memcmp(d, "RIFF", 4) != 0 ||
-      std::memcmp(d + 8, "WAVE", 4) != 0) {
-    return false;
-  }
-  bool have_fmt = false, have_data = false;
-  size_t pos = 12;
-  while (pos + 8 <= n) {
-    char id[4];
-    std::memcpy(id, d + pos, 4);
-    uint32_t sz = 0;
-    std::memcpy(&sz, d + pos + 4, 4);
-    const size_t body = pos + 8;
-    if (body + sz > n) break;
-    if (std::memcmp(id, "fmt ", 4) == 0 && sz >= 16) {
-      std::memset(&fmt, 0, sizeof(fmt));
-      const size_t copy = sz < sizeof(WAVEFORMATEX) ? sz : sizeof(WAVEFORMATEX);
-      std::memcpy(&fmt, d + body, copy);
-      // A 16-byte PCM header carries no cbSize field; force it to 0.
-      if (sz < sizeof(WAVEFORMATEX)) fmt.cbSize = 0;
-      have_fmt = true;
-    } else if (std::memcmp(id, "data", 4) == 0) {
-      pcm = d + body;
-      pcm_len = sz;
-      have_data = true;
-    }
-    pos = body + sz + (sz & 1);  // chunks are word-aligned
-    if (have_fmt && have_data) break;
-  }
-  return have_fmt && have_data && pcm_len > 0;
-}
+using wavfmt::ParseWav;
 
 // A playing cue: the XAudio2 source voice plus the PCM bytes it streams from
 // (XAudio2 references this memory until playback ends, so it is kept alive

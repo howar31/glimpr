@@ -52,6 +52,14 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Off-by-default native unit tests (see test/CMakeLists.txt). The test target is
+# EXCLUDE_FROM_ALL, so `flutter build windows` (which builds ALL) never compiles
+# it; build it explicitly with the "glimpr_tests" target. Guarded so a tree
+# without the test dir still configures.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")
+  add_subdirectory("test")
+endif()
+
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.

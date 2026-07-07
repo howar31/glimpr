@@ -6,38 +6,9 @@
 #include <cstring>
 #include <vector>
 
-namespace {
+#include "base64.h"
 
-// Standard base64 encode for the output path argv token (so a path with spaces
-// or non-ASCII needs no command-line quoting; the worker base64-decodes it).
-std::string B64Encode(const std::string& in) {
-  static const char* T =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  std::string out;
-  size_t i = 0;
-  while (i + 3 <= in.size()) {
-    uint32_t n = (uint32_t)(uint8_t)in[i] << 16 |
-                 (uint32_t)(uint8_t)in[i + 1] << 8 | (uint8_t)in[i + 2];
-    out += T[(n >> 18) & 63];
-    out += T[(n >> 12) & 63];
-    out += T[(n >> 6) & 63];
-    out += T[n & 63];
-    i += 3;
-  }
-  if (i + 1 == in.size()) {
-    uint32_t n = (uint32_t)(uint8_t)in[i] << 16;
-    out += T[(n >> 18) & 63];
-    out += T[(n >> 12) & 63];
-    out += "==";
-  } else if (i + 2 == in.size()) {
-    uint32_t n = (uint32_t)(uint8_t)in[i] << 16 | (uint32_t)(uint8_t)in[i + 1] << 8;
-    out += T[(n >> 18) & 63];
-    out += T[(n >> 12) & 63];
-    out += T[(n >> 6) & 63];
-    out += '=';
-  }
-  return out;
-}
+namespace {
 
 std::wstring Ascii(const std::string& s) {
   std::wstring w;
@@ -56,7 +27,7 @@ std::wstring BuildCommandLine(const Recorder::Spec& spec) {
   cl += exe;
   cl += L"\" --record-worker";
   cl += L" --mode=" + mode;
-  cl += L" --output-b64=" + Ascii(B64Encode(spec.output_path));
+  cl += L" --output-b64=" + Ascii(b64::Encode(spec.output_path));
   cl += L" --display=" + std::to_wstring(spec.display_id);
   cl += L" --window=" + std::to_wstring(spec.window_id);
   cl += L" --x=" + std::to_wstring(spec.x);

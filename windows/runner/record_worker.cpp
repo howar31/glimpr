@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 
+#include "record_args.h"
 #include "recorder.h"
 
 namespace {
@@ -33,79 +34,7 @@ void WriteLine(const std::string& s) {
             nullptr);
 }
 
-// Standard base64 decode (the output path arrives base64'd to avoid argv
-// quoting); returns the decoded UTF-8 bytes.
-std::string B64Decode(const std::string& in) {
-  auto val = [](char c) -> int {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-  };
-  std::string out;
-  int buf = 0, bits = 0;
-  for (char c : in) {
-    if (c == '=') break;
-    int v = val(c);
-    if (v < 0) continue;
-    buf = (buf << 6) | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out += static_cast<char>((buf >> bits) & 0xFF);
-    }
-  }
-  return out;
-}
-
-// The value of a "--key=value" argv token (ASCII; the output path value is
-// base64 so it is ASCII too). Empty if absent.
-std::string ArgVal(const std::vector<std::wstring>& args, const wchar_t* key) {
-  const std::wstring k = key;
-  for (const auto& a : args) {
-    if (a.rfind(k, 0) == 0) {
-      const std::wstring v = a.substr(k.size());
-      std::string narrow;  // values are ASCII (numbers / base64 / keywords)
-      narrow.reserve(v.size());
-      for (wchar_t c : v) narrow.push_back(static_cast<char>(c));
-      return narrow;
-    }
-  }
-  return "";
-}
-
-Recorder::Spec ParseSpec(const std::vector<std::wstring>& args) {
-  Recorder::Spec s;
-  const std::string mode = ArgVal(args, L"--mode=");
-  s.mode = mode == "window"   ? Recorder::Mode::kWindow
-           : mode == "region" ? Recorder::Mode::kRegion
-                              : Recorder::Mode::kDisplay;
-  s.output_path = B64Decode(ArgVal(args, L"--output-b64="));
-  s.display_id = _atoi64(ArgVal(args, L"--display=").c_str());
-  s.window_id = _atoi64(ArgVal(args, L"--window=").c_str());
-  s.x = atof(ArgVal(args, L"--x=").c_str());
-  s.y = atof(ArgVal(args, L"--y=").c_str());
-  s.w = atof(ArgVal(args, L"--w=").c_str());
-  s.h = atof(ArgVal(args, L"--h=").c_str());
-  s.fps = atoi(ArgVal(args, L"--fps=").c_str());
-  if (s.fps <= 0) s.fps = 30;
-  s.hevc = ArgVal(args, L"--hevc=") == "1";
-  s.hdr = ArgVal(args, L"--hdr=") == "1";
-  s.gif = ArgVal(args, L"--gif=") == "1";
-  s.gif_fps = atoi(ArgVal(args, L"--giffps=").c_str());
-  if (s.gif_fps <= 0) s.gif_fps = 15;
-  s.show_cursor = ArgVal(args, L"--cursor=") != "0";
-  const std::string q = ArgVal(args, L"--quality=");
-  s.video_quality = q.empty() ? "high" : q;
-  s.max_long_side = atoi(ArgVal(args, L"--maxlong=").c_str());
-  s.max_duration_sec = atoi(ArgVal(args, L"--maxdur=").c_str());
-  s.system_audio = ArgVal(args, L"--sysaudio=") == "1";
-  s.microphone = ArgVal(args, L"--mic=") == "1";
-  s.merge_audio = ArgVal(args, L"--merge=") == "1";
-  return s;
-}
+using recordargs::ParseSpec;
 
 LRESULT CALLBACK WorkerProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
   if (msg == WM_WORKER_RECORD) {

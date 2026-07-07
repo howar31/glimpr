@@ -11,6 +11,7 @@
 #include "deco_args.h"
 #include "decoration.h"
 #include "image_codec.h"
+#include "pixel_swizzle.h"
 #include "wgc_capturer.h"  // CaptureFrame
 
 namespace {
@@ -18,16 +19,7 @@ namespace {
 using flutter::EncodableMap;
 using flutter::EncodableValue;
 using namespace chanarg;
-
-// The editor composites in RGBA8888 (dart:ui rawRgba); the native codec +
-// decoration take BGRA. Swap R<->B (G, A unchanged); alpha sense is preserved.
-std::vector<uint8_t> RgbaToBgra(const std::vector<uint8_t>& rgba) {
-  std::vector<uint8_t> bgra = rgba;
-  for (size_t i = 0; i + 3 < bgra.size(); i += 4) {
-    std::swap(bgra[i], bgra[i + 2]);
-  }
-  return bgra;
-}
+using pixfmt::RgbaToBgra;
 
 }  // namespace
 
