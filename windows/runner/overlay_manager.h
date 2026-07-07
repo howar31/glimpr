@@ -239,6 +239,13 @@ class OverlayManager {
   UINT_PTR present_watchdog_ = 0;  // one-shot stuck-present release (see above)
 
   UINT_PTR teardown_timer_ = 0;  // one-shot post-dismiss engine teardown + re-warm
+  // An annotated export runs async on an overlay engine AFTER the overlay hides;
+  // a large capture's compose+encode+save+copy can outlast the 250ms teardown.
+  // Destroying the engine mid-export aborts the save/clipboard, so the export
+  // holds this flag and the teardown defers until it clears (bounded so a wedged
+  // export can never leave the WinUI3-island repair permanently undone).
+  bool export_busy_ = false;
+  int teardown_defer_count_ = 0;
 
   static OverlayManager* instance_;  // single owner; routes the timer callback
 };

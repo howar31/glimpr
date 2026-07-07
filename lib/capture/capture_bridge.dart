@@ -253,6 +253,20 @@ class CaptureBridge {
   /// Hide all overlay windows and release buffers (Esc-cancel or capture-fire).
   Future<void> dismissOverlay() => _channel.invokeMethod('dismissOverlay');
 
+  /// Bracket the overlay's async annotated export (busy=true at start, false in
+  /// the finally) so the Windows post-dismiss engine teardown WAITS for it — a
+  /// large capture's compose/encode/save/copy can outlast the 250ms teardown,
+  /// which would otherwise destroy the exporting engine mid-save (no file, stale
+  /// clipboard, no completion chime). No-op on macOS (overlay engines stay warm)
+  /// and in tests (the handler is absent).
+  Future<void> setOverlayExportBusy(bool busy) async {
+    try {
+      await _channel.invokeMethod('setExportBusy', {'busy': busy});
+    } catch (_) {
+      // Windows-only race; a no-op elsewhere is correct.
+    }
+  }
+
   /// Stop the record-select loupe's live-pixel SCStreams WITHOUT hiding the
   /// overlay window — used when a record-select picker is torn down over a
   /// session beneath (which keeps the window up, so dismissOverlay is skipped).

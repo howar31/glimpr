@@ -1148,6 +1148,10 @@ class _OverlayAppState extends State<OverlayApp> {
       _dismiss();
       return;
     }
+    // Hold the Windows overlay-engine teardown until this async export finishes:
+    // a large capture's compose/encode/save/copy can outlast the 250ms teardown,
+    // which would otherwise destroy this engine mid-save. Cleared in the finally.
+    _bridge.setOverlayExportBusy(true);
     // Snapshot the (immutable) inputs, then HIDE the overlay IMMEDIATELY so the
     // user isn't staring at the frozen frame while we composite / encode /
     // deliver. This export takes over the frozen image's lifecycle (disposes it
@@ -1299,6 +1303,7 @@ class _OverlayAppState extends State<OverlayApp> {
     } catch (e) {
       _bridge.showError(appL10n.overlayCaptureFailedError('$e'));
     } finally {
+      _bridge.setOverlayExportBusy(false); // release the teardown hold
       CaptureBridge.setCaptureProcessing(false); // menu-bar pulse: delivered
       windowMask?.dispose();
       cursorImg?.dispose();

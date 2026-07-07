@@ -573,6 +573,7 @@ void OverlayManager::DismissAll() {
   // via a one-shot timer so the teardown runs OUTSIDE this dismissOverlay channel
   // handler (whose engine it would otherwise destroy mid-call). See TeardownUnits.
   if (teardown_timer_) KillTimer(nullptr, teardown_timer_);
+  teardown_defer_count_ = 0;
   teardown_timer_ = SetTimer(nullptr, 0, 250, &OverlayManager::TeardownProc);
 }
 
@@ -582,6 +583,16 @@ void OverlayManager::TeardownUnits() {
     teardown_timer_ = 0;
   }
   if (presenting_) return;  // a new capture started in the gap -- leave it intact
+  // A large annotated export is still composing/saving/copying on an overlay
+  // engine; destroying it now would abort the save + clipboard (the bug where a
+  // big region saved nothing and left a stale clipboard). Defer, bounded to
+  // ~10s so a wedged export still eventually re-warms (repairs WinUI3 islands).
+  if (export_busy_ && teardown_defer_count_ < 40) {
+    ++teardown_defer_count_;
+    teardown_timer_ = SetTimer(nullptr, 0, 250, &OverlayManager::TeardownProc);
+    return;
+  }
+  teardown_defer_count_ = 0;
   perf::Mark("teardownBegin");
   hdr_bases_.clear();  // the annotated export consumed (or forfeited) them
   units_.clear();  // ~Unit -> ~OverlayWindow destroys each Flutter engine + window;
@@ -890,6 +901,13 @@ void OverlayManager::HandleOverlayCapture(
   }
   if (method == "dismissOverlay") {
     DismissAll();
+    result->Success();
+    return;
+  }
+  // The annotated export brackets its async compose/save/copy with busy=true..
+  // false so the post-dismiss engine teardown waits for it (see TeardownUnits).
+  if (method == "setExportBusy") {
+    export_busy_ = GetBool(args, "busy", false);
     result->Success();
     return;
   }
