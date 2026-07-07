@@ -4,9 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/editor/tool_meta.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
+import 'package:glimpr/overlay/style_popovers.dart';
 import 'package:glimpr/overlay/toolbar.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
 import 'package:glimpr/shortcuts/shortcut_actions.dart';
+import 'package:glimpr/theme/glimpr_theme.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/localized_app.dart';
 
@@ -37,6 +41,76 @@ Future<EditorController> _pumpToolbar(
       ),
     ),
   );
+  return c;
+}
+
+// Pumps the toolbar on a WIDE surface (so a tool's whole option row is on-screen
+// and its pills are hittable) with [tool] selected.
+Future<EditorController> _pumpWide(WidgetTester tester, ToolKind tool) async {
+  tester.view.physicalSize = const Size(1800, 700);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final c = EditorController();
+  addTearDown(c.dispose);
+  c.selectTool(tool);
+  await tester.pumpWidget(
+    localizedApp(
+      Scaffold(
+        body: Center(
+          child: EditorToolbar(
+            controller: c,
+            onMove: (_) {},
+            onPtEditingDone: () {},
+            editorBindings: kDefaultBindings,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  return c;
+}
+
+// A RecordOverrides seeded for a normal (non-GIF) H.264 take, unless [gif].
+RecordOverrides _overrides({bool gif = false}) => RecordOverrides(
+      showCursor: true,
+      systemAudio: false,
+      microphone: false,
+      hevc: false,
+      hdr: false,
+      gif: gif,
+      fps: 30,
+      gifFps: 15,
+      maxDuration: 0,
+    );
+
+// Pumps the record live-select toolbar variant (region-only + record overrides).
+Future<EditorController> _pumpRecord(
+    WidgetTester tester, RecordOverrides o) async {
+  tester.view.physicalSize = const Size(1800, 700);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final c = EditorController();
+  addTearDown(c.dispose);
+  await tester.pumpWidget(
+    localizedApp(
+      Scaffold(
+        body: Center(
+          child: EditorToolbar(
+            controller: c,
+            onMove: (_) {},
+            onPtEditingDone: () {},
+            editorBindings: kDefaultBindings,
+            recordMode: true,
+            recordOverrides: o,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
   return c;
 }
 
@@ -239,5 +313,142 @@ void main() {
       expect(toolLabel(l10n, kind, pinMode: true), toolLabel(l10n, kind));
       expect(toolLabel(l10n, kind, recordMode: true), toolLabel(l10n, kind));
     }
+  });
+
+  // ---- HUD toggles -------------------------------------------------------
+
+  testWidgets(
+      'HUD toggles are accent when on and greyed + inert for tools they '
+      'do not apply to', (tester) async {
+    final c = await _pumpToolbar(tester, kDefaultBindings);
+    final crosshair = find.widgetWithIcon(IconButton, Icons.gps_fixed);
+    final loupe = find.widgetWithIcon(IconButton, Icons.search);
+    // Default tool is Crop: both HUD elements apply and default ON -> accent.
+    expect(tester.widget<IconButton>(crosshair).color, GlimprTokens.accent);
+    expect(tester.widget<IconButton>(loupe).color, GlimprTokens.accent);
+    expect(tester.widget<IconButton>(crosshair).onPressed, isNotNull);
+
+    // Text tool: neither crosshair nor loupe applies -> the buttons grey out
+    // (opacity 0.35) and go inert (onPressed null).
+    c.selectTool(ToolKind.text);
+    await tester.pump();
+    expect(tester.widget<IconButton>(crosshair).onPressed, isNull);
+    final op = tester.widget<Opacity>(
+      find.ancestor(of: crosshair, matching: find.byType(Opacity)).first,
+    );
+    expect(op.opacity, 0.35);
+  });
+
+  testWidgets('tapping a HUD toggle flips the controller state', (tester) async {
+    final c = await _pumpToolbar(tester, kDefaultBindings);
+    expect(c.crosshairOn.value, isTrue);
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.gps_fixed));
+    await tester.pump();
+    expect(c.crosshairOn.value, isFalse);
+    // Now greyed-off (still applies, so still enabled) shows the fg colour, not
+    // accent.
+    expect(
+      tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.gps_fixed))
+          .color,
+      isNot(GlimprTokens.accent),
+    );
+  });
+
+  // ---- style-popover openers --------------------------------------------
+
+  testWidgets('the line-style pill opens the line-style popover',
+      (tester) async {
+    await _pumpWide(tester, ToolKind.line);
+    expect(find.byType(LineStylePickerPopover), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('line-style-picker')));
+    await tester.pump();
+    expect(find.byType(LineStylePickerPopover), findsOneWidget);
+  });
+
+  testWidgets('the texture pill opens the highlighter-texture popover',
+      (tester) async {
+    await _pumpWide(tester, ToolKind.highlighter);
+    await tester.tap(find.byKey(const ValueKey('texture-picker')));
+    await tester.pump();
+    expect(find.byType(TexturePickerPopover), findsOneWidget);
+  });
+
+  testWidgets('the colour swatch opens the colour picker popover',
+      (tester) async {
+    // The colour popover loads recent colours from Settings.instance — back it
+    // with an in-memory prefs platform.
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+    await _pumpWide(tester, ToolKind.rectangle);
+    await tester.tap(find.byTooltip('Colour'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ColorPickerPopover), findsOneWidget);
+  });
+
+  // ---- record-mode variant ----------------------------------------------
+
+  testWidgets(
+      'record mode shows the region selector + one-shot overrides, hides the '
+      'annotation tools and HUD toggles', (tester) async {
+    final o = _overrides();
+    addTearDown(o.dispose);
+    await _pumpRecord(tester, o);
+
+    // The crop slot IS the record region selector; annotation tools are hidden.
+    expect(find.byTooltip('Record'), findsOneWidget);
+    expect(find.byTooltip('Rectangle'), findsNothing);
+    // The three one-shot override toggles (cursor / system audio / mic).
+    expect(find.byIcon(Icons.mouse), findsOneWidget);
+    expect(find.byIcon(Icons.volume_up), findsOneWidget);
+    expect(find.byIcon(Icons.mic), findsOneWidget);
+    // HUD toggles do not show in record mode.
+    expect(find.byIcon(Icons.gps_fixed), findsNothing);
+    expect(find.byIcon(Icons.search), findsNothing);
+    // The option row hosts the per-take codec + frame-rate pickers.
+    expect(find.byKey(const ValueKey('record-format-picker')), findsOneWidget);
+    expect(find.byKey(const ValueKey('record-fps-picker')), findsOneWidget);
+    // The record caption names the mode.
+    expect(find.text('Record mode: the selection starts a recording'),
+        findsOneWidget);
+  });
+
+  testWidgets('a record override toggle mutates only that override notifier',
+      (tester) async {
+    final o = _overrides();
+    addTearDown(o.dispose);
+    await _pumpRecord(tester, o);
+    expect(o.showCursor.value, isTrue);
+    await tester.tap(find.byIcon(Icons.mouse));
+    await tester.pump();
+    expect(o.showCursor.value, isFalse);
+  });
+
+  testWidgets('record mode: GIF greys out the audio override toggles',
+      (tester) async {
+    final o = _overrides(gif: true);
+    addTearDown(o.dispose);
+    await _pumpRecord(tester, o);
+    final sysBtn = find.widgetWithIcon(IconButton, Icons.volume_up);
+    expect(tester.widget<IconButton>(sysBtn).onPressed, isNull);
+    final op = tester.widget<Opacity>(
+      find.ancestor(of: sysBtn, matching: find.byType(Opacity)).first,
+    );
+    expect(op.opacity, 0.35);
+  });
+
+  testWidgets('the record codec pill opens the codec popover and applies a pick',
+      (tester) async {
+    final o = _overrides();
+    addTearDown(o.dispose);
+    await _pumpRecord(tester, o);
+    await tester.tap(find.byKey(const ValueKey('record-format-picker')));
+    await tester.pump();
+    expect(find.byType(ChoiceListPopover<String>), findsOneWidget);
+    // Pick HEVC (HDR): it rides the HEVC codec with the HDR flag on top.
+    await tester.tap(find.text('HEVC (HDR)'));
+    await tester.pump();
+    expect(o.hevc.value, isTrue);
+    expect(o.hdr.value, isTrue);
+    expect(o.gif.value, isFalse);
   });
 }
