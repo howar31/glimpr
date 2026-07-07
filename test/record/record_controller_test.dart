@@ -10,6 +10,20 @@ import 'package:glimpr/settings/settings.dart';
 
 import '../support/fake_store.dart';
 
+// Wait until [cond] holds (or a real-time timeout). The overlay record-select
+// relay is a fire-and-forget void callback whose async chain touches the real
+// filesystem (naming.dir.create); under the full suite's multi-isolate load
+// that I/O can lag. A fixed pumpEventQueue count spins through microtasks
+// WITHOUT waiting for the real I/O to complete (nothing to drain), so poll on
+// real wall-clock instead — this reliably yields time for the I/O.
+Future<void> pumpUntil(bool Function() cond,
+    {Duration timeout = const Duration(seconds: 10)}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!cond() && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 /// Captures start/stop calls and exposes the registered event callbacks so
 /// tests can drive the native lifecycle.
 class _FakeBridge extends RecordBridge {
@@ -338,7 +352,7 @@ void main() {
       bridge.selection({
         'displayId': 1, 'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
       });
-      await pumpEventQueue(times: 200); // -> start() issued; phase starting (countdown)
+      await pumpUntil(() => rc.phase == RecordPhase.starting);
       expect(rc.phase, RecordPhase.starting);
       await rc.toggle(kRecordModeRegion); // hotkey during countdown = stop
       expect(bridge.stops, 1);
@@ -354,7 +368,7 @@ void main() {
         'displayId': 2,
         'x': 5.0, 'y': 6.0, 'w': 100.0, 'h': 80.0,
       });
-      await pumpEventQueue(times: 200);
+      await pumpUntil(() => bridge.starts.isNotEmpty);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeRegion);
       expect(s['displayId'], 2);
@@ -375,7 +389,7 @@ void main() {
         'title': 'Safari',
         'app': 'Safari',
       });
-      await pumpEventQueue(times: 200);
+      await pumpUntil(() => bridge.starts.isNotEmpty);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeRegion);
       expect(s['rect'], const Rect.fromLTWH(10, 20, 300, 200));
@@ -387,7 +401,7 @@ void main() {
       final rc = build();
       await rc.toggle(kRecordModeRegion);
       bridge.selection({'displayId': 3});
-      await pumpEventQueue(times: 200);
+      await pumpUntil(() => bridge.starts.isNotEmpty);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeDisplay);
       expect(s['displayId'], 3);
@@ -409,7 +423,7 @@ void main() {
         'hevc': true,
         'fps': 60,
       });
-      await pumpEventQueue(times: 200);
+      await pumpUntil(() => bridge.starts.isNotEmpty);
       final s = bridge.starts.single;
       expect(s['showsCursor'], isFalse); // override wins over the setting
       expect(s['systemAudio'], isTrue);
@@ -467,7 +481,7 @@ void main() {
         'displayId': 1, 'x': 0.0, 'y': 0.0, 'w': 100.0, 'h': 100.0,
         'maxDuration': 5,
       });
-      await pumpEventQueue(times: 200);
+      await pumpUntil(() => bridge.starts.isNotEmpty);
       expect(bridge.starts.single['maxDuration'], 5);
     });
 
