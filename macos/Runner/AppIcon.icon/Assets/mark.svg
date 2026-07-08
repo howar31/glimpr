@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Glimpr Viewfinder mark layer for the macOS 26 Icon Composer document.
+     Full 1024 canvas, mark centered at the same proportion as the legacy
+     tile icon (icon-dark.svg) scaled from its 824 body to the full canvas
+     (the Liquid Glass tile mask/material/shadow come from the SYSTEM; the
+     layer stays flat per the platform guidance). Brand gradient baked in;
+     the system's dark/tinted appearances recolor as needed. -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- userSpaceOnUse resolves in the mark group's LOCAL space (see the
+         icon-dark.svg note): these are the mark's own 13.45..82.55 coords. -->
+    <linearGradient id="mark" gradientUnits="userSpaceOnUse"
+        x1="13.45" y1="13.45" x2="82.55" y2="82.55">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.52" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(215.0 215.0) scale(6.1875)"
+      fill="none" stroke="url(#mark)" stroke-width="8.5"
+      stroke-linecap="round" stroke-linejoin="round">
+    <path d="M36 18 H23 A5 5 0 0 0 18 23 V36"/>
+    <path d="M60 18 H73 A5 5 0 0 1 78 23 V36"/>
+    <path d="M78 60 V73 A5 5 0 0 1 73 78 H60"/>
+    <path d="M18 60 V73 A5 5 0 0 0 23 78 H36"/>
+  </g>
+  <path transform="translate(215.0 215.0) scale(6.1875)" fill="url(#mark)"
+      d="M48 31 C49.7 43, 53 46.3, 65 48 C53 49.7, 49.7 53, 48 65
+         C46.3 53, 43 49.7, 31 48 C43 46.3, 46.3 43, 48 31 Z"/>
+</svg>
