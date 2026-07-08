@@ -47,8 +47,8 @@ no-op stub package by design; see [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-If Glimpr is useful to you, you can support development on
-[Ko-fi](https://ko-fi.com/howar31).
+If Glimpr is useful to you, you can support development:
+[☕ Ko-fi](https://ko-fi.com/howar31) · [💸 PayPal](https://donate.howar31.com)
 
 ## License
 
