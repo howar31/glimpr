@@ -32,7 +32,7 @@ struct MonitorHdrInfo {
 MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor);
 
 // A Dart bool setting, read straight from the shared_preferences JSON
-// (%APPDATA%\com.example\glimpr\shared_preferences.json) -- for native code
+// (%APPDATA%\Howar31\Glimpr\shared_preferences.json) -- for native code
 // that must decide before any Dart runs (HDR-base retention) or without a
 // channel (the pin windows). [dflt] when the file/key is missing.
 bool ReadPrefsBool(const char* key_name, bool dflt);

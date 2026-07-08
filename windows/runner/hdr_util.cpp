@@ -179,7 +179,7 @@ bool ReadPrefsBool(const char* key_name, bool dflt) {
   }
   std::wstring path(roaming);
   CoTaskMemFree(roaming);
-  path += L"\\com.example\\glimpr\\shared_preferences.json";
+  path += L"\\Howar31\\Glimpr\\shared_preferences.json";
   FILE* f = nullptr;
   if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return dflt;
   std::string json;

@@ -19,7 +19,7 @@ void Init();
 bool Enabled();
 
 // Append "<ms-since-launch> <label>" to
-// %APPDATA%\com.example\glimpr\perf.log (QPC-based, agent-readable over SSH).
+// %APPDATA%\Howar31\Glimpr\perf.log (QPC-based, agent-readable over SSH).
 // No-op when the gate is off. Thread-safe.
 void Mark(const std::string& label);
 

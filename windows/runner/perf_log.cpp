@@ -22,7 +22,7 @@ std::wstring PrefsDir() {
   }
   std::wstring dir(roaming);
   CoTaskMemFree(roaming);
-  return dir + L"\\com.example\\glimpr";
+  return dir + L"\\Howar31\\Glimpr";
 }
 
 // The same flat shared_preferences.json the Dart perf gate reads
