@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io';
 import '../../platform_gate.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,7 @@ import 'shortcuts/hotkey_service.dart';
 import 'shortcuts/shortcut_actions.dart';
 import 'shortcuts/shortcut_store.dart';
 import 'shortcuts/windows_hotkey_registrar.dart';
+import 'update/update_check.dart';
 
 /// Every engine runs this same main(). The native side answers `glimpr/role`
 /// with 'overlay' for the per-display overlay engines and 'control' for the
@@ -54,6 +56,14 @@ Future<void> main() async {
   // handlers up front; record actions no-op when the module is unavailable.
   final record = RecordController();
   final recordAvailable = await RecordBridge().isAvailable();
+  // Launch-time update check (silent, 24h-throttled, Settings-toggleable).
+  // Fire-and-forget: never blocks boot; failures are silent by design.
+  unawaited(UpdateChecker(
+    store: Settings.instance.store,
+    fetchLatest: defaultFetchLatest,
+    currentVersion: () async =>
+        await kRoleChannel.invokeMethod<String>('appVersion') ?? '',
+  ).maybeCheckOnLaunch());
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
   const control = kRoleChannel;

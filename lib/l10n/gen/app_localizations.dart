@@ -170,6 +170,48 @@ abstract class AppLocalizations {
   /// **'Licenses & acknowledgements'**
   String get settingsAboutLicenses;
 
+  /// About pane: manual update-check row label (idle state)
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get settingsAboutCheckUpdates;
+
+  /// About pane: update row label while the check is in flight
+  ///
+  /// In en, this message translates to:
+  /// **'Checking...'**
+  String get settingsAboutChecking;
+
+  /// About pane: update row label when a newer release exists; tapping opens the download page
+  ///
+  /// In en, this message translates to:
+  /// **'Update available: {version}'**
+  String settingsAboutUpdateAvailable(String version);
+
+  /// About pane: update row label right after a manual check found no newer release
+  ///
+  /// In en, this message translates to:
+  /// **'You are up to date'**
+  String get settingsAboutUpToDate;
+
+  /// Advanced pane: updates section label
+  ///
+  /// In en, this message translates to:
+  /// **'Updates'**
+  String get settingsSectionUpdates;
+
+  /// Advanced pane: auto update-check toggle title
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates automatically'**
+  String get settingsUpdateCheckTitle;
+
+  /// Advanced pane: auto update-check toggle explanation
+  ///
+  /// In en, this message translates to:
+  /// **'Once a day, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.'**
+  String get settingsUpdateCheckBody;
+
   /// About > Licenses: number of licenses a package has
   ///
   /// In en, this message translates to:

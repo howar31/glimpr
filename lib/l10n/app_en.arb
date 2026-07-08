@@ -48,6 +48,37 @@
   "@settingsAboutLicenses": {
     "description": "About pane: opens the in-app open-source license page"
   },
+  "settingsAboutCheckUpdates": "Check for updates",
+  "@settingsAboutCheckUpdates": {
+    "description": "About pane: manual update-check row label (idle state)"
+  },
+  "settingsAboutChecking": "Checking...",
+  "@settingsAboutChecking": {
+    "description": "About pane: update row label while the check is in flight"
+  },
+  "settingsAboutUpdateAvailable": "Update available: {version}",
+  "@settingsAboutUpdateAvailable": {
+    "description": "About pane: update row label when a newer release exists; tapping opens the download page",
+    "placeholders": {
+      "version": { "type": "String" }
+    }
+  },
+  "settingsAboutUpToDate": "You are up to date",
+  "@settingsAboutUpToDate": {
+    "description": "About pane: update row label right after a manual check found no newer release"
+  },
+  "settingsSectionUpdates": "Updates",
+  "@settingsSectionUpdates": {
+    "description": "Advanced pane: updates section label"
+  },
+  "settingsUpdateCheckTitle": "Check for updates automatically",
+  "@settingsUpdateCheckTitle": {
+    "description": "Advanced pane: auto update-check toggle title"
+  },
+  "settingsUpdateCheckBody": "Once a day, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.",
+  "@settingsUpdateCheckBody": {
+    "description": "Advanced pane: auto update-check toggle explanation"
+  },
   "settingsLicenseCount": "{count, plural, =1{1 license} other{{count} licenses}}",
   "@settingsLicenseCount": {
     "description": "About > Licenses: number of licenses a package has",

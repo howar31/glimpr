@@ -39,6 +39,7 @@ import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
 import 'settings.dart';
 import 'token_picker.dart';
+import '../update/update_check.dart';
 
 /// The settings window content: the "Aurora" design — a frosted-glass window
 /// (the blur comes from a native NSVisualEffectView behind the Flutter view) with
@@ -124,6 +125,17 @@ class _SettingsAppState extends State<SettingsApp>
   // permission state (re-checked on load + while the grant prompt is pending).
   bool _snapElementMode = false;
   bool _axTrusted = false;
+  // In-app update check: About row state + the Advanced auto-check toggle.
+  bool _updateCheckEnabled = true;
+  String? _updateAvailableTag;
+  String? _updateUrl;
+  bool _updateChecking = false;
+  bool _updateJustCheckedClean = false;
+  late final UpdateChecker _updateChecker = UpdateChecker(
+    store: widget.settings.store,
+    fetchLatest: defaultFetchLatest,
+    currentVersion: _loadAppVersion,
+  );
   // App language choice + the value active since launch (restart-effective,
   // like the warm target): the restart hint shows while they differ.
   String _appLanguage = 'system';
@@ -257,6 +269,23 @@ class _SettingsAppState extends State<SettingsApp>
     // Native → Dart pushes on the role channel (menu-bar "About Glimpr" deep-link).
     _roleChannel.setMethodCallHandler(_onRoleCall);
     _load();
+    _seedUpdateBadge();
+  }
+
+  // Surface a persisted launch-check hit (written by the control engine's
+  // boot check) on the About row without re-fetching. Kept OFF the _load
+  // path on purpose: it awaits the role channel's appVersion reply, which
+  // must not gate the panes' settings load.
+  Future<void> _seedUpdateBadge() async {
+    final tag = await _s.store.getString('update_latest_tag');
+    final url = await _s.store.getString('update_latest_url');
+    if (tag == null || url == null) return;
+    final version = await _appVersionFuture;
+    if (!mounted || !UpdateChecker.isNewer(version, tag)) return;
+    setState(() {
+      _updateAvailableTag = tag;
+      _updateUrl = url;
+    });
   }
 
   // Handle native-initiated role-channel calls (Dart→native still uses
@@ -343,8 +372,10 @@ class _SettingsAppState extends State<SettingsApp>
     final appLanguage = await _s.getAppLanguage();
     final pinHoverGlow = await _s.getPinHoverGlow();
     final rec = await _s.loadRecording();
+    final updateEnabled = await _updateChecker.enabled();
     if (!mounted) return;
     setState(() {
+      _updateCheckEnabled = updateEnabled;
       _saveDir = dir;
       _format = format;
       _jpegQuality = quality;
@@ -888,8 +919,29 @@ class _SettingsAppState extends State<SettingsApp>
       const SizedBox(height: 28),
       GlassCard.rows([
         _aboutLinkRow(t,
+            icon: Icons.system_update_alt,
+            label: _updateChecking
+                ? _l.settingsAboutChecking
+                : _updateAvailableTag != null
+                    ? _l.settingsAboutUpdateAvailable(_updateAvailableTag!)
+                    : _updateJustCheckedClean
+                        ? _l.settingsAboutUpToDate
+                        : _l.settingsAboutCheckUpdates,
+            trailingIcon:
+                _updateAvailableTag != null ? Icons.north_east : Icons.refresh,
+            onTap: () {
+              if (_updateChecking) return;
+              final url = _updateUrl;
+              if (_updateAvailableTag != null && url != null) {
+                _openUrl(url);
+              } else {
+                _checkForUpdates();
+              }
+            }),
+        _aboutLinkRow(t,
             icon: SimpleIcons.kofi,
             label: _l.settingsAboutKofi,
+            divider: true,
             onTap: () => _openUrl('https://ko-fi.com/howar31')),
         _aboutLinkRow(t,
             icon: SimpleIcons.github,
@@ -925,7 +977,8 @@ class _SettingsAppState extends State<SettingsApp>
       required String label,
       required VoidCallback onTap,
       bool divider = false,
-      bool external = true}) {
+      bool external = true,
+      IconData? trailingIcon}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -935,12 +988,34 @@ class _SettingsAppState extends State<SettingsApp>
         title: label,
         divider: divider,
         trailing: Icon(
-          external ? Icons.north_east : Icons.chevron_right,
+          trailingIcon ??
+              (external ? Icons.north_east : Icons.chevron_right),
           size: 18,
           color: t.fg4,
         ),
       ),
     );
+  }
+
+  // Manual "check for updates" from the About row: bypasses the 24h
+  // launch-check throttle; result feeds the same row's label states.
+  Future<void> _checkForUpdates() async {
+    setState(() {
+      _updateChecking = true;
+      _updateJustCheckedClean = false;
+    });
+    final r = await _updateChecker.checkNow();
+    if (!mounted) return;
+    setState(() {
+      _updateChecking = false;
+      if (r != null && r.isNewer) {
+        _updateAvailableTag = r.latestTag;
+        _updateUrl = r.url;
+      } else {
+        _updateAvailableTag = null;
+        _updateJustCheckedClean = r != null;
+      }
+    });
   }
 
   // Open the Glimpr-styled open-source license browser (lib/settings/
@@ -2262,6 +2337,22 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ],
+      if (!platformIsWindows) const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionUpdates, icon: Icons.system_update_alt),
+      GlassCard.rows([
+        SettingRow(
+          icon: Icons.update,
+          title: _l.settingsUpdateCheckTitle,
+          hint: _l.settingsUpdateCheckBody,
+          trailing: GlassToggle(
+            value: _updateCheckEnabled,
+            onChanged: (v) async {
+              await _updateChecker.setEnabled(v);
+              if (mounted) setState(() => _updateCheckEnabled = v);
+            },
+          ),
+        ),
+      ]),
     ];
   }
 

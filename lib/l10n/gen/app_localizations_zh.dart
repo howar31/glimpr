@@ -45,6 +45,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutLicenses => '授權與第三方致謝';
 
   @override
+  String get settingsAboutCheckUpdates => '檢查更新';
+
+  @override
+  String get settingsAboutChecking => '檢查中…';
+
+  @override
+  String settingsAboutUpdateAvailable(String version) {
+    return '有新版本：$version';
+  }
+
+  @override
+  String get settingsAboutUpToDate => '目前已是最新版本';
+
+  @override
+  String get settingsSectionUpdates => '更新';
+
+  @override
+  String get settingsUpdateCheckTitle => '自動檢查更新';
+
+  @override
+  String get settingsUpdateCheckBody => '每天向 GitHub 查詢一次是否有新版本，不會傳送其他資料。';
+
+  @override
   String settingsLicenseCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

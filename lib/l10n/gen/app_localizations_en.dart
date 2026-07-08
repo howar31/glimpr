@@ -45,6 +45,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAboutLicenses => 'Licenses & acknowledgements';
 
   @override
+  String get settingsAboutCheckUpdates => 'Check for updates';
+
+  @override
+  String get settingsAboutChecking => 'Checking...';
+
+  @override
+  String settingsAboutUpdateAvailable(String version) {
+    return 'Update available: $version';
+  }
+
+  @override
+  String get settingsAboutUpToDate => 'You are up to date';
+
+  @override
+  String get settingsSectionUpdates => 'Updates';
+
+  @override
+  String get settingsUpdateCheckTitle => 'Check for updates automatically';
+
+  @override
+  String get settingsUpdateCheckBody =>
+      'Once a day, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.';
+
+  @override
   String settingsLicenseCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

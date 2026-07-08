@@ -305,9 +305,10 @@ void main() {
     final s = await _pump(tester);
     await tester.tap(find.text('Advanced'));
     await tester.pumpAndSettle();
-    // The element-snap card holds the only GlassToggle on the Advanced pane.
-    expect(find.byType(GlassToggle), findsOneWidget);
-    await tester.tap(find.byType(GlassToggle));
+    // The Advanced pane has two GlassToggles on macOS: element snap first,
+    // then the auto update-check toggle in the Updates section below it.
+    expect(find.byType(GlassToggle), findsNWidgets(2));
+    await tester.tap(find.byType(GlassToggle).first);
     await tester.pump();
     // Toggling on kicks off the 1s AX-permission recheck poll; the mocked
     // "trusted" reply lets it exit after one tick — drain it so no timer leaks.
