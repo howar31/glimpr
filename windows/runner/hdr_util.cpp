@@ -202,8 +202,9 @@ bool ReadPrefsBool(const char* key_name, bool dflt) {
 }
 
 bool ReadHdrScreenshotSetting() {
-  // Default ON (matches the Dart getter's ?? true fallback).
-  return ReadPrefsBool("hdr_screenshot", true);
+  // Windows default OFF (the Dart getter's default is platform-split:
+  // macOS on / Windows off).
+  return ReadPrefsBool("hdr_screenshot", false);
 }
 
 float HalfToFloatScalar(uint16_t h) { return HalfToFloat(h); }

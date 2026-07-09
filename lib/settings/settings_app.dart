@@ -115,7 +115,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _rightClickExits = true;
   bool _confirmOnExit = true;
   bool _captureCursor = true;
-  bool _hdrScreenshot = true;
+  bool _hdrScreenshot = !platformIsWindows;
   bool _pinHoverGlow = true;
   bool _launchAtLogin = false;
   int _warmTarget = 2;

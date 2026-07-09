@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/loupe_config.dart';
 import 'package:glimpr/output/flow.dart';
+import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/settings/settings.dart';
 
 import '../support/fake_store.dart';
@@ -235,10 +237,18 @@ void main() {
     expect(plain.hdr, isFalse);
   });
 
-  test('hdr_screenshot defaults on and round-trips into CaptureSettings',
-      () async {
+  test('hdr_screenshot default is platform-split (mac on, win off)', () async {
+    addTearDown(() => debugPlatformOverride = null);
+    debugPlatformOverride = TargetPlatform.macOS;
+    expect(await Settings(FakeStore()).getHdrScreenshot(), isTrue);
+    debugPlatformOverride = TargetPlatform.windows;
+    expect(await Settings(FakeStore()).getHdrScreenshot(), isFalse);
+  });
+
+  test('hdr_screenshot round-trips into CaptureSettings', () async {
+    addTearDown(() => debugPlatformOverride = null);
+    debugPlatformOverride = TargetPlatform.macOS;
     final s = Settings(FakeStore());
-    expect(await s.getHdrScreenshot(), isTrue);
     expect((await s.loadCapture()).hdrScreenshot, isTrue);
     await s.setHdrScreenshot(false);
     expect(await s.getHdrScreenshot(), isFalse);

@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../capture/capture_kind.dart';
+import '../platform_gate.dart';
 import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../output/filename.dart';
@@ -293,8 +294,13 @@ class Settings {
       store.setBool(_snapElementModeKey, v);
 
   // Dual-output HDR screenshots for the direct capture modes. Default OFF.
+  // Platform-split default (owner decision 2026-07-09): macOS captures HDR
+  // siblings out of the box; Windows stays SDR-only until opted in. The
+  // Windows native missing-key fallback (hdr_util ReadHdrScreenshotSetting)
+  // and the macOS Swift fallback (CaptureController) each mirror their
+  // platform's default here.
   Future<bool> getHdrScreenshot() async =>
-      (await store.getBool(_hdrScreenshotKey)) ?? true;
+      (await store.getBool(_hdrScreenshotKey)) ?? !platformIsWindows;
   Future<void> setHdrScreenshot(bool v) =>
       store.setBool(_hdrScreenshotKey, v);
 

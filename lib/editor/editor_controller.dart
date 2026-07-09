@@ -81,23 +81,15 @@ ShiftConstraint? shiftConstraintFor(ToolKind tool) => switch (tool) {
         null,
     };
 
-/// Factory-default style per tool. The highlighter defaults to a translucent
-/// marker colour so it reads as a highlighter out of the box (its painter
-/// honours the colour's alpha). The other per-tool seeds are the field-proven
-/// daily-driver values adopted as factory defaults (2026-07-09): orange
-/// shadowed 80px text/step, neutral grey region tools, one curve point on
-/// line/arrow, a stronger pixelate and a tighter spotlight feather.
+/// Factory-default style for a tool. Tools share the uniform default except:
+/// the highlighter defaults to a translucent marker colour so it reads as a
+/// highlighter out of the box (its painter honours the colour's alpha), and
+/// text defaults to a larger 30px glyph (image pixels) so fresh installs get
+/// readable labels.
 DrawStyle defaultStyleFor(ToolKind t) => switch (t) {
       ToolKind.highlighter =>
         const DrawStyle(color: kHighlighterDefaultColor),
-      ToolKind.text || ToolKind.step => const DrawStyle(
-          color: Color(0xFFFF9500), fontSize: 80, shadow: true),
-      ToolKind.blur || ToolKind.crop =>
-        const DrawStyle(color: Color(0xFF4F4F4A)),
-      ToolKind.pixelate =>
-        const DrawStyle(color: Color(0xFF4F4F4A), strength: 20),
-      ToolKind.line || ToolKind.arrow => const DrawStyle(curvePoints: 1),
-      ToolKind.spotlight => const DrawStyle(spotlightFeather: 12),
+      ToolKind.text => const DrawStyle(fontSize: 30),
       _ => const DrawStyle(),
     };
 
