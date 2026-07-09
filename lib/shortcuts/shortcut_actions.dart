@@ -225,16 +225,20 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
 /// and the LIVE overlay-editor command keys move meta -> control. No migration
 /// code: changing a default is just changing a default.
 final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
-  // Capture globals: Ctrl+Alt+Win+1..4.
-  kCaptureAreaKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1,
-      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
-  kCaptureWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2,
-      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
-  kCaptureScreenKey: _b(PhysicalKeyboardKey.digit3, LogicalKeyboardKey.digit3,
-      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
-  kCaptureLastRegionKey: _b(
-      PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4,
-      {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  // Capture globals: the PrintScreen family (ShareX-style; field-proven
+  // daily-driver bindings adopted as factory defaults 2026-07-09). Bare
+  // PrintScreen = full screen, Win+Shift+PrtScr = area, Ctrl+Win+PrtScr =
+  // window, bare F14 = last region. (Win+PrtScr alone is the OS screenshot
+  // shortcut, so the area/window combos avoid the bare Win chord.)
+  kCaptureAreaKey: _b(
+      PhysicalKeyboardKey.printScreen, LogicalKeyboardKey.printScreen,
+      {HotkeyModifier.shift, HotkeyModifier.meta}),
+  kCaptureWindowKey: _b(
+      PhysicalKeyboardKey.printScreen, LogicalKeyboardKey.printScreen,
+      {HotkeyModifier.control, HotkeyModifier.meta}),
+  kCaptureScreenKey: _b(
+      PhysicalKeyboardKey.printScreen, LogicalKeyboardKey.printScreen),
+  kCaptureLastRegionKey: _b(PhysicalKeyboardKey.f14, LogicalKeyboardKey.f14),
   // Pin / open-editor globals (S4): Ctrl+Alt+Win+5/6/9/0, mirroring macOS
   // ⌘⌥5/6/9/0. NOTE: only 1-4 were field-tested for OS collision; 5/6/9/0 are
   // unverified (rebindable, so the user can clear any that collide).
@@ -251,11 +255,13 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
   // to the capture globals (Ctrl+Alt+Win+digit), the way macOS recording
   // (Ctrl+Cmd+digit) differs from capture (Cmd+Alt+digit) by its modifier set.
   // region 1 / window 2 / display 3 / last-region 4, mirroring the macOS order.
-  kRecordRegionKey: _b(PhysicalKeyboardKey.digit1, LogicalKeyboardKey.digit1, {
+  // Record region/last-region ride the capture-family keys with an extra Ctrl
+  // (PrtScr / F14), matching the capture defaults above.
+  kRecordRegionKey: _b(
+      PhysicalKeyboardKey.printScreen, LogicalKeyboardKey.printScreen, {
     HotkeyModifier.control,
-    HotkeyModifier.alt,
-    HotkeyModifier.meta,
     HotkeyModifier.shift,
+    HotkeyModifier.meta,
   }),
   kRecordWindowKey: _b(PhysicalKeyboardKey.digit2, LogicalKeyboardKey.digit2, {
     HotkeyModifier.control,
@@ -269,12 +275,8 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
     HotkeyModifier.meta,
     HotkeyModifier.shift,
   }),
-  kRecordLastRegionKey: _b(
-      PhysicalKeyboardKey.digit4, LogicalKeyboardKey.digit4, {
+  kRecordLastRegionKey: _b(PhysicalKeyboardKey.f14, LogicalKeyboardKey.f14, {
     HotkeyModifier.control,
-    HotkeyModifier.alt,
-    HotkeyModifier.meta,
-    HotkeyModifier.shift,
   }),
   // Editor command keys: the overlay editor is LIVE on Windows (S2b), so its
   // meta-modified commands must be Ctrl-based now (undo/redo/paste/duplicate/

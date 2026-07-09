@@ -81,13 +81,25 @@ ShiftConstraint? shiftConstraintFor(ToolKind tool) => switch (tool) {
         null,
     };
 
-/// Factory-default style for a tool. Tools share the uniform default except the
-/// highlighter, which defaults to a translucent marker colour so it reads as a
-/// highlighter out of the box — its painter honours the colour's alpha (no
-/// forced opacity), so the default carries the translucency.
-DrawStyle defaultStyleFor(ToolKind t) => t == ToolKind.highlighter
-    ? const DrawStyle(color: kHighlighterDefaultColor)
-    : const DrawStyle();
+/// Factory-default style per tool. The highlighter defaults to a translucent
+/// marker colour so it reads as a highlighter out of the box (its painter
+/// honours the colour's alpha). The other per-tool seeds are the field-proven
+/// daily-driver values adopted as factory defaults (2026-07-09): orange
+/// shadowed 80px text/step, neutral grey region tools, one curve point on
+/// line/arrow, a stronger pixelate and a tighter spotlight feather.
+DrawStyle defaultStyleFor(ToolKind t) => switch (t) {
+      ToolKind.highlighter =>
+        const DrawStyle(color: kHighlighterDefaultColor),
+      ToolKind.text || ToolKind.step => const DrawStyle(
+          color: Color(0xFFFF9500), fontSize: 80, shadow: true),
+      ToolKind.blur || ToolKind.crop =>
+        const DrawStyle(color: Color(0xFF4F4F4A)),
+      ToolKind.pixelate =>
+        const DrawStyle(color: Color(0xFF4F4F4A), strength: 20),
+      ToolKind.line || ToolKind.arrow => const DrawStyle(curvePoints: 1),
+      ToolKind.spotlight => const DrawStyle(spotlightFeather: 12),
+      _ => const DrawStyle(),
+    };
 
 /// The drawing [ToolKind] a drawable corresponds to, for driving the option bar
 /// off the SELECTED annotation (so the universal Select tool can edit any of

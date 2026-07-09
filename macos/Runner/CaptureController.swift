@@ -105,7 +105,10 @@ final class CaptureController {
         // Freeze-time HDR retention (the hdr_screenshot setting, bare key —
         // Glimpr's SettingsStore writes plain NSUserDefaults keys): HDR
         // displays keep their EDR image for the annotated export's sibling.
-        let wantHdr = UserDefaults.standard.bool(forKey: "hdr_screenshot")
+        // Missing key = ON (matches the Dart getter's ?? true fallback;
+        // bool(forKey:) would read a missing key as false).
+        let wantHdr =
+          (UserDefaults.standard.object(forKey: "hdr_screenshot") as? Bool) ?? true
         manager.beginHdrRetention()
         try await self.capturer.captureAll(
           showsCursor: false, includeCursorImage: true,

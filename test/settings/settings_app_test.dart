@@ -308,13 +308,12 @@ void main() {
     // The Advanced pane has two GlassToggles on macOS: element snap first,
     // then the auto update-check toggle in the Updates section below it.
     expect(find.byType(GlassToggle), findsNWidgets(2));
+    // Element snap now defaults ON, so the tap turns it OFF and persists.
     await tester.tap(find.byType(GlassToggle).first);
     await tester.pump();
-    // Toggling on kicks off the 1s AX-permission recheck poll; the mocked
-    // "trusted" reply lets it exit after one tick — drain it so no timer leaks.
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(await s.getSnapElementMode(), isTrue);
+    expect(await s.getSnapElementMode(), isFalse);
   });
 
   // ---- Shortcuts pane, reserved rows (platform-shaped) -------------------

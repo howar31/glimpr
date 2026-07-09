@@ -115,7 +115,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _rightClickExits = true;
   bool _confirmOnExit = true;
   bool _captureCursor = true;
-  bool _hdrScreenshot = false;
+  bool _hdrScreenshot = true;
   bool _pinHoverGlow = true;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
@@ -123,7 +123,7 @@ class _SettingsAppState extends State<SettingsApp>
   int _captureLayerCap = 3;
   // Precise AX element snap (Advanced experiment) + the live Accessibility
   // permission state (re-checked on load + while the grant prompt is pending).
-  bool _snapElementMode = false;
+  bool _snapElementMode = true;
   bool _axTrusted = false;
   // In-app update check: About row state + the Advanced auto-check toggle.
   bool _updateCheckEnabled = true;
@@ -145,7 +145,7 @@ class _SettingsAppState extends State<SettingsApp>
   int? _warmTargetInitial;
   String _filenameTemplate = defaultFilenameTemplate;
   // Opt-in capture decoration, per scenario (all off by default).
-  bool _decorateSnap = false;
+  bool _decorateSnap = true;
   bool _decorateCrop = false;
   bool _decorateWindow = true;
   bool _decorateDisplay = false;
@@ -169,7 +169,7 @@ class _SettingsAppState extends State<SettingsApp>
   Set<FlowAction> _afterRecording = {};
   int _loupeSpan = kLoupeSpanDefault;
   int _loupeZoom = kLoupeZoomDefault;
-  bool _eyedropperKeysCancel = true;
+  bool _eyedropperKeysCancel = false;
   bool _hudCrosshair = true;
   bool _hudLoupe = true;
   bool _hudMarchingAnts = true;

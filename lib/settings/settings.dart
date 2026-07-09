@@ -251,7 +251,7 @@ class Settings {
 
   // Capture decoration (opt-in, per scenario) ----------------------------
   Future<bool> getDecorateSnap() async =>
-      (await store.getBool(_decorateSnapKey)) ?? false;
+      (await store.getBool(_decorateSnapKey)) ?? true;
   Future<void> setDecorateSnap(bool v) => store.setBool(_decorateSnapKey, v);
 
   Future<bool> getDecorateCrop() async =>
@@ -284,15 +284,17 @@ class Settings {
   Future<void> setCaptureCursor(bool v) =>
       store.setBool(_captureCursorKey, v);
 
-  // Precise AX element snap (Advanced experiment). Default OFF.
+  // Precise AX element snap (Advanced experiment). Default ON (macOS shows
+  // the permission chip until Accessibility is granted; Windows ignores the
+  // setting, element snap is always on there).
   Future<bool> getSnapElementMode() async =>
-      (await store.getBool(_snapElementModeKey)) ?? false;
+      (await store.getBool(_snapElementModeKey)) ?? true;
   Future<void> setSnapElementMode(bool v) =>
       store.setBool(_snapElementModeKey, v);
 
   // Dual-output HDR screenshots for the direct capture modes. Default OFF.
   Future<bool> getHdrScreenshot() async =>
-      (await store.getBool(_hdrScreenshotKey)) ?? false;
+      (await store.getBool(_hdrScreenshotKey)) ?? true;
   Future<void> setHdrScreenshot(bool v) =>
       store.setBool(_hdrScreenshotKey, v);
 
@@ -349,7 +351,7 @@ class Settings {
       store.setBool(_recordSystemAudioKey, v);
 
   Future<bool> getRecordMicrophone() async =>
-      (await store.getBool(_recordMicKey)) ?? true;
+      (await store.getBool(_recordMicKey)) ?? false;
   Future<void> setRecordMicrophone(bool v) =>
       store.setBool(_recordMicKey, v);
 
@@ -500,9 +502,9 @@ class Settings {
       store.setString(_loupeInfoModeKey, v.name);
 
   // Eyedropper: what a tool shortcut does while sampling (true = cancel
-  // sampling and switch — the default; false = sampling is modal).
+  // sampling and switch; false = sampling is modal — the default).
   Future<bool> getEyedropperToolKeysCancel() async =>
-      (await store.getBool(_eyedropperToolKeysKey)) ?? true;
+      (await store.getBool(_eyedropperToolKeysKey)) ?? false;
   Future<void> setEyedropperToolKeysCancel(bool v) =>
       store.setBool(_eyedropperToolKeysKey, v);
 
@@ -602,7 +604,7 @@ class RecordingSettings {
     this.showCursor = true,
     this.scrim = true,
     this.systemAudio = true,
-    this.microphone = true,
+    this.microphone = false,
     this.mergeAudio = false,
     this.maxDuration = 0,
     this.countdown = 0,

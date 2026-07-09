@@ -8,21 +8,19 @@ void main() {
     expect(defaultBindingsFor(false), kDefaultBindings);
   });
 
-  test('Windows capture globals are Ctrl+Alt+Win+digit', () {
+  test('Windows capture globals are the PrintScreen family', () {
     final w = defaultBindingsFor(true);
-    const ctrlAltWin = {
-      HotkeyModifier.control,
-      HotkeyModifier.alt,
-      HotkeyModifier.meta,
-    };
-    expect(w[kCaptureAreaKey]!.physicalKey, PhysicalKeyboardKey.digit1);
-    expect(w[kCaptureAreaKey]!.modifiers, ctrlAltWin);
-    expect(w[kCaptureWindowKey]!.physicalKey, PhysicalKeyboardKey.digit2);
-    expect(w[kCaptureWindowKey]!.modifiers, ctrlAltWin);
-    expect(w[kCaptureScreenKey]!.physicalKey, PhysicalKeyboardKey.digit3);
-    expect(w[kCaptureLastRegionKey]!.physicalKey, PhysicalKeyboardKey.digit4);
-    // Display string the menu/UI shows.
-    expect(w[kCaptureAreaKey]!.label(TargetPlatform.windows), 'Ctrl+Alt+Win+1');
+    expect(w[kCaptureAreaKey]!.physicalKey, PhysicalKeyboardKey.printScreen);
+    expect(w[kCaptureAreaKey]!.modifiers,
+        {HotkeyModifier.shift, HotkeyModifier.meta});
+    expect(w[kCaptureWindowKey]!.physicalKey, PhysicalKeyboardKey.printScreen);
+    expect(w[kCaptureWindowKey]!.modifiers,
+        {HotkeyModifier.control, HotkeyModifier.meta});
+    // Bare PrintScreen = full screen; bare F14 = last region.
+    expect(w[kCaptureScreenKey]!.physicalKey, PhysicalKeyboardKey.printScreen);
+    expect(w[kCaptureScreenKey]!.modifiers, isEmpty);
+    expect(w[kCaptureLastRegionKey]!.physicalKey, PhysicalKeyboardKey.f14);
+    expect(w[kCaptureLastRegionKey]!.modifiers, isEmpty);
   });
 
   test('Windows binds pin/open-editor globals to Ctrl+Alt+Win+5/6/9/0; record modes bound', () {
@@ -41,21 +39,23 @@ void main() {
     expect(w[kOpenEditorKey]!.modifiers, ctrlAltWin);
     expect(w[kOpenEditorClipboardKey]!.physicalKey, PhysicalKeyboardKey.digit0);
     expect(w[kOpenEditorClipboardKey]!.modifiers, ctrlAltWin);
-    // All record modes are wired on Windows (S6): Ctrl+Alt+Win+Shift+1/2/3/4.
+    // Record modes: region/last-region ride the capture-family keys with an
+    // extra Ctrl (PrtScr / F14); window/display keep Ctrl+Alt+Win+Shift+2/3.
     const ctrlAltWinShift = {
       HotkeyModifier.control,
       HotkeyModifier.alt,
       HotkeyModifier.meta,
       HotkeyModifier.shift,
     };
-    expect(w[kRecordRegionKey]!.physicalKey, PhysicalKeyboardKey.digit1);
-    expect(w[kRecordRegionKey]!.modifiers, ctrlAltWinShift);
+    expect(w[kRecordRegionKey]!.physicalKey, PhysicalKeyboardKey.printScreen);
+    expect(w[kRecordRegionKey]!.modifiers,
+        {HotkeyModifier.control, HotkeyModifier.shift, HotkeyModifier.meta});
     expect(w[kRecordWindowKey]!.physicalKey, PhysicalKeyboardKey.digit2);
     expect(w[kRecordWindowKey]!.modifiers, ctrlAltWinShift);
     expect(w[kRecordDisplayKey]!.physicalKey, PhysicalKeyboardKey.digit3);
     expect(w[kRecordDisplayKey]!.modifiers, ctrlAltWinShift);
-    expect(w[kRecordLastRegionKey]!.physicalKey, PhysicalKeyboardKey.digit4);
-    expect(w[kRecordLastRegionKey]!.modifiers, ctrlAltWinShift);
+    expect(w[kRecordLastRegionKey]!.physicalKey, PhysicalKeyboardKey.f14);
+    expect(w[kRecordLastRegionKey]!.modifiers, {HotkeyModifier.control});
   });
 
   test('editor command keys are Ctrl-based on Windows (overlay editor is live)', () {

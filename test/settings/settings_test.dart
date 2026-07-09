@@ -15,13 +15,13 @@ void main() {
     expect(await s.getSaveDirectory(), isNull);
   });
 
-  test('snapElementMode round-trips and defaults false', () async {
+  test('snapElementMode round-trips and defaults true', () async {
     final s = Settings(FakeStore());
-    expect(await s.getSnapElementMode(), isFalse);
-    expect((await s.loadCapture()).snapElementMode, isFalse);
-    await s.setSnapElementMode(true);
     expect(await s.getSnapElementMode(), isTrue);
     expect((await s.loadCapture()).snapElementMode, isTrue);
+    await s.setSnapElementMode(false);
+    expect(await s.getSnapElementMode(), isFalse);
+    expect((await s.loadCapture()).snapElementMode, isFalse);
   });
 
   test('hud_loupe round-trips and defaults true', () async {
@@ -235,13 +235,13 @@ void main() {
     expect(plain.hdr, isFalse);
   });
 
-  test('hdr_screenshot defaults off and round-trips into CaptureSettings',
+  test('hdr_screenshot defaults on and round-trips into CaptureSettings',
       () async {
     final s = Settings(FakeStore());
-    expect(await s.getHdrScreenshot(), isFalse);
-    expect((await s.loadCapture()).hdrScreenshot, isFalse);
-    await s.setHdrScreenshot(true);
     expect(await s.getHdrScreenshot(), isTrue);
     expect((await s.loadCapture()).hdrScreenshot, isTrue);
+    await s.setHdrScreenshot(false);
+    expect(await s.getHdrScreenshot(), isFalse);
+    expect((await s.loadCapture()).hdrScreenshot, isFalse);
   });
 }

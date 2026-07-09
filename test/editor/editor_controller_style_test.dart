@@ -37,7 +37,9 @@ void main() {
     c.setStrokeWidth(16);
     c.selectTool(ToolKind.text); // switch away
     c.resetTool(ToolKind.arrow);
-    expect(c.toolStyles[ToolKind.arrow], const DrawStyle());
+    // Back to the arrow's FACTORY default (which carries curvePoints: 1).
+    expect(c.toolStyles[ToolKind.arrow], defaultStyleFor(ToolKind.arrow));
+    expect(c.toolStyles[ToolKind.arrow]!.strokeWidth, isNot(16));
   });
 
   test(
