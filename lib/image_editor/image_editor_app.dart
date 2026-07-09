@@ -1220,7 +1220,12 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       editorBindings: _bindings,
       showDragHandle: false,
       onMove: (_) {}, // fixed — not draggable
-      onPtEditingDone: () {}, // focus refinement is a later 微調
+      // Hand keyboard focus back to the editor after a toolbar number field
+      // commits (Enter / tap-outside) — without this every tool shortcut goes
+      // dead once a field was typed in (the field unfocuses, nothing refocuses
+      // the editor's key node). EditorCore routes it to the inline text editor
+      // instead while one is open.
+      onPtEditingDone: controller.requestFocus,
       trailing: [
           // View controls: fit-to-window / actual size (also ⌘1 / ⌘2).
           _IconAction(

@@ -820,8 +820,20 @@ class _EditorCoreState extends State<EditorCore> {
   /// Post-frame so it lands after the route pop / rebuild settles.
   void _onRefocusRequested() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
+      if (!mounted) return;
+      // Hand focus to the inline text editor when one is open (a toolbar
+      // number field committing mid-text-edit must not kill the caret);
+      // otherwise to the tool-shortcut node.
+      if (_editingText) {
+        _textFocus.requestFocus();
+      } else {
+        _focus.requestFocus();
+      }
     });
+    // addPostFrameCallback does NOT itself request a frame: without this the
+    // hand-back starves whenever nothing else is dirty (e.g. a toolbar number
+    // field that just unfocused cleanly).
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// While editing, a toolbar style change applies to the whole text box: the
