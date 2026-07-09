@@ -114,13 +114,13 @@ class _SettingsAppState extends State<SettingsApp>
   bool _completionSound = true;
   bool _rightClickExits = true;
   bool _confirmOnExit = true;
-  bool _captureCursor = false;
+  bool _captureCursor = true;
   bool _hdrScreenshot = false;
   bool _pinHoverGlow = true;
   bool _launchAtLogin = false;
   int _warmTarget = 2;
   int _recentCap = kRecentImagesCap;
-  int _captureLayerCap = 1;
+  int _captureLayerCap = 3;
   // Precise AX element snap (Advanced experiment) + the live Accessibility
   // permission state (re-checked on load + while the grant prompt is pending).
   bool _snapElementMode = false;
@@ -147,10 +147,10 @@ class _SettingsAppState extends State<SettingsApp>
   // Opt-in capture decoration, per scenario (all off by default).
   bool _decorateSnap = false;
   bool _decorateCrop = false;
-  bool _decorateWindow = false;
+  bool _decorateWindow = true;
   bool _decorateDisplay = false;
   bool _decorateLastRegion = false;
-  int _decorationJpegFill = 0xFFFFFFFF;
+  int _decorationJpegFill = 0xFF202327;
   // Screen recording (macOS 15+ module; the card shows an unavailable hint
   // below 15).
   bool _recordAvailable = false;

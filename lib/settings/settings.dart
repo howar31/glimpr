@@ -259,7 +259,7 @@ class Settings {
   Future<void> setDecorateCrop(bool v) => store.setBool(_decorateCropKey, v);
 
   Future<bool> getDecorateWindow() async =>
-      (await store.getBool(_decorateWindowKey)) ?? false;
+      (await store.getBool(_decorateWindowKey)) ?? true;
   Future<void> setDecorateWindow(bool v) =>
       store.setBool(_decorateWindowKey, v);
 
@@ -274,13 +274,13 @@ class Settings {
       store.setBool(_decorateLastRegionKey, v);
 
   Future<int> getDecorationJpegFill() async =>
-      (await store.getInt(_decorationJpegFillKey)) ?? 0xFFFFFFFF;
+      (await store.getInt(_decorationJpegFillKey)) ?? 0xFF202327;
   Future<void> setDecorationJpegFill(int argb) =>
       store.setInt(_decorationJpegFillKey, argb);
 
   // Capture mouse pointer ---------------------------------------------------
   Future<bool> getCaptureCursor() async =>
-      (await store.getBool(_captureCursorKey)) ?? false;
+      (await store.getBool(_captureCursorKey)) ?? true;
   Future<void> setCaptureCursor(bool v) =>
       store.setBool(_captureCursorKey, v);
 
@@ -317,14 +317,14 @@ class Settings {
       case 'h264':
         return RecordFormat.h264;
     }
-    return RecordFormat.h264; // default codec
+    return RecordFormat.gif; // default format
   }
 
   Future<void> setRecordFormat(RecordFormat f) =>
       store.setString(_recordFormatKey, f.name);
 
   Future<int> getRecordFps() async {
-    final v = (await store.getInt(_recordFpsKey)) ?? 30;
+    final v = (await store.getInt(_recordFpsKey)) ?? 60;
     return v == 60 ? 60 : 30;
   }
 
@@ -344,12 +344,12 @@ class Settings {
   Future<void> setRecordScrim(bool v) => store.setBool(_recordScrimKey, v);
 
   Future<bool> getRecordSystemAudio() async =>
-      (await store.getBool(_recordSystemAudioKey)) ?? false;
+      (await store.getBool(_recordSystemAudioKey)) ?? true;
   Future<void> setRecordSystemAudio(bool v) =>
       store.setBool(_recordSystemAudioKey, v);
 
   Future<bool> getRecordMicrophone() async =>
-      (await store.getBool(_recordMicKey)) ?? false;
+      (await store.getBool(_recordMicKey)) ?? true;
   Future<void> setRecordMicrophone(bool v) =>
       store.setBool(_recordMicKey, v);
 
@@ -400,15 +400,15 @@ class Settings {
       store.setString(_recordVideoQualityKey, q.name);
 
   /// Output resolution cap: the longest side in pixels; 0 = native (no cap).
-  /// Shared by mp4 and GIF. Off-step values clamp to the 1920 default.
+  /// Shared by mp4 and GIF. Off-step values clamp to the 0 (native) default.
   static const kRecordMaxLongSides = <int>[0, 720, 1280, 1920, 2560];
   Future<int> getRecordMaxLongSide() async {
-    final v = (await store.getInt(_recordMaxLongSideKey)) ?? 1920;
-    return kRecordMaxLongSides.contains(v) ? v : 1920;
+    final v = (await store.getInt(_recordMaxLongSideKey)) ?? 0;
+    return kRecordMaxLongSides.contains(v) ? v : 0;
   }
 
   Future<void> setRecordMaxLongSide(int v) => store.setInt(
-      _recordMaxLongSideKey, kRecordMaxLongSides.contains(v) ? v : 1920);
+      _recordMaxLongSideKey, kRecordMaxLongSides.contains(v) ? v : 0);
 
   /// GIF frame rate in frames per second. Off-step values clamp to 15.
   static const kRecordGifFps = <int>[10, 15, 20, 25];
@@ -467,10 +467,10 @@ class Settings {
       store.setString(_appLanguageKey, (v == 'en' || v == 'zh') ? v : 'system');
 
   // Capture layer stack ------------------------------------------------------
-  // How many freeze layers one overlay session may hold (1-5, default 1).
+  // How many freeze layers one overlay session may hold (1-5, default 3).
   // 1 = no stacking: a capture hotkey during a live session replaces it.
   Future<int> getCaptureLayerCap() async =>
-      ((await store.getInt(_captureLayerCapKey)) ?? 1).clamp(1, 5);
+      ((await store.getInt(_captureLayerCapKey)) ?? 3).clamp(1, 5);
   Future<void> setCaptureLayerCap(int v) =>
       store.setInt(_captureLayerCapKey, v.clamp(1, 5));
 
@@ -486,12 +486,13 @@ class Settings {
       store.setInt(_loupeZoomKey, v.clamp(kLoupeZoomMin, kLoupeZoomMax));
 
   // Loupe info display (`?`/`/` cycle): persisted so the choice survives
-  // relaunch. Stored as the enum name; an unknown/missing value reads as coords.
+  // relaunch. Stored as the enum name; an unknown/missing value reads as
+  // shortcuts (the default).
   Future<LoupeInfoMode> getLoupeInfoMode() async {
     final name = await store.getString(_loupeInfoModeKey);
     return LoupeInfoMode.values.firstWhere(
       (m) => m.name == name,
-      orElse: () => LoupeInfoMode.coords,
+      orElse: () => LoupeInfoMode.shortcuts,
     );
   }
 
@@ -596,17 +597,17 @@ enum RecordVideoQuality { low, medium, high }
 
 class RecordingSettings {
   const RecordingSettings({
-    this.format = RecordFormat.h264,
-    this.fps = 30,
+    this.format = RecordFormat.gif,
+    this.fps = 60,
     this.showCursor = true,
     this.scrim = true,
-    this.systemAudio = false,
-    this.microphone = false,
+    this.systemAudio = true,
+    this.microphone = true,
     this.mergeAudio = false,
     this.maxDuration = 0,
     this.countdown = 0,
     this.videoQuality = RecordVideoQuality.high,
-    this.maxLongSide = 1920,
+    this.maxLongSide = 0,
     this.gifFps = 15,
     this.flow = const {},
   });

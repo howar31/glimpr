@@ -163,17 +163,17 @@ void main() {
       await rc.toggle(kRecordModeDisplay);
       final s = bridge.starts.single;
       expect(s['mode'], kRecordModeDisplay);
-      expect(s['outputPath'], endsWith('.mp4'));
+      // Factory defaults: GIF format (audio forced off on the GIF path),
+      // 60 fps, native resolution (0 = no cap), high quality, GIF 15 fps.
+      expect(s['outputPath'], endsWith('.gif'));
       expect(s['outputPath'], contains('DISPLAY'));
-      expect(s['fps'], 30);
+      expect(s['fps'], 60);
       expect(s['hevc'], isFalse);
       expect(s['showsCursor'], isTrue);
       expect(s['systemAudio'], isFalse);
       expect(s['microphone'], isFalse);
-      // Output quality defaults: high quality, 1920 long-side cap, GIF 15 fps,
-      // high GIF quality (two-pass).
       expect(s['videoQuality'], 'high');
-      expect(s['maxLongSide'], 1920);
+      expect(s['maxLongSide'], 0);
       expect(s['gifFps'], 15);
       expect(rc.phase, RecordPhase.starting);
     });
@@ -411,6 +411,9 @@ void main() {
     test('a relayed selection honours the one-shot toolbar overrides',
         () async {
       final rc = build();
+      // Pin an mp4 codec: the GIF default would force the audio flags off
+      // and mask the overrides this test asserts.
+      await Settings(store).setRecordFormat(RecordFormat.h264);
       await Settings(store).setRecordSystemAudio(false);
       await Settings(store).setRecordShowCursor(true);
       await rc.toggle(kRecordModeRegion);
@@ -598,11 +601,11 @@ void main() {
       expect(r.showCursor, isTrue); // default on
     });
 
-    test('record_format round-trips and defaults to h264', () async {
+    test('record_format round-trips and defaults to gif', () async {
       final s = Settings(FakeStore());
-      expect((await s.loadRecording()).format, RecordFormat.h264);
-      await s.setRecordFormat(RecordFormat.gif);
       expect((await s.loadRecording()).format, RecordFormat.gif);
+      await s.setRecordFormat(RecordFormat.h264);
+      expect((await s.loadRecording()).format, RecordFormat.h264);
     });
 
     test('record_max_duration round-trips, defaults 0, clamps off-steps',

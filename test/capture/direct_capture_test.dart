@@ -219,6 +219,10 @@ void main() {
     test('window(): delivers the native final bytes when a windowId is present',
         () async {
       final s = FakeStore();
+      // Pin decoration OFF: this test asserts the undecorated native path
+      // (decorate_window now defaults ON; the decorated spec is covered by
+      // the next test).
+      await Settings(s).setDecorateWindow(false);
       Uint8List? deliveredBytes;
       Map<String, dynamic>? passedDecoration;
       var completes = 0;
@@ -262,7 +266,7 @@ void main() {
       );
       await dc.window();
       expect(deliveredBytes, Uint8List.fromList([1, 2, 3]));
-      expect(passedDecoration, isNull); // decoration off by default
+      expect(passedDecoration, isNull); // decoration pinned off above
       expect(completes, 1);
       final saved = await LastRegionStore(s).load();
       expect(saved!.rect, const Rect.fromLTWH(5, 6, 100, 80));
