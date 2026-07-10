@@ -18,6 +18,7 @@
 #include "win32_window.h"
 
 class PinManager;
+struct IDropTarget;
 
 // The standalone Image Editor: a resident, revealable top-level window hosting
 // its OWN Flutter engine (role 'image-editor'). Mirrors the macOS warm editor
@@ -96,6 +97,9 @@ class EditorWindow : public Win32Window {
   // Editor-export pulse (+ tooltip label) -> control tray.
   std::function<void(bool, const std::string&)> proc_cb_;
   PinManager* pin_manager_ = nullptr;
+  // OLE drop target (EditorDropTarget): vetoes non-image drags at hover, the
+  // same timing as macOS. Registered in OnCreate, revoked in OnDestroy.
+  IDropTarget* drop_target_ = nullptr;
 };
 
 #endif  // RUNNER_EDITOR_WINDOW_H_

@@ -17,6 +17,7 @@
 #include "base64.h"
 #include "capture_key_rule.h"
 #include "clipboard_dib.h"
+#include "drop_filter.h"
 #include "hdr_util.h"
 #include "pixel_swizzle.h"
 #include "record_args.h"
@@ -384,6 +385,26 @@ void TestOpaqueDib() {
   CHECK(!clipdib::AllOpaque(src.data(), w, h, stride));
 }
 
+// --- editor drop filter -------------------------------------------------------
+
+void TestDropFilter() {
+  g_case = "drop-filter";
+  CHECK(dropfilter::IsEditorImagePath(L"C:\\Users\\a\\Pictures\\shot.png"));
+  CHECK(dropfilter::IsEditorImagePath(L"C:\\a\\PHOTO.JPG"));   // case-blind
+  CHECK(dropfilter::IsEditorImagePath(L"D:\\x\\anim.Gif"));
+  CHECK(dropfilter::IsEditorImagePath(L"D:\\x\\pic.jpeg"));
+  CHECK(dropfilter::IsEditorImagePath(L"D:\\x\\pic.webp"));
+  CHECK(dropfilter::IsEditorImagePath(L"D:\\x\\pic.bmp"));
+  CHECK(dropfilter::IsEditorImagePath(L"D:\\x\\pic.tiff"));
+  CHECK(dropfilter::IsEditorImagePath(L"D:\\dir.png\\also.png"));
+  CHECK(!dropfilter::IsEditorImagePath(L"C:\\a\\notes.txt"));
+  CHECK(!dropfilter::IsEditorImagePath(L"C:\\a\\archive.zip"));
+  CHECK(!dropfilter::IsEditorImagePath(L"C:\\a\\noextension"));
+  CHECK(!dropfilter::IsEditorImagePath(L"C:\\dir.png\\file"));  // dot in dir only
+  CHECK(!dropfilter::IsEditorImagePath(L"C:\\a\\clip.mp4"));
+  CHECK(!dropfilter::IsEditorImagePath(L""));
+}
+
 // --- hotkey capture commit rule --------------------------------------------
 
 void TestCaptureKeyRule() {
@@ -414,6 +435,7 @@ int main() {
       {"ext-srgb", TestExtSrgb},         {"tonemap", TestToneMapLut},
       {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
+      {"drop-filter", TestDropFilter},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

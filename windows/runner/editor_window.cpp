@@ -2,11 +2,16 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <ole2.h>
+#include <shellapi.h>
 
 #include <flutter/generated_plugin_registrant.h>
 
+#include <atomic>
+#include <optional>
 #include <utility>
 
+#include "drop_filter.h"
 #include "perf_log.h"
 #include "pin_window.h"
 #include "utils.h"
@@ -27,6 +32,95 @@ constexpr int kMinH = 720;
 std::unique_ptr<EncodableValue> StrArg(const std::string& s) {
   return std::make_unique<EncodableValue>(EncodableValue(s));
 }
+
+// OLE drop target for the editor window: vetoes non-image drags AT HOVER
+// (DragEnter/DragOver answer DROPEFFECT_NONE -> the cursor shows "not
+// allowed" and Drop never fires) -- the same timing as macOS's
+// draggingEntered. WM_DROPFILES cannot veto at hover, hence OLE; it needs
+// the OleInitialize'd platform thread (main.cpp).
+class EditorDropTarget : public IDropTarget {
+ public:
+  explicit EditorDropTarget(EditorWindow* owner) : owner_(owner) {}
+  virtual ~EditorDropTarget() = default;
+
+  // IUnknown --
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+    if (!ppv) return E_POINTER;
+    if (riid == IID_IUnknown || riid == IID_IDropTarget) {
+      *ppv = static_cast<IDropTarget*>(this);
+      AddRef();
+      return S_OK;
+    }
+    *ppv = nullptr;
+    return E_NOINTERFACE;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override {
+    return static_cast<ULONG>(++refs_);
+  }
+  ULONG STDMETHODCALLTYPE Release() override {
+    const ULONG n = static_cast<ULONG>(--refs_);
+    if (n == 0) delete this;
+    return n;
+  }
+
+  // IDropTarget --
+  HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL,
+                                      DWORD* effect) override {
+    accept_ = FirstImagePath(data).has_value();
+    if (effect) *effect = accept_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL, DWORD* effect) override {
+    if (effect) *effect = accept_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE DragLeave() override {
+    accept_ = false;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL,
+                                 DWORD* effect) override {
+    const std::optional<std::string> path = FirstImagePath(data);
+    if (effect) *effect = path ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    if (path && owner_) owner_->OpenWithPath(*path);
+    accept_ = false;
+    return S_OK;
+  }
+
+  // The owning window is going away; the target may outlive it briefly on the
+  // OLE side.
+  void Detach() { owner_ = nullptr; }
+
+ private:
+  // The first dragged file whose extension the editor supports (as UTF-8), or
+  // nullopt. Mirrors macOS imageURL(_:): first supported file wins.
+  static std::optional<std::string> FirstImagePath(IDataObject* data) {
+    if (!data) return std::nullopt;
+    FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    STGMEDIUM medium{};
+    if (FAILED(data->GetData(&fmt, &medium))) return std::nullopt;
+    std::optional<std::string> out;
+    if (auto* drop = static_cast<HDROP>(GlobalLock(medium.hGlobal))) {
+      const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+      for (UINT i = 0; i < count && !out; ++i) {
+        const UINT len = DragQueryFileW(drop, i, nullptr, 0);
+        if (len == 0) continue;
+        std::wstring path(len + 1, L'\0');
+        if (DragQueryFileW(drop, i, path.data(), len + 1) == 0) continue;
+        path.resize(len);
+        if (dropfilter::IsEditorImagePath(path)) out = Utf8FromUtf16(path);
+      }
+      GlobalUnlock(medium.hGlobal);
+    }
+    ReleaseStgMedium(&medium);
+    return out;
+  }
+
+  EditorWindow* owner_;
+  std::atomic<long> refs_{1};
+  bool accept_ = false;
+};
+
 }  // namespace
 
 EditorWindow::EditorWindow(const flutter::DartProject& project, HWND control_hwnd)
@@ -245,10 +339,21 @@ bool EditorWindow::OnCreate() {
   sound_channel_ = std::make_unique<SoundChannel>(messenger);
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  // Accept Explorer image drags anywhere on the window (parity with macOS
+  // registerForDraggedTypes, including the hover-time veto). The Flutter child
+  // view registers no target, so OLE resolves up the ancestor chain to here.
+  drop_target_ = new EditorDropTarget(this);
+  RegisterDragDrop(GetHandle(), drop_target_);
   return true;
 }
 
 void EditorWindow::OnDestroy() {
+  if (drop_target_) {
+    if (GetHandle()) RevokeDragDrop(GetHandle());
+    static_cast<EditorDropTarget*>(drop_target_)->Detach();
+    drop_target_->Release();
+    drop_target_ = nullptr;
+  }
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

@@ -51,9 +51,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     CreateAndAttachConsole();
   }
 
-  // Initialize COM, so that it is available for use in the library and/or
-  // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  // Initialize OLE (a superset of CoInitializeEx STA), so COM is available for
+  // the library/plugins AND RegisterDragDrop works (the editor window's OLE
+  // drop target needs an OleInitialize'd thread).
+  ::OleInitialize(nullptr);
 
   // Single instance: a resident tray app must not run twice (a second tray icon
   // + a RegisterHotKey collision). If one is already running, ask it to reveal
@@ -63,7 +64,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (instance_mutex && ::GetLastError() == ERROR_ALREADY_EXISTS) {
     UINT reveal = ::RegisterWindowMessageW(L"GlimprRevealSettings");
     ::PostMessage(HWND_BROADCAST, reveal, 0, 0);
-    ::CoUninitialize();
+    ::OleUninitialize();
     return EXIT_SUCCESS;
   }
 
@@ -92,6 +93,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
-  ::CoUninitialize();
+  ::OleUninitialize();
   return EXIT_SUCCESS;
 }
