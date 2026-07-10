@@ -79,7 +79,9 @@ void main() {
     await dragSelect(tester, const Offset(100, 100), const Offset(300, 300));
     await confirmTrim(tester, c);
 
-    expect(c.document.value.canvasSize, const Size(200, 200));
+    // Inclusive endpoints: the AIMED pixel under BOTH drag ends is inside the
+    // selection (px 100..300 -> 201), matching what the loupe names.
+    expect(c.document.value.canvasSize, const Size(201, 201));
     expect(c.document.value.canvasImage, isNotNull);
     final shifted = c.document.value.drawables.single as RectangleDrawable;
     expect(shifted.rect, const Rect.fromLTRB(20, 20, 60, 60));
@@ -137,8 +139,9 @@ void main() {
     await dragSelect(tester, const Offset(200, 200), const Offset(250, 230));
     await confirmTrim(tester, c);
 
-    // Selection moved by (50,30) -> trim origin (150,130), size unchanged.
-    expect(c.document.value.canvasSize, const Size(200, 200));
+    // Selection moved by (50,30) -> trim origin (150,130), size unchanged
+    // (201: inclusive aimed-pixel endpoints, px 100..300).
+    expect(c.document.value.canvasSize, const Size(201, 201));
     final shifted = c.document.value.drawables.single as RectangleDrawable;
     expect(shifted.rect, const Rect.fromLTRB(10, 10, 30, 30));
   });
@@ -168,9 +171,11 @@ void main() {
         tester, const Offset(100, 100), const Offset(300.4, 300.6));
     await confirmTrim(tester, c);
 
-    expect(c.document.value.canvasSize, const Size(200, 201));
+    // Inclusive aimed pixels: x 100..round(299.9)=300, y 100..round(300.1)=300
+    // -> 201 px either way, whole-pixel edges, fully covered raster.
+    expect(c.document.value.canvasSize, const Size(201, 201));
     final img = c.document.value.canvasImage!;
-    expect(img.width, 200);
+    expect(img.width, 201);
     expect(img.height, 201);
     late Uint8List rgba;
     await tester.runAsync(() async {

@@ -84,7 +84,8 @@ void main() {
 
       await g.up();
       await tester.pump();
-      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 250, 200));
+      // Inclusive aimed-pixel endpoints: both drag ends' pixels included.
+      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 251, 201));
     });
   });
 

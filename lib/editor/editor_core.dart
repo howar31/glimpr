@@ -170,7 +170,11 @@ class EditorCore extends StatefulWidget {
 
 class _EditorCoreState extends State<EditorCore> {
   final _focus = FocusNode();
-  final _crop = SelectionController();
+  // Cursor drags build INCLUSIVE aimed-pixel selections (see
+  // aimedSelectionRect); programmatic rects (handles/move/snap) pass through.
+  late final _crop = SelectionController(
+    (a, b) => aimedSelectionRect(a, b, widget.host.pixelScale),
+  );
 
   late Offset _cursor; // logical cursor (crosshair/loupe/nudge + hover)
   late Offset

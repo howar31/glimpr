@@ -67,8 +67,9 @@ void main() {
           via: const [Offset(180, 160)]);
 
       expect(host.exports, hasLength(1));
+      // Inclusive aimed-pixel endpoints: both drag ends' pixels included.
       expect(host.exports.single.rect,
-          Rect.fromLTRB(100, 100, 300, 250));
+          Rect.fromLTRB(100, 100, 301, 251));
       expect(host.exports.single.window, isNull); // no window under cursor
       // The drawing lock wraps the drag exactly once: lock on start, off on end.
       expect(host.cursor.drawingLockCalls, [true, false]);
@@ -477,7 +478,8 @@ void main() {
       await drag(tester, const Offset(100, 100), const Offset(340, 280));
 
       expect(host.exports, hasLength(1));
-      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 340, 280));
+      // Inclusive aimed-pixel endpoints: both drag ends' pixels included.
+      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 341, 281));
     });
 
     testWidgets('windows: a tiny record marquee is clamped to the 80pt floor',
@@ -492,7 +494,7 @@ void main() {
       await drag(tester, const Offset(100, 100), const Offset(120, 115));
 
       expect(host.exports, hasLength(1));
-      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 180, 180));
+      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 181, 181));
     });
 
     testWidgets('macOS: no record marquee floor (VideoToolbox takes tiny '
@@ -505,7 +507,7 @@ void main() {
       await drag(tester, const Offset(100, 100), const Offset(120, 115));
 
       expect(host.exports, hasLength(1));
-      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 120, 115));
+      expect(host.exports.single.rect, Rect.fromLTRB(100, 100, 121, 116));
     });
   });
 
