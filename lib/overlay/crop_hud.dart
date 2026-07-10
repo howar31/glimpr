@@ -112,6 +112,18 @@ class TextSelectionPainter extends CustomPainter {
   bool shouldRepaint(TextSelectionPainter old) => true;
 }
 
+/// The [LoupePainter.cursorLogical] that lands the painter's snapped center on
+/// a LIVE span×span patch's aimed cell — the native feeds center the patch on
+/// the aim at cell index span ~/ 2, whose pixel-center coordinate is
+/// span ~/ 2 + 0.5.
+Offset liveLoupeCenter(int span, double scaleFactor) {
+  // INTEGER division: the double form (span / 2 + 0.5) snapped one cell PAST
+  // the aim — the loupe magnified the wrong center pixel and showed the black
+  // out-of-patch backdrop along its right/bottom edge.
+  final c = (span ~/ 2 + 0.5) / scaleFactor;
+  return Offset(c, c);
+}
+
 /// A pixel-magnifier loupe of [image] (native pixels) centered on [cursorLogical]
 /// (logical coords; native = logical * [scaleFactor]). Drawn crisp (no filter)
 /// with a pixel grid and a center-pixel marker, sized to the painter's box.

@@ -19,11 +19,89 @@ Widget _paintHost(CustomPainter painter) => Directionality(
       child: CustomPaint(painter: painter, size: const Size(200, 150)),
     );
 
+/// Captures LoupePainter's drawImageRect geometry (all other canvas calls are
+/// no-ops) so the sampled source rect is assertable without rasterizing.
+class _RecordingCanvas implements Canvas {
+  Rect? imageSrc;
+  Rect? imageDst;
+
+  @override
+  void drawImageRect(ui.Image image, Rect src, Rect dst, Paint paint) {
+    imageSrc = src;
+    imageDst = dst;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
 void main() {
   late ui.Image base;
 
   setUpAll(() async {
     base = await _solidImage(64, 48);
+  });
+
+  test('liveLoupeCenter lands the painter snap on the aimed patch cell', () {
+    // The native live feeds center the span×span patch on the aimed pixel at
+    // cell index span ~/ 2. LoupePainter snaps its view to
+    // (centerPx - 0.5).round() + 0.5; that snap must land exactly on the
+    // aimed cell's pixel center or the loupe shows the WRONG center pixel and
+    // an out-of-patch black edge on the right/bottom.
+    for (final span in [5, 7, 9, 11, 13, 15, 17, 19, 21]) {
+      for (final scale in [1.0, 1.25, 1.5, 2.0]) {
+        final c = liveLoupeCenter(span, scale);
+        final centerPx = c.dx * scale;
+        final snapped = (centerPx - 0.5).roundToDouble() + 0.5;
+        expect(snapped, span ~/ 2 + 0.5, reason: 'span=$span scale=$scale');
+      }
+    }
+  });
+
+  test('live loupe samples exactly the whole patch, aim on the center cell',
+      () async {
+    // End-to-end painter geometry for the LIVE record-select loupe: with the
+    // patch-center aim from liveLoupeCenter, the painted source rect must be
+    // EXACTLY the span×span patch — no out-of-patch overhang (the black-edge
+    // bug) and the aimed pixel dead-center.
+    const span = 13;
+    const scale = 1.5;
+    final patch = await _solidImage(span, span);
+    final canvas = _RecordingCanvas();
+    LoupePainter(
+      image: patch,
+      cursorLogical: liveLoupeCenter(span, scale),
+      scaleFactor: scale,
+      zoom: 8,
+    ).paint(canvas, const Size(span * 8.0, span * 8.0));
+    expect(canvas.imageSrc, const Rect.fromLTRB(0, 0, 13, 13));
+    expect(canvas.imageDst, const Rect.fromLTRB(0, 0, 104, 104));
+  });
+
+  test('frozen loupe centers the sampled rect on the aimed pixel', () {
+    // Screenshot (frozen) path: the painter receives the RAW cursor and must
+    // snap its sampled rect onto the same aimed pixel the readout names
+    // (round(x*scale - 0.5)) — center cell == aimed pixel == readout, the
+    // same guarantee the live test above pins for record-select.
+    const scale = 2.0;
+    const cursor = Offset(10.4, 7.2);
+    final canvas = _RecordingCanvas();
+    LoupePainter(
+      image: base, // 64x48 native px
+      cursorLogical: cursor,
+      scaleFactor: scale,
+      zoom: 8,
+    ).paint(canvas, const Size(104, 104)); // 13 native px across
+    final aimedX = (cursor.dx * scale - 0.5).round(); // 20 — the readout pixel
+    final aimedY = (cursor.dy * scale - 0.5).round(); // 14
+    expect(
+      canvas.imageSrc,
+      Rect.fromCenter(
+        center: Offset(aimedX + 0.5, aimedY + 0.5),
+        width: 13,
+        height: 13,
+      ),
+    );
   });
 
   testWidgets('CrosshairPainter paints full lines and the holed variant',

@@ -2721,13 +2721,9 @@ class _EditorCoreState extends State<EditorCore> {
       if (patch == null) return const SizedBox.shrink();
       image = patch;
       // Aim at the patch's center cell: the fetch centered the patch on the
-      // aimed pixel, so the painter's snapped center must land on cell
-      // span/2 (whose pixel-center coordinate is span/2 + 0.5).
-      center = Offset.zero +
-          Offset(
-            (widget.loupe.span / 2 + 0.5) / widget.host.pixelScale,
-            (widget.loupe.span / 2 + 0.5) / widget.host.pixelScale,
-          );
+      // aimed pixel at cell index span ~/ 2, and the painter's snapped center
+      // must land exactly there (see liveLoupeCenter + its test).
+      center = liveLoupeCenter(widget.loupe.span, widget.host.pixelScale);
     } else {
       image = _canvasImage;
       center = _cursor;
