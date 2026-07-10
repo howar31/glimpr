@@ -375,12 +375,22 @@ class _EditorCoreState extends State<EditorCore> {
   Future<void> _confirmTrim() async {
     final r = _crop.rect.value;
     if (r == null) return;
-    // A drag can run past the image edges — clamp to the canvas.
-    final rect = r.intersect(Offset.zero & _canvasSize);
-    if (rect.width < 1 || rect.height < 1) {
+    // A drag can run past the image edges — clamp to the canvas. Then snap to
+    // whole pixels (editor logical == pixels): a fractional-edge trim would
+    // resample the whole image AND leave toImage's rounded-up last row/column
+    // only partially covered -> a semi-transparent edge that pastes as a white
+    // line in alpha-flattening apps.
+    final clamped = r.intersect(Offset.zero & _canvasSize);
+    if (clamped.width < 1 || clamped.height < 1) {
       setState(() => _crop.clear());
       return;
     }
+    final rect = Rect.fromLTRB(
+      clamped.left.roundToDouble(),
+      clamped.top.roundToDouble(),
+      clamped.right.roundToDouble(),
+      clamped.bottom.roundToDouble(),
+    );
     final cropped = await _cropImage(_canvasImage, rect);
     if (!mounted) {
       cropped.dispose();

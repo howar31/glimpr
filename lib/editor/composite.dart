@@ -16,7 +16,10 @@ Rect _nativeRect(Rect r, double s) =>
     Rect.fromLTRB(r.left * s, r.top * s, r.right * s, r.bottom * s);
 
 /// Native-pixel crop rect for [selectionLogical] (logical overlay coords), or
-/// the whole display when null. Clamped to the native image bounds.
+/// the whole display when null. Clamped to the native image bounds and snapped
+/// to whole pixels: a fractional edge would round toImage's size UP while the
+/// content covers the extra row/column only partially -> a semi-transparent
+/// edge that pastes as a white line in alpha-flattening apps.
 Rect nativeCropRect({
   required Rect? selectionLogical,
   required Size logicalSize,
@@ -28,14 +31,20 @@ Rect nativeCropRect({
     logicalSize.width * scaleFactor,
     logicalSize.height * scaleFactor,
   );
-  if (selectionLogical == null) return full;
-  final scaled = Rect.fromLTRB(
-    selectionLogical.left * scaleFactor,
-    selectionLogical.top * scaleFactor,
-    selectionLogical.right * scaleFactor,
-    selectionLogical.bottom * scaleFactor,
+  final scaled = selectionLogical == null
+      ? full
+      : Rect.fromLTRB(
+          selectionLogical.left * scaleFactor,
+          selectionLogical.top * scaleFactor,
+          selectionLogical.right * scaleFactor,
+          selectionLogical.bottom * scaleFactor,
+        ).intersect(full);
+  return Rect.fromLTRB(
+    scaled.left.roundToDouble(),
+    scaled.top.roundToDouble(),
+    scaled.right.roundToDouble(),
+    scaled.bottom.roundToDouble(),
   );
-  return scaled.intersect(full);
 }
 
 /// Composites [frozen] (native pixels) + [drawables] (logical coords, scaled by

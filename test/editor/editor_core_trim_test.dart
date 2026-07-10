@@ -155,4 +155,32 @@ void main() {
 
     expect(c.document.value.canvasSize, const Size(250, 250));
   });
+
+  testWidgets('a FRACTIONAL crop rect snaps to whole pixels: integer canvas '
+      'and a fully opaque bottom row', (tester) async {
+    // A fractional-edge trim rounds toImage's height UP, leaving the last row
+    // only partially covered -> a semi-transparent edge that pastes as a white
+    // line in alpha-flattening apps. The trim must snap to pixel boundaries.
+    final host = editorHost();
+    final c = await pumpEditorCore(tester, host);
+
+    await dragSelect(
+        tester, const Offset(100, 100), const Offset(300.4, 300.6));
+    await confirmTrim(tester, c);
+
+    expect(c.document.value.canvasSize, const Size(200, 201));
+    final img = c.document.value.canvasImage!;
+    expect(img.width, 200);
+    expect(img.height, 201);
+    late Uint8List rgba;
+    await tester.runAsync(() async {
+      final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      rgba = data!.buffer.asUint8List();
+    });
+    final lastRow = (img.height - 1) * img.width * 4;
+    for (var x = 0; x < img.width; x++) {
+      expect(rgba[lastRow + x * 4 + 3], 255,
+          reason: 'bottom-row alpha must be opaque at x=$x');
+    }
+  });
 }
