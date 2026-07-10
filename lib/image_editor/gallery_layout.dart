@@ -3,8 +3,9 @@ import 'dart:math' as math;
 /// Landing-gallery grid sizing: tiles GROW with the window instead of leaving
 /// dead space (the recents list is capped, so a large window used to strand
 /// most of its area). Tile width is bounded to [kGalleryTileMin]..
-/// [kGalleryTileMax]; the max keeps the ~256px thumbnail sidecars at
-/// native-or-down scale (maxW / ratio ≈ 254px tall), so grown tiles never blur.
+/// [kGalleryTileMax]; the max matches the ThumbCache sidecar box (620x456
+/// device px = 2x the largest tile's thumbnail area), so grown tiles stay
+/// native-or-down even on 2x displays.
 const double kGalleryTileMin = 170;
 const double kGalleryTileMax = 310;
 const double kGalleryTileRatio = 1.22; // whole cell, thumbnail + caption

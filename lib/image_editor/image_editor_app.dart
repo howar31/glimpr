@@ -1766,11 +1766,12 @@ class _RecentTileState extends State<_RecentTile> {
   }
 
   /// The cover-fit file thumbnail, served from the persisted ThumbCache (a
-  /// ~256px sidecar PNG) so the landing never decodes full-resolution sources
-  /// (F1-3: 30 x 5K recents measured a ~578MB launch transient). Falls back
-  /// to a direct bounded decode when the cache is unavailable, and to the
-  /// generic image glyph when the file is unreadable. The inset backdrop
-  /// shows through transparent PNGs.
+  /// cover-cropped sidecar PNG sized to the tile's display window) so the
+  /// landing never decodes full-resolution sources (F1-3: 30 x 5K recents
+  /// measured a ~578MB launch transient). Falls back to a direct bounded
+  /// decode when the cache is unavailable, and to the generic image glyph
+  /// when the file is unreadable. The inset backdrop shows through
+  /// transparent PNGs.
   Widget _thumbnail(GlimprTokens t) {
     return Container(
       width: double.infinity,
@@ -1794,8 +1795,9 @@ class _RecentTileState extends State<_RecentTile> {
             // Top edge, not centre: window title bars / page headers are the
             // most recognisable slice of a tall screenshot.
             alignment: Alignment.topCenter,
-            // Bounds the fallback's direct decode; a no-op for cache files.
-            cacheHeight: 256,
+            // Bounds the fallback's direct full-source decode; a no-op for
+            // sidecar files (their width never exceeds the cache's box).
+            cacheWidth: 620,
             errorBuilder: (_, _, _) =>
                 Icon(Icons.image_outlined, size: 18, color: t.fg3),
           );

@@ -22,6 +22,41 @@ Future<Uint8List> _pngBytes(int w, int h) async {
   return data!.buffer.asUint8List();
 }
 
+/// Encode a [w]x[h] PNG whose pixel colors come from [colorAt](x, y) — RGBA.
+Future<Uint8List> _paintedPngBytes(
+    int w, int h, List<int> Function(int x, int y) colorAt) async {
+  final pixels = Uint8List(w * h * 4);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final c = colorAt(x, y);
+      final i = (y * w + x) * 4;
+      pixels[i] = c[0];
+      pixels[i + 1] = c[1];
+      pixels[i + 2] = c[2];
+      pixels[i + 3] = 255;
+    }
+  }
+  final completer = Completer<ui.Image>();
+  ui.decodeImageFromPixels(
+      pixels, w, h, ui.PixelFormat.rgba8888, completer.complete);
+  final img = await completer.future;
+  final data = await img.toByteData(format: ui.ImageByteFormat.png);
+  img.dispose();
+  return data!.buffer.asUint8List();
+}
+
+/// Decode [file] and return (width, height, rawRgba bytes).
+Future<(int, int, Uint8List)> _decode(File file) async {
+  final codec = await ui.instantiateImageCodec(await file.readAsBytes());
+  final frame = await codec.getNextFrame();
+  codec.dispose();
+  final img = frame.image;
+  final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final out = (img.width, img.height, data!.buffer.asUint8List());
+  img.dispose();
+  return out;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -38,6 +73,9 @@ void main() {
       expect(k1, endsWith('.png'));
       expect(k1.split('-').first, k2.split('-').first);
       expect(k1, isNot(k2));
+      // Format version: cover-cropped sidecars must not be served from keys
+      // of the old height-bound generation.
+      expect(k1, contains('-v2-'));
     });
   });
 
@@ -91,6 +129,48 @@ void main() {
       final junk = File(p.join(tmp.path, 'junk.png'));
       await junk.writeAsBytes(List.filled(64, 7));
       expect(await cache.obtain(junk.path), isNull);
+    });
+
+    test('TALL source: sidecar keeps native width and crops the TOP slice',
+        () async {
+      // A tall screenshot: the tile covers by WIDTH (topCenter), so the
+      // sidecar must be the top slice at full width — the old height-only
+      // bound shrank a 120x1200 source to 46x456 and the tile upscaled it
+      // blurry. Top 200 rows red, rest blue.
+      final src = File(p.join(tmp.path, 'tall.png'));
+      await src.writeAsBytes(await _paintedPngBytes(
+          120, 1200, (x, y) => y < 200 ? [255, 0, 0] : [0, 0, 255]));
+
+      final f = await cache.obtain(src.path);
+      final (w, h, rgba) = await _decode(f!);
+      expect(w, 120); // native width kept (<= box width)
+      expect(h, (120 * 456 / 620).round()); // box-aspect top crop
+      // Every pixel is from the red TOP slice.
+      for (var i = 0; i < rgba.length; i += 4) {
+        expect(rgba[i], 255, reason: 'px ${i ~/ 4} not from the top slice');
+        expect(rgba[i + 2], 0);
+      }
+    });
+
+    test('WIDE source: sidecar crops a horizontally CENTERED slice at native '
+        'height', () async {
+      // A wide panorama: the tile covers by HEIGHT; the sidecar must be the
+      // horizontally-centered slice. Left/right thirds green, middle yellow.
+      final src = File(p.join(tmp.path, 'wide.png'));
+      await src.writeAsBytes(await _paintedPngBytes(
+          1200, 120,
+          (x, y) => (x < 400 || x >= 800) ? [0, 255, 0] : [255, 255, 0]));
+
+      final f = await cache.obtain(src.path);
+      final (w, h, rgba) = await _decode(f!);
+      expect(h, 120); // native height kept (<= box height)
+      expect(w, (120 * 620 / 456).round()); // box-aspect centered crop
+      // Every pixel is from the yellow CENTER band.
+      for (var i = 0; i < rgba.length; i += 4) {
+        expect(rgba[i], 255, reason: 'px ${i ~/ 4} not from the center band');
+        expect(rgba[i + 1], 255);
+        expect(rgba[i + 2], 0);
+      }
     });
 
     test('bounds concurrent generation', () async {

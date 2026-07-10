@@ -1,26 +1,42 @@
 import 'dart:async';
+import 'dart:math' as math;
 import '../platform_gate.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:path/path.dart' as p;
 
-/// Persisted downscaled-thumbnail cache for the landing gallery (perf-tune
-/// F1-3). Decoding 30 recent 5K PNGs eagerly at launch measured a ~578MB RSS
-/// transient — cacheHeight bounds the CACHED size, not the decode, and PNG
-/// has no reduced-size decode path. Tiles now read ~[height]px sidecar PNGs;
-/// missing sidecars are generated with at most [maxConcurrent] decodes in
-/// flight, so even a cold cache never piles full-resolution decodes.
+/// Persisted thumbnail cache for the landing gallery (perf-tune F1-3).
+/// Decoding 30 recent 5K PNGs eagerly at launch measured a ~578MB RSS
+/// transient, so tiles read small sidecar PNGs instead; missing sidecars are
+/// generated with at most [maxConcurrent] decodes in flight, so even a cold
+/// cache never piles full-resolution decodes.
 ///
-/// Entries are keyed by (source path, mtime, size): a changed source gets a
-/// new key and its stale generations are pruned via the shared path-hash
-/// prefix. Lives under ~/Library/Caches (macOS) / %LOCALAPPDATA% (Windows) —
-/// safe to delete at any time.
+/// A sidecar is the tile's COVER SLICE, not a whole-image miniature: the tile
+/// paints BoxFit.cover / topCenter into a [boxWidth]x[boxHeight] (device px)
+/// window, so the source is cropped to that aspect FIRST (top slice for tall
+/// sources, horizontally-centered for wide) and downscaled second. Bounding
+/// the whole image by height alone starved a tall screenshot's width (a
+/// 631x3733 source became 43px wide) and the tile upscaled it into blur.
+///
+/// Entries are keyed by (source path, mtime, size) + a format version: a
+/// changed source gets a new key and its stale generations are pruned via the
+/// shared path-hash prefix. Lives under ~/Library/Caches (macOS) /
+/// %LOCALAPPDATA% (Windows) — safe to delete at any time.
 class ThumbCache {
-  ThumbCache({Directory? dir, this.height = 256, this.maxConcurrent = 2})
+  ThumbCache(
+      {Directory? dir,
+      this.boxWidth = 620,
+      this.boxHeight = 456,
+      this.maxConcurrent = 2})
       : dir = dir ?? _defaultDir();
 
   final Directory dir;
-  final int height;
+
+  /// The canonical tile display window in DEVICE px: 2x the largest gallery
+  /// tile's thumbnail area (kGalleryTileMax 310 x ~228 logical), so tiles stay
+  /// native-or-down on 2x displays at every grid size.
+  final int boxWidth;
+  final int boxHeight;
   final int maxConcurrent;
 
   int _running = 0;
@@ -70,14 +86,46 @@ class ThumbCache {
   }
 
   Future<File?> _generate(String path, String key) async {
+    ui.ImmutableBuffer? buffer;
+    ui.ImageDescriptor? desc;
     try {
       final bytes = await File(path).readAsBytes();
-      // targetHeight bounds the DECODE for formats that support it and the
-      // decoded bitmap for the rest; the throttle above bounds the pile-up.
-      final codec = await ui.instantiateImageCodec(bytes, targetHeight: height);
+      buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      desc = await ui.ImageDescriptor.encoded(buffer);
+      final srcW = desc.width;
+      final srcH = desc.height;
+      // Bound the decode on the axis the tile's cover BINDS (tall sources by
+      // width, wide by height) — the other axis follows the source aspect and
+      // gets cropped below. Never upscales: the bound caps at the native size.
+      final tall = srcW * boxHeight < srcH * boxWidth;
+      final codec = await desc.instantiateCodec(
+        targetWidth: tall ? math.min(boxWidth, srcW) : null,
+        targetHeight: tall ? null : math.min(boxHeight, srcH),
+      );
       final frame = await codec.getNextFrame();
       codec.dispose();
-      final img = frame.image;
+      var img = frame.image;
+      // Crop to the box aspect the way the tile displays it: top slice,
+      // horizontally centered (BoxFit.cover + Alignment.topCenter).
+      final cropW =
+          math.min(img.width, (img.height * boxWidth / boxHeight).round());
+      final cropH =
+          math.min(img.height, (img.width * boxHeight / boxWidth).round());
+      if (cropW != img.width || cropH != img.height) {
+        final left = ((img.width - cropW) / 2).floorToDouble();
+        final rec = ui.PictureRecorder();
+        ui.Canvas(rec).drawImageRect(
+          img,
+          ui.Rect.fromLTWH(left, 0, cropW.toDouble(), cropH.toDouble()),
+          ui.Rect.fromLTWH(0, 0, cropW.toDouble(), cropH.toDouble()),
+          ui.Paint(),
+        );
+        final pic = rec.endRecording();
+        final cropped = await pic.toImage(cropW, cropH);
+        pic.dispose();
+        img.dispose();
+        img = cropped;
+      }
       final data = await img.toByteData(format: ui.ImageByteFormat.png);
       img.dispose();
       if (data == null) return null;
@@ -99,6 +147,9 @@ class ThumbCache {
       return await tmp.rename(p.join(dir.path, key));
     } catch (_) {
       return null;
+    } finally {
+      desc?.dispose();
+      buffer?.dispose();
     }
   }
 
@@ -122,9 +173,10 @@ class ThumbCache {
 }
 
 /// Stable cache filename for (source path, mtime ms, byte size). The path
-/// hash leads so every generation of one source shares a prunable prefix.
+/// hash leads so every generation of one source shares a prunable prefix; the
+/// format version invalidates sidecars from older pipelines (v2 = cover-crop).
 String thumbKey(String path, int mtimeMs, int size) =>
-    '${fnv1a32(path).toRadixString(16)}-$mtimeMs-$size.png';
+    '${fnv1a32(path).toRadixString(16)}-v2-$mtimeMs-$size.png';
 
 /// FNV-1a 32-bit over the string's code units — Dart's String.hashCode is
 /// not guaranteed stable across runs/versions, a cache filename must be.
