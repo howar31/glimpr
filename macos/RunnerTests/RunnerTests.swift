@@ -604,3 +604,30 @@ final class PinPanelTests: XCTestCase {
     return NSEvent(cgEvent: cg)
   }
 }
+
+// MARK: - Editor drag/open supported-extension filter (MainFlutterWindow.swift)
+
+final class SupportedImageExtensionTests: XCTestCase {
+  func testSupportedExtensionsCaseBlind() {
+    for path in [
+      "/a/shot.png", "/a/PHOTO.JPG", "/a/pic.jpeg", "/a/anim.Gif",
+      "/a/pic.webp", "/a/pic.bmp", "/a/pic.tiff",
+    ] {
+      XCTAssertTrue(
+        DragDestinationEffectView.isSupportedImageURL(URL(fileURLWithPath: path)),
+        path)
+    }
+  }
+
+  func testUnsupportedExtensionsRejected() {
+    // heic is deliberately out: the shared set is what BOTH platforms decode.
+    for path in [
+      "/a/notes.txt", "/a/archive.zip", "/a/noextension",
+      "/a/photo.heic", "/a/clip.mp4", "/dir.png/file",
+    ] {
+      XCTAssertFalse(
+        DragDestinationEffectView.isSupportedImageURL(URL(fileURLWithPath: path)),
+        path)
+    }
+  }
+}

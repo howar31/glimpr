@@ -603,9 +603,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
   }
 
-  /// Present a modal NSOpenPanel restricted to common image types and return the
-  /// chosen file path, or nil if the user cancelled. A re-entrancy guard prevents
-  /// stacking a second panel if the channel or menu fires while one is already up.
+  /// Present a modal NSOpenPanel restricted to the editor's supported image
+  /// types (the same set the drag filter and the Windows build accept) and
+  /// return the chosen file path, or nil if the user cancelled. A re-entrancy
+  /// guard prevents stacking a second panel if the channel or menu fires while
+  /// one is already up.
   private func presentOpenPanel() -> String? {
     guard !isPresentingOpenPanel else { return nil }
     isPresentingOpenPanel = true
@@ -613,7 +615,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     let panel = NSOpenPanel()
     panel.allowsMultipleSelection = false
     panel.canChooseDirectories = false
-    panel.allowedContentTypes = [.png, .jpeg, .gif, .tiff, .bmp, .heic, .image]
+    panel.allowedContentTypes =
+      DragDestinationEffectView.supportedImageExtensions.compactMap {
+        UTType(filenameExtension: $0)
+      }
     return panel.runModal() == .OK ? panel.url?.path : nil
   }
 
@@ -866,27 +871,54 @@ class GlassContentViewController: NSViewController {
 final class DragDestinationEffectView: NSVisualEffectView {
   var onDropFile: ((String) -> Void)?
 
-  /// The first dropped file URL whose content conforms to public.image, or nil.
+  /// Extensions the editor can decode on BOTH platforms — the drag filter and
+  /// the Open panel accept exactly this set so the openable files match the
+  /// Windows build. Keep in sync with the Windows drop filter
+  /// (windows/runner/drop_filter.h) and the Dart Open dialog filter
+  /// (image_editor_app.dart _openPanel).
+  static let supportedImageExtensions: Set<String> = [
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff",
+  ]
+
+  static func isSupportedImageURL(_ url: URL) -> Bool {
+    supportedImageExtensions.contains(url.pathExtension.lowercased())
+  }
+
+  /// The drag session's verdict, decided ONCE in draggingEntered. The dragged
+  /// items cannot change within a session, and re-reading the pasteboard on
+  /// every draggingUpdated (which fires continuously while hovering) floods
+  /// the drag source with data-request XPC round trips until macOS kills the
+  /// session after a few seconds — the copy cursor visibly decayed mid-hover.
+  private var sessionImageURL: URL?
+
+  /// The first dragged file URL with a supported image extension, or nil.
   private func imageURL(_ sender: NSDraggingInfo) -> URL? {
     let options: [NSPasteboard.ReadingOptionKey: Any] = [
-      .urlReadingFileURLsOnly: true,
-      .urlReadingContentsConformToTypes: [UTType.image.identifier],
+      .urlReadingFileURLsOnly: true
     ]
     let urls = sender.draggingPasteboard.readObjects(
       forClasses: [NSURL.self], options: options) as? [URL]
-    return urls?.first
+    return urls?.first(where: Self.isSupportedImageURL)
   }
 
   override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-    (onDropFile != nil && imageURL(sender) != nil) ? .copy : []
+    sessionImageURL = onDropFile != nil ? imageURL(sender) : nil
+    return sessionImageURL != nil ? .copy : []
   }
 
   override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-    (onDropFile != nil && imageURL(sender) != nil) ? .copy : []
+    sessionImageURL != nil ? .copy : []
+  }
+
+  override func draggingExited(_ sender: NSDraggingInfo?) {
+    sessionImageURL = nil
   }
 
   override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-    guard let handler = onDropFile, let url = imageURL(sender) else { return false }
+    guard let handler = onDropFile,
+      let url = sessionImageURL ?? imageURL(sender)
+    else { return false }
+    sessionImageURL = nil
     handler(url.path)
     return true
   }
