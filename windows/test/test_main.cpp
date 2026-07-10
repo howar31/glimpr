@@ -16,6 +16,7 @@
 
 #include "base64.h"
 #include "capture_key_rule.h"
+#include "clipboard_dib.h"
 #include "hdr_util.h"
 #include "pixel_swizzle.h"
 #include "record_args.h"
@@ -329,6 +330,60 @@ void TestSnapFilter() {
   CHECK(!snapfilter::Passes(tiny));
 }
 
+// --- clipboard opaque DIB ----------------------------------------------------
+
+void TestOpaqueDib() {
+  g_case = "clipdib";
+  // 3x2 BGRA with a padded stride (16 bytes/row), every alpha 255.
+  const uint32_t w = 3, h = 2, stride = 16;
+  std::vector<uint8_t> src(static_cast<size_t>(stride) * h, 0xCD);
+  auto px = [&src, stride](uint32_t x, uint32_t y, uint8_t b, uint8_t g,
+                           uint8_t r, uint8_t a) {
+    uint8_t* p = src.data() + y * stride + x * 4;
+    p[0] = b; p[1] = g; p[2] = r; p[3] = a;
+  };
+  px(0, 0, 1, 2, 3, 255);
+  px(1, 0, 4, 5, 6, 255);
+  px(2, 0, 7, 8, 9, 255);
+  px(0, 1, 11, 12, 13, 255);
+  px(1, 1, 14, 15, 16, 255);
+  px(2, 1, 17, 18, 19, 255);
+  CHECK(clipdib::AllOpaque(src.data(), w, h, stride));
+
+  std::vector<uint8_t> dib(clipdib::OpaqueDibSize(w, h));
+  CHECK(dib.size() == 52 + w * 4 * h);
+  clipdib::WriteOpaqueDib(dib.data(), src.data(), w, h, stride);
+  auto u32 = [&dib](size_t off) {
+    uint32_t v;
+    std::memcpy(&v, dib.data() + off, 4);
+    return v;
+  };
+  auto u16 = [&dib](size_t off) {
+    uint16_t v;
+    std::memcpy(&v, dib.data() + off, 2);
+    return v;
+  };
+  CHECK(u32(0) == 40);  // BITMAPINFOHEADER, not V5
+  CHECK(u32(4) == w);
+  CHECK(u32(8) == h);  // POSITIVE height: bottom-up
+  CHECK(u16(12) == 1 && u16(14) == 32);
+  CHECK(u32(16) == 3);  // BI_BITFIELDS
+  CHECK(u32(20) == w * 4 * h);
+  CHECK(u32(40) == 0x00FF0000u);  // R/G/B masks, NO alpha mask anywhere
+  CHECK(u32(44) == 0x0000FF00u);
+  CHECK(u32(48) == 0x000000FFu);
+  // Bottom-up: the DIB's first pixel row is the image's LAST row; source row
+  // padding beyond w*4 is not copied.
+  const uint8_t* pix = dib.data() + 52;
+  CHECK(pix[0] == 11 && pix[1] == 12 && pix[2] == 13 && pix[3] == 255);
+  CHECK(pix[8] == 17 && pix[11] == 255);   // (2,1) ends the first DIB row
+  CHECK(pix[12] == 1 && pix[15] == 255);   // image row 0 comes second
+
+  // A single not-fully-opaque pixel flips the detection.
+  px(1, 1, 14, 15, 16, 254);
+  CHECK(!clipdib::AllOpaque(src.data(), w, h, stride));
+}
+
 // --- hotkey capture commit rule --------------------------------------------
 
 void TestCaptureKeyRule() {
@@ -358,7 +413,7 @@ int main() {
       {"parsespec-full", TestParseSpecFull}, {"half", TestHalfFloatRoundTrip},
       {"ext-srgb", TestExtSrgb},         {"tonemap", TestToneMapLut},
       {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
-      {"capture-key", TestCaptureKeyRule},
+      {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

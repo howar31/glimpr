@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "clipboard_dib.h"
 #include "image_codec.h"
 #include "perf_log.h"
 
@@ -170,6 +171,37 @@ bool WriteBgraToClipboard(const uint8_t* bgra, uint32_t w, uint32_t h,
                           uint32_t stride, const uint8_t* png,
                           size_t png_len) {
   if (!bgra || w == 0 || h == 0) return false;
+
+  // A FULLY OPAQUE image advertises NO alpha: write a classic bottom-up 32bpp
+  // CF_DIB (the system synthesizes CF_DIBV5 with a zero alpha mask and
+  // CF_BITMAP) and no PNG format -- the same clipboard surface as Windows'
+  // own screenshots. Alpha-aware consumers (LINE et al) matte/halo an image
+  // whose clipboard advertises an alpha channel, even when every pixel is
+  // opaque; native screenshots never trigger that. Images with real
+  // transparency (decorated captures) keep the alpha-carrying DIBV5 + PNG
+  // path below -- flatten-to-white there is inherent to the target app.
+  if (clipdib::AllOpaque(bgra, w, h, stride)) {
+    HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, clipdib::OpaqueDibSize(w, h));
+    if (!dib) return false;
+    {
+      auto* p = static_cast<uint8_t*>(GlobalLock(dib));
+      if (!p) {
+        GlobalFree(dib);
+        return false;
+      }
+      clipdib::WriteOpaqueDib(p, bgra, w, h, stride);
+      GlobalUnlock(dib);
+    }
+    if (!OpenClipboard(nullptr)) {
+      GlobalFree(dib);
+      return false;
+    }
+    EmptyClipboard();
+    const bool ok = SetClipboardData(CF_DIB, dib) != nullptr;
+    CloseClipboard();
+    if (!ok) GlobalFree(dib);
+    return ok;
+  }
 
   BITMAPV5HEADER bi{};
   bi.bV5Size = sizeof(BITMAPV5HEADER);
