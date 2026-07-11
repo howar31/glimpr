@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  version-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag core version matches pubspec
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          CORE="${TAG%%-*}"
+          PUBSPEC="$(sed -n 's/^version: \([0-9][0-9.]*\)+.*/\1/p' pubspec.yaml)"
+          echo "tag=$TAG core=$CORE pubspec=$PUBSPEC"
+          test "$CORE" = "$PUBSPEC"
+
+  mac:
+    needs: version-gate
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Import signing certificate (temp keychain)
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$CERT_P12" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security list-keychains -d user -s build.keychain login.keychain
+          rm /tmp/cert.p12
+      - run: flutter pub get
+      - run: flutter build macos --release
+      - name: Verify signature
+        run: |
+          codesign --verify --deep --strict build/macos/Build/Products/Release/Glimpr.app
+          codesign -dv build/macos/Build/Products/Release/Glimpr.app 2>&1 | grep 'flags=0x10000(runtime)'
+      - name: Build DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "Glimpr" \
+            --window-size 540 380 \
+            --icon-size 128 \
+            --icon "Glimpr.app" 140 180 \
+            --app-drop-link 400 180 \
+            --hdiutil-quiet \
+            "Glimpr-macOS.dmg" \
+            "build/macos/Build/Products/Release/Glimpr.app" \
+          || { echo "create-dmg failed; hdiutil fallback"; \
+               STAGE=$(mktemp -d); cp -R build/macos/Build/Products/Release/Glimpr.app "$STAGE/"; \
+               ln -s /Applications "$STAGE/Applications"; \
+               hdiutil create -volname Glimpr -srcfolder "$STAGE" -ov -format UDZO Glimpr-macOS.dmg; }
+      - name: Notarize and staple
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          printf '%s' "$ASC_KEY_P8" > /tmp/asc.p8
+          xcrun notarytool submit Glimpr-macOS.dmg \
+            --key /tmp/asc.p8 --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
+            --wait --timeout 30m
+          xcrun stapler staple Glimpr-macOS.dmg
+          rm /tmp/asc.p8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: Glimpr-macOS.dmg
+
+  windows:
+    needs: version-gate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ver = "$env:GITHUB_REF_NAME".TrimStart("v") -replace "-.*",""
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            /DMyAppVersion=$ver `
+            /DBuildDir="$PWD\build\windows\x64\runner\Release" `
+            /O"$PWD" windows\installer\glimpr.iss
+      - name: Build portable zip
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Glimpr-Windows-Portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-artifacts
+          path: |
+            Glimpr-Setup.exe
+            Glimpr-Windows-Portable.zip
+
+  release:
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Create or update GitHub Release (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE=""
+          case "$GITHUB_REF_NAME" in *-*) PRERELEASE="--prerelease";; esac
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $PRERELEASE
+          gh release upload "$GITHUB_REF_NAME" \
+            Glimpr-macOS.dmg Glimpr-Setup.exe Glimpr-Windows-Portable.zip --clobber
