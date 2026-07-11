@@ -30,6 +30,7 @@ enum TrayCommand : UINT {
   kCmdOpenEditorClipboard,
   kCmdClearRecent,
   kCmdOpenSaveFolder,
+  kCmdCheckUpdates,
   kCmdAbout,
   kCmdSettings,
   kCmdQuit,
@@ -278,6 +279,13 @@ void TrayIcon::ShowMenu() {
   AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
              "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  // Dart pushes an "Update available: vX.Y.Z" label when the update check
+  // finds a newer release (SetUpdateStatus); idle falls back to the pushed
+  // localized "check" wording like every other item.
+  AppendItem(menu, kCmdCheckUpdates,
+             update_label_.empty() ? L("checkUpdates", "Check for updates")
+                                   : update_label_,
+             "", true);
   AppendItem(menu, kCmdAbout, L("about", "About Glimpr"), "", true);
   AppendItem(menu, kCmdSettings, L("settings", "Settings..."), "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -321,6 +329,9 @@ void TrayIcon::OnCommand(UINT command_id) {
       break;
     case kCmdClearRecent: if (cb_.on_clear_recent) cb_.on_clear_recent(); break;
     case kCmdOpenSaveFolder: hotkeys_->FireAction(kActOpenSaveFolder); break;
+    case kCmdCheckUpdates:
+      if (cb_.on_check_updates) cb_.on_check_updates();
+      break;
     case kCmdAbout: if (cb_.on_about) cb_.on_about(); break;
     case kCmdSettings: if (cb_.on_reveal_settings) cb_.on_reveal_settings(); break;
     case kCmdQuit: if (cb_.on_quit) cb_.on_quit(); break;
@@ -334,6 +345,11 @@ void TrayIcon::SetRecentImages(std::vector<std::string> paths) {
 
 void TrayIcon::SetLabels(std::map<std::string, std::string> labels) {
   labels_ = std::move(labels);
+}
+
+void TrayIcon::SetUpdateStatus(const std::string& label_utf8, bool available) {
+  update_label_ = label_utf8;
+  update_available_ = available;
 }
 
 // static

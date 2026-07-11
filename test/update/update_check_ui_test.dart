@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/channels.dart';
 import 'package:glimpr/platform_gate.dart';
@@ -27,11 +27,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('idle About row offers a manual update check', (tester) async {
+  testWidgets('idle About header offers the refresh affordance', (tester) async {
     mockMethodChannel(kRoleChannel,
         handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
     await openAbout(tester, Settings(FakeStore()));
-    expect(find.text('Check for updates'), findsOneWidget);
+    // The check lives next to the version number (a refresh icon), not among
+    // the About links; idle shows no status line.
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
+    expect(find.textContaining('Update available'), findsNothing);
   });
 
   testWidgets('persisted newer release shows the update badge row',
@@ -54,7 +57,63 @@ void main() {
     await store.setString('update_latest_tag', 'v0.9.0');
     await store.setString('update_latest_url', 'https://example.test/rel');
     await openAbout(tester, settings);
-    expect(find.text('Check for updates'), findsOneWidget);
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
+    expect(find.textContaining('Update available'), findsNothing);
+  });
+
+  testWidgets('a persisted newer release pushes the tray update status',
+      (tester) async {
+    final calls = mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await openAbout(tester, settings);
+    final push = calls.where((c) => c.method == 'setUpdateStatus').toList();
+    expect(push, isNotEmpty);
+    final args = (push.last.arguments as Map).cast<String, Object?>();
+    expect(args['available'], isTrue);
+    expect(args['label'], 'Update available: v9.9.9');
+  });
+
+  testWidgets('tray click with a known update opens the release page',
+      (tester) async {
+    final calls = mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await openAbout(tester, settings);
+    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
+    await tester.pump();
+    final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
+    expect(opened, hasLength(1));
+    expect((opened.single.arguments as Map)['url'], 'https://example.test/rel');
+  });
+
+  testWidgets('tray click without a known update lands on About and checks',
+      (tester) async {
+    final calls = mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final settings = Settings(FakeStore());
+    // Stay on the General pane; the tray call must deep-link to About itself.
+    await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
+    await tester.pumpAndSettle();
+    // No URL opened; the About pane is showing (Ko-fi row is About-only) and
+    // a (clean) status push happened after the check resolved. The real
+    // fetch is blocked by flutter_test's HttpOverrides, so the check yields
+    // null -> the label resets to the idle "check" wording.
+    expect(calls.where((c) => c.method == 'openExternalUrl'), isEmpty);
+    expect(find.text('Support'), findsOneWidget);
+    final push = calls.where((c) => c.method == 'setUpdateStatus').toList();
+    expect(push, isNotEmpty);
+    final args = (push.last.arguments as Map).cast<String, Object?>();
+    expect(args['available'], isFalse);
+    expect(args['label'], 'Check for updates');
   });
 
   testWidgets('Advanced pane toggle persists update_check_enabled',

@@ -241,6 +241,24 @@ bool FlutterWindow::OnCreate() {
           }
           if (tray_icon_) tray_icon_->SetLabels(std::move(labels));
           result->Success();
+        } else if (m == "setUpdateStatus") {
+          // Update-check state for the tray item (label + availability);
+          // pushed by Dart whenever the About row's state changes.
+          if (const auto* args = std::get_if<EncodableMap>(call.arguments())) {
+            const auto label_it = args->find(EncodableValue(std::string("label")));
+            const auto avail_it =
+                args->find(EncodableValue(std::string("available")));
+            const auto* label = label_it != args->end()
+                                    ? std::get_if<std::string>(&label_it->second)
+                                    : nullptr;
+            const auto* avail = avail_it != args->end()
+                                    ? std::get_if<bool>(&avail_it->second)
+                                    : nullptr;
+            if (tray_icon_ && label && avail) {
+              tray_icon_->SetUpdateStatus(*label, *avail);
+            }
+          }
+          result->Success();
         } else if (m == "revealInExplorer") {
           if (const auto* args = std::get_if<EncodableMap>(call.arguments())) {
             auto it = args->find(EncodableValue(std::string("path")));
@@ -361,6 +379,15 @@ bool FlutterWindow::OnCreate() {
           },
           [this]() {
             if (editor_window_) editor_window_->ClearRecent();
+          },
+          [this]() {
+            // With a known update the Dart side opens the release page
+            // directly (no window); otherwise reveal Settings first so the
+            // About row can show the check running and its result.
+            if (!tray_icon_ || !tray_icon_->UpdateAvailable()) {
+              RevealControlWindow();
+            }
+            role_channel_->InvokeMethod("trayCheckUpdates", nullptr);
           },
       });
   // The warm editor engine pushes its recent-images list to the tray "Open

@@ -27,6 +27,8 @@ class TrayIcon {
     // Open Recent submenu: reveal the editor on the chosen path; clear the list.
     std::function<void(const std::string&)> on_open_recent;
     std::function<void()> on_clear_recent;
+    // "Check for updates" item; Dart decides (open release page vs run a check).
+    std::function<void()> on_check_updates;
   };
 
   TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,
@@ -84,6 +86,14 @@ class TrayIcon {
   // no channel argument can carry the label.
   std::string Label(const std::string& id, const std::string& fallback) const;
 
+  // Update-check state pushed by Dart (mirrors StatusItemController
+  // .setUpdateStatus): [label_utf8] replaces the menu item's idle wording
+  // ("Update available: vX.Y.Z"); [available] tells the click handler an
+  // update is already known (the menu is rebuilt per open, so no live
+  // item mutation is needed). Empty label = back to the idle wording.
+  void SetUpdateStatus(const std::string& label_utf8, bool available);
+  bool UpdateAvailable() const { return update_available_; }
+
  private:
   void ShowMenu();
   void OnCommand(UINT command_id);
@@ -113,6 +123,8 @@ class TrayIcon {
   HICON icon_ = nullptr;  // current tray HICON (DestroyIcon on replace / remove)
   std::vector<std::string> recent_;  // Open Recent submenu (full paths, newest first)
   std::map<std::string, std::string> labels_;  // localized menu labels (UTF-8)
+  std::string update_label_;   // Dart-pushed update-item label (UTF-8; see above)
+  bool update_available_ = false;
 
   // Recording-state breath animation.
   UINT_PTR record_timer_ = 0;

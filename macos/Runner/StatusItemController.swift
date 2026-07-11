@@ -26,6 +26,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private var hintedItems: [(NSMenuItem, String)] = []
   // About Glimpr menu item → reveal Settings on the About pane (set by the host).
   var onAbout: (() -> Void)?
+  // "Check for updates" menu item. Dart owns the state: the label follows the
+  // About row (idle wording vs "Update available: vX.Y.Z") via setUpdateStatus,
+  // and the click reports whether an update is already known so the host can
+  // skip revealing Settings when it will just open the release page.
+  var onCheckUpdates: ((_ updateAvailable: Bool) -> Void)?
+  private var updateItem: NSMenuItem?
+  private var updateAvailable = false
+
+  /// Dart-pushed update status: swap the item's label; remember availability
+  /// for the click handler.
+  func setUpdateStatus(label: String, available: Bool) {
+    updateAvailable = available
+    updateItem?.title = label
+  }
   // Screen recording (macOS 15+): native stop/abort while a recording runs.
   var onRecordStop: (() -> Void)?
   var onRecordAbort: (() -> Void)?
@@ -124,6 +138,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       title: L.s("Open Save Folder", "開啟儲存資料夾"),
       action: #selector(openSaveFolder), key: ""))
     menu.addItem(.separator())
+    let update = menuItem(
+      title: L.s("Check for updates", "檢查更新"),
+      action: #selector(checkUpdates), key: "")
+    updateItem = update
+    menu.addItem(update)
     menu.addItem(menuItem(title: L.s("About Glimpr", "關於 Glimpr"), action: #selector(about), key: ""))
     menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
@@ -440,5 +459,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   @objc private func clearRecent() { onClearRecent() }
   @objc private func settings() { onSettings() }
   @objc private func about() { onAbout?() }
+  @objc private func checkUpdates() { onCheckUpdates?(updateAvailable) }
   @objc private func quit() { NSApp.terminate(nil) }
 }

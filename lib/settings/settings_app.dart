@@ -286,6 +286,20 @@ class _SettingsAppState extends State<SettingsApp>
       _updateAvailableTag = tag;
       _updateUrl = url;
     });
+    _pushTrayUpdateStatus();
+  }
+
+  // Mirror the About row's update state onto the tray / menu-bar item: native
+  // shows [label] and, when available, a tray click opens the release page
+  // directly (the not-available click routes back via trayCheckUpdates below).
+  void _pushTrayUpdateStatus() {
+    final tag = _updateAvailableTag;
+    _roleChannel.invokeMethod('setUpdateStatus', {
+      'available': tag != null,
+      'label': tag != null
+          ? _l.settingsAboutUpdateAvailable(tag)
+          : _l.settingsAboutCheckUpdates,
+    }).catchError((_) {});
   }
 
   // Handle native-initiated role-channel calls (Dart→native still uses
@@ -293,6 +307,18 @@ class _SettingsAppState extends State<SettingsApp>
   Future<dynamic> _onRoleCall(MethodCall call) async {
     if (call.method == 'showAbout' && mounted) {
       setState(() => _section = _kAboutSection);
+    }
+    if (call.method == 'trayCheckUpdates' && mounted) {
+      final url = _updateUrl;
+      if (_updateAvailableTag != null && url != null) {
+        _openUrl(url);
+      } else {
+        // Native revealed the Settings window before this call; land on the
+        // About pane and run the manual check there so the row itself is the
+        // feedback (checking -> up-to-date / new-version states).
+        setState(() => _section = _kAboutSection);
+        await _checkForUpdates();
+      }
     }
     return null;
   }
@@ -906,38 +932,85 @@ class _SettingsAppState extends State<SettingsApp>
             const SizedBox(height: 14),
             const Wordmark(size: 30),
             const SizedBox(height: 8),
-            FutureBuilder<String>(
-              future: _appVersionFuture,
-              builder: (_, snap) => Text(
-                snap.data ?? '',
-                style: GlimprType.sansStyle(12.5, 500, t.fg4),
+            // Version + the update check, together (owner ruling: the check
+            // is STATUS, not a link — a refresh affordance beside the version
+            // and the result right below, where the eye already is when the
+            // tray deep-links here).
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FutureBuilder<String>(
+                  future: _appVersionFuture,
+                  builder: (_, snap) => Text(
+                    snap.data ?? '',
+                    style: GlimprType.sansStyle(12.5, 500, t.fg4),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                if (_updateChecking)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.5, color: t.fg4),
+                  )
+                else
+                  Tooltip(
+                    message: _l.settingsAboutCheckUpdates,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _checkForUpdates,
+                        child: Icon(Icons.refresh, size: 15, color: t.fg4),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            // Result line (fixed height, no layout jump): up-to-date in the
+            // quiet caption tone; a new version in accent, tappable.
+            SizedBox(
+              height: 22,
+              child: Center(
+                child: _updateAvailableTag != null
+                    ? MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            final url = _updateUrl;
+                            if (url != null) _openUrl(url);
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _l.settingsAboutUpdateAvailable(
+                                    _updateAvailableTag!),
+                                style: GlimprType.sansStyle(
+                                    12, 600, t.accentFg),
+                              ),
+                              const SizedBox(width: 3),
+                              Icon(Icons.north_east,
+                                  size: 12, color: t.accentFg),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _updateJustCheckedClean
+                        ? Text(
+                            _l.settingsAboutUpToDate,
+                            style: GlimprType.sansStyle(12, 500, t.fg4),
+                          )
+                        : null,
               ),
             ),
           ],
         ),
       ),
-      const SizedBox(height: 28),
+      const SizedBox(height: 18),
       GlassCard.rows([
-        _aboutLinkRow(t,
-            icon: Icons.system_update_alt,
-            label: _updateChecking
-                ? _l.settingsAboutChecking
-                : _updateAvailableTag != null
-                    ? _l.settingsAboutUpdateAvailable(_updateAvailableTag!)
-                    : _updateJustCheckedClean
-                        ? _l.settingsAboutUpToDate
-                        : _l.settingsAboutCheckUpdates,
-            trailingIcon:
-                _updateAvailableTag != null ? Icons.north_east : Icons.refresh,
-            onTap: () {
-              if (_updateChecking) return;
-              final url = _updateUrl;
-              if (_updateAvailableTag != null && url != null) {
-                _openUrl(url);
-              } else {
-                _checkForUpdates();
-              }
-            }),
         _aboutLinkRow(t,
             icon: SimpleIcons.kofi,
             label: _l.settingsAboutKofi,
@@ -1016,6 +1089,7 @@ class _SettingsAppState extends State<SettingsApp>
         _updateJustCheckedClean = r != null;
       }
     });
+    _pushTrayUpdateStatus();
   }
 
   // Open the Glimpr-styled open-source license browser (lib/settings/

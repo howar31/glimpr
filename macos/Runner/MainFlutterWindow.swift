@@ -181,6 +181,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           NSWorkspace.shared.open(url)
         }
         result(nil)
+      // Update-check state for the menu-bar item (label + availability);
+      // pushed by Dart whenever the About row's state changes.
+      case "setUpdateStatus":
+        if let args = call.arguments as? [String: Any],
+           let label = args["label"] as? String,
+           let available = args["available"] as? Bool {
+          self?.statusItem?.setUpdateStatus(label: label, available: available)
+        }
+        result(nil)
       // About pane: the app's marketing + build version from the bundle.
       case "appVersion":
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
@@ -288,6 +297,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     statusItem?.onAbout = { [weak self] in
       self?.revealSettings()
       self?.roleChannel?.invokeMethod("showAbout", arguments: nil)
+    }
+    // Check for updates: with a known update the Dart side opens the release
+    // page directly (no window); otherwise reveal Settings first so the About
+    // row can show the check running and its result.
+    statusItem?.onCheckUpdates = { [weak self] available in
+      if !available { self?.revealSettings() }
+      self?.roleChannel?.invokeMethod("trayCheckUpdates", arguments: nil)
     }
     recordingChannel?.onRecordingPauseChange = { [weak self] paused in
       self?.statusItem?.setRecordingPaused(paused)

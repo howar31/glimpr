@@ -57,13 +57,23 @@ Future<void> main() async {
   final record = RecordController();
   final recordAvailable = await RecordBridge().isAvailable();
   // Launch-time update check (silent, 24h-throttled, Settings-toggleable).
-  // Fire-and-forget: never blocks boot; failures are silent by design.
-  unawaited(UpdateChecker(
-    store: Settings.instance.store,
-    fetchLatest: defaultFetchLatest,
-    currentVersion: () async =>
-        await kRoleChannel.invokeMethod<String>('appVersion') ?? '',
-  ).maybeCheckOnLaunch());
+  // Fire-and-forget: never blocks boot; failures are silent by design. A hit
+  // flips the tray item to its "update available" label right away (the
+  // Settings UI seeds itself from the persisted keys separately).
+  unawaited(() async {
+    final r = await UpdateChecker(
+      store: Settings.instance.store,
+      fetchLatest: defaultFetchLatest,
+      currentVersion: () async =>
+          await kRoleChannel.invokeMethod<String>('appVersion') ?? '',
+    ).maybeCheckOnLaunch();
+    if (r != null && r.isNewer) {
+      unawaited(kRoleChannel.invokeMethod('setUpdateStatus', {
+        'available': true,
+        'label': appL10n.settingsAboutUpdateAvailable(r.latestTag),
+      }).catchError((_) {}));
+    }
+  }());
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
   const control = kRoleChannel;
@@ -151,6 +161,7 @@ Future<void> main() async {
       'openRecent': l.trayOpenRecent,
       'clearRecent': l.trayClearRecent,
       'openSaveFolder': l.trayOpenSaveFolder,
+      'checkUpdates': l.settingsAboutCheckUpdates,
       'about': l.trayAbout,
       'settings': l.traySettings,
       'quit': l.trayQuit,
