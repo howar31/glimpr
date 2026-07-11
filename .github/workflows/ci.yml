@@ -28,12 +28,16 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build macos --debug
-      - name: macOS native tests (RunnerTests)
+      # The repo's Debug config signs with the local dev certificate (TCC
+      # stability); CI has no certificates, so generate the Flutter configs
+      # only and let xcodebuild build + test with ad-hoc signing overrides.
+      - run: flutter build macos --debug --config-only
+      - name: Build app + run macOS native tests (ad-hoc signed)
         run: |
           cd macos
           xcodebuild test -workspace Runner.xcworkspace -scheme Runner \
-            -configuration Debug -destination 'platform=macOS'
+            -configuration Debug -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
 
   windows:
     runs-on: windows-latest
