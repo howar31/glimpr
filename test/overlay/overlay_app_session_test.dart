@@ -65,6 +65,19 @@ void main() {
     await tester.pump();
   }
 
+  // Wall-clock poll between real-async waits and pumps. A fixed settle delay
+  // is not enough on slow CI runners (a capture's real image decode can
+  // outlast it); same class as the record relay tests' pumpUntil.
+  Future<void> pumpUntil(WidgetTester tester, bool Function() cond,
+      {Duration timeout = const Duration(seconds: 10)}) async {
+    final deadline = DateTime.now().add(timeout);
+    while (!cond() && DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+  }
+
   testWidgets('idle overlay shows nothing and mounts no canvas', (tester) async {
     await tester.pumpWidget(const OverlayApp());
     await tester.pump();
@@ -132,6 +145,11 @@ void main() {
 
     // A real capture arrives: RS suspends, a normal session canvas takes over.
     await deliverCapture(tester, captureArgs());
+    await pumpUntil(tester, () {
+      final canvases = find.byType(EditorCanvas);
+      if (canvases.evaluate().length != 1) return false;
+      return !tester.widget<EditorCanvas>(canvases).recordMode;
+    });
     final canvas = find.byType(EditorCanvas);
     expect(canvas, findsOneWidget);
     expect(tester.widget<EditorCanvas>(canvas).recordMode, isFalse);
