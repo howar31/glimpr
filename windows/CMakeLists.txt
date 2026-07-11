@@ -43,6 +43,12 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
+  # C++/WinRT under C++17 includes <experimental/coroutine>, which newer MSVC
+  # STLs (14.5x) reject with a hard STL1011 static_assert; older toolchains
+  # only warned. Compile-time suppression only, no runtime effect. Proper exit
+  # is the C++20 <coroutine> migration (post-launch).
+  target_compile_definitions(${TARGET} PRIVATE
+    "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
 endfunction()
 
 # Flutter library and tool build rules.
