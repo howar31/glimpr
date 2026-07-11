@@ -154,4 +154,45 @@ void main() {
     expect(canvas, findsOneWidget);
     expect(tester.widget<EditorCanvas>(canvas).recordMode, isFalse);
   });
+
+  testWidgets('a rebuild inside the freeze decode window survives the suspend',
+      (tester) async {
+    // Regression: the screenshot-over-record-select handler suspends the
+    // picker synchronously, but the picker's canvas stays mounted until the
+    // freeze session's setState swaps the tree. If suspend disposes the
+    // picker's stub image/controller immediately, any rebuild landing in the
+    // decode await window (a late Settings .then on a slow host, an
+    // active-display signal) makes the mounted RawImage clone a disposed
+    // image -> the canvas subtree dies and no session ever mounts (seen on
+    // CI runners only; local hosts never pumped inside the window).
+    await tester.pumpWidget(const OverlayApp());
+    await tester.pump();
+    await deliverCapture(tester, captureArgs(liveSelect: true));
+    expect(tester.widget<EditorCanvas>(find.byType(EditorCanvas)).recordMode,
+        isTrue);
+
+    // Deliver the screenshot WITHOUT settling so the handler is parked at its
+    // decode await (picker already suspended), then land active-display
+    // signals; the id flip guarantees one _active transition -> an internal
+    // rebuild of the still-mounted picker canvas.
+    late Future<void> push;
+    await tester.runAsync(() async {
+      push = pushFromNative(_overlay, 'onCaptureReady', captureArgs());
+      await Future<void>.delayed(Duration.zero);
+      await pushFromNative(_overlay, 'onActiveDisplay',
+          {'activeId': 999, 'cursorX': 10.0, 'cursorY': 10.0});
+      await pushFromNative(_overlay, 'onActiveDisplay',
+          {'activeId': 1, 'cursorX': 10.0, 'cursorY': 10.0});
+    });
+    await tester.pump(); // rebuilds the poked subtree; must not throw
+    await tester.runAsync(() => push);
+    await pumpUntil(tester, () {
+      final canvases = find.byType(EditorCanvas);
+      if (canvases.evaluate().length != 1) return false;
+      return !tester.widget<EditorCanvas>(canvases).recordMode;
+    });
+    final canvas = find.byType(EditorCanvas);
+    expect(canvas, findsOneWidget);
+    expect(tester.widget<EditorCanvas>(canvas).recordMode, isFalse);
+  });
 }

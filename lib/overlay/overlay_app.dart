@@ -236,7 +236,10 @@ class _OverlayAppState extends State<OverlayApp> {
             ? Offset(d.cursorLeft!, d.cursorTop!)
             : null;
         final loadedStyles = await stylesFuture;
-        if (!mounted) return;
+        if (!mounted) {
+          _disposeRetiredRs(); // state is going away; nothing references them
+          return;
+        }
         _layers.capacity = await layerCapFuture;
         var replaced = false;
         var evicted = false;
@@ -303,6 +306,14 @@ class _OverlayAppState extends State<OverlayApp> {
           _captureSeq++;
           _updateLayerCaption(replaced: replaced, evicted: evicted);
         });
+        // The suspended record-select canvas (if any) leaves the tree in this
+        // setState's frame; its retired editor/stub are safe to dispose only
+        // after that frame has built (see _suspendRecordSelect).
+        if (_rsRetiredEditor != null || _rsRetiredStub != null) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _disposeRetiredRs());
+          WidgetsBinding.instance.ensureVisualUpdate();
+        }
         _attachShared(_editor!); // sync tool/style with the other displays
         // Frozen frame is built; reveal this display's window (no blank flash).
         _bridge.overlayReady();
@@ -522,14 +533,35 @@ class _OverlayAppState extends State<OverlayApp> {
     // resurfaced loupe has no pixels (verified: stopping it here blanks the loupe on
     // resurface). The transient feed cost while a freeze layer sits on top is the
     // accepted price of an instant resurface.
+    //
+    // Do NOT dispose the editor/stub here either: there is no setState, so the
+    // picker's EditorCanvas stays MOUNTED (still referencing both) until the
+    // caller's freeze-session setState swaps the tree. Any rebuild landing in
+    // that await window (a late Settings .then, an active-display signal)
+    // would make the mounted RawImage clone a disposed image -> StateError and
+    // the canvas subtree dies. Retire them instead; the freeze path disposes
+    // them post-frame after its setState has rendered.
     _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
-    _recordEditor?.dispose();
-    _recordStub?.dispose();
+    _disposeRetiredRs(); // defensive: never stack two retirements
+    _rsRetiredEditor = _recordEditor;
+    _rsRetiredStub = _recordStub;
     _recordEditor = null;
     _recordStub = null;
     _recordDisplay = null;
     _rs = RecordSelectState.suspended;
     _broadcastCropScrim();
+  }
+
+  /// Objects the suspended record-select canvas may still reference until the
+  /// freeze session's setState swaps the tree (see _suspendRecordSelect).
+  EditorController? _rsRetiredEditor;
+  ui.Image? _rsRetiredStub;
+
+  void _disposeRetiredRs() {
+    _rsRetiredEditor?.dispose();
+    _rsRetiredEditor = null;
+    _rsRetiredStub?.dispose();
+    _rsRetiredStub = null;
   }
 
   /// suspended -> active again (record hotkey, or auto-restore on freeze drain).
@@ -798,6 +830,7 @@ class _OverlayAppState extends State<OverlayApp> {
     _recordEditor?.cropScrimActive.removeListener(_broadcastCropScrim);
     _recordEditor?.dispose();
     _recordStub?.dispose();
+    _disposeRetiredRs();
     _recordOverrides?.dispose();
     for (final l in _layers.drain()) {
       l.disposeAll();
