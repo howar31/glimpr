@@ -358,9 +358,20 @@ bool FlutterWindow::OnCreate() {
               update_installer::ApplyStaged(exe_path, sig_path)) {
             if (tray_icon_) tray_icon_->Remove();
             result->Success(EncodableValue(true));
-            // Same rationale as the relaunch handler: a clean engine teardown
-            // can hang; the watcher waits on our death to run the installer.
-            ExitProcess(0);
+            // Exit AFTER a short beat so the Settings UI can paint its
+            // "installing, restarting" state (macOS shows it for the seconds
+            // its apply takes; the win apply is near-instant). The watcher
+            // waits on our death before running the installer, and force-exit
+            // is still required: a clean engine teardown can hang (same
+            // rationale as the relaunch handler).
+            CreateThread(
+                nullptr, 0,
+                [](LPVOID) -> DWORD {
+                  Sleep(1200);
+                  ExitProcess(0);
+                },
+                nullptr, 0, nullptr);
+            return;
           }
           result->Success(EncodableValue(false));
         } else {

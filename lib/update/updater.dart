@@ -86,18 +86,22 @@ class UpdaterService {
         await download(exeUrl, exePath);
         await download(sigUrl, sigPath);
         phase.value = UpdatePhase.installing;
-        await channel.invokeMethod(
+        // A declined apply (failed verification, not installed) changed
+        // nothing on disk: fall back like any other failure.
+        final applied = await channel.invokeMethod(
             'applyStaged',
             {'path': exePath, 'sigPath': sigPath}).timeout(_kApplyTimeout);
+        if (applied != true) throw StateError('apply declined');
       } else {
         final dmgUrl = assets[_kMacAsset];
         if (dmgUrl == null) throw StateError('dmg asset missing');
         final dmgPath = '${dir.path}${Platform.pathSeparator}$_kMacAsset';
         await download(dmgUrl, dmgPath);
         phase.value = UpdatePhase.installing;
-        await channel
+        final applied = await channel
             .invokeMethod('applyStaged', {'path': dmgPath}).timeout(
                 _kApplyTimeout);
+        if (applied != true) throw StateError('apply declined');
       }
       return true;
     } catch (_) {

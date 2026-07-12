@@ -38,7 +38,7 @@ void main() {
   test('windows: downloads the installer and its signature, then applies',
       () async {
     debugPlatformOverride = TargetPlatform.windows;
-    final calls = mockMethodChannel(_update, handler: (c) => null);
+    final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final urls = <String>[];
     final s = make(assets: {
       'Glimpr-Setup.exe': 'https://example.test/setup.exe',
@@ -60,7 +60,7 @@ void main() {
   test('windows: a release without the signature asset fails closed',
       () async {
     debugPlatformOverride = TargetPlatform.windows;
-    final calls = mockMethodChannel(_update, handler: (c) => null);
+    final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = make(assets: {
       'Glimpr-Setup.exe': 'https://example.test/setup.exe',
     });
@@ -71,7 +71,7 @@ void main() {
 
   test('macOS: downloads the DMG only and applies', () async {
     debugPlatformOverride = TargetPlatform.macOS;
-    final calls = mockMethodChannel(_update, handler: (c) => null);
+    final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final urls = <String>[];
     final s = make(assets: {
       'Glimpr-Setup.exe': 'https://example.test/setup.exe',
@@ -87,7 +87,7 @@ void main() {
 
   test('a failed download reports failure and never applies', () async {
     debugPlatformOverride = TargetPlatform.macOS;
-    final calls = mockMethodChannel(_update, handler: (c) => null);
+    final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = UpdaterService(
       fetchAssets: (tag) async => {'Glimpr-macOS.dmg': 'https://x/d.dmg'},
       download: (url, toPath) async => throw const SocketException('offline'),
@@ -100,8 +100,17 @@ void main() {
 
   test('an unavailable release listing fails closed', () async {
     debugPlatformOverride = TargetPlatform.macOS;
-    mockMethodChannel(_update, handler: (c) => null);
+    mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = make(assets: null);
+    expect(await s.installTag('v9.9.9'), isFalse);
+    expect(s.phase.value, UpdatePhase.failed);
+  });
+
+  test('a DECLINED native apply reports failure (fallback path)', () async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? false : null);
+    final s = make(assets: {'Glimpr-macOS.dmg': 'https://x/d.dmg'});
     expect(await s.installTag('v9.9.9'), isFalse);
     expect(s.phase.value, UpdatePhase.failed);
   });

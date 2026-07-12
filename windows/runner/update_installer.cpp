@@ -44,8 +44,18 @@ std::wstring ExeFile() {
   return (n == 0 || n >= MAX_PATH) ? L"" : std::wstring(buf, n);
 }
 
-// Lowercase + trim trailing separators, for path equality.
+// 8.3 short names (a shortcut or launcher may hand us C:\PROGRA~1\...) must
+// compare equal to the registry's long form; expansion needs the path to
+// exist, which both compared paths do.
+std::wstring LongPath(const std::wstring& p) {
+  wchar_t buf[MAX_PATH];
+  DWORD n = GetLongPathNameW(p.c_str(), buf, MAX_PATH);
+  return (n == 0 || n >= MAX_PATH) ? p : std::wstring(buf, n);
+}
+
+// Long-form + lowercase + trim trailing separators, for path equality.
 std::wstring Canon(std::wstring p) {
+  p = LongPath(p);
   while (!p.empty() && (p.back() == L'\\' || p.back() == L'/')) p.pop_back();
   std::transform(p.begin(), p.end(), p.begin(), [](wchar_t c) {
     return static_cast<wchar_t>(towlower(c));
