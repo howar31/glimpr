@@ -194,6 +194,18 @@ abstract class AppLocalizations {
   /// **'You are up to date'**
   String get settingsAboutUpToDate;
 
+  /// About pane: status while the self-update downloads the new release
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the update…'**
+  String get settingsAboutUpdateDownloading;
+
+  /// About pane: status while the self-update installs; the app restarts on its own
+  ///
+  /// In en, this message translates to:
+  /// **'Installing, the app will restart…'**
+  String get settingsAboutUpdateInstalling;
+
   /// Advanced pane: updates section label
   ///
   /// In en, this message translates to:

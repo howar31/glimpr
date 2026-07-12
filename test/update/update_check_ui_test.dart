@@ -4,6 +4,7 @@ import 'package:glimpr/channels.dart';
 import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
+import 'package:glimpr/update/updater.dart';
 
 import '../support/fake_store.dart';
 import '../support/mock_channels.dart';
@@ -77,10 +78,14 @@ void main() {
     expect(args['label'], 'Update available: v9.9.9');
   });
 
-  testWidgets('tray click with a known update opens the release page',
+  testWidgets(
+      'tray click with a known update on an UNSUPPORTED build opens the page',
       (tester) async {
     final calls = mockMethodChannel(kRoleChannel,
         handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    // Not installed (win portable / dev tree): self-update declines.
+    mockMethodChannel(kUpdateChannel,
+        handler: (c) => c.method == 'updateSupported' ? false : null);
     final store = FakeStore();
     final settings = Settings(store);
     await store.setString('update_latest_tag', 'v9.9.9');
@@ -91,6 +96,30 @@ void main() {
     final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
     expect(opened, hasLength(1));
     expect((opened.single.arguments as Map)['url'], 'https://example.test/rel');
+  });
+
+  testWidgets(
+      'tray click with a known update on a SUPPORTED build starts the install',
+      (tester) async {
+    final calls = mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final updateCalls = mockMethodChannel(kUpdateChannel,
+        handler: (c) => c.method == 'updateSupported' ? true : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await openAbout(tester, settings);
+    await tester.runAsync(
+        () => pushFromNative(kRoleChannel, 'trayCheckUpdates', null));
+    await tester.pump();
+    // The install path was taken (supported probed); the asset fetch then
+    // fails in the test environment (network is blocked), so the flow falls
+    // back to the release page — nothing hangs, nothing is left mid-phase.
+    expect(updateCalls.where((c) => c.method == 'updateSupported'),
+        hasLength(1));
+    final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
+    expect(opened, hasLength(1));
   });
 
   testWidgets('tray click without a known update lands on About and checks',

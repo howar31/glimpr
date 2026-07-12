@@ -16,6 +16,8 @@
   "settingsAboutChecking": "檢查中…",
   "settingsAboutUpdateAvailable": "有新版本：{version}",
   "settingsAboutUpToDate": "目前已是最新版本",
+  "settingsAboutUpdateDownloading": "正在下載更新…",
+  "settingsAboutUpdateInstalling": "安裝中，即將重新啟動…",
   "settingsSectionUpdates": "更新",
   "settingsUpdateCheckTitle": "自動檢查更新",
   "settingsUpdateCheckBody": "每天向 GitHub 查詢一次是否有新版本，不會傳送其他資料。",

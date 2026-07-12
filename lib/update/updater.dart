@@ -21,6 +21,10 @@ typedef ReleaseAssets = Map<String, String>;
 
 const kUpdateChannel = MethodChannel('glimpr/update');
 
+// Mount/verify/swap (mac) or verify/spawn (win) runs seconds; a hung native
+// side must not wedge the flow in "installing" forever.
+const _kApplyTimeout = Duration(minutes: 2);
+
 const _kMacAsset = 'Glimpr-macOS.dmg';
 const _kWinAsset = 'Glimpr-Setup.exe';
 const _kWinSigAsset = 'Glimpr-Setup.exe.sig';
@@ -51,7 +55,12 @@ class UpdaterService {
   /// release page.
   Future<bool> supported() async {
     try {
-      return await channel.invokeMethod<bool>('updateSupported') ?? false;
+      // Timeout: an engine without the channel never replies (it would hang
+      // the caller forever); absent/slow native = unsupported.
+      return await channel
+              .invokeMethod<bool>('updateSupported')
+              .timeout(const Duration(seconds: 3)) ??
+          false;
     } catch (_) {
       return false;
     }
@@ -78,14 +87,17 @@ class UpdaterService {
         await download(sigUrl, sigPath);
         phase.value = UpdatePhase.installing;
         await channel.invokeMethod(
-            'applyStaged', {'path': exePath, 'sigPath': sigPath});
+            'applyStaged',
+            {'path': exePath, 'sigPath': sigPath}).timeout(_kApplyTimeout);
       } else {
         final dmgUrl = assets[_kMacAsset];
         if (dmgUrl == null) throw StateError('dmg asset missing');
         final dmgPath = '${dir.path}${Platform.pathSeparator}$_kMacAsset';
         await download(dmgUrl, dmgPath);
         phase.value = UpdatePhase.installing;
-        await channel.invokeMethod('applyStaged', {'path': dmgPath});
+        await channel
+            .invokeMethod('applyStaged', {'path': dmgPath}).timeout(
+                _kApplyTimeout);
       }
       return true;
     } catch (_) {

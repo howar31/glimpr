@@ -67,6 +67,14 @@
   "@settingsAboutUpToDate": {
     "description": "About pane: update row label right after a manual check found no newer release"
   },
+  "settingsAboutUpdateDownloading": "Downloading the update…",
+  "@settingsAboutUpdateDownloading": {
+    "description": "About pane: status while the self-update downloads the new release"
+  },
+  "settingsAboutUpdateInstalling": "Installing, the app will restart…",
+  "@settingsAboutUpdateInstalling": {
+    "description": "About pane: status while the self-update installs; the app restarts on its own"
+  },
   "settingsSectionUpdates": "Updates",
   "@settingsSectionUpdates": {
     "description": "Advanced pane: updates section label"

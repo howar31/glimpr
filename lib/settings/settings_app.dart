@@ -40,6 +40,8 @@ import 'login_item.dart';
 import 'settings.dart';
 import 'token_picker.dart';
 import '../update/update_check.dart';
+import '../update/updater.dart';
+import 'dart:io' show Directory;
 
 /// The settings window content: the "Aurora" design — a frosted-glass window
 /// (the blur comes from a native NSVisualEffectView behind the Flutter view) with
@@ -135,6 +137,13 @@ class _SettingsAppState extends State<SettingsApp>
     store: widget.settings.store,
     fetchLatest: defaultFetchLatest,
     currentVersion: _loadAppVersion,
+  );
+  // Installed-build self-update; unsupported builds (win portable, dev tree)
+  // fall back to opening the release page.
+  late final UpdaterService _updater = UpdaterService(
+    fetchAssets: defaultFetchAssets,
+    download: defaultDownload,
+    stageDir: () => Directory.systemTemp.createTemp('glimpr-update'),
   );
   // App language choice + the value active since launch (restart-effective,
   // like the warm target): the restart hint shows while they differ.
@@ -268,6 +277,8 @@ class _SettingsAppState extends State<SettingsApp>
     _subfolderFocus.addListener(_onPatternFocusChange);
     // Native → Dart pushes on the role channel (menu-bar "About Glimpr" deep-link).
     _roleChannel.setMethodCallHandler(_onRoleCall);
+    // Repaint the About status line as the self-update progresses.
+    _updater.phase.addListener(_onUpdaterPhase);
     _load();
     _seedUpdateBadge();
   }
@@ -287,6 +298,23 @@ class _SettingsAppState extends State<SettingsApp>
       _updateUrl = url;
     });
     _pushTrayUpdateStatus();
+  }
+
+  // One-click install of [tag] for supported (installed) builds; anything
+  // else — win portable, dev tree, verification or download failure — falls
+  // back to the release page, changing nothing on disk. When the native
+  // apply succeeds this process exits and relaunches as the new version.
+  Future<void> _startInstall(String tag, String url) async {
+    if (_updater.phase.value == UpdatePhase.downloading ||
+        _updater.phase.value == UpdatePhase.installing) {
+      return;
+    }
+    if (!await _updater.supported()) {
+      _openUrl(url);
+      return;
+    }
+    final handed = await _updater.installTag(tag);
+    if (!handed && mounted) _openUrl(url);
   }
 
   // Mirror the About row's update state onto the tray / menu-bar item: native
@@ -310,8 +338,9 @@ class _SettingsAppState extends State<SettingsApp>
     }
     if (call.method == 'trayCheckUpdates' && mounted) {
       final url = _updateUrl;
-      if (_updateAvailableTag != null && url != null) {
-        _openUrl(url);
+      final tag = _updateAvailableTag;
+      if (tag != null && url != null) {
+        await _startInstall(tag, url);
       } else {
         // Native revealed the Settings window before this call; land on the
         // About pane and run the manual check there so the row itself is the
@@ -356,11 +385,16 @@ class _SettingsAppState extends State<SettingsApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _updater.phase.removeListener(_onUpdaterPhase);
     _filenameController.dispose();
     _filenameFocus.dispose();
     _subfolderController.dispose();
     _subfolderFocus.dispose();
     super.dispose();
+  }
+
+  void _onUpdaterPhase() {
+    if (mounted) setState(() {});
   }
 
   // Follow the system appearance: rebuild when it flips so the token set swaps.
@@ -972,39 +1006,7 @@ class _SettingsAppState extends State<SettingsApp>
             // quiet caption tone; a new version in accent, tappable.
             SizedBox(
               height: 22,
-              child: Center(
-                child: _updateAvailableTag != null
-                    ? MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            final url = _updateUrl;
-                            if (url != null) _openUrl(url);
-                          },
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _l.settingsAboutUpdateAvailable(
-                                    _updateAvailableTag!),
-                                style: GlimprType.sansStyle(
-                                    12, 600, t.accentFg),
-                              ),
-                              const SizedBox(width: 3),
-                              Icon(Icons.north_east,
-                                  size: 12, color: t.accentFg),
-                            ],
-                          ),
-                        ),
-                      )
-                    : _updateJustCheckedClean
-                        ? Text(
-                            _l.settingsAboutUpToDate,
-                            style: GlimprType.sansStyle(12, 500, t.fg4),
-                          )
-                        : null,
-              ),
+              child: Center(child: _updateStatusLine(t)),
             ),
           ],
         ),
@@ -1040,6 +1042,53 @@ class _SettingsAppState extends State<SettingsApp>
             style: GlimprType.sansStyle(11.5, 500, t.fg4)),
       ),
     ];
+  }
+
+  // The About header's update status line: self-update progress while it
+  // runs; the tappable "update available" state (one click = download,
+  // install, restart — unsupported builds open the release page instead);
+  // the just-checked-clean confirmation; else nothing.
+  Widget? _updateStatusLine(GlimprTokens t) {
+    switch (_updater.phase.value) {
+      case UpdatePhase.downloading:
+        return Text(_l.settingsAboutUpdateDownloading,
+            style: GlimprType.sansStyle(12, 500, t.fg4));
+      case UpdatePhase.installing:
+        return Text(_l.settingsAboutUpdateInstalling,
+            style: GlimprType.sansStyle(12, 600, t.accentFg));
+      case UpdatePhase.idle:
+      case UpdatePhase.failed:
+        break;
+    }
+    final tag = _updateAvailableTag;
+    if (tag != null) {
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            final url = _updateUrl;
+            if (url != null) _startInstall(tag, url);
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _l.settingsAboutUpdateAvailable(tag),
+                style: GlimprType.sansStyle(12, 600, t.accentFg),
+              ),
+              const SizedBox(width: 3),
+              Icon(Icons.download, size: 13, color: t.accentFg),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_updateJustCheckedClean) {
+      return Text(_l.settingsAboutUpToDate,
+          style: GlimprType.sansStyle(12, 500, t.fg4));
+    }
+    return null;
   }
 
   // A full-width tappable About row: SettingRow's icon tile + label, with a

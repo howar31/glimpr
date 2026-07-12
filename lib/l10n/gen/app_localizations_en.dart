@@ -59,6 +59,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAboutUpToDate => 'You are up to date';
 
   @override
+  String get settingsAboutUpdateDownloading => 'Downloading the update…';
+
+  @override
+  String get settingsAboutUpdateInstalling =>
+      'Installing, the app will restart…';
+
+  @override
   String get settingsSectionUpdates => 'Updates';
 
   @override

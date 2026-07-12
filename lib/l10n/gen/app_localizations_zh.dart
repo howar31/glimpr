@@ -59,6 +59,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutUpToDate => '目前已是最新版本';
 
   @override
+  String get settingsAboutUpdateDownloading => '正在下載更新…';
+
+  @override
+  String get settingsAboutUpdateInstalling => '安裝中，即將重新啟動…';
+
+  @override
   String get settingsSectionUpdates => '更新';
 
   @override
