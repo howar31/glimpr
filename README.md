@@ -7,37 +7,51 @@
 [![Downloads](https://img.shields.io/github/downloads/howar31/glimpr/total?style=flat-square)](https://github.com/howar31/glimpr/releases)
 [![Ko-fi](https://img.shields.io/badge/sponsor-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/howar31)
 
-Fast, native screenshot, annotation, and screen-recording tool for macOS and Windows.
+English | [繁體中文](README.zh-Hant.md)
 
-![Glimpr image editor](docs/media/editor-mac.png)
+Fast, native screenshot, annotation, and screen-recording tool for macOS and
+Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/editor-mac.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/media/editor-mac-light.png">
+  <img alt="Glimpr image editor" src="docs/media/editor-mac.png">
+</picture>
 
 ## Features
 
-- **Capture** – interactive region, window, and display capture with a frozen,
-  pixel-faithful overlay; window snap and element snap (accessibility-based);
-  multi-display support; HDR-aware screenshots (HEIC / JPEG XR) alongside SDR.
+- **Screenshot** – interactive region, window, and display screenshots on a
+  frozen, pixel-faithful overlay; window snap and element snap
+  (accessibility-based); multi-display support; HDR-aware screenshots
+  (HEIC / JPEG XR) alongside SDR.
 - **Annotate** – 12 tools (rectangle, ellipse, line, arrow, pen, highlighter,
   text, numbered steps, blur, pixelate, spotlight, crop) in the capture
   overlay and a standalone image editor, with a pixel loupe and eyedropper.
 - **Record** – screen recording (H.264 / HEVC including HDR10, GIF) in
   region, window, display, and last-region modes; system audio and
   microphone; pause / resume; auto-stop.
-- **Pin** – float any capture as an always-on-top pin with drag and zoom.
+- **Pin** – float any screenshot as an always-on-top pin with drag and zoom.
 - **Flows** – configurable after-capture and after-edit actions: save, copy,
   open editor, pin, share; filename templates and date subfolders.
 - Rebindable global hotkeys (including PrintScreen and bare keys), light and
   dark themes, English and Traditional Chinese.
+- **Private by design** – no telemetry, no account; captures never leave your
+  machine. The only network request is the update check, and it can be turned
+  off.
 
 ## Install
 
-**macOS 15+** — download the DMG from
+**macOS 14+** (screen recording requires macOS 15+) — download the DMG from
 [Releases](https://github.com/howar31/glimpr/releases) and drag Glimpr to
 Applications. Grant Screen Recording (and optionally Accessibility for
 element snap) on first run.
 
-**Windows 10/11** — download the installer or the portable zip from
+**Windows 10 (1903+) / 11** — download the installer or the portable zip from
 [Releases](https://github.com/howar31/glimpr/releases). SmartScreen may warn
 about the unsigned installer: choose "More info", then "Run anyway".
+
+Installed builds update themselves: when a new release is out, updating is
+one click from the tray menu or the About pane.
 
 ## Build from source
 
