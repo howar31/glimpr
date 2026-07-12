@@ -1,5 +1,12 @@
 # Glimpr
 
+[![License](https://img.shields.io/github/license/howar31/glimpr?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/howar31/glimpr?style=flat-square)](https://github.com/howar31/glimpr/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue?style=flat-square)](https://glimpr.howar31.com)
+[![CI](https://img.shields.io/github/actions/workflow/status/howar31/glimpr/ci.yml?style=flat-square&label=CI)](https://github.com/howar31/glimpr/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/howar31/glimpr/total?style=flat-square)](https://github.com/howar31/glimpr/releases)
+[![Ko-fi](https://img.shields.io/badge/sponsor-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/howar31)
+
 Fast, native screenshot, annotation, and screen-recording tool for macOS and Windows.
 
 ![Glimpr image editor](docs/media/editor-mac.png)
