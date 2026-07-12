@@ -25,9 +25,16 @@ const kUpdateChannel = MethodChannel('glimpr/update');
 // side must not wedge the flow in "installing" forever.
 const _kApplyTimeout = Duration(minutes: 2);
 
-const _kMacAsset = 'Glimpr-macOS.dmg';
-const _kWinAsset = 'Glimpr-Setup.exe';
-const _kWinSigAsset = 'Glimpr-Setup.exe.sig';
+/// Asset names carry the release version since v1.1.1
+/// (Glimpr-Setup-1.1.1.exe), so resolution matches by prefix + suffix
+/// instead of exact names; pre-1.1.1 unversioned names still match. The
+/// .sig is looked up by the matched exe's own name.
+MapEntry<String, String>? _findAsset(ReleaseAssets assets, String suffix) {
+  for (final e in assets.entries) {
+    if (e.key.startsWith('Glimpr') && e.key.endsWith(suffix)) return e;
+  }
+  return null;
+}
 
 class UpdaterService {
   UpdaterService({
@@ -76,14 +83,14 @@ class UpdaterService {
       if (assets == null) throw StateError('release listing unavailable');
       final dir = await stageDir();
       if (platformIsWindows) {
-        final exeUrl = assets[_kWinAsset];
-        final sigUrl = assets[_kWinSigAsset];
-        if (exeUrl == null || sigUrl == null) {
+        final exe = _findAsset(assets, '.exe');
+        final sigUrl = exe == null ? null : assets['${exe.key}.sig'];
+        if (exe == null || sigUrl == null) {
           throw StateError('installer or signature asset missing');
         }
-        final exePath = '${dir.path}${Platform.pathSeparator}$_kWinAsset';
-        final sigPath = '${dir.path}${Platform.pathSeparator}$_kWinSigAsset';
-        await download(exeUrl, exePath);
+        final exePath = '${dir.path}${Platform.pathSeparator}${exe.key}';
+        final sigPath = '$exePath.sig';
+        await download(exe.value, exePath);
         await download(sigUrl, sigPath);
         phase.value = UpdatePhase.installing;
         // A declined apply (failed verification, not installed) changed
@@ -93,10 +100,10 @@ class UpdaterService {
             {'path': exePath, 'sigPath': sigPath}).timeout(_kApplyTimeout);
         if (applied != true) throw StateError('apply declined');
       } else {
-        final dmgUrl = assets[_kMacAsset];
-        if (dmgUrl == null) throw StateError('dmg asset missing');
-        final dmgPath = '${dir.path}${Platform.pathSeparator}$_kMacAsset';
-        await download(dmgUrl, dmgPath);
+        final dmg = _findAsset(assets, '.dmg');
+        if (dmg == null) throw StateError('dmg asset missing');
+        final dmgPath = '${dir.path}${Platform.pathSeparator}${dmg.key}';
+        await download(dmg.value, dmgPath);
         phase.value = UpdatePhase.installing;
         final applied = await channel
             .invokeMethod('applyStaged', {'path': dmgPath}).timeout(

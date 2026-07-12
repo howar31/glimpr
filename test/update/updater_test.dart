@@ -41,17 +41,20 @@ void main() {
     final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final urls = <String>[];
     final s = make(assets: {
-      'Glimpr-Setup.exe': 'https://example.test/setup.exe',
-      'Glimpr-Setup.exe.sig': 'https://example.test/setup.sig',
-      'Glimpr-macOS.dmg': 'https://example.test/mac.dmg',
+      'Glimpr-Setup-9.9.9.exe': 'https://example.test/setup.exe',
+      'Glimpr-Setup-9.9.9.exe.sig': 'https://example.test/setup.sig',
+      'Glimpr-macOS-9.9.9.dmg': 'https://example.test/mac.dmg',
+      'Glimpr-Windows-Portable-9.9.9.zip': 'https://example.test/portable.zip',
     }, downloadedUrls: urls);
     final handed = await s.installTag('v9.9.9');
     expect(handed, isTrue);
     expect(urls, containsAll(['https://example.test/setup.exe', 'https://example.test/setup.sig']));
     expect(urls, isNot(contains('https://example.test/mac.dmg')));
+    expect(urls, isNot(contains('https://example.test/portable.zip')));
     final apply = calls.where((c) => c.method == 'applyStaged').toList();
     expect(apply, hasLength(1));
     final args = (apply.single.arguments as Map).cast<String, Object?>();
+    expect(args['path']! as String, endsWith('Glimpr-Setup-9.9.9.exe'));
     expect(File(args['path']! as String).existsSync(), isTrue);
     expect(File(args['sigPath']! as String).existsSync(), isTrue);
     expect(s.phase.value, UpdatePhase.installing);
@@ -62,7 +65,7 @@ void main() {
     debugPlatformOverride = TargetPlatform.windows;
     final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = make(assets: {
-      'Glimpr-Setup.exe': 'https://example.test/setup.exe',
+      'Glimpr-Setup-9.9.9.exe': 'https://example.test/setup.exe',
     });
     expect(await s.installTag('v9.9.9'), isFalse);
     expect(calls.where((c) => c.method == 'applyStaged'), isEmpty);
@@ -74,8 +77,8 @@ void main() {
     final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final urls = <String>[];
     final s = make(assets: {
-      'Glimpr-Setup.exe': 'https://example.test/setup.exe',
-      'Glimpr-macOS.dmg': 'https://example.test/mac.dmg',
+      'Glimpr-Setup-9.9.9.exe': 'https://example.test/setup.exe',
+      'Glimpr-macOS-9.9.9.dmg': 'https://example.test/mac.dmg',
     }, downloadedUrls: urls);
     expect(await s.installTag('v9.9.9'), isTrue);
     expect(urls, ['https://example.test/mac.dmg']);
@@ -83,6 +86,19 @@ void main() {
         (calls.singleWhere((c) => c.method == 'applyStaged').arguments as Map)
             .cast<String, Object?>();
     expect(args.containsKey('sigPath'), isFalse);
+  });
+
+  test('pre-1.1.1 unversioned asset names still resolve', () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
+    final urls = <String>[];
+    final s = make(assets: {
+      'Glimpr-Setup.exe': 'https://example.test/setup.exe',
+      'Glimpr-Setup.exe.sig': 'https://example.test/setup.sig',
+      'Glimpr-macOS.dmg': 'https://example.test/mac.dmg',
+    }, downloadedUrls: urls);
+    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(urls, containsAll(['https://example.test/setup.exe', 'https://example.test/setup.sig']));
   });
 
   test('a failed download reports failure and never applies', () async {

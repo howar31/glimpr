@@ -55,6 +55,11 @@ jobs:
         run: |
           codesign --verify --deep --strict build/macos/Build/Products/Release/Glimpr.app
           codesign -dv build/macos/Build/Products/Release/Glimpr.app 2>&1 | grep 'flags=0x10000(runtime)'
+      # Asset names carry the version (Glimpr-macOS-1.2.0.dmg) so a download
+      # identifies its release; the updater matches by prefix + suffix and the
+      # landing page resolves names via the GitHub API at page load.
+      - name: Asset name
+        run: echo "DMG=Glimpr-macOS-${GITHUB_REF_NAME#v}.dmg" >> "$GITHUB_ENV"
       - name: Build DMG
         run: |
           brew install create-dmg
@@ -65,12 +70,12 @@ jobs:
             --icon "Glimpr.app" 140 180 \
             --app-drop-link 400 180 \
             --hdiutil-quiet \
-            "Glimpr-macOS.dmg" \
+            "$DMG" \
             "build/macos/Build/Products/Release/Glimpr.app" \
           || { echo "create-dmg failed; hdiutil fallback"; \
                STAGE=$(mktemp -d); cp -R build/macos/Build/Products/Release/Glimpr.app "$STAGE/"; \
                ln -s /Applications "$STAGE/Applications"; \
-               hdiutil create -volname Glimpr -srcfolder "$STAGE" -ov -format UDZO Glimpr-macOS.dmg; }
+               hdiutil create -volname Glimpr -srcfolder "$STAGE" -ov -format UDZO "$DMG"; }
       - name: Notarize and staple
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
@@ -78,15 +83,15 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           printf '%s' "$ASC_KEY_P8" > /tmp/asc.p8
-          xcrun notarytool submit Glimpr-macOS.dmg \
+          xcrun notarytool submit "$DMG" \
             --key /tmp/asc.p8 --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
             --wait --timeout 30m
-          xcrun stapler staple Glimpr-macOS.dmg
+          xcrun stapler staple "$DMG"
           rm /tmp/asc.p8
       - uses: actions/upload-artifact@v4
         with:
           name: mac-dmg
-          path: Glimpr-macOS.dmg
+          path: Glimpr-macOS-*.dmg
 
   windows:
     needs: version-gate
@@ -104,20 +109,24 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $ver = "$env:GITHUB_REF_NAME".TrimStart("v") -replace "-.*",""
+          $ver = "$env:GITHUB_REF_NAME".TrimStart("v")
+          $core = $ver -replace "-.*",""
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            /DMyAppVersion=$ver `
+            /DMyAppVersion=$core `
+            "/FGlimpr-Setup-$ver" `
             /DBuildDir="$PWD\build\windows\x64\runner\Release" `
             /O"$PWD" windows\installer\glimpr.iss
       - name: Build portable zip
         shell: pwsh
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Glimpr-Windows-Portable.zip
+        run: |
+          $ver = "$env:GITHUB_REF_NAME".TrimStart("v")
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "Glimpr-Windows-Portable-$ver.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: win-artifacts
           path: |
-            Glimpr-Setup.exe
-            Glimpr-Windows-Portable.zip
+            Glimpr-Setup-*.exe
+            Glimpr-Windows-Portable-*.zip
 
   release:
     needs: [mac, windows]
@@ -131,19 +140,22 @@ jobs:
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
+          VER="${GITHUB_REF_NAME#v}"
           printf '%s' "$RELEASE_SIGNING_KEY" > k.pem
           openssl pkeyutl -sign -inkey k.pem -rawin \
-            -in Glimpr-Setup.exe -out Glimpr-Setup.exe.sig
+            -in "Glimpr-Setup-$VER.exe" -out "Glimpr-Setup-$VER.exe.sig"
           rm k.pem
-          test "$(wc -c < Glimpr-Setup.exe.sig)" -eq 64
+          test "$(wc -c < "Glimpr-Setup-$VER.exe.sig")" -eq 64
       - name: Create or update GitHub Release (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          VER="${GITHUB_REF_NAME#v}"
           PRERELEASE=""
           case "$GITHUB_REF_NAME" in *-*) PRERELEASE="--prerelease";; esac
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
             gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $PRERELEASE
           gh release upload "$GITHUB_REF_NAME" \
-            Glimpr-macOS.dmg Glimpr-Setup.exe Glimpr-Setup.exe.sig \
-            Glimpr-Windows-Portable.zip --clobber
+            "Glimpr-macOS-$VER.dmg" "Glimpr-Setup-$VER.exe" \
+            "Glimpr-Setup-$VER.exe.sig" \
+            "Glimpr-Windows-Portable-$VER.zip" --clobber

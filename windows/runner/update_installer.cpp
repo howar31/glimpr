@@ -14,9 +14,10 @@ namespace update_installer {
 namespace {
 
 // The release-signing PUBLIC key (Ed25519, raw 32 bytes; provisioned
-// 2026-07-12). CI signs Glimpr-Setup.exe with the matching private key (the
-// RELEASE_SIGNING_KEY repo secret) and publishes the detached signature as
-// Glimpr-Setup.exe.sig. Rotating the key = new constant here + a new release.
+// 2026-07-12). CI signs the Glimpr-Setup-<version>.exe asset with the
+// matching private key (the RELEASE_SIGNING_KEY repo secret) and publishes
+// the detached signature as <asset>.sig. Rotating the key = new constant
+// here + a new release.
 const unsigned char kReleasePubKey[32] = {
     0x2e, 0x47, 0xbb, 0xfb, 0x3c, 0xa9, 0x74, 0x41,
     0xb8, 0xb0, 0x79, 0x8e, 0xd9, 0x65, 0xc9, 0x16,
