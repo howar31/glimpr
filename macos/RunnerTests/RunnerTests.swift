@@ -631,3 +631,31 @@ final class SupportedImageExtensionTests: XCTestCase {
     }
   }
 }
+
+// Self-update: the hdiutil attach -plist mount-point parse (the pure step of
+// UpdateInstaller.applyStaged; the swap itself is on-device-only).
+final class UpdateInstallerTests: XCTestCase {
+  func testMountPointParsesFirstMountedEntity() {
+    let plist = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0"><dict>
+        <key>system-entities</key>
+        <array>
+          <dict><key>dev-entry</key><string>/dev/disk9</string></dict>
+          <dict>
+            <key>dev-entry</key><string>/dev/disk9s1</string>
+            <key>mount-point</key><string>/Volumes/Glimpr</string>
+          </dict>
+        </array>
+      </dict></plist>
+      """
+    XCTAssertEqual(
+      UpdateInstaller.mountPoint(fromHdiutilPlist: plist), "/Volumes/Glimpr")
+  }
+
+  func testMountPointFailsClosedOnGarbage() {
+    XCTAssertNil(UpdateInstaller.mountPoint(fromHdiutilPlist: "not a plist"))
+    XCTAssertNil(UpdateInstaller.mountPoint(fromHdiutilPlist: ""))
+  }
+}

@@ -62,6 +62,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var recordingChannel: RecordingChannel?
   private var statusItem: StatusItemController?
   private var roleChannel: FlutterMethodChannel?
+  private var updateChannel: FlutterMethodChannel?
   private var loginChannel: FlutterMethodChannel?
   private var licenseChannel: FlutterMethodChannel?
   private var hotkeyController: HotkeyController?
@@ -95,6 +96,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   override func awakeFromNib() {
     PerfLog.mark("launchBegin")
     MainFlutterWindow.shared = self
+    // A previous self-update leaves the replaced bundle beside us; sweep it.
+    UpdateInstaller.cleanupLeftovers()
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     // Frosted-glass window: host the Flutter view inside a vibrancy view
@@ -200,6 +203,50 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       }
     }
     self.roleChannel = roleChannel
+
+    // Installed-build self-update (glimpr/update): the Dart updater stages a
+    // downloaded DMG; this verifies (codesign chain + Team ID) and atomically
+    // swaps the /Applications bundle, then relaunches into the new version.
+    // Heavy IO + subprocesses run off the platform thread.
+    let updateChannel = FlutterMethodChannel(
+      name: "glimpr/update", binaryMessenger: flutterViewController.engine.binaryMessenger)
+    updateChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "updateSupported":
+        result(UpdateInstaller.supported)
+      case "applyStaged":
+        guard let args = call.arguments as? [String: Any],
+          let path = args["path"] as? String
+        else {
+          result(false)
+          return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+          let ok = UpdateInstaller.applyStaged(dmgPath: path)
+          DispatchQueue.main.async {
+            result(ok)
+            if ok {
+              // The bundle on disk is now the NEW version; the running
+              // process still executes the old one. Relaunch-shaped watcher:
+              // wait for this pid to die, then open the (new) bundle.
+              let bundlePath = Bundle.main.bundlePath
+              let pid = ProcessInfo.processInfo.processIdentifier
+              let task = Process()
+              task.executableURL = URL(fileURLWithPath: "/bin/sh")
+              task.arguments = [
+                "-c",
+                "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.1; done; "
+                  + "/usr/bin/open \"\(bundlePath)\"",
+              ]
+              try? task.run()
+              NSApp.terminate(nil)
+            }
+          }
+        }
+      default: result(FlutterMethodNotImplemented)
+      }
+    }
+    self.updateChannel = updateChannel
 
     // Launch-at-login, backed by SMAppService (the OS is the source of truth).
     let loginChannel = FlutterMethodChannel(
@@ -1561,4 +1608,100 @@ enum L {
     pref: UserDefaults.standard.string(forKey: "app_language"),
     systemLanguages: Locale.preferredLanguages)
   static func s(_ en: String, _ zhHant: String) -> String { zh ? zhHant : en }
+}
+
+/// Installed-build self-update: verify the app inside a downloaded DMG
+/// (codesign chain + Team ID — Apple-anchored, no extra keys) and atomically
+/// swap it in place of the running /Applications bundle. Every failure path
+/// leaves the current install untouched (the Dart caller falls back to the
+/// release page). Lives in this file on purpose: a new .swift file needs four
+/// pbxproj entries to compile.
+enum UpdateInstaller {
+  static let teamId = "Z76959JS7F"
+
+  /// Self-update only ever touches a real /Applications install the user can
+  /// write to — never a dev-build bundle in the repo tree.
+  static var supported: Bool {
+    let bundle = Bundle.main.bundleURL
+    guard bundle.path.hasPrefix("/Applications/") else { return false }
+    return FileManager.default.isWritableFile(
+      atPath: bundle.deletingLastPathComponent().path)
+  }
+
+  /// Remove leftovers from a previous swap (called once at launch).
+  static func cleanupLeftovers() {
+    let dir = Bundle.main.bundleURL.deletingLastPathComponent()
+    guard dir.path.hasPrefix("/Applications") else { return }
+    for name in ["Glimpr.app.old", "Glimpr.app.update"] {
+      try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+    }
+  }
+
+  static func applyStaged(dmgPath: String) -> Bool {
+    guard supported else { return false }
+    let (aCode, aOut) = run("/usr/bin/hdiutil", ["attach", dmgPath, "-nobrowse", "-plist"])
+    guard aCode == 0, let mount = mountPoint(fromHdiutilPlist: aOut) else { return false }
+    defer { _ = run("/usr/bin/hdiutil", ["detach", mount, "-force"]) }
+    guard
+      let appName = (try? FileManager.default.contentsOfDirectory(atPath: mount))?
+        .first(where: { $0.hasSuffix(".app") })
+    else { return false }
+    let newApp = mount + "/" + appName
+    // Apple-anchored integrity: a valid deep signature AND our Team ID.
+    let (vCode, _) = run("/usr/bin/codesign", ["--verify", "--deep", "--strict", newApp])
+    guard vCode == 0 else { return false }
+    let (dCode, dOut) = run("/usr/bin/codesign", ["-dv", newApp])
+    guard dCode == 0, dOut.contains("TeamIdentifier=\(teamId)") else { return false }
+    // Stage a copy beside the current bundle (same volume -> atomic renames),
+    // then swap: current -> .old, staged -> current; revert on failure.
+    let fm = FileManager.default
+    let current = Bundle.main.bundleURL
+    let dir = current.deletingLastPathComponent()
+    let staged = dir.appendingPathComponent("Glimpr.app.update")
+    let old = dir.appendingPathComponent("Glimpr.app.old")
+    try? fm.removeItem(at: staged)
+    try? fm.removeItem(at: old)
+    let (cCode, _) = run("/usr/bin/ditto", [newApp, staged.path])
+    guard cCode == 0 else {
+      try? fm.removeItem(at: staged)
+      return false
+    }
+    do { try fm.moveItem(at: current, to: old) } catch {
+      try? fm.removeItem(at: staged)
+      return false
+    }
+    do { try fm.moveItem(at: staged, to: current) } catch {
+      try? fm.moveItem(at: old, to: current)
+      try? fm.removeItem(at: staged)
+      return false
+    }
+    return true
+  }
+
+  /// The first mounted filesystem's mount point from `hdiutil attach -plist`.
+  /// Internal (not private) so RunnerTests can pin the parse.
+  static func mountPoint(fromHdiutilPlist plist: String) -> String? {
+    guard let data = plist.data(using: .utf8),
+      let root = try? PropertyListSerialization.propertyList(from: data, format: nil),
+      let dict = root as? [String: Any],
+      let entities = dict["system-entities"] as? [[String: Any]]
+    else { return nil }
+    for e in entities {
+      if let mp = e["mount-point"] as? String { return mp }
+    }
+    return nil
+  }
+
+  private static func run(_ tool: String, _ args: [String]) -> (Int32, String) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: tool)
+    p.arguments = args
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = pipe
+    do { try p.run() } catch { return (-1, "") }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+  }
 }
