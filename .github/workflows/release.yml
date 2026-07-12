@@ -127,6 +127,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+      - name: Sign the installer for self-update verification
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          printf '%s' "$RELEASE_SIGNING_KEY" > k.pem
+          openssl pkeyutl -sign -inkey k.pem -rawin \
+            -in Glimpr-Setup.exe -out Glimpr-Setup.exe.sig
+          rm k.pem
+          test "$(wc -c < Glimpr-Setup.exe.sig)" -eq 64
       - name: Create or update GitHub Release (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,4 +145,5 @@ jobs:
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
             gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $PRERELEASE
           gh release upload "$GITHUB_REF_NAME" \
-            Glimpr-macOS.dmg Glimpr-Setup.exe Glimpr-Windows-Portable.zip --clobber
+            Glimpr-macOS.dmg Glimpr-Setup.exe Glimpr-Setup.exe.sig \
+            Glimpr-Windows-Portable.zip --clobber
