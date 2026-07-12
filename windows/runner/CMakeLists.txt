@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
-project(runner LANGUAGES CXX)
+# C is enabled for the vendored ed25519 verifier (plain-C sources).
+project(runner LANGUAGES C CXX)
 
 # Define the application target. To change its name, change BINARY_NAME in the
 # top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
@@ -36,6 +37,7 @@ add_executable(${BINARY_NAME} WIN32
   "recorder_client.cpp"
   "sound_channel.cpp"
   "tray_icon.cpp"
+  "update_installer.cpp"
   "utils.cpp"
   "wgc_capturer.cpp"
   "win32_window.cpp"
@@ -49,6 +51,20 @@ add_executable(${BINARY_NAME} WIN32
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+
+# Vendored Ed25519 verifier (orlp/ed25519, zlib license; verify-only subset)
+# for the self-update installer signature check. Built as its own library so
+# the third-party sources are exempt from the runner's /W4 /WX wall.
+add_library(ed25519_verify STATIC
+  "ed25519/verify.c"
+  "ed25519/sha512.c"
+  "ed25519/ge.c"
+  "ed25519/sc.c"
+  "ed25519/fe.c"
+)
+target_compile_options(ed25519_verify PRIVATE /W0)
+target_include_directories(ed25519_verify PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(${BINARY_NAME} PRIVATE ed25519_verify)
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")

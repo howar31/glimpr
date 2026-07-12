@@ -26,3 +26,6 @@ target_include_directories(${TEST_NAME} PRIVATE
 # them but the translation unit must still link.
 target_link_libraries(${TEST_NAME} PRIVATE
   "dxgi.lib" "user32.lib" "shell32.lib" "ole32.lib")
+# The vendored Ed25519 verifier (defined in ../runner/CMakeLists.txt) for the
+# self-update signature-check vectors.
+target_link_libraries(${TEST_NAME} PRIVATE ed25519_verify)

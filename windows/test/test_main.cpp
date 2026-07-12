@@ -18,6 +18,7 @@
 #include "capture_key_rule.h"
 #include "clipboard_dib.h"
 #include "drop_filter.h"
+#include "ed25519/ed25519.h"
 #include "hdr_util.h"
 #include "pixel_swizzle.h"
 #include "record_args.h"
@@ -418,6 +419,46 @@ void TestCaptureKeyRule() {
   CHECK(!ShouldCommitCaptureKey(VK_SNAPSHOT, true, false, false));
 }
 
+// --- ed25519 verify (self-update signature check) ---------------------------
+
+std::vector<unsigned char> HexBytes(const char* hex) {
+  std::vector<unsigned char> out;
+  for (size_t i = 0; hex[i] && hex[i + 1]; i += 2) {
+    auto nib = [](char c) -> unsigned {
+      if (c >= '0' && c <= '9') return c - '0';
+      return (c | 0x20) - 'a' + 10;
+    };
+    out.push_back(static_cast<unsigned char>((nib(hex[i]) << 4) |
+                                             nib(hex[i + 1])));
+  }
+  return out;
+}
+
+void TestEd25519Verify() {
+  g_case = "ed25519";
+  // RFC 8032 TEST 1: empty message.
+  auto pk1 = HexBytes(
+      "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+  auto sig1 = HexBytes(
+      "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb882"
+      "1590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
+  const unsigned char empty[1] = {0};
+  CHECK(ed25519_verify(sig1.data(), empty, 0, pk1.data()) == 1);
+  // RFC 8032 TEST 2: one-byte message 0x72.
+  auto pk2 = HexBytes(
+      "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
+  auto sig2 = HexBytes(
+      "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1"
+      "e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00");
+  const unsigned char msg2[] = {0x72};
+  CHECK(ed25519_verify(sig2.data(), msg2, 1, pk2.data()) == 1);
+  // A single flipped bit in the signature must fail.
+  sig2[0] ^= 0x01;
+  CHECK(ed25519_verify(sig2.data(), msg2, 1, pk2.data()) == 0);
+  // The wrong public key must fail.
+  CHECK(ed25519_verify(sig1.data(), msg2, 1, pk1.data()) == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -435,7 +476,7 @@ int main() {
       {"ext-srgb", TestExtSrgb},         {"tonemap", TestToneMapLut},
       {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
-      {"drop-filter", TestDropFilter},
+      {"drop-filter", TestDropFilter},     {"ed25519", TestEd25519Verify},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

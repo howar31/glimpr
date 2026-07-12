@@ -70,6 +70,9 @@ class FlutterWindow : public Win32Window {
   // Pro license blob storage (Credential Manager). Dumb read/write/clear; all
   // verification is Dart-side. Only the private/Pro build invokes it.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> license_channel_;
+  // Installed-build self-update (glimpr/update): supported-check + verified
+  // silent-install apply. Control engine only.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> update_channel_;
   // Screen recording (glimpr/record): WGC continuous capture + Media Foundation
   // encode. Control engine only (mirrors the macOS RecordingChannel).
   std::unique_ptr<RecordChannel> record_channel_;

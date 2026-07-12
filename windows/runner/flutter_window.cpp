@@ -15,6 +15,8 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "perf_log.h"
+#include "update_installer.h"
+#include "utils.h"
 #include "win_reveal.h"
 
 using flutter::EncodableMap;
@@ -320,6 +322,47 @@ bool FlutterWindow::OnCreate() {
         } else if (m == "clear") {
           LicenseClear();
           result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
+
+  // Installed-build self-update (glimpr/update): the Dart updater stages a
+  // verified download and this applies it (Ed25519 check + silent installer +
+  // relaunch watcher). Control engine only. Success(true) means the watcher
+  // is live and THIS process force-exits (mirrors the relaunch handler).
+  update_channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
+      messenger, "glimpr/update",
+      &flutter::StandardMethodCodec::GetInstance());
+  update_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+        const auto& m = call.method_name();
+        if (m == "updateSupported") {
+          result->Success(EncodableValue(update_installer::UpdateSupported()));
+        } else if (m == "applyStaged") {
+          std::wstring exe_path;
+          std::wstring sig_path;
+          if (const auto* args =
+                  std::get_if<EncodableMap>(call.arguments())) {
+            for (const auto& kv : *args) {
+              const auto* k = std::get_if<std::string>(&kv.first);
+              const auto* v = std::get_if<std::string>(&kv.second);
+              if (!k || !v) continue;
+              std::wstring wide = Utf16FromUtf8(*v);
+              if (*k == "path") exe_path = wide;
+              if (*k == "sigPath") sig_path = wide;
+            }
+          }
+          if (!exe_path.empty() && !sig_path.empty() &&
+              update_installer::ApplyStaged(exe_path, sig_path)) {
+            if (tray_icon_) tray_icon_->Remove();
+            result->Success(EncodableValue(true));
+            // Same rationale as the relaunch handler: a clean engine teardown
+            // can hang; the watcher waits on our death to run the installer.
+            ExitProcess(0);
+          }
+          result->Success(EncodableValue(false));
         } else {
           result->NotImplemented();
         }
