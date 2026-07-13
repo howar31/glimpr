@@ -486,18 +486,90 @@ void main() {
             store);
         final out = '${dir.path}/out.gif';
         final seen = <int>[];
+        var lastTotal = 0;
         await exportGif(
           doc: doc,
           store: store,
           outPath: out,
-          onProgress: (done, total) => seen.add(done),
+          onProgress: (done, total) {
+            seen.add(done);
+            lastTotal = total;
+          },
         );
-        expect(seen.last, 2);
+        expect(seen.last, lastTotal,
+            reason: 'progress must land on its own reported total');
+        expect(seen, isNotEmpty);
         final reread = await importGif(
             Uint8List.fromList(File(out).readAsBytesSync()), store);
         expect(reread.frameCount, 2);
         expect(reread.frames[0].delayMs, 200);
         expect(reread.frames[1].delayMs, 300);
+      } finally {
+        await store.dispose();
+      }
+    });
+
+    test('honors export options (per-frame palette, dither, loop, optimize)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('gifed_exportopt');
+      final store = FrameStore(dir);
+      try {
+        final f1 = _solid(4, 4, [255, 0, 0, 255]);
+        final f2 = _solid(4, 4, [0, 0, 255, 255]);
+        final doc = await importGif(
+            encodeGifFrames(
+              frames: [FrameSpec(f1, 200), FrameSpec(f2, 300)],
+              width: 4,
+              height: 4,
+              loopCount: 0,
+            ),
+            store);
+        final out = '${dir.path}/out.gif';
+        await exportGif(
+          doc: doc,
+          store: store,
+          outPath: out,
+          options: const GifExportOptions(
+            strategy: PaletteStrategy.perFrame,
+            dither: true,
+            optimize: true,
+            loopCount: 7,
+          ),
+        );
+        final reread = await importGif(
+            Uint8List.fromList(File(out).readAsBytesSync()), store);
+        expect(reread.loopCount, 7);
+        expect(reread.frameCount, 2);
+        expect(File(store.pathFor(reread.frames[0].key)).readAsBytesSync(),
+            f1);
+        expect(File(store.pathFor(reread.frames[1].key)).readAsBytesSync(),
+            f2);
+      } finally {
+        await store.dispose();
+      }
+    });
+
+    test('defaults keep the document loop count', () async {
+      final dir = await Directory.systemTemp.createTemp('gifed_exportloop');
+      final store = FrameStore(dir);
+      try {
+        final doc = await importGif(
+            encodeGifFrames(
+              frames: [
+                FrameSpec(_solid(2, 2, [255, 0, 0, 255]), 100),
+                FrameSpec(_solid(2, 2, [0, 255, 0, 255]), 100),
+              ],
+              width: 2,
+              height: 2,
+              loopCount: 3,
+            ),
+            store);
+        expect(doc.loopCount, 3);
+        final out = '${dir.path}/out.gif';
+        await exportGif(doc: doc, store: store, outPath: out);
+        final reread = await importGif(
+            Uint8List.fromList(File(out).readAsBytesSync()), store);
+        expect(reread.loopCount, 3);
       } finally {
         await store.dispose();
       }
