@@ -10,6 +10,7 @@
 #include "clipboard_channel.h"
 #include "sound_channel.h"
 #include "editor_window.h"
+#include "gif_editor_window.h"
 #include "hotkey_host.h"
 #include "overlay_manager.h"
 #include "pin_window.h"
@@ -88,6 +89,10 @@ class FlutterWindow : public Win32Window {
   // The standalone Image Editor engine + window (warm-built shortly after launch;
   // revealed on demand). The macOS warm editor window analogue.
   std::unique_ptr<EditorWindow> editor_window_;
+
+  // The standalone GIF Editor engine + window (same lifecycle as the Image
+  // Editor's). The macOS warm GIF editor window analogue.
+  std::unique_ptr<GifEditorWindow> gif_editor_window_;
 
   // The live floating pins (pin-to-screen). The macOS PinPanel set analogue.
   std::unique_ptr<PinManager> pin_manager_;

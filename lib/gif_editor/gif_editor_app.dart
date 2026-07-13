@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -76,10 +77,19 @@ class _GifEditorAppState extends State<GifEditorApp>
   bool _exporting = false;
   double _exportProgress = 0;
 
+  /// File picker; macOS uses the native NSOpenPanel (openPanel channel
+  /// method), Windows the cross-platform file_selector dialog (the runner
+  /// hosts no dialogs — same split as the Image Editor).
   Future<void> _openPanel() async {
     if (_c.opening) return;
-    final path = await _channel.invokeMethod<String>('openPanel');
-    if (path == null || path.isEmpty) return;
+    String? path;
+    if (platformIsWindows) {
+      const group = XTypeGroup(label: 'GIF', extensions: ['gif']);
+      path = (await openFile(acceptedTypeGroups: [group]))?.path;
+    } else {
+      path = await _channel.invokeMethod<String>('openPanel');
+    }
+    if (path == null || path.isEmpty || !mounted) return;
     try {
       final bytes = await File(path).readAsBytes();
       await _c.openBytes(bytes);
@@ -95,9 +105,18 @@ class _GifEditorAppState extends State<GifEditorApp>
     final doc = _c.doc;
     final store = _c.store;
     if (doc == null || store == null || _exporting) return;
-    final out = await _channel.invokeMethod<String>(
-        'savePanel', {'suggestedName': '$_sourceName-edited.gif'});
-    if (out == null || out.isEmpty) return;
+    final suggested = '$_sourceName-edited.gif';
+    String? out;
+    if (platformIsWindows) {
+      const group = XTypeGroup(label: 'GIF', extensions: ['gif']);
+      out = (await getSaveLocation(
+              suggestedName: suggested, acceptedTypeGroups: [group]))
+          ?.path;
+    } else {
+      out = await _channel
+          .invokeMethod<String>('savePanel', {'suggestedName': suggested});
+    }
+    if (out == null || out.isEmpty || !mounted) return;
     _c.pause();
     setState(() {
       _exporting = true;
@@ -150,6 +169,20 @@ class _GifEditorAppState extends State<GifEditorApp>
     _channel.invokeMethod('hideEditor');
   }
 
+  // Windows only: push the localized title to the OS caption (no Flutter
+  // title bar there; the runner C++ is ASCII-only and owns no l10n strings).
+  String? _sentWindowTitle;
+
+  void _syncWindowTitle() {
+    if (!platformIsWindows) return;
+    final title = _l.gifEditorTitleBar;
+    if (title == _sentWindowTitle) return;
+    _sentWindowTitle = title;
+    try {
+      _channel.invokeMethod('setWindowTitle', title);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final brightness =
@@ -186,6 +219,7 @@ class _GifEditorAppState extends State<GifEditorApp>
             body: Builder(
               builder: (ctx) {
                 _l = AppLocalizations.of(ctx);
+                _syncWindowTitle();
                 return Stack(
                   children: [
                     Column(

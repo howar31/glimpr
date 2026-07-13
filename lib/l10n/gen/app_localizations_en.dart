@@ -1676,4 +1676,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get gifEditorExportFailed => 'Export failed';
+
+  @override
+  String get trayOpenGifEditor => 'Open GIF Editor';
 }

@@ -2002,5 +2002,9 @@
   "gifEditorExportFailed": "Export failed",
   "@gifEditorExportFailed": {
     "description": "GIF Editor: error toast when exporting fails"
+  },
+  "trayOpenGifEditor": "Open GIF Editor",
+  "@trayOpenGifEditor": {
+    "description": "Tray menu: reveal the GIF Editor window (provisional entry)"
   }
 }

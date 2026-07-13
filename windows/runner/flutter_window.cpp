@@ -405,6 +405,8 @@ bool FlutterWindow::OnCreate() {
   // The standalone Image Editor (its own engine + window). Warm-built on the
   // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).
   editor_window_ = std::make_unique<EditorWindow>(project_, GetHandle());
+  // The standalone GIF Editor (same lifecycle; revealed from the tray).
+  gif_editor_window_ = std::make_unique<GifEditorWindow>(project_, GetHandle());
   // The capture flow's open-in-editor leg + recents relay reach the editor from
   // both the direct-capture (control) and overlay engines.
   capture_channel_->SetEditorWindow(editor_window_.get());
@@ -443,6 +445,9 @@ bool FlutterWindow::OnCreate() {
             }
             role_channel_->InvokeMethod("trayCheckUpdates", nullptr);
           },
+          [this]() {
+            if (gif_editor_window_) gif_editor_window_->RevealEditor();
+          },
       });
   // The warm editor engine pushes its recent-images list to the tray "Open
   // Recent" submenu (it boots ~2s after launch, so recents populate before the
@@ -479,6 +484,10 @@ bool FlutterWindow::OnCreate() {
   editor_window_->SetProcessingCallback(
       [this](bool active, const std::string& label) {
         if (tray_icon_) tray_icon_->SetProcessing(active, label);  // editor
+      });
+  gif_editor_window_->SetProcessingCallback(
+      [this](bool active, const std::string& label) {
+        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // gif editor
       });
 
   // A second instance posts this to reveal the running one's Settings.
@@ -584,6 +593,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     perf::Mark("warmupBegin");
     if (overlay_manager_) overlay_manager_->WarmUp();
     if (editor_window_) editor_window_->WarmUp();  // instant first editor open
+    if (gif_editor_window_) gif_editor_window_->WarmUp();
     perf::Mark("warmupEnd");
     return 0;
   }

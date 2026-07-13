@@ -29,6 +29,9 @@ class TrayIcon {
     std::function<void()> on_clear_recent;
     // "Check for updates" item; Dart decides (open release page vs run a check).
     std::function<void()> on_check_updates;
+    // Provisional entry (final entry points are a pending integration
+    // discussion): reveal the GIF Editor window.
+    std::function<void()> on_open_gif_editor;
   };
 
   TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,

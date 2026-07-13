@@ -8,6 +8,7 @@ import 'package:glimpr/gif_editor/gif_editor_app.dart';
 import 'package:glimpr/gif_editor/gif_editor_controller.dart';
 import 'package:glimpr/gif_editor/gif_import.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
+import 'package:glimpr/platform_gate.dart';
 
 import '../support/gif_fixture.dart';
 import '../support/mock_channels.dart';
@@ -18,6 +19,12 @@ AppLocalizations get _en => lookupAppLocalizations(const Locale('en'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // These tests exercise the macOS (channel) picker branch on BOTH suite
+  // hosts; the Windows branch goes through the file_selector plugin, which
+  // has no implementation in the test environment.
+  setUp(() => debugPlatformOverride = TargetPlatform.macOS);
+  tearDown(() => debugPlatformOverride = null);
 
   testWidgets('landing shows the open card', (tester) async {
     mockMethodChannel(_channel);

@@ -3181,6 +3181,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export failed'**
   String get gifEditorExportFailed;
+
+  /// Tray menu: reveal the GIF Editor window (provisional entry)
+  ///
+  /// In en, this message translates to:
+  /// **'Open GIF Editor'**
+  String get trayOpenGifEditor;
 }
 
 class _AppLocalizationsDelegate

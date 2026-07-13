@@ -1616,4 +1616,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get gifEditorExportFailed => '輸出失敗';
+
+  @override
+  String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }

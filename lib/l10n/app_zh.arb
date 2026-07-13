@@ -513,5 +513,6 @@
   "gifEditorImporting": "正在開啟 GIF…",
   "gifEditorOpenFailed": "無法開啟這個 GIF",
   "gifEditorExportDone": "已輸出 GIF",
-  "gifEditorExportFailed": "輸出失敗"
+  "gifEditorExportFailed": "輸出失敗",
+  "trayOpenGifEditor": "開啟 GIF 編輯器"
 }

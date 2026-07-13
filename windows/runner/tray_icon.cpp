@@ -28,6 +28,7 @@ enum TrayCommand : UINT {
   kCmdRecordLast,
   kCmdOpenEditor,
   kCmdOpenEditorClipboard,
+  kCmdOpenGifEditor,
   kCmdClearRecent,
   kCmdOpenSaveFolder,
   kCmdCheckUpdates,
@@ -276,6 +277,10 @@ void TrayIcon::ShowMenu() {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
                 Utf16FromUtf8(L("openRecent", "Open Recent")).c_str());
   }
+  // Provisional entry (final entry points are a pending integration
+  // discussion): reveals the GIF Editor window.
+  AppendItem(menu, kCmdOpenGifEditor, L("gifEditor", "Open GIF Editor"), "",
+             true);
   AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
              "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -326,6 +331,9 @@ void TrayIcon::OnCommand(UINT command_id) {
     case kCmdOpenEditor: hotkeys_->FireAction(kActOpenEditor); break;
     case kCmdOpenEditorClipboard:
       hotkeys_->FireAction(kActOpenEditorClipboard);
+      break;
+    case kCmdOpenGifEditor:
+      if (cb_.on_open_gif_editor) cb_.on_open_gif_editor();
       break;
     case kCmdClearRecent: if (cb_.on_clear_recent) cb_.on_clear_recent(); break;
     case kCmdOpenSaveFolder: hotkeys_->FireAction(kActOpenSaveFolder); break;

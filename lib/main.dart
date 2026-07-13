@@ -163,6 +163,7 @@ Future<void> main() async {
       'recordLast': globalActionLabel(l, kRecordLastRegionKey),
       'openEditor': globalActionLabel(l, kOpenEditorKey),
       'openEditorClipboard': globalActionLabel(l, kOpenEditorClipboardKey),
+      'gifEditor': l.trayOpenGifEditor,
       'openRecent': l.trayOpenRecent,
       'clearRecent': l.trayClearRecent,
       'openSaveFolder': l.trayOpenSaveFolder,
