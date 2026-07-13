@@ -73,8 +73,10 @@ class FrameStore {
     final img = await completer.future;
     _images[key] = img;
     if (_images.length > imageCacheCap) {
-      final eldest = _images.keys.first;
-      _images.remove(eldest)?.dispose();
+      // Evict WITHOUT disposing: a RawImage in the filmstrip may still be
+      // painting the evicted frame (explicit dispose would crash its next
+      // repaint); the ui.Image finalizer reclaims it once unreferenced.
+      _images.remove(_images.keys.first);
     }
     return img;
   }

@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../image_editor/checkerboard.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../platform_gate.dart';
 import '../settings/app_locale.dart';
@@ -11,7 +13,7 @@ import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'frame_store.dart';
 import 'gif_document.dart';
-import 'gif_import.dart';
+import 'gif_editor_controller.dart';
 
 /// Standalone GIF Editor window (the third editor surface, next to the
 /// Settings window and the Image Editor). Same Aurora chrome recipe as the
@@ -23,7 +25,11 @@ import 'gif_import.dart';
 /// later slices; the editing MODEL here is a frame sequence, deliberately
 /// separate from the Image Editor's single-canvas annotation model.
 class GifEditorApp extends StatefulWidget {
-  const GifEditorApp({super.key});
+  const GifEditorApp({super.key, this.controller});
+
+  /// Test seam: widget tests inject a preloaded controller so the heavy
+  /// open path (real IO + engine decode) can run under runAsync first.
+  final GifEditorController? controller;
 
   @override
   State<GifEditorApp> createState() => _GifEditorAppState();
@@ -37,52 +43,41 @@ class _GifEditorAppState extends State<GifEditorApp>
 
   static const _channel = MethodChannel('glimpr/gifEditor');
 
-  FrameStore? _store;
-  GifDocument? _doc;
-  bool _opening = false;
+  late final GifEditorController _c;
+  late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _ownsController = widget.controller == null;
+    _c = widget.controller ?? GifEditorController();
+    _c.addListener(_onControllerChanged);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(_store?.dispose());
+    _c.removeListener(_onControllerChanged);
+    if (_ownsController) _c.dispose();
+    _toastTimer?.cancel();
+    _toastClearTimer?.cancel();
     super.dispose();
   }
+
+  void _onControllerChanged() => setState(() {});
 
   @override
   void didChangePlatformBrightness() => setState(() {});
 
   Future<void> _openPanel() async {
-    if (_opening) return;
+    if (_c.opening) return;
     final path = await _channel.invokeMethod<String>('openPanel');
     if (path == null || path.isEmpty) return;
-    await _load(path);
-  }
-
-  Future<void> _load(String path) async {
-    setState(() => _opening = true);
     try {
       final bytes = await File(path).readAsBytes();
-      // A fresh session directory per opened GIF; the previous document's
-      // store (if any) is disposed after the swap so undo keys never dangle.
-      final dir =
-          await Directory.systemTemp.createTemp('glimpr_gif_editor');
-      final store = FrameStore(dir);
-      final doc = await importGif(Uint8List.fromList(bytes), store);
-      final old = _store;
-      setState(() {
-        _store = store;
-        _doc = doc;
-        _opening = false;
-      });
-      unawaited(old?.dispose());
+      await _c.openBytes(bytes);
     } catch (_) {
-      setState(() => _opening = false);
       _toast(_l.gifEditorOpenFailed);
     }
   }
@@ -137,6 +132,9 @@ class _GifEditorAppState extends State<GifEditorApp>
             if (platformIsWindows)
               const SingleActivator(LogicalKeyboardKey.keyW, control: true):
                   _requestClose,
+            const SingleActivator(LogicalKeyboardKey.space): () {
+              if (_c.doc != null) _c.togglePlay();
+            },
           },
           child: Scaffold(
             // Windows paints the opaque themed base (winBase rule); macOS
@@ -155,7 +153,7 @@ class _GifEditorAppState extends State<GifEditorApp>
                         // standard OS caption.
                         if (!platformIsWindows) _titleBar(tokens),
                         Expanded(
-                          child: _doc == null
+                          child: _c.doc == null
                               ? _landing(tokens)
                               : _editor(tokens),
                         ),
@@ -224,7 +222,7 @@ class _GifEditorAppState extends State<GifEditorApp>
                 style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
               ),
               const SizedBox(height: 24),
-              _opening
+              _c.opening
                   ? Text(
                       _l.gifEditorImporting,
                       style: GlimprType.sansStyle(12.5, 500, t.fg3),
@@ -241,16 +239,131 @@ class _GifEditorAppState extends State<GifEditorApp>
     );
   }
 
-  /// Loaded state. S1-T5 fills this with the preview canvas, the filmstrip
-  /// timeline, playback and stats; this placeholder only proves the state
-  /// swap end to end.
+  /// Loaded state: preview canvas over a checkerboard, a controls/stats row,
+  /// and the frame filmstrip along the bottom.
   Widget _editor(GlimprTokens t) {
-    return Container(
+    final doc = _c.doc!;
+    final store = _c.store!;
+    final frame = doc.frames[_c.current];
+    return Column(
       key: const Key('gif-editor-canvas'),
-      alignment: Alignment.center,
-      child: Text(
-        _l.gifEditorStatsFrames(_doc!.frameCount),
-        style: GlimprType.sansStyle(13, 500, t.fg2),
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(child: Checkerboard(dark: t.isDark)),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: _FramePreview(store: store, frame: frame),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _controlsRow(t, doc),
+        _filmstrip(t, doc, store),
+      ],
+    );
+  }
+
+  Widget _controlsRow(GlimprTokens t, GifDocument doc) {
+    final seconds = doc.totalDuration.inMilliseconds / 1000;
+    final f = doc.frames.first;
+    final loop = doc.loopCount == 0 ? '∞' : '×${doc.loopCount}';
+    final stats = '${_l.gifEditorStatsFrames(doc.frameCount)}'
+        ' · ${seconds.toStringAsFixed(1)}s'
+        ' · ${f.width}×${f.height}'
+        ' · $loop';
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: Row(
+        children: [
+          Tooltip(
+            message: _c.playing ? _l.gifEditorPause : _l.gifEditorPlay,
+            waitDuration: const Duration(milliseconds: 500),
+            child: GestureDetector(
+              key: const Key('gif-play-toggle'),
+              onTap: _c.togglePlay,
+              child: Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: t.cardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: t.cardBorder),
+                ),
+                child: Icon(
+                  _c.playing
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  size: 19,
+                  color: t.fg1,
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Text(stats, style: GlimprType.sansStyle(12, 500, t.fg3)),
+        ],
+      ),
+    );
+  }
+
+  Widget _filmstrip(GlimprTokens t, GifDocument doc, FrameStore store) {
+    return Container(
+      height: 86,
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        itemCount: doc.frameCount,
+        itemBuilder: (ctx, i) {
+          final f = doc.frames[i];
+          final selected = i == _c.current;
+          return GestureDetector(
+            key: Key('gif-frame-$i'),
+            onTap: () => _c.seek(i),
+            child: Container(
+              width: 84,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                // Accent marks the CURRENT frame (accent = active/selected).
+                border: Border.all(
+                  color: selected ? GlimprTokens.accent : t.cardBorder,
+                  width: selected ? 2 : 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(7)),
+                      child: _FramePreview(store: store, frame: f),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Text(
+                      '${i + 1} · ${f.delayMs} ms',
+                      style: GlimprType.sansStyle(
+                          9.5, 500, selected ? t.fg1 : t.fg4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -300,6 +413,59 @@ class _GifEditorAppState extends State<GifEditorApp>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Paints one stored frame, keeping the PREVIOUS image on screen while the
+/// next one decodes (a FutureBuilder would flash empty on every seek).
+class _FramePreview extends StatefulWidget {
+  const _FramePreview({required this.store, required this.frame});
+
+  final FrameStore store;
+  final GifFrame frame;
+
+  @override
+  State<_FramePreview> createState() => _FramePreviewState();
+}
+
+class _FramePreviewState extends State<_FramePreview> {
+  ui.Image? _image;
+  FrameKey? _shownKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_FramePreview old) {
+    super.didUpdateWidget(old);
+    if (old.frame.key != widget.frame.key) _load();
+  }
+
+  Future<void> _load() async {
+    final f = widget.frame;
+    final img = await widget.store.image(f.key, f.width, f.height);
+    if (!mounted || widget.frame.key != f.key) return;
+    setState(() {
+      _image = img;
+      _shownKey = f.key;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Keep painting the stale image until the new one lands; the key check
+    // in _load prevents an out-of-order overwrite.
+    if (_image == null) return const SizedBox.expand();
+    return RawImage(
+      image: _image,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
+      // Repaint hint only; RawImage compares images by identity anyway.
+      key: ValueKey(_shownKey),
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/gif_editor/gif_editor_app.dart';
+import 'package:glimpr/gif_editor/gif_editor_controller.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
 
 import '../support/gif_fixture.dart';
@@ -69,4 +70,47 @@ void main() {
     expect(find.text(_en.gifEditorOpenGifButton), findsNothing);
     expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);
   }, timeout: const Timeout(Duration(seconds: 60)));
+
+  Future<GifEditorController> preloaded(WidgetTester tester) async {
+    final c = GifEditorController();
+    addTearDown(c.dispose);
+    // The heavy open path (IO + engine decode) runs under runAsync; the
+    // widget then mounts against a ready document.
+    await tester.runAsync(() => c.openBytes(twoFrameGifFixture()));
+    return c;
+  }
+
+  testWidgets('filmstrip tiles, stats and tap-to-seek', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloaded(tester);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-frame-0')), findsOneWidget);
+    expect(find.byKey(const Key('gif-frame-1')), findsOneWidget);
+    expect(
+        find.textContaining(_en.gifEditorStatsFrames(2)), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gif-frame-1')));
+    await tester.pump();
+    expect(c.current, 1);
+  });
+
+  testWidgets('play toggle advances frames on their own delays',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloaded(tester);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-play-toggle')));
+    await tester.pump();
+    expect(c.playing, isTrue);
+    // Frame 0 holds for 200ms (fixture), then frame 1.
+    await tester.pump(const Duration(milliseconds: 210));
+    expect(c.current, 1);
+    // Frame 1 holds for 400ms, then wraps.
+    await tester.pump(const Duration(milliseconds: 410));
+    expect(c.current, 0);
+    await tester.tap(find.byKey(const Key('gif-play-toggle')));
+    await tester.pump();
+    expect(c.playing, isFalse);
+  });
 }
