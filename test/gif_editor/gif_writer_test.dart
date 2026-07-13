@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/gif_editor/encode/gif_encoder.dart';
 import 'package:glimpr/gif_editor/encode/gif_writer.dart';
 import 'package:glimpr/gif_editor/encode/palette.dart';
 import 'package:glimpr/gif_editor/export_service.dart';
@@ -137,6 +139,141 @@ void main() {
         expect(doc.frameCount, 300);
         expect(doc.loopCount, 3);
         expect(doc.frames.first.delayMs, 50);
+      } finally {
+        await store.dispose();
+      }
+    });
+  });
+
+  group('GifEncoder', () {
+    test('incremental emit is byte-identical to the wrapper', () {
+      final f1 = _solid(3, 3, [255, 0, 0, 255]);
+      final f2 = _solid(3, 3, [0, 0, 255, 255]);
+      final wrapped = encodeGifFrames(
+        frames: [FrameSpec(f1, 100), FrameSpec(f2, 150)],
+        width: 3,
+        height: 3,
+        loopCount: 2,
+      );
+
+      final chunks = BytesBuilder(copy: true);
+      final enc = GifEncoder(
+        chunks.add,
+        width: 3,
+        height: 3,
+        options: const GifEncodeOptions(loopCount: 2),
+        globalPalette: Palette.medianCut([f1, f2]),
+      );
+      enc.addFrame(f1, 100);
+      enc.addFrame(f2, 150);
+      enc.finish();
+      expect(chunks.takeBytes(), wrapped);
+    });
+
+    test('per-frame palettes stay exact where a global palette cannot', () async {
+      // Two frames with disjoint 256-color sets (512 distinct total): one
+      // global 255-entry palette must miss somewhere, per-frame local tables
+      // reproduce every pixel exactly.
+      Uint8List frameOf(int channelShift) {
+        final f = Uint8List(16 * 16 * 4);
+        for (var i = 0; i < 256; i++) {
+          // 255 distinct values (an opaque palette holds at most 255): the
+          // last pixel repeats 254 so ONE frame still fits exactly.
+          final v = i < 255 ? i : 254;
+          f[i * 4 + channelShift] = v;
+          f[i * 4 + (channelShift == 0 ? 1 : 0)] = 128; // keep sets disjoint
+          f[i * 4 + 3] = 255;
+        }
+        return f;
+      }
+
+      final f1 = frameOf(0);
+      final f2 = frameOf(2);
+
+      Future<List<Uint8List>> roundTrip(PaletteStrategy strategy) async {
+        final gif = encodeGifFrames(
+          frames: [FrameSpec(f1, 100), FrameSpec(f2, 100)],
+          width: 16,
+          height: 16,
+          loopCount: 0,
+          strategy: strategy,
+        );
+        final dir = await Directory.systemTemp.createTemp('gifed_lct');
+        final store = FrameStore(dir);
+        try {
+          final doc = await importGif(gif, store);
+          return [
+            for (final f in doc.frames)
+              Uint8List.fromList(
+                  File(store.pathFor(f.key)).readAsBytesSync()),
+          ];
+        } finally {
+          await store.dispose();
+        }
+      }
+
+      final perFrame = await roundTrip(PaletteStrategy.perFrame);
+      expect(perFrame[0], f1);
+      expect(perFrame[1], f2);
+
+      final global = await roundTrip(PaletteStrategy.global);
+      final exact = listEquals(global[0], f1) && listEquals(global[1], f2);
+      expect(exact, isFalse,
+          reason: 'sanity: this fixture must actually exceed one palette');
+    });
+
+    test('options loop count lands in the NETSCAPE block', () async {
+      // Two frames: single-frame GIFs get their loop extension ignored by
+      // the decoder, which would fake a pass at 0 and mask a real 5.
+      final chunks = BytesBuilder(copy: true);
+      final f = _solid(2, 2, [10, 20, 30, 255]);
+      final f2 = _solid(2, 2, [200, 20, 30, 255]);
+      final enc = GifEncoder(
+        chunks.add,
+        width: 2,
+        height: 2,
+        options: const GifEncodeOptions(loopCount: 5),
+        globalPalette: Palette.medianCut([f, f2]),
+      );
+      enc.addFrame(f, 100);
+      enc.addFrame(f2, 100);
+      enc.finish();
+      final dir = await Directory.systemTemp.createTemp('gifed_loop');
+      final store = FrameStore(dir);
+      try {
+        final doc = await importGif(chunks.takeBytes(), store);
+        expect(doc.loopCount, 5);
+      } finally {
+        await store.dispose();
+      }
+    });
+
+    test('dithered encode of a gradient still decodes frame-exact sizes',
+        () async {
+      // Smoke: dither on a >255-color gradient produces a valid stream.
+      final f = Uint8List(64 * 8 * 4);
+      for (var y = 0; y < 8; y++) {
+        for (var x = 0; x < 64; x++) {
+          final i = y * 64 + x;
+          f[i * 4] = x * 4;
+          f[i * 4 + 1] = y * 32;
+          f[i * 4 + 2] = ((x + y) * 3) & 0xFF;
+          f[i * 4 + 3] = 255;
+        }
+      }
+      final gif = encodeGifFrames(
+        frames: [FrameSpec(f, 100)],
+        width: 64,
+        height: 8,
+        loopCount: 0,
+        dither: true,
+      );
+      final dir = await Directory.systemTemp.createTemp('gifed_dither');
+      final store = FrameStore(dir);
+      try {
+        final doc = await importGif(gif, store);
+        expect(doc.frames.single.width, 64);
+        expect(doc.frames.single.height, 8);
       } finally {
         await store.dispose();
       }
