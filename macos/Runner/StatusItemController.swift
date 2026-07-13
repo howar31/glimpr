@@ -17,6 +17,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let keyHint: (String) -> (String, UInt)?
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
+  private let onOpenGifEditor: () -> Void
   private let onOpenSaveFolder: () -> Void
   private let onOpenRecent: (String) -> Void
   private let onClearRecent: () -> Void
@@ -58,6 +59,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
        keyHint: @escaping (String) -> (String, UInt)?,
        onSettings: @escaping () -> Void,
        onOpenImage: @escaping () -> Void,
+       onOpenGifEditor: @escaping () -> Void,
        onOpenSaveFolder: @escaping () -> Void,
        onOpenRecent: @escaping (String) -> Void,
        onClearRecent: @escaping () -> Void) {
@@ -67,6 +69,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     self.keyHint = keyHint
     self.onSettings = onSettings
     self.onOpenImage = onOpenImage
+    self.onOpenGifEditor = onOpenGifEditor
     self.onOpenSaveFolder = onOpenSaveFolder
     self.onOpenRecent = onOpenRecent
     self.onClearRecent = onClearRecent
@@ -134,6 +137,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
     rebuildRecent([]) // seed the placeholder until Dart pushes the list
+    // Provisional entry (final entry points are a pending integration
+    // discussion): reveals the warm GIF Editor window.
+    menu.addItem(menuItem(
+      title: L.s("Open GIF Editor", "開啟 GIF 編輯器"),
+      action: #selector(openGifEditor), key: ""))
     menu.addItem(menuItem(
       title: L.s("Open Save Folder", "開啟儲存資料夾"),
       action: #selector(openSaveFolder), key: ""))
@@ -452,6 +460,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   }
 
   @objc private func openImage() { onOpenImage() }
+  @objc private func openGifEditor() { onOpenGifEditor() }
   @objc private func openSaveFolder() { onOpenSaveFolder() }
   @objc private func openRecent(_ sender: NSMenuItem) {
     if let path = sender.representedObject as? String { onOpenRecent(path) }

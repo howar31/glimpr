@@ -72,6 +72,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var imageEditorRole: FlutterMethodChannel?
   private var imageEditorChannel: FlutterMethodChannel?
   private var imageEditorDelegate: ImageEditorWindowDelegate?
+  private var gifEditorWindow: NSWindow?
+  private var gifEditorRole: FlutterMethodChannel?
+  private var gifEditorChannel: FlutterMethodChannel?
+  private var gifEditorDelegate: ImageEditorWindowDelegate?
   private var isPresentingOpenPanel = false
   // A Finder "Open With" path that arrived before the editor Dart side signalled
   // ready (cold start); flushed by the `editorReady` channel call.
@@ -321,6 +325,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       },
       onSettings: { [weak self] in self?.revealSettings() },
       onOpenImage: { [weak self] in self?.openImageEditor() },
+      onOpenGifEditor: { [weak self] in self?.revealGifEditor() },
       onOpenSaveFolder: { [weak self] in self?.openSaveFolder() },
       // A recent item reveals the editor (it may be hidden) then loads the file
       // (confirmed:false → Dart dirty-confirms if an edited image is open).
@@ -372,6 +377,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // spike confirmed this), so build it now and keep it hidden at alpha 0 (engine
     // stays warm), revealed by "Open Editor…". Mirrors this window's warm pattern.
     setUpImageEditorWindow()
+    setUpGifEditorWindow()
 
     // Resident: keep the engine warm (on-screen, transparent, click-through) so
     // main() runs + the hotkey registers, but present nothing until "Settings…".
@@ -692,16 +698,152 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     imageEditorChannel?.invokeMethod("requestClose", arguments: nil)
   }
 
-  /// Run the user's configured title-bar double-click action on the editor
-  /// window (System Settings › Desktop & Dock › "Double-click a window's title
+  /// Run the user's configured title-bar double-click action on [window]
+  /// (System Settings › Desktop & Dock › "Double-click a window's title
   /// bar to"). Defaults to zoom when unset, matching AppKit.
-  private func handleTitleBarDoubleClick() {
-    guard let w = imageEditorWindow else { return }
+  private func handleTitleBarDoubleClick(on window: NSWindow? = nil) {
+    guard let w = window ?? imageEditorWindow else { return }
     switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
     case "Minimize": w.miniaturize(nil)
     case "None": break
     default: w.zoom(nil) // "Maximize" / unset
     }
+  }
+
+  /// The GIF Editor: a third warm engine + window mirroring the Image Editor
+  /// recipe (warm at boot — mac engines cannot be created after launch),
+  /// with a channel surface reduced to what its S1 shell needs. GIF in, GIF
+  /// out: both panels filter to .gif only.
+  private func setUpGifEditorWindow() {
+    let vc = FlutterViewController()
+    RegisterGeneratedPlugins(registry: vc)
+    EncodeChannel.register(messenger: vc.engine.binaryMessenger)
+    ClipboardChannel.register(messenger: vc.engine.binaryMessenger)
+    SoundChannel.register(messenger: vc.engine.binaryMessenger)
+    let role = FlutterMethodChannel(
+      name: "glimpr/role", binaryMessenger: vc.engine.binaryMessenger)
+    role.setMethodCallHandler { call, result in
+      if call.method == "getRole" {
+        result("gif-editor")
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.gifEditorRole = role
+
+    let channel = FlutterMethodChannel(
+      name: "glimpr/gifEditor", binaryMessenger: vc.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "openPanel":
+        result(self?.presentGifOpenPanel())
+      case "savePanel":
+        let suggested =
+          (call.arguments as? [String: Any])?["suggestedName"] as? String
+        result(self?.presentGifSavePanel(suggestedName: suggested))
+      case "hideEditor":
+        self?.hideGifEditor()
+        result(nil)
+      case "titleBarDoubleClick":
+        self?.handleTitleBarDoubleClick(on: self?.gifEditorWindow)
+        result(nil)
+      case "openSettings":
+        self?.revealSettings()
+        result(nil)
+      case "setProcessing":
+        let a = call.arguments as? [String: Any]
+        let active = a?["active"] as? Bool ?? false
+        self?.statusItem?.setProcessing(active, label: a?["label"] as? String)
+        result(nil)
+      case "perfMark":
+        if let label = (call.arguments as? [String: Any])?["label"] as? String {
+          PerfLog.mark(label)
+        }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.gifEditorChannel = channel
+
+    let w = ImageEditorPanel(
+      contentRect: NSRect(x: 0, y: 0, width: 1180, height: 700),
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+      backing: .buffered, defer: false)
+    w.onCloseShortcut = { [weak self] in self?.hideGifEditor() }
+    w.title = L.s("GIF Editor", "GIF 編輯器")
+    w.titleVisibility = .hidden
+    w.titlebarAppearsTransparent = true
+    // Same behind-window vibrancy shell as the Image Editor; no drop handler
+    // in S1 (drag-drop open is a later slice).
+    w.contentViewController = GlassContentViewController(flutterViewController: vc)
+    w.setContentSize(NSSize(width: 1180, height: 700))
+    // Min width keeps the controls row (play + stats + Export) intact; min
+    // height keeps a usable preview above the filmstrip.
+    w.contentMinSize = NSSize(width: 760, height: 560)
+    w.isReleasedWhenClosed = false
+    w.center()
+    w.setFrameAutosaveName("GlimprGifEditorWindow")
+    let delegate = ImageEditorWindowDelegate(
+      // S1 has no dirty state yet: the red button hides directly (the engine
+      // stays warm). A Dart-side dirty confirm arrives with the edit slices.
+      onClose: { [weak self] in self?.hideGifEditor() },
+      onBecomeKey: {},
+      onResignKey: {})
+    w.delegate = delegate
+    self.gifEditorDelegate = delegate
+    self.gifEditorWindow = w
+
+    // Same warm-parking recipe as the Image Editor window: realize on-screen,
+    // then alpha 0 + click-through, out of Exposé.
+    w.orderFrontRegardless()
+    w.alphaValue = 0
+    w.ignoresMouseEvents = true
+    w.collectionBehavior = [.transient]
+  }
+
+  /// Reveal the warm GIF Editor window (landing or last state).
+  func revealGifEditor() {
+    guard let w = gifEditorWindow else { return }
+    w.alphaValue = 1
+    w.ignoresMouseEvents = false
+    w.collectionBehavior = [.managed]
+    updateActivationPolicy()
+    NSApp.activate(ignoringOtherApps: true)
+    w.makeKeyAndOrderFront(nil)
+  }
+
+  private func hideGifEditor() {
+    guard let w = gifEditorWindow else { return }
+    w.alphaValue = 0
+    w.ignoresMouseEvents = true
+    w.orderBack(nil)
+    w.collectionBehavior = [.transient]
+    updateActivationPolicy()
+  }
+
+  /// Modal NSOpenPanel restricted to GIF files (the GIF Editor's only input).
+  private func presentGifOpenPanel() -> String? {
+    guard !isPresentingOpenPanel else { return nil }
+    isPresentingOpenPanel = true
+    defer { isPresentingOpenPanel = false }
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.allowedContentTypes = [.gif]
+    return panel.runModal() == .OK ? panel.url?.path : nil
+  }
+
+  /// Modal NSSavePanel for the GIF export destination.
+  private func presentGifSavePanel(suggestedName: String?) -> String? {
+    guard !isPresentingOpenPanel else { return nil }
+    isPresentingOpenPanel = true
+    defer { isPresentingOpenPanel = false }
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.gif]
+    panel.canCreateDirectories = true
+    if let name = suggestedName { panel.nameFieldStringValue = name }
+    return panel.runModal() == .OK ? panel.url?.path : nil
   }
 
   // Retains the share picker while it is on screen (it would deallocate — and
