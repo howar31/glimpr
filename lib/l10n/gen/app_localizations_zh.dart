@@ -1618,5 +1618,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorExportFailed => '輸出失敗';
 
   @override
+  String get gifEditorExportOptions => '輸出選項';
+
+  @override
+  String get gifEditorPalette => '調色盤';
+
+  @override
+  String get gifEditorPaletteGlobal => '全域';
+
+  @override
+  String get gifEditorPalettePerFrame => '逐幀';
+
+  @override
+  String get gifEditorDither => '抖動';
+
+  @override
+  String get gifEditorOptimize => '最佳化檔案大小';
+
+  @override
+  String get gifEditorLoop => '循環';
+
+  @override
+  String get gifEditorLoopForever => '無限';
+
+  @override
+  String get gifEditorLoopCount => '次數';
+
+  @override
   String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }

@@ -1678,5 +1678,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorExportFailed => 'Export failed';
 
   @override
+  String get gifEditorExportOptions => 'Export Options';
+
+  @override
+  String get gifEditorPalette => 'Palette';
+
+  @override
+  String get gifEditorPaletteGlobal => 'Global';
+
+  @override
+  String get gifEditorPalettePerFrame => 'Per frame';
+
+  @override
+  String get gifEditorDither => 'Dithering';
+
+  @override
+  String get gifEditorOptimize => 'Optimize file size';
+
+  @override
+  String get gifEditorLoop => 'Loop';
+
+  @override
+  String get gifEditorLoopForever => 'Forever';
+
+  @override
+  String get gifEditorLoopCount => 'Count';
+
+  @override
   String get trayOpenGifEditor => 'Open GIF Editor';
 }

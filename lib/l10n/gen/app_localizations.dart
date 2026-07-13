@@ -3182,6 +3182,60 @@ abstract class AppLocalizations {
   /// **'Export failed'**
   String get gifEditorExportFailed;
 
+  /// GIF Editor: tooltip on the export options button and title of its popover
+  ///
+  /// In en, this message translates to:
+  /// **'Export Options'**
+  String get gifEditorExportOptions;
+
+  /// GIF Editor export options: palette strategy row label
+  ///
+  /// In en, this message translates to:
+  /// **'Palette'**
+  String get gifEditorPalette;
+
+  /// GIF Editor export options: one shared palette for the whole file
+  ///
+  /// In en, this message translates to:
+  /// **'Global'**
+  String get gifEditorPaletteGlobal;
+
+  /// GIF Editor export options: a dedicated palette per frame
+  ///
+  /// In en, this message translates to:
+  /// **'Per frame'**
+  String get gifEditorPalettePerFrame;
+
+  /// GIF Editor export options: error-diffusion toggle row label
+  ///
+  /// In en, this message translates to:
+  /// **'Dithering'**
+  String get gifEditorDither;
+
+  /// GIF Editor export options: frame-diff size optimization toggle row label
+  ///
+  /// In en, this message translates to:
+  /// **'Optimize file size'**
+  String get gifEditorOptimize;
+
+  /// GIF Editor export options: loop row label
+  ///
+  /// In en, this message translates to:
+  /// **'Loop'**
+  String get gifEditorLoop;
+
+  /// GIF Editor export options: loop segment for endless playback
+  ///
+  /// In en, this message translates to:
+  /// **'Forever'**
+  String get gifEditorLoopForever;
+
+  /// GIF Editor export options: loop segment for a finite play count
+  ///
+  /// In en, this message translates to:
+  /// **'Count'**
+  String get gifEditorLoopCount;
+
   /// Tray menu: reveal the GIF Editor window (provisional entry)
   ///
   /// In en, this message translates to:

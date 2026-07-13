@@ -514,5 +514,14 @@
   "gifEditorOpenFailed": "無法開啟這個 GIF",
   "gifEditorExportDone": "已輸出 GIF",
   "gifEditorExportFailed": "輸出失敗",
+  "gifEditorExportOptions": "輸出選項",
+  "gifEditorPalette": "調色盤",
+  "gifEditorPaletteGlobal": "全域",
+  "gifEditorPalettePerFrame": "逐幀",
+  "gifEditorDither": "抖動",
+  "gifEditorOptimize": "最佳化檔案大小",
+  "gifEditorLoop": "循環",
+  "gifEditorLoopForever": "無限",
+  "gifEditorLoopCount": "次數",
   "trayOpenGifEditor": "開啟 GIF 編輯器"
 }

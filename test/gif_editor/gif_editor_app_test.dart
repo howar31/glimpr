@@ -203,6 +203,82 @@ void main() {
     expect(calls.map((call) => call.method), contains('openPanel'));
   });
 
+  testWidgets('export options popover opens, edits state and dismisses',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloaded(tester);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-options-popover')), findsNothing);
+    await tester.tap(find.byKey(const Key('gif-export-options')));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-options-popover')), findsOneWidget);
+    expect(find.text(_en.gifEditorPalette), findsOneWidget);
+    // Palette strategy segment.
+    await tester.tap(find.text(_en.gifEditorPalettePerFrame));
+    await tester.pump();
+    // Dither toggle.
+    await tester.tap(find.byKey(const Key('gif-opt-dither')));
+    await tester.pump();
+    // Finite loop reveals the count field.
+    expect(
+        find.byKey(const Key('gif-opt-loop-count-field')), findsNothing);
+    await tester.tap(find.text(_en.gifEditorLoopCount));
+    await tester.pump();
+    expect(
+        find.byKey(const Key('gif-opt-loop-count-field')), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('gif-opt-loop-count-field')), '4');
+    await tester.pump();
+    // Outside tap dismisses.
+    await tester.tapAt(const Offset(10, 100));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-options-popover')), findsNothing);
+    // State survived the dismiss: reopen shows the field again.
+    await tester.tap(find.byKey(const Key('gif-export-options')));
+    await tester.pump();
+    expect(
+        find.byKey(const Key('gif-opt-loop-count-field')), findsOneWidget);
+  });
+
+  testWidgets('export honors the loop count chosen in the options',
+      (tester) async {
+    final dir = (await tester
+        .runAsync(() => Directory.systemTemp.createTemp('gifed_optexp')))!;
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final outPath = '${dir.path}/out.gif';
+    mockMethodChannel(_channel, handler: (call) {
+      if (call.method == 'savePanel') return outPath;
+      return null;
+    });
+    final c = await preloaded(tester);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    // Choose a finite loop of 4 (fixture is loop-forever).
+    await tester.tap(find.byKey(const Key('gif-export-options')));
+    await tester.pump();
+    await tester.tap(find.text(_en.gifEditorLoopCount));
+    await tester.pump();
+    await tester.enterText(
+        find.byKey(const Key('gif-opt-loop-count-field')), '4');
+    await tester.tapAt(const Offset(10, 100));
+    await tester.pump();
+    await tester.tap(find.text(_en.gifEditorExportButton));
+    await tester.pump();
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (find.text(_en.gifEditorExportDone).evaluate().isEmpty &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    expect(find.text(_en.gifEditorExportDone), findsOneWidget);
+    final reread = await tester.runAsync(() async => importGif(
+        Uint8List.fromList(File(outPath).readAsBytesSync()),
+        FrameStore(await Directory.systemTemp.createTemp('reread_opt'))));
+    expect(reread!.loopCount, 4);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.

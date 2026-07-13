@@ -2003,6 +2003,42 @@
   "@gifEditorExportFailed": {
     "description": "GIF Editor: error toast when exporting fails"
   },
+  "gifEditorExportOptions": "Export Options",
+  "@gifEditorExportOptions": {
+    "description": "GIF Editor: tooltip on the export options button and title of its popover"
+  },
+  "gifEditorPalette": "Palette",
+  "@gifEditorPalette": {
+    "description": "GIF Editor export options: palette strategy row label"
+  },
+  "gifEditorPaletteGlobal": "Global",
+  "@gifEditorPaletteGlobal": {
+    "description": "GIF Editor export options: one shared palette for the whole file"
+  },
+  "gifEditorPalettePerFrame": "Per frame",
+  "@gifEditorPalettePerFrame": {
+    "description": "GIF Editor export options: a dedicated palette per frame"
+  },
+  "gifEditorDither": "Dithering",
+  "@gifEditorDither": {
+    "description": "GIF Editor export options: error-diffusion toggle row label"
+  },
+  "gifEditorOptimize": "Optimize file size",
+  "@gifEditorOptimize": {
+    "description": "GIF Editor export options: frame-diff size optimization toggle row label"
+  },
+  "gifEditorLoop": "Loop",
+  "@gifEditorLoop": {
+    "description": "GIF Editor export options: loop row label"
+  },
+  "gifEditorLoopForever": "Forever",
+  "@gifEditorLoopForever": {
+    "description": "GIF Editor export options: loop segment for endless playback"
+  },
+  "gifEditorLoopCount": "Count",
+  "@gifEditorLoopCount": {
+    "description": "GIF Editor export options: loop segment for a finite play count"
+  },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
     "description": "Tray menu: reveal the GIF Editor window (provisional entry)"

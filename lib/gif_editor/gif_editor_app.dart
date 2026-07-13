@@ -65,12 +65,13 @@ class _GifEditorAppState extends State<GifEditorApp>
     _c.removeListener(_onControllerChanged);
     if (_ownsController) _c.dispose();
     _strip.dispose();
+    _loopField.dispose();
     _toastTimer?.cancel();
     _toastClearTimer?.cancel();
     super.dispose();
   }
 
-  void _onControllerChanged() => setState(() {});
+  void _onControllerChanged() => setState(_seedOptions);
 
   @override
   void didChangePlatformBrightness() => setState(() {});
@@ -79,6 +80,30 @@ class _GifEditorAppState extends State<GifEditorApp>
   String _sourceName = 'animation';
   bool _exporting = false;
   double _exportProgress = 0;
+
+  // Export options (session state; the loop fields re-seed per document).
+  PaletteStrategy _optStrategy = PaletteStrategy.global;
+  bool _optDither = false;
+  bool _optOptimize = true;
+  bool _optLoopForever = true;
+  int _optLoopCount = 1;
+  bool _optionsOpen = false;
+  final TextEditingController _loopField = TextEditingController(text: '1');
+  GifDocument? _seededDoc;
+
+  /// Re-seed the loop option from each newly opened document (the other
+  /// options are sticky for the window's lifetime).
+  void _seedOptions() {
+    final doc = _c.doc;
+    if (identical(doc, _seededDoc)) return;
+    _seededDoc = doc;
+    _optionsOpen = false;
+    if (doc != null) {
+      _optLoopForever = doc.loopCount == 0;
+      _optLoopCount = doc.loopCount == 0 ? 1 : doc.loopCount;
+      _loopField.text = '$_optLoopCount';
+    }
+  }
 
   /// File picker; macOS uses the native NSOpenPanel (openPanel channel
   /// method), Windows the cross-platform file_selector dialog (the runner
@@ -133,6 +158,12 @@ class _GifEditorAppState extends State<GifEditorApp>
         doc: doc,
         store: store,
         outPath: out,
+        options: GifExportOptions(
+          strategy: _optStrategy,
+          dither: _optDither,
+          optimize: _optOptimize,
+          loopCount: _optLoopForever ? 0 : _optLoopCount.clamp(1, 0xFFFF),
+        ),
         onProgress: (done, total) =>
             setState(() => _exportProgress = done / total),
       );
@@ -261,6 +292,18 @@ class _GifEditorAppState extends State<GifEditorApp>
                         child: _FloatingHomeButton(
                             key: const Key('gif-home'), onTap: _goHome),
                       ),
+                    // Export options: outside-tap barrier + anchored panel.
+                    if (_optionsOpen && _c.doc != null) ...[
+                      Positioned.fill(
+                        child: GestureDetector(
+                          key: const Key('gif-options-barrier'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () =>
+                              setState(() => _optionsOpen = false),
+                        ),
+                      ),
+                      _optionsPopover(tokens),
+                    ],
                     _toastLayer(tokens),
                   ],
                 );
@@ -420,6 +463,29 @@ class _GifEditorAppState extends State<GifEditorApp>
           const Spacer(),
           Text(stats, style: GlimprType.sansStyle(12, 500, t.fg3)),
           const SizedBox(width: 14),
+          Tooltip(
+            message: _l.gifEditorExportOptions,
+            waitDuration: const Duration(milliseconds: 500),
+            child: GestureDetector(
+              key: const Key('gif-export-options'),
+              onTap: () => setState(() => _optionsOpen = !_optionsOpen),
+              child: Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: t.cardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color:
+                          _optionsOpen ? GlimprTokens.accent : t.cardBorder),
+                ),
+                child: Icon(Icons.tune_rounded,
+                    size: 17, color: _optionsOpen ? t.fg1 : t.fg2),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           AccentButton(
             _exporting
                 ? '${(_exportProgress * 100).round()}%'
@@ -430,6 +496,149 @@ class _GifEditorAppState extends State<GifEditorApp>
             },
           ),
         ],
+      ),
+    );
+  }
+
+  /// The export options popover: anchored above the controls row's right
+  /// edge, dismissed by the outside-tap barrier. Same glass surface as the
+  /// toast pill; controls reuse the app-wide idioms (Segmented, GlassToggle).
+  Widget _optionsPopover(GlimprTokens t) {
+    Widget row(String label, Widget control) => Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(label,
+                    style: GlimprType.sansStyle(12.5, 500, t.fg2)),
+              ),
+              control,
+            ],
+          ),
+        );
+
+    // Segmented controls are too wide to share a line with their label in
+    // both languages; those sections stack label over control instead.
+    Widget section(String label, Widget control) => Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: GlimprType.sansStyle(12.5, 500, t.fg2)),
+              const SizedBox(height: 7),
+              control,
+            ],
+          ),
+        );
+
+    return Positioned(
+      right: 12,
+      bottom: 86 + 44 + 8, // clear the filmstrip + controls row
+      child: Container(
+        key: const Key('gif-options-popover'),
+        width: 332,
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+        decoration: BoxDecoration(
+          color: t.hudBg,
+          borderRadius: BorderRadius.circular(GlimprTokens.radiusBar),
+          border: Border.all(color: t.hudBorder),
+          boxShadow: [
+            BoxShadow(
+              color: t.isDark
+                  ? const Color(0x66000000)
+                  : const Color(0x2E0F172A),
+              blurRadius: 16,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.gifEditorExportOptions,
+                style: GlimprType.sansStyle(11.5, 600, t.fg3,
+                    letterSpacing: 0.2)),
+            section(
+              _l.gifEditorPalette,
+              Segmented<PaletteStrategy>(
+                value: _optStrategy,
+                onChanged: (v) => setState(() => _optStrategy = v),
+                options: [
+                  (PaletteStrategy.global, _l.gifEditorPaletteGlobal),
+                  (PaletteStrategy.perFrame, _l.gifEditorPalettePerFrame),
+                ],
+              ),
+            ),
+            row(
+              _l.gifEditorDither,
+              GlassToggle(
+                key: const Key('gif-opt-dither'),
+                value: _optDither,
+                onChanged: (v) => setState(() => _optDither = v),
+              ),
+            ),
+            row(
+              _l.gifEditorOptimize,
+              GlassToggle(
+                key: const Key('gif-opt-optimize'),
+                value: _optOptimize,
+                onChanged: (v) => setState(() => _optOptimize = v),
+              ),
+            ),
+            section(
+              _l.gifEditorLoop,
+              Row(
+                children: [
+                  Segmented<bool>(
+                    value: _optLoopForever,
+                    onChanged: (v) => setState(() => _optLoopForever = v),
+                    options: [
+                      (true, _l.gifEditorLoopForever),
+                      (false, _l.gifEditorLoopCount),
+                    ],
+                  ),
+                  if (!_optLoopForever) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 52,
+                      child: TextField(
+                        key: const Key('gif-opt-loop-count-field'),
+                        controller: _loopField,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(5),
+                        ],
+                        textAlign: TextAlign.center,
+                        style: GlimprType.sansStyle(12.5, 600, t.fg1),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 7),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide: BorderSide(color: t.cardBorder),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide:
+                                const BorderSide(color: GlimprTokens.accent),
+                          ),
+                        ),
+                        onChanged: (v) {
+                          final n = int.tryParse(v);
+                          if (n != null && n > 0) {
+                            setState(() => _optLoopCount = n);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
