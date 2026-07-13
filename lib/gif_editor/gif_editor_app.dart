@@ -11,6 +11,7 @@ import '../platform_gate.dart';
 import '../settings/app_locale.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
+import 'export_service.dart';
 import 'frame_store.dart';
 import 'gif_document.dart';
 import 'gif_editor_controller.dart';
@@ -70,6 +71,11 @@ class _GifEditorAppState extends State<GifEditorApp>
   @override
   void didChangePlatformBrightness() => setState(() {});
 
+  // Basename of the opened file; seeds the export save panel's suggestion.
+  String _sourceName = 'animation';
+  bool _exporting = false;
+  double _exportProgress = 0;
+
   Future<void> _openPanel() async {
     if (_c.opening) return;
     final path = await _channel.invokeMethod<String>('openPanel');
@@ -77,8 +83,44 @@ class _GifEditorAppState extends State<GifEditorApp>
     try {
       final bytes = await File(path).readAsBytes();
       await _c.openBytes(bytes);
+      final base = path.split(Platform.pathSeparator).last;
+      final dot = base.lastIndexOf('.');
+      _sourceName = dot > 0 ? base.substring(0, dot) : base;
     } catch (_) {
       _toast(_l.gifEditorOpenFailed);
+    }
+  }
+
+  Future<void> _export() async {
+    final doc = _c.doc;
+    final store = _c.store;
+    if (doc == null || store == null || _exporting) return;
+    final out = await _channel.invokeMethod<String>(
+        'savePanel', {'suggestedName': '$_sourceName-edited.gif'});
+    if (out == null || out.isEmpty) return;
+    _c.pause();
+    setState(() {
+      _exporting = true;
+      _exportProgress = 0;
+    });
+    // Tray processing pulse, parallel to the Image Editor's Done flow.
+    unawaited(_channel.invokeMethod('setProcessing',
+        {'active': true, 'label': _l.gifEditorExportButton}));
+    try {
+      await exportGif(
+        doc: doc,
+        store: store,
+        outPath: out,
+        onProgress: (done, total) =>
+            setState(() => _exportProgress = done / total),
+      );
+      _toast(_l.gifEditorExportDone);
+    } catch (_) {
+      _toast(_l.gifEditorExportFailed);
+    } finally {
+      setState(() => _exporting = false);
+      unawaited(
+          _channel.invokeMethod('setProcessing', {'active': false}));
     }
   }
 
@@ -310,6 +352,16 @@ class _GifEditorAppState extends State<GifEditorApp>
           ),
           const Spacer(),
           Text(stats, style: GlimprType.sansStyle(12, 500, t.fg3)),
+          const SizedBox(width: 14),
+          AccentButton(
+            _exporting
+                ? '${(_exportProgress * 100).round()}%'
+                : _l.gifEditorExportButton,
+            icon: Icons.save_alt_rounded,
+            onTap: () {
+              if (!_exporting) unawaited(_export());
+            },
+          ),
         ],
       ),
     );
