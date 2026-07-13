@@ -20,9 +20,21 @@
 <meta name="twitter:image" content="https://glimpr.howar31.com/media/og-card.png">
 <link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="13 13 70 70"><defs><linearGradient id="m" gradientUnits="userSpaceOnUse" x1="13.45" y1="13.45" x2="82.55" y2="82.55"><stop offset="0" stop-color="%2322d3ee"/><stop offset=".52" stop-color="%233b82f6"/><stop offset="1" stop-color="%23a78bfa"/></linearGradient></defs><g fill="none" stroke="url(%23m)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"><path d="M36 18 H23 A5 5 0 0 0 18 23 V36"/><path d="M60 18 H73 A5 5 0 0 1 78 23 V36"/><path d="M78 60 V73 A5 5 0 0 1 73 78 H60"/><path d="M18 60 V73 A5 5 0 0 0 23 78 H36"/></g><path fill="url(%23m)" d="M48 31 C49.7 43 53 46.3 65 48 C53 49.7 49.7 53 48 65 C46.3 53 43 49.7 31 48 C43 46.3 46.3 43 48 31 Z"/></svg>'>
 <script>
-  // Apply stored theme/language before first paint (no flash). Defaults:
-  // theme follows the system; language follows the browser.
+  // Apply stored theme/language and the visitor's OS before first paint
+  // (no flash). Defaults: theme follows the system; language follows the
+  // browser; download emphasis stays on macOS unless Windows is detected.
   (function () {
+    try {
+      // userAgentData is Chromium-only; Firefox/Safari fall back to the
+      // legacy platform string, then the UA string. Only Windows needs
+      // detecting: mac emphasis is the no-detection default, so any
+      // failure or unknown OS (Linux, spoofed UA) leaves the page as-is.
+      var uad = navigator.userAgentData;
+      var win = uad && uad.platform ? /^Win/i.test(uad.platform) :
+          /Win/i.test(navigator.platform || '') ||
+          /Windows NT/.test(navigator.userAgent || '');
+      if (win) document.documentElement.dataset.os = 'win';
+    } catch (e) {}
     var t = localStorage.getItem('glimpr-theme');
     if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
     var l = localStorage.getItem('glimpr-lang') ||
@@ -255,6 +267,23 @@
     background: var(--surface);
   }
   .btn-win:hover { border-color: var(--muted); }
+  /* Windows visitors (html[data-os="win"], set before first paint) get the
+     two buttons' emphasis and order swapped; no detection keeps mac-first. */
+  :root[data-os="win"] .btn-win {
+    order: -1;
+    color: #fff;
+    border: 0;
+    background: var(--grad);
+    box-shadow: 0 8px 26px -10px rgba(59, 130, 246, .55);
+  }
+  :root[data-os="win"] .btn-win:hover { box-shadow: 0 12px 30px -10px rgba(59, 130, 246, .7); }
+  :root[data-os="win"] .btn-mac {
+    color: var(--fg);
+    border: 1.5px solid var(--hair);
+    background: var(--surface);
+    box-shadow: none;
+  }
+  :root[data-os="win"] .btn-mac:hover { border-color: var(--muted); box-shadow: none; }
   .dlnote {
     margin-top: 18px;
     font: 450 12px/1.9 var(--mono);
