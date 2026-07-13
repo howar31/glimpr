@@ -81,14 +81,22 @@ class FrameStore {
     return img;
   }
 
-  /// Drop every cached image and delete the backing directory.
+  /// Drop every cached image and delete the backing directory. Best-effort:
+  /// on Windows the recursive delete fails with a sharing violation while an
+  /// async frame read is still in flight (document swap / teardown race) —
+  /// swallow it and leave the session dir to the OS's temp cleanup rather
+  /// than let the error escape an unawaited dispose.
   Future<void> dispose() async {
     for (final img in _images.values) {
       img.dispose();
     }
     _images.clear();
-    if (dir.existsSync()) {
-      await dir.delete(recursive: true);
+    try {
+      if (dir.existsSync()) {
+        await dir.delete(recursive: true);
+      }
+    } on FileSystemException {
+      // Locked file on Windows; the dir is under the system temp location.
     }
   }
 }
