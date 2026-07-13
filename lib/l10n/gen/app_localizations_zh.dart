@@ -1578,4 +1578,42 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get keyCapNone => '無';
+
+  @override
+  String get gifEditorTitleBar => 'GIF 編輯器';
+
+  @override
+  String get gifEditorOpenGif => '開啟 GIF 以編輯';
+
+  @override
+  String get gifEditorOpenGifSubtitle => '修剪幀、調整時間，並輸出新的 GIF。';
+
+  @override
+  String get gifEditorOpenGifButton => '開啟 GIF…';
+
+  @override
+  String get gifEditorExportButton => '輸出 GIF';
+
+  @override
+  String get gifEditorPlay => '播放';
+
+  @override
+  String get gifEditorPause => '暫停';
+
+  @override
+  String gifEditorStatsFrames(int count) {
+    return '$count 幀';
+  }
+
+  @override
+  String get gifEditorImporting => '正在開啟 GIF…';
+
+  @override
+  String get gifEditorOpenFailed => '無法開啟這個 GIF';
+
+  @override
+  String get gifEditorExportDone => '已輸出 GIF';
+
+  @override
+  String get gifEditorExportFailed => '輸出失敗';
 }

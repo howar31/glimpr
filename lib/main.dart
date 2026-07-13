@@ -7,6 +7,7 @@ import 'package:glimpr_pro/glimpr_pro.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'channels.dart';
+import 'gif_editor/gif_editor_app.dart';
 import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
 import 'output/deliver.dart' show effectiveSaveDir;
@@ -43,6 +44,10 @@ Future<void> main() async {
   }
   if (role == 'image-editor') {
     runApp(const ImageEditorApp());
+    return;
+  }
+  if (role == 'gif-editor') {
+    runApp(const GifEditorApp());
     return;
   }
   // Control engine only: register the global capture hotkey (default ⌘⌥1) via

@@ -1953,5 +1953,54 @@
   "keyCapNone": "None",
   "@keyCapNone": {
     "description": "Key-cap chips: shown when a binding is unbound"
+  },
+  "gifEditorTitleBar": "GIF Editor",
+  "@gifEditorTitleBar": {
+    "description": "GIF Editor: window title bar and native window title"
+  },
+  "gifEditorOpenGif": "Open a GIF to edit",
+  "@gifEditorOpenGif": {
+    "description": "GIF Editor landing card: headline copy"
+  },
+  "gifEditorOpenGifSubtitle": "Trim frames, adjust timing, and export a new GIF.",
+  "@gifEditorOpenGifSubtitle": {
+    "description": "GIF Editor landing card: subtitle copy below the headline"
+  },
+  "gifEditorOpenGifButton": "Open GIF…",
+  "@gifEditorOpenGifButton": {
+    "description": "GIF Editor: Open button label on the landing card"
+  },
+  "gifEditorExportButton": "Export GIF",
+  "@gifEditorExportButton": {
+    "description": "GIF Editor: primary export action label"
+  },
+  "gifEditorPlay": "Play",
+  "@gifEditorPlay": {
+    "description": "GIF Editor: tooltip on the play control"
+  },
+  "gifEditorPause": "Pause",
+  "@gifEditorPause": {
+    "description": "GIF Editor: tooltip on the pause control"
+  },
+  "gifEditorStatsFrames": "{count} frames",
+  "@gifEditorStatsFrames": {
+    "description": "GIF Editor stats: frame count",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "gifEditorImporting": "Opening GIF…",
+  "@gifEditorImporting": {
+    "description": "GIF Editor: progress label while decoding an opened GIF"
+  },
+  "gifEditorOpenFailed": "Could not open this GIF",
+  "@gifEditorOpenFailed": {
+    "description": "GIF Editor: error toast when a file fails to decode"
+  },
+  "gifEditorExportDone": "GIF exported",
+  "@gifEditorExportDone": {
+    "description": "GIF Editor: success toast after exporting"
+  },
+  "gifEditorExportFailed": "Export failed",
+  "@gifEditorExportFailed": {
+    "description": "GIF Editor: error toast when exporting fails"
   }
 }

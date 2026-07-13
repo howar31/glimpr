@@ -501,5 +501,17 @@
   "overlayFailedSave": "已複製，但檔案儲存失敗",
   "overlayFailedClipboard": "已儲存，但複製到剪貼簿失敗",
   "overlayCaptureFailedGeneric": "截圖失敗",
-  "keyCapNone": "無"
+  "keyCapNone": "無",
+  "gifEditorTitleBar": "GIF 編輯器",
+  "gifEditorOpenGif": "開啟 GIF 以編輯",
+  "gifEditorOpenGifSubtitle": "修剪幀、調整時間，並輸出新的 GIF。",
+  "gifEditorOpenGifButton": "開啟 GIF…",
+  "gifEditorExportButton": "輸出 GIF",
+  "gifEditorPlay": "播放",
+  "gifEditorPause": "暫停",
+  "gifEditorStatsFrames": "{count} 幀",
+  "gifEditorImporting": "正在開啟 GIF…",
+  "gifEditorOpenFailed": "無法開啟這個 GIF",
+  "gifEditorExportDone": "已輸出 GIF",
+  "gifEditorExportFailed": "輸出失敗"
 }

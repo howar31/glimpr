@@ -1637,4 +1637,43 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get keyCapNone => 'None';
+
+  @override
+  String get gifEditorTitleBar => 'GIF Editor';
+
+  @override
+  String get gifEditorOpenGif => 'Open a GIF to edit';
+
+  @override
+  String get gifEditorOpenGifSubtitle =>
+      'Trim frames, adjust timing, and export a new GIF.';
+
+  @override
+  String get gifEditorOpenGifButton => 'Open GIF…';
+
+  @override
+  String get gifEditorExportButton => 'Export GIF';
+
+  @override
+  String get gifEditorPlay => 'Play';
+
+  @override
+  String get gifEditorPause => 'Pause';
+
+  @override
+  String gifEditorStatsFrames(int count) {
+    return '$count frames';
+  }
+
+  @override
+  String get gifEditorImporting => 'Opening GIF…';
+
+  @override
+  String get gifEditorOpenFailed => 'Could not open this GIF';
+
+  @override
+  String get gifEditorExportDone => 'GIF exported';
+
+  @override
+  String get gifEditorExportFailed => 'Export failed';
 }

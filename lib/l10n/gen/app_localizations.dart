@@ -3109,6 +3109,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'None'**
   String get keyCapNone;
+
+  /// GIF Editor: window title bar and native window title
+  ///
+  /// In en, this message translates to:
+  /// **'GIF Editor'**
+  String get gifEditorTitleBar;
+
+  /// GIF Editor landing card: headline copy
+  ///
+  /// In en, this message translates to:
+  /// **'Open a GIF to edit'**
+  String get gifEditorOpenGif;
+
+  /// GIF Editor landing card: subtitle copy below the headline
+  ///
+  /// In en, this message translates to:
+  /// **'Trim frames, adjust timing, and export a new GIF.'**
+  String get gifEditorOpenGifSubtitle;
+
+  /// GIF Editor: Open button label on the landing card
+  ///
+  /// In en, this message translates to:
+  /// **'Open GIF…'**
+  String get gifEditorOpenGifButton;
+
+  /// GIF Editor: primary export action label
+  ///
+  /// In en, this message translates to:
+  /// **'Export GIF'**
+  String get gifEditorExportButton;
+
+  /// GIF Editor: tooltip on the play control
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get gifEditorPlay;
+
+  /// GIF Editor: tooltip on the pause control
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get gifEditorPause;
+
+  /// GIF Editor stats: frame count
+  ///
+  /// In en, this message translates to:
+  /// **'{count} frames'**
+  String gifEditorStatsFrames(int count);
+
+  /// GIF Editor: progress label while decoding an opened GIF
+  ///
+  /// In en, this message translates to:
+  /// **'Opening GIF…'**
+  String get gifEditorImporting;
+
+  /// GIF Editor: error toast when a file fails to decode
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open this GIF'**
+  String get gifEditorOpenFailed;
+
+  /// GIF Editor: success toast after exporting
+  ///
+  /// In en, this message translates to:
+  /// **'GIF exported'**
+  String get gifEditorExportDone;
+
+  /// GIF Editor: error toast when exporting fails
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed'**
+  String get gifEditorExportFailed;
 }
 
 class _AppLocalizationsDelegate
