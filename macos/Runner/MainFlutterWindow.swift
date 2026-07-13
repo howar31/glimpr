@@ -794,11 +794,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     self.gifEditorDelegate = delegate
     self.gifEditorWindow = w
 
-    // Same warm-parking recipe as the Image Editor window: realize on-screen,
-    // then alpha 0 + click-through, out of Exposé.
+    // Warm parking, third-window variant: realize on-screen (the engine only
+    // starts its render loop from a real display:true pass), then IMMEDIATELY
+    // sink the window to the back. Resting at the FRONT of the normal level
+    // (the image-editor recipe) breaks record-select input when a SECOND
+    // parked editor window does it (owner-repro'd, bisected 2026-07-13); the
+    // orderBack rest state mirrors hideImageEditor's proven steady state.
     w.orderFrontRegardless()
     w.alphaValue = 0
     w.ignoresMouseEvents = true
+    w.orderBack(nil)
     w.collectionBehavior = [.transient]
   }
 
@@ -1004,10 +1009,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     standardWindowButton(.zoomButton)?.isEnabled = false
   }
 
-  /// Regular app (Dock icon + Cmd-Tab) while EITHER the settings or the image
-  /// editor window is visible (alpha > 0); a menu-bar accessory at rest.
+  /// Regular app (Dock icon + Cmd-Tab) while the settings, image editor, or
+  /// GIF editor window is visible (alpha > 0); a menu-bar accessory at rest.
   private func updateActivationPolicy() {
     let editorVisible = (imageEditorWindow?.alphaValue ?? 0) > 0
+      || (gifEditorWindow?.alphaValue ?? 0) > 0
     let settingsVisible = alphaValue > 0
     // While a capture is paused for the Settings detour (⌘, from the overlay), stay
     // .accessory. Flipping to .regular for Settings and back to .accessory on close
