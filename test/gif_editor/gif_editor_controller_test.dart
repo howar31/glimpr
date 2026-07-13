@@ -66,4 +66,17 @@ void main() {
     expect(c.playing, isTrue);
     expect(c.current, 1);
   });
+
+  test('close clears the document back to the landing state', () async {
+    await c.openBytes(twoFrameGifFixture());
+    c.togglePlay();
+    c.close();
+    expect(c.doc, isNull);
+    expect(c.store, isNull);
+    expect(c.playing, isFalse);
+    expect(c.current, 0);
+    // A new document opens normally afterwards.
+    await c.openBytes(twoFrameGifFixture());
+    expect(c.doc!.frameCount, 2);
+  });
 }

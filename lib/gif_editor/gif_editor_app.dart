@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -47,6 +48,7 @@ class _GifEditorAppState extends State<GifEditorApp>
 
   late final GifEditorController _c;
   late final bool _ownsController;
+  final ScrollController _strip = ScrollController();
 
   @override
   void initState() {
@@ -62,6 +64,7 @@ class _GifEditorAppState extends State<GifEditorApp>
     WidgetsBinding.instance.removeObserver(this);
     _c.removeListener(_onControllerChanged);
     if (_ownsController) _c.dispose();
+    _strip.dispose();
     _toastTimer?.cancel();
     _toastClearTimer?.cancel();
     super.dispose();
@@ -169,6 +172,10 @@ class _GifEditorAppState extends State<GifEditorApp>
     _channel.invokeMethod('hideEditor');
   }
 
+  /// Back to the landing: drop the current document (S1 has no dirty state
+  /// to confirm; the frame store is disposed by the controller).
+  void _goHome() => _c.close();
+
   // Windows only: push the localized title to the OS caption (no Flutter
   // title bar there; the runner C++ is ASCII-only and owns no l10n strings).
   String? _sentWindowTitle;
@@ -207,11 +214,20 @@ class _GifEditorAppState extends State<GifEditorApp>
             if (platformIsWindows)
               const SingleActivator(LogicalKeyboardKey.keyW, control: true):
                   _requestClose,
+            // Open a (new) GIF from anywhere; S1 has no dirty state so the
+            // current document is simply replaced.
+            SingleActivator(LogicalKeyboardKey.keyO,
+                meta: !platformIsWindows,
+                control: platformIsWindows): () => unawaited(_openPanel()),
             const SingleActivator(LogicalKeyboardKey.space): () {
               if (_c.doc != null) _c.togglePlay();
             },
           },
-          child: Scaffold(
+          child: Focus(
+            // Shortcuts need a focused subtree; the canvas has no focusable
+            // field of its own yet.
+            autofocus: true,
+            child: Scaffold(
             // Windows paints the opaque themed base (winBase rule); macOS
             // stays pure native vibrancy.
             backgroundColor:
@@ -235,10 +251,21 @@ class _GifEditorAppState extends State<GifEditorApp>
                         ),
                       ],
                     ),
+                    // Windows: a floating glass Home button at the canvas
+                    // top-left while a GIF is loaded (the OS caption has no
+                    // Flutter title bar to host one).
+                    if (platformIsWindows && _c.doc != null)
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: _FloatingHomeButton(
+                            key: const Key('gif-home'), onTap: _goHome),
+                      ),
                     _toastLayer(tokens),
                   ],
                 );
               },
+            ),
             ),
           ),
         ),
@@ -260,6 +287,12 @@ class _GifEditorAppState extends State<GifEditorApp>
         child: Row(
           children: [
             const SizedBox(width: 78), // clear the traffic-light buttons
+            // Back to the landing (open another GIF) — same top-left home
+            // idiom as the Image Editor; landing has nowhere to go back to.
+            if (_c.doc != null) ...[
+              _TitleBarHome(key: const Key('gif-home'), onTap: _goHome),
+              const SizedBox(width: 6),
+            ],
             const GlimprMark(size: 18),
             const SizedBox(width: 9),
             Text(
@@ -407,7 +440,20 @@ class _GifEditorAppState extends State<GifEditorApp>
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: t.divider)),
       ),
-      child: ListView.builder(
+      // A plain vertical wheel scrolls the strip too (owner request): the
+      // horizontal list only handles horizontal deltas natively (shift+wheel
+      // or trackpad), so translate the vertical component ourselves.
+      child: Listener(
+        onPointerSignal: (e) {
+          if (e is! PointerScrollEvent) return;
+          final dy = e.scrollDelta.dy;
+          if (dy == 0 || !_strip.hasClients) return;
+          final pos = _strip.position;
+          _strip.jumpTo(
+              (pos.pixels + dy).clamp(0.0, pos.maxScrollExtent));
+        },
+        child: ListView.builder(
+        controller: _strip,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         itemCount: doc.frameCount,
@@ -450,6 +496,7 @@ class _GifEditorAppState extends State<GifEditorApp>
             ),
           );
         },
+        ),
       ),
     );
   }
@@ -533,7 +580,14 @@ class _FramePreviewState extends State<_FramePreview> {
 
   Future<void> _load() async {
     final f = widget.frame;
-    final img = await widget.store.image(f.key, f.width, f.height);
+    final ui.Image img;
+    try {
+      img = await widget.store.image(f.key, f.width, f.height);
+    } catch (_) {
+      // The store can be disposed mid-load (home / document swap); the
+      // widget unmounts moments later, so just keep the stale image.
+      return;
+    }
     if (!mounted || widget.frame.key != f.key) return;
     setState(() {
       _image = img;
@@ -552,6 +606,110 @@ class _FramePreviewState extends State<_FramePreview> {
       filterQuality: FilterQuality.medium,
       // Repaint hint only; RawImage compares images by identity anyway.
       key: ValueKey(_shownKey),
+    );
+  }
+}
+
+/// Title-bar back-to-landing affordance (macOS only; the Image Editor idiom).
+class _TitleBarHome extends StatefulWidget {
+  const _TitleBarHome({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_TitleBarHome> createState() => _TitleBarHomeState();
+}
+
+class _TitleBarHomeState extends State<_TitleBarHome> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final l = AppLocalizations.of(context);
+    final color = _hover ? t.fg1 : t.fg2;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: l.editorGalleryHome,
+          waitDuration: const Duration(milliseconds: 400),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+            decoration: BoxDecoration(
+              color: _hover ? t.navHoverBg : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.chevron_left, size: 16, color: color),
+                Icon(Icons.home_outlined, size: 15, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating glass Home over the canvas (Windows; no Flutter title bar there).
+class _FloatingHomeButton extends StatefulWidget {
+  const _FloatingHomeButton({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_FloatingHomeButton> createState() => _FloatingHomeButtonState();
+}
+
+class _FloatingHomeButtonState extends State<_FloatingHomeButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final l = AppLocalizations.of(context);
+    final color = _hover ? t.fg1 : t.fg2;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Tooltip(
+          message: l.editorGalleryHome,
+          waitDuration: const Duration(milliseconds: 400),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+            decoration: BoxDecoration(
+              color: t.hudBg,
+              borderRadius: BorderRadius.circular(GlimprTokens.radiusBar),
+              border: Border.all(color: t.hudBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: t.isDark
+                      ? const Color(0x66000000)
+                      : const Color(0x2E0F172A),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.home_outlined, size: 15, color: color),
+                const SizedBox(width: 6),
+                Text(l.editorGalleryHome,
+                    style: GlimprType.sansStyle(12, 600, color)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

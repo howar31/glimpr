@@ -86,6 +86,19 @@ class GifEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drop the document and return to the no-document (landing) state. The
+  /// store is disposed asynchronously; S1 has no dirty state to guard.
+  void close() {
+    _stopTicker();
+    _playing = false;
+    _current = 0;
+    final old = _store;
+    _store = null;
+    _doc = null;
+    unawaited(old?.dispose());
+    notifyListeners();
+  }
+
   /// Self-rescheduling tick honoring EACH frame's own delay (a fixed-rate
   /// ticker would drift against variable-delay GIFs).
   void _scheduleTick() {

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/gestures.dart';
+import 'package:glimpr/gif_editor/encode/gif_writer.dart';
 import 'package:glimpr/gif_editor/frame_store.dart';
 import 'package:glimpr/gif_editor/gif_editor_app.dart';
 import 'package:glimpr/gif_editor/gif_editor_controller.dart';
@@ -172,5 +174,65 @@ void main() {
     await tester.tap(find.byKey(const Key('gif-play-toggle')));
     await tester.pump();
     expect(c.playing, isFalse);
+  });
+
+  testWidgets('home returns to the landing', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloaded(tester);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-home')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gif-home')));
+    // The title bar's double-tap recognizer holds the arena; the single tap
+    // fires only after the double-tap window lapses.
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(c.doc, isNull);
+    expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
+    expect(find.byKey(const Key('gif-home')), findsNothing);
+  });
+
+  testWidgets('cmd-O opens the file picker from anywhere', (tester) async {
+    final calls = mockMethodChannel(_channel);
+    final c = await preloaded(tester);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(calls.map((call) => call.method), contains('openPanel'));
+  });
+
+  testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
+    mockMethodChannel(_channel);
+    // 30 frames so the strip overflows the 800px test surface.
+    final c = GifEditorController();
+    addTearDown(c.dispose);
+    await tester.runAsync(() async {
+      final frames = List.generate(
+          30,
+          (i) => FrameSpec(
+              Uint8List.fromList([255, 0, 0, 255]), 100));
+      await c.openBytes(encodeGifFrames(
+          frames: frames, width: 1, height: 1, loopCount: 0));
+    });
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    expect(c.doc, isNotNull,
+        reason: 'the 30-frame document should have opened');
+    expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);
+    // skipOffstage:false — after scrolling, tile 0 leaves the painted
+    // viewport but stays laid out in the sliver cache.
+    final before = tester.getTopLeft(
+        find.byKey(const Key('gif-frame-0'), skipOffstage: false));
+    final strip = tester.getCenter(find.byKey(const Key('gif-frame-0')));
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(strip);
+    await tester.sendEventToBinding(
+        pointer.scroll(const Offset(0, 120))); // plain vertical wheel
+    await tester.pump();
+    final after = tester.getTopLeft(
+        find.byKey(const Key('gif-frame-0'), skipOffstage: false));
+    expect(after.dx, lessThan(before.dx)); // strip moved right
   });
 }
