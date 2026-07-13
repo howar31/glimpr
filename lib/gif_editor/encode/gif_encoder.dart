@@ -63,6 +63,12 @@ class GifEncoder {
   int _pendingDelayMs = 0;
   Palette? _pendingPalette;
 
+  // Frame-diff state: the raw pixels of the last WRITTEN frame, and whether
+  // that frame was written with disposal "restore to background" (the next
+  // frame then paints onto a cleared canvas and must be full-rect).
+  Uint8List? _prevRgba;
+  bool _canvasCleared = false;
+
   /// Queue one full-size RGBA frame. The PREVIOUS frame is what actually
   /// gets written (its encoding may depend on this one).
   void addFrame(Uint8List rgba, int delayMs) {
@@ -76,9 +82,10 @@ class GifEncoder {
       _writeHeader(palette);
       _headerWritten = true;
     }
-    final prevPending = _pendingRgba;
-    if (prevPending != null) {
-      _flushPending();
+    if (_pendingRgba != null) {
+      _flushPending(
+          nextRegresses:
+              options.optimizeFrameDiff && _regresses(rgba, _pendingRgba!));
     }
     _pendingRgba = rgba;
     _pendingDelayMs = delayMs;
@@ -89,16 +96,137 @@ class GifEncoder {
   void finish() {
     assert(!_finished, 'finish called twice');
     _finished = true;
-    if (_pendingRgba != null) _flushPending();
+    if (_pendingRgba != null) _flushPending(nextRegresses: false);
     if (_headerWritten) _emit(const [0x3B]); // trailer
   }
 
-  void _flushPending() {
+  /// Does [next] turn any of [prev]'s opaque pixels transparent? Such a
+  /// change cannot be painted over (a transparent index KEEPS the old pixel),
+  /// so the canvas has to be cleared first.
+  static bool _regresses(Uint8List next, Uint8List prev) {
+    for (var i = 3; i < next.length; i += 4) {
+      if (next[i] < 128 && prev[i] >= 128) return true;
+    }
+    return false;
+  }
+
+  void _flushPending({required bool nextRegresses}) {
     final rgba = _pendingRgba!;
     final palette = _pendingPalette!;
-    _writeFrame(rgba, _pendingDelayMs, palette);
+    if (!options.optimizeFrameDiff) {
+      // S1 semantics: every frame full-canvas, restore to background.
+      _writeImage(
+        left: 0,
+        top: 0,
+        w: width,
+        h: height,
+        indices: mapFrameToIndices(rgba, width, height, palette,
+            dither: options.dither),
+        disposal: 2,
+        delayMs: _pendingDelayMs,
+        palette: palette,
+      );
+    } else {
+      _writeOptimized(rgba, _pendingDelayMs, palette, nextRegresses);
+      _prevRgba = rgba;
+    }
     _pendingRgba = null;
     _pendingPalette = null;
+  }
+
+  /// Frame-diff emission. Invariant that keeps the chain correct: along a
+  /// run of disposal-1 frames holes only ever shrink (a growing hole is a
+  /// regression and restarts the run), so a canvas pixel is clear exactly
+  /// where the current frame is transparent — full-rect emissions may paint
+  /// their holes with the transparent index at any point in the run.
+  void _writeOptimized(
+      Uint8List rgba, int delayMs, Palette palette, bool nextRegresses) {
+    final prev = _prevRgba;
+    final mustFull = prev == null || _canvasCleared;
+    if (mustFull || nextRegresses) {
+      _writeImage(
+        left: 0,
+        top: 0,
+        w: width,
+        h: height,
+        indices: mapFrameToIndices(rgba, width, height, palette,
+            dither: options.dither),
+        // Restore-to-background only when the NEXT frame needs a cleared
+        // canvas; otherwise leave the composite in place and keep diffing.
+        disposal: nextRegresses ? 2 : 1,
+        delayMs: delayMs,
+        palette: palette,
+      );
+      _canvasCleared = nextRegresses;
+      return;
+    }
+
+    bool differsAt(int o) {
+      final opaqueNew = rgba[o + 3] >= 128;
+      final opaqueOld = prev[o + 3] >= 128;
+      if (opaqueNew != opaqueOld) return true;
+      return opaqueNew &&
+          (rgba[o] != prev[o] ||
+              rgba[o + 1] != prev[o + 1] ||
+              rgba[o + 2] != prev[o + 2]);
+    }
+
+    // Bounding box of changed pixels.
+    var minX = width, minY = height, maxX = -1, maxY = -1;
+    for (var y = 0; y < height; y++) {
+      final rowBase = y * width;
+      for (var x = 0; x < width; x++) {
+        if (!differsAt((rowBase + x) * 4)) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < 0) {
+      // Identical frames: a 1x1 transparent stub carries just the delay.
+      _writeImage(
+        left: 0,
+        top: 0,
+        w: 1,
+        h: 1,
+        indices: Uint8List.fromList(const [Palette.transparentIndex]),
+        disposal: 1,
+        delayMs: delayMs,
+        palette: palette,
+      );
+      _canvasCleared = false;
+      return;
+    }
+
+    // Map the WHOLE frame (dither needs full-frame error context), then lift
+    // the changed pixels; unchanged ones paint transparent so the previous
+    // composite shows through.
+    final full = mapFrameToIndices(rgba, width, height, palette,
+        dither: options.dither);
+    final rw = maxX - minX + 1;
+    final rh = maxY - minY + 1;
+    final rect = Uint8List(rw * rh);
+    var k = 0;
+    for (var y = minY; y <= maxY; y++) {
+      final rowBase = y * width;
+      for (var x = minX; x <= maxX; x++) {
+        final p = rowBase + x;
+        rect[k++] = differsAt(p * 4) ? full[p] : Palette.transparentIndex;
+      }
+    }
+    _writeImage(
+      left: minX,
+      top: minY,
+      w: rw,
+      h: rh,
+      indices: rect,
+      disposal: 1,
+      delayMs: delayMs,
+      palette: palette,
+    );
+    _canvasCleared = false;
   }
 
   void _writeHeader(Palette firstPalette) {
@@ -121,38 +249,55 @@ class GifEncoder {
     _emit(out.takeBytes());
   }
 
-  /// Full-canvas frame with disposal "restore to background" (S1 semantics;
-  /// the frame-diff task adds the sub-rectangle path).
-  void _writeFrame(Uint8List rgba, int delayMs, Palette palette) {
-    final indices = mapFrameToIndices(rgba, width, height, palette,
-        dither: options.dither);
-    var transparent = false;
-    for (final i in indices) {
-      if (i == Palette.transparentIndex) {
-        transparent = true;
-        break;
+  /// One GCE + image descriptor + pixel data block at ([left], [top]) sized
+  /// [w] x [h]. [disposal] uses GIF semantics (1 = leave, 2 = restore to
+  /// background); the transparency flag is set whenever [indices] contain
+  /// the reserved slot.
+  void _writeImage({
+    required int left,
+    required int top,
+    required int w,
+    required int h,
+    required Uint8List indices,
+    required int disposal,
+    required int delayMs,
+    required Palette palette,
+  }) {
+    assert(indices.length == w * h);
+    // DECODER QUIRK (probed 2026-07-14): Flutter's GIF decoder fails
+    // getPixels on any TRANSPARENT frame that follows a restore-to-background
+    // frame whose own transparency flag was off, so disposal-2 frames always
+    // advertise the flag. Harmless everywhere: the flag only assigns meaning
+    // to index 255, and nothing below emits 255 without wanting a hole.
+    var transparent = disposal == 2;
+    if (!transparent) {
+      for (final i in indices) {
+        if (i == Palette.transparentIndex) {
+          transparent = true;
+          break;
+        }
       }
     }
     final out = BytesBuilder(copy: false);
 
-    // Graphic Control Extension: disposal 2 (restore to background) + delay
-    // in centiseconds with the mainstream 2cs floor.
+    // Graphic Control Extension: disposal + delay in centiseconds with the
+    // mainstream 2cs floor.
     final delayCs = (delayMs / 10).round().clamp(2, 0xFFFF);
     out.add([
       0x21, 0xF9, 0x04,
-      0x08 | (transparent ? 0x01 : 0x00),
+      (disposal << 2) | (transparent ? 0x01 : 0x00),
       delayCs & 0xFF, (delayCs >> 8) & 0xFF,
       Palette.transparentIndex,
       0x00,
     ]);
 
-    // Image Descriptor: full canvas; a local color table when per-frame.
+    // Image Descriptor; a local color table when per-frame.
     final localTable = options.strategy == PaletteStrategy.perFrame;
     out.addByte(0x2C);
-    out.add(_u16(0));
-    out.add(_u16(0));
-    out.add(_u16(width));
-    out.add(_u16(height));
+    out.add(_u16(left));
+    out.add(_u16(top));
+    out.add(_u16(w));
+    out.add(_u16(h));
     out.addByte(localTable ? 0x87 : 0x00); // LCT present, size 256
     if (localTable) out.add(palette.rgb);
 

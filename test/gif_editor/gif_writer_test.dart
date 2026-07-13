@@ -280,6 +280,194 @@ void main() {
     });
   });
 
+  group('frame-diff optimization', () {
+    /// Encode, decode through the real codec, and return raw RGBA frames.
+    Future<List<Uint8List>> decodeAll(Uint8List gif) async {
+      final dir = await Directory.systemTemp.createTemp('gifed_diff');
+      final store = FrameStore(dir);
+      try {
+        final doc = await importGif(gif, store);
+        return [
+          for (final f in doc.frames)
+            Uint8List.fromList(File(store.pathFor(f.key)).readAsBytesSync()),
+        ];
+      } finally {
+        await store.dispose();
+      }
+    }
+
+    /// A gray canvas with a white [box]-sized square at (x, y).
+    Uint8List boxFrame(int w, int h, int box, int x, int y) {
+      final f = Uint8List(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        f[i * 4] = 40;
+        f[i * 4 + 1] = 44;
+        f[i * 4 + 2] = 48;
+        f[i * 4 + 3] = 255;
+      }
+      for (var by = y; by < y + box; by++) {
+        for (var bx = x; bx < x + box; bx++) {
+          final o = (by * w + bx) * 4;
+          f[o] = 255;
+          f[o + 1] = 255;
+          f[o + 2] = 255;
+        }
+      }
+      return f;
+    }
+
+    test('opaque moving box: pixels survive and the file shrinks', () async {
+      final frames = [
+        for (var i = 0; i < 6; i++)
+          FrameSpec(boxFrame(48, 32, 8, 4 + i * 6, 12), 80),
+      ];
+      Uint8List enc(bool optimize) => encodeGifFrames(
+            frames: frames,
+            width: 48,
+            height: 32,
+            loopCount: 0,
+            optimize: optimize,
+          );
+      final optimized = enc(true);
+      final plain = enc(false);
+      expect(optimized.length, lessThan(plain.length));
+
+      final decoded = await decodeAll(optimized);
+      expect(decoded.length, 6);
+      for (var i = 0; i < 6; i++) {
+        expect(decoded[i], frames[i].rgba, reason: 'frame $i must composite');
+      }
+    });
+
+    test('shrinking hole (transparent to opaque) stays a diff chain',
+        () async {
+      // Frame 1 has a transparent hole; frame 2 fills part of it in. No
+      // regression, so the encoder may diff, and the decoder must still
+      // reconstruct both composites exactly.
+      // Transparent source pixels must be all-zero RGBA: the decoder emits
+      // (0,0,0,0) for holes, so nonzero RGB under alpha 0 can never survive
+      // a byte-exact round trip.
+      final f1 = boxFrame(16, 16, 4, 2, 2);
+      for (var y = 8; y < 12; y++) {
+        for (var x = 0; x < 16; x++) {
+          f1.fillRange((y * 16 + x) * 4, (y * 16 + x) * 4 + 4, 0);
+        }
+      }
+      final f2 = Uint8List.fromList(f1);
+      for (var x = 0; x < 16; x++) {
+        final o = (9 * 16 + x) * 4; // row 9 becomes opaque green
+        f2[o] = 0;
+        f2[o + 1] = 200;
+        f2[o + 2] = 0;
+        f2[o + 3] = 255;
+      }
+      final gif = encodeGifFrames(
+        frames: [FrameSpec(f1, 100), FrameSpec(f2, 100)],
+        width: 16,
+        height: 16,
+        loopCount: 0,
+        optimize: true,
+      );
+      final decoded = await decodeAll(gif);
+      expect(decoded[0], f1);
+      expect(decoded[1], f2);
+    });
+
+    test('growing hole (opaque to transparent) falls back and stays exact',
+        () async {
+      // Frame 2 punches a hole where frame 1 was opaque: unrepresentable as
+      // a paint-over diff, so the encoder must restart the chain (previous
+      // frame full-rect + restore-to-background) and the composite survives.
+      final f1 = boxFrame(16, 16, 6, 5, 5);
+      final f2 = Uint8List.fromList(f1);
+      for (var y = 6; y < 9; y++) {
+        for (var x = 6; x < 9; x++) {
+          f2.fillRange((y * 16 + x) * 4, (y * 16 + x) * 4 + 4, 0);
+        }
+      }
+      final f3 = boxFrame(16, 16, 6, 7, 7); // opaque again afterwards
+      final gif = encodeGifFrames(
+        frames: [FrameSpec(f1, 100), FrameSpec(f2, 100), FrameSpec(f3, 100)],
+        width: 16,
+        height: 16,
+        loopCount: 0,
+        optimize: true,
+      );
+      final decoded = await decodeAll(gif);
+      expect(decoded[0], f1);
+      expect(decoded[1], f2);
+      expect(decoded[2], f3);
+    });
+
+    test('identical consecutive frames collapse to a stub and keep delays',
+        () async {
+      // Noisy content (still <=200 distinct colors) so a full re-encode of
+      // the duplicate frame would cost far more than the GCT overhead — the
+      // size assertion then really proves the stub path ran.
+      final f = Uint8List(64 * 64 * 4);
+      for (var i = 0; i < 64 * 64; i++) {
+        final v = (i * 37) % 200;
+        f[i * 4] = v;
+        f[i * 4 + 1] = (v * 3) % 200;
+        f[i * 4 + 2] = (v * 7) % 200;
+        f[i * 4 + 3] = 255;
+      }
+      final gif = encodeGifFrames(
+        frames: [FrameSpec(f, 100), FrameSpec(Uint8List.fromList(f), 250)],
+        width: 64,
+        height: 64,
+        loopCount: 0,
+        optimize: true,
+      );
+      final full = encodeGifFrames(
+        frames: [FrameSpec(f, 100), FrameSpec(Uint8List.fromList(f), 250)],
+        width: 64,
+        height: 64,
+        loopCount: 0,
+        optimize: false,
+      );
+      expect(gif.length, lessThan(full.length - 500),
+          reason: 'the duplicate frame must not re-encode its pixels');
+
+      final dir = await Directory.systemTemp.createTemp('gifed_dup');
+      final store = FrameStore(dir);
+      try {
+        final doc = await importGif(gif, store);
+        expect(doc.frameCount, 2);
+        expect(doc.frames[0].delayMs, 100);
+        expect(doc.frames[1].delayMs, 250);
+        expect(
+            File(store.pathFor(doc.frames[1].key)).readAsBytesSync(), f);
+      } finally {
+        await store.dispose();
+      }
+    });
+
+    test('unoptimized multi-frame transparency decodes (disposal-2 quirk)',
+        () async {
+      // Regression guard for the platform decoder quirk: a transparent
+      // frame after an opaque restore-to-background frame is undecodable
+      // unless the disposal-2 frame advertises the transparency flag. The
+      // S1-shape (optimize off) writes disposal 2 everywhere, so this is
+      // the exact shape a pass-through re-encode of a transparent GIF hits.
+      final f1 = boxFrame(16, 16, 4, 2, 2);
+      final f2 = boxFrame(16, 16, 4, 8, 8);
+      for (var x = 0; x < 16; x++) {
+        f2.fillRange(x * 4, x * 4 + 4, 0); // top row transparent
+      }
+      final gif = encodeGifFrames(
+        frames: [FrameSpec(f1, 100), FrameSpec(f2, 100)],
+        width: 16,
+        height: 16,
+        loopCount: 0,
+        optimize: false,
+      );
+      final decoded = await decodeAll(gif);
+      expect(decoded[0], f1);
+      expect(decoded[1], f2);
+    });
+  });
+
   group('exportGif', () {
     test('writes a decodable file with progress', () async {
       final dir = await Directory.systemTemp.createTemp('gifed_export');
