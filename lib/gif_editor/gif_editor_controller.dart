@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
 
+import '../editor/drawable.dart';
+import 'burn_in.dart';
 import 'document_transform.dart';
 import 'frame_store.dart';
 import 'gif_document.dart';
@@ -262,6 +265,86 @@ class GifEditorController extends ChangeNotifier {
       -1 => const CanvasOp.rotateCcw(),
       _ => const CanvasOp.rotate180(),
     });
+  }
+
+  // --- burn-in (annotate bake / progress bar / title frame) ----------------
+
+  /// Burn [drawables] into the SELECTED frames (empty selection = every
+  /// frame). Reuses the transforming busy state; undoable like every op.
+  Future<void> bakeDrawables(List<Drawable> drawables) =>
+      _runBake(drawables: drawables);
+
+  /// Draw the playback progress bar onto every frame.
+  Future<void> bakeProgressBar({Color color = kProgressBarColor}) =>
+      _runBake(drawables: const [], progressBar: true, progressColor: color);
+
+  Future<void> _runBake({
+    required List<Drawable> drawables,
+    bool progressBar = false,
+    Color progressColor = kProgressBarColor,
+  }) async {
+    final doc = _doc;
+    final store = _store;
+    if (doc == null || store == null || _transforming) return;
+    if (drawables.isEmpty && !progressBar) return;
+    pause();
+    _transforming = true;
+    _transformProgress = 0;
+    notifyListeners();
+    try {
+      final frames = await bakeDocument(
+        doc: doc,
+        store: store,
+        drawables: drawables,
+        range: Set.of(_selection),
+        progressBar: progressBar,
+        progressColor: progressColor,
+        onProgress: (done, total) {
+          _transformProgress = done / total;
+          if (!_disposed) notifyListeners();
+        },
+      );
+      if (!identical(_doc, doc)) return;
+      _pushUndo();
+      // Frame count/order unchanged: selection and playhead stay valid.
+      _doc = GifDocument(frames: frames, loopCount: doc.loopCount);
+    } finally {
+      _transforming = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Insert a blank (opaque black) title frame BEFORE the current frame with
+  /// a 1s delay, and select it so the annotate surface targets it.
+  Future<void> insertTitleFrame() async {
+    final doc = _doc;
+    final store = _store;
+    if (doc == null || store == null || _transforming) return;
+    pause();
+    final w = doc.frames.first.width;
+    final h = doc.frames.first.height;
+    final rgba = Uint8List(w * h * 4);
+    for (var i = 3; i < rgba.length; i += 4) {
+      rgba[i] = 255; // opaque black
+    }
+    final key = await store.put(rgba, w, h);
+    if (!identical(_doc, doc) || _disposed) return;
+    _pushUndo();
+    final at = _current.clamp(0, doc.frameCount);
+    _doc = GifDocument(
+      frames: [
+        ...doc.frames.sublist(0, at),
+        GifFrame(key: key, width: w, height: h, delayMs: 1000),
+        ...doc.frames.sublist(at),
+      ],
+      loopCount: doc.loopCount,
+    );
+    _selection
+      ..clear()
+      ..add(at);
+    _selAnchor = at;
+    _current = at;
+    notifyListeners();
   }
 
   Future<void> _applyCanvasOp(CanvasOp op) async {
