@@ -214,6 +214,62 @@ void main() {
     });
   });
 
+  group('move/reverse/yoyo', () {
+    List<int> delays() => [for (final f in c.doc!.frames) f.delayMs];
+
+    test('moveSelected shifts the block and the selection follows',
+        () async {
+      await openN([0, 1, 2, 3], [100, 150, 200, 250]);
+      c.select(1);
+      c.select(2, toggle: true);
+      c.moveSelected(-1);
+      expect(delays(), [150, 200, 100, 250]);
+      expect(c.selection, {0, 1});
+      c.moveSelected(1);
+      expect(delays(), [100, 150, 200, 250]);
+      expect(c.selection, {1, 2});
+    });
+
+    test('blocked moves at the edges are complete no-ops', () async {
+      await openN([0, 1, 2], [100, 150, 200]);
+      c.select(0);
+      c.select(1, toggle: true);
+      c.moveSelected(-1);
+      expect(delays(), [100, 150, 200]);
+      expect(c.canUndo, isFalse);
+      c.select(2);
+      c.moveSelected(1);
+      expect(delays(), [100, 150, 200]);
+      expect(c.canUndo, isFalse);
+    });
+
+    test('reverse flips the contents at the selected positions', () async {
+      await openN([0, 1, 2, 3, 4], [100, 150, 200, 250, 300]);
+      c.select(1);
+      c.select(3, range: true);
+      c.reverse();
+      expect(delays(), [100, 250, 200, 150, 300]);
+      expect(c.selection, {1, 2, 3});
+      c.undo();
+      expect(delays(), [100, 150, 200, 250, 300]);
+    });
+
+    test('reverse with no selection flips the whole document', () async {
+      await openN([0, 1, 2], [100, 150, 200]);
+      c.reverse();
+      expect(delays(), [200, 150, 100]);
+    });
+
+    test('yoyo appends the full reversed sequence', () async {
+      await openN([0, 1], [100, 150]);
+      c.yoyo();
+      expect(delays(), [100, 150, 150, 100]);
+      expect(c.doc!.frameCount, 4);
+      c.undo();
+      expect(c.doc!.frameCount, 2);
+    });
+  });
+
   test('close clears the document back to the landing state', () async {
     await c.openBytes(twoFrameGifFixture());
     c.togglePlay();

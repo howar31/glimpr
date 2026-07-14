@@ -237,6 +237,76 @@ class GifEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Move every selected frame one slot left (-1) or right (+1). Frames
+  /// process from the receiving edge so a block shifts as one unit; a frame
+  /// against the edge (or against a blocked selected neighbor) stays put.
+  /// A move where nothing shifts leaves no undo entry.
+  void moveSelected(int delta) {
+    assert(delta == -1 || delta == 1);
+    final doc = _doc;
+    if (doc == null || _selection.isEmpty) return;
+    final frames = List.of(doc.frames);
+    final order = _selection.toList()
+      ..sort((a, b) => delta < 0 ? a - b : b - a);
+    final moved = <int>{};
+    var changed = false;
+    for (final i in order) {
+      final target = i + delta;
+      if (target < 0 || target >= frames.length || moved.contains(target)) {
+        moved.add(i); // blocked: occupies its old slot, may block the next
+        continue;
+      }
+      final tmp = frames[target];
+      frames[target] = frames[i];
+      frames[i] = tmp;
+      moved.add(target);
+      changed = true;
+    }
+    if (!changed) return;
+    pause();
+    _pushUndo();
+    _doc = GifDocument(frames: frames, loopCount: doc.loopCount);
+    _selection
+      ..clear()
+      ..addAll(moved);
+    notifyListeners();
+  }
+
+  /// Reverse the frame contents at the selected positions (two or more),
+  /// or the whole document when the selection is empty or a single frame.
+  void reverse() {
+    final doc = _doc;
+    if (doc == null || doc.frameCount < 2) return;
+    pause();
+    _pushUndo();
+    final frames = List.of(doc.frames);
+    if (_selection.length >= 2) {
+      final pos = _selection.toList()..sort();
+      for (var a = 0, b = pos.length - 1; a < b; a++, b--) {
+        final tmp = frames[pos[a]];
+        frames[pos[a]] = frames[pos[b]];
+        frames[pos[b]] = tmp;
+      }
+    } else {
+      frames.setAll(0, frames.reversed.toList());
+    }
+    _doc = GifDocument(frames: frames, loopCount: doc.loopCount);
+    notifyListeners();
+  }
+
+  /// Append the whole sequence reversed (forward-then-back playback).
+  void yoyo() {
+    final doc = _doc;
+    if (doc == null || doc.frameCount < 2) return;
+    pause();
+    _pushUndo();
+    _doc = GifDocument(
+      frames: [...doc.frames, ...doc.frames.reversed],
+      loopCount: doc.loopCount,
+    );
+    notifyListeners();
+  }
+
   /// Self-rescheduling tick honoring EACH frame's own delay (a fixed-rate
   /// ticker would drift against variable-delay GIFs).
   void _scheduleTick() {
