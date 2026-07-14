@@ -503,6 +503,21 @@ void main() {
       }
     });
 
+    test('borderDoc paints every frame and is undoable', () async {
+      await openQuad();
+      await c.borderDoc(1, 0xFF112233);
+      // 2x2 with border 1 = every pixel becomes the border color.
+      expect(
+          frameBytes(0),
+          Uint8List.fromList([
+            17, 34, 51, 255, 17, 34, 51, 255, //
+            17, 34, 51, 255, 17, 34, 51, 255, //
+          ]));
+      expect(frameBytes(1), frameBytes(0));
+      c.undo();
+      expect(frameBytes(0), quad);
+    });
+
     test('progress reports and duplicate detection works on new frames',
         () async {
       await openQuad();

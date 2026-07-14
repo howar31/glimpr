@@ -7,7 +7,16 @@ import 'gif_document.dart';
 import 'transform.dart';
 
 /// Which canvas operation to apply to every frame.
-enum CanvasOpKind { crop, resize, flipH, flipV, rotateCw, rotateCcw, rotate180 }
+enum CanvasOpKind {
+  crop,
+  resize,
+  flipH,
+  flipV,
+  rotateCw,
+  rotateCcw,
+  rotate180,
+  border,
+}
 
 /// A canvas operation plus its parameters (crop rect or resize target).
 class CanvasOp {
@@ -47,10 +56,14 @@ class CanvasOp {
         b = 0,
         c = 0,
         d = 0;
+  const CanvasOp.border(this.a, this.b)
+      : kind = CanvasOpKind.border,
+        c = 0,
+        d = 0;
 
   final CanvasOpKind kind;
 
-  /// crop: x, y, w, h; resize: target w, h in a/b.
+  /// crop: x, y, w, h; resize: target w, h in a/b; border: width, ARGB.
   final int a, b, c, d;
 
   /// Output canvas size for an input of [w] x [h].
@@ -160,6 +173,7 @@ Future<void> _transformEntry((SendPort, _TransformJob) args) async {
         CanvasOpKind.rotateCw => rotate90cw(src, w, h),
         CanvasOpKind.rotateCcw => rotate90ccw(src, w, h),
         CanvasOpKind.rotate180 => rotate180(src, w, h),
+        CanvasOpKind.border => drawBorder(src, w, h, job.a, job.b),
       };
       hashes[i] = FrameStore.contentHash(out);
       await File(job.outPaths[i]).writeAsBytes(out, flush: false);

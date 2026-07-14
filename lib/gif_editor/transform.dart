@@ -87,6 +87,38 @@ Uint8List rotate180(Uint8List src, int w, int h) {
   return out;
 }
 
+/// Paint an opaque border band of [bw] px inside the frame edges (no canvas
+/// growth). [argb] is 0xAARRGGBB; the alpha byte is written as-is.
+Uint8List drawBorder(Uint8List src, int w, int h, int bw, int argb) {
+  final out = Uint8List.fromList(src);
+  final a = (argb >> 24) & 0xFF;
+  final r = (argb >> 16) & 0xFF;
+  final g = (argb >> 8) & 0xFF;
+  final b = argb & 0xFF;
+  void set(int x, int y) {
+    final o = (y * w + x) * 4;
+    out[o] = r;
+    out[o + 1] = g;
+    out[o + 2] = b;
+    out[o + 3] = a;
+  }
+
+  final band = bw.clamp(0, (w < h ? w : h) ~/ 2);
+  for (var y = 0; y < h; y++) {
+    if (y < band || y >= h - band) {
+      for (var x = 0; x < w; x++) {
+        set(x, y);
+      }
+    } else {
+      for (var x = 0; x < band; x++) {
+        set(x, y);
+        set(w - 1 - x, y);
+      }
+    }
+  }
+  return out;
+}
+
 /// Bilinear resample to [ow] x [oh]. Channels interpolate independently
 /// (straight alpha); an identity size is a plain copy.
 Uint8List resizeBilinear(

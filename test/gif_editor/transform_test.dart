@@ -81,6 +81,29 @@ void main() {
     });
   });
 
+  group('drawBorder', () {
+    test('paints the band and leaves the interior alone', () {
+      final src = _grid(8, 6);
+      final out = drawBorder(src, 8, 6, 2, 0xFF102030);
+      expect(_px(out, 8, 0, 0), [16, 32, 48, 255]);
+      expect(_px(out, 8, 7, 5), [16, 32, 48, 255]);
+      expect(_px(out, 8, 1, 3), [16, 32, 48, 255]); // left band, row middle
+      expect(_px(out, 8, 4, 1), [16, 32, 48, 255]); // top band
+      expect(_px(out, 8, 4, 3), [4, 3, 7, 255]); // interior untouched
+    });
+
+    test('width clamps to half the short side', () {
+      final src = _grid(4, 4);
+      final out = drawBorder(src, 4, 4, 99, 0xFFFFFFFF);
+      // Clamped to 2: everything is border on a 4x4.
+      for (var y = 0; y < 4; y++) {
+        for (var x = 0; x < 4; x++) {
+          expect(_px(out, 4, x, y), [255, 255, 255, 255]);
+        }
+      }
+    });
+  });
+
   group('resizeBilinear', () {
     test('solid input stays solid at any size', () {
       final src = Uint8List(4 * 4 * 4);

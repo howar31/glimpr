@@ -256,6 +256,18 @@ class GifEditorController extends ChangeNotifier {
   Future<void> flipDoc({required bool horizontal}) => _applyCanvasOp(
       horizontal ? const CanvasOp.flipH() : const CanvasOp.flipV());
 
+  /// Paint an opaque border band inside every frame's edges. [width] clamps
+  /// to half the short side; [argb] is 0xAARRGGBB.
+  Future<void> borderDoc(int width, int argb) async {
+    final doc = _doc;
+    if (doc == null) return;
+    final short = doc.frames.first.width < doc.frames.first.height
+        ? doc.frames.first.width
+        : doc.frames.first.height;
+    final w = width.clamp(1, short ~/ 2);
+    await _applyCanvasOp(CanvasOp.border(w, argb));
+  }
+
   /// Rotate every frame: 1 = clockwise quarter, -1 = counter-clockwise
   /// quarter, 2 = half turn.
   Future<void> rotateDoc(int quarterTurns) async {
