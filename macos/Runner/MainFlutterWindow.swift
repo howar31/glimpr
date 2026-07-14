@@ -774,13 +774,20 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.title = L.s("GIF Editor", "GIF 編輯器")
     w.titleVisibility = .hidden
     w.titlebarAppearsTransparent = true
-    // Same behind-window vibrancy shell as the Image Editor; no drop handler
-    // in S1 (drag-drop open is a later slice).
-    w.contentViewController = GlassContentViewController(flutterViewController: vc)
+    // Same behind-window vibrancy shell as the Image Editor. A .gif dropped
+    // anywhere on the window opens it (loadPath; replaces the document like
+    // cmd-O does).
+    w.contentViewController = GlassContentViewController(
+      flutterViewController: vc,
+      onDropFile: { [weak self] path in
+        self?.gifEditorChannel?.invokeMethod("loadPath", arguments: path)
+      },
+      dropExtensions: ["gif"])
     w.setContentSize(NSSize(width: 1180, height: 700))
-    // Min width keeps the controls row (play + stats + Export) intact; min
-    // height keeps a usable preview above the filmstrip.
-    w.contentMinSize = NSSize(width: 760, height: 560)
+    // Min width must fit the annotate mode's docked editor toolbar pill
+    // (same constraint as the Image Editor window); min height keeps a
+    // usable preview above the ops row + filmstrip.
+    w.contentMinSize = NSSize(width: 1060, height: 640)
     w.isReleasedWhenClosed = false
     w.center()
     w.setFrameAutosaveName("GlimprGifEditorWindow")
@@ -1035,11 +1042,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 class GlassContentViewController: NSViewController {
   private let flutterViewController: FlutterViewController
   private let onDropFile: ((String) -> Void)?
+  private let dropExtensions: Set<String>?
 
   init(flutterViewController: FlutterViewController,
-       onDropFile: ((String) -> Void)? = nil) {
+       onDropFile: ((String) -> Void)? = nil,
+       dropExtensions: Set<String>? = nil) {
     self.flutterViewController = flutterViewController
     self.onDropFile = onDropFile
+    self.dropExtensions = dropExtensions
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -1056,6 +1066,9 @@ class GlassContentViewController: NSViewController {
     // canvas. The settings window passes nil and never accepts drops.
     if let onDropFile = onDropFile {
       effectView.onDropFile = onDropFile
+      if let dropExtensions = dropExtensions {
+        effectView.allowedExtensions = dropExtensions
+      }
       effectView.registerForDraggedTypes([.fileURL])
     }
     self.view = effectView
@@ -1081,6 +1094,11 @@ class GlassContentViewController: NSViewController {
 /// forwarded to Dart (which dirty-confirms before replacing the current image).
 final class DragDestinationEffectView: NSVisualEffectView {
   var onDropFile: ((String) -> Void)?
+
+  /// Per-window drag filter; defaults to the shared image set (the Image
+  /// Editor). The GIF Editor window narrows this to ["gif"].
+  var allowedExtensions: Set<String> =
+    DragDestinationEffectView.supportedImageExtensions
 
   /// Extensions the editor can decode on BOTH platforms — the drag filter and
   /// the Open panel accept exactly this set so the openable files match the
@@ -1109,7 +1127,9 @@ final class DragDestinationEffectView: NSVisualEffectView {
     ]
     let urls = sender.draggingPasteboard.readObjects(
       forClasses: [NSURL.self], options: options) as? [URL]
-    return urls?.first(where: Self.isSupportedImageURL)
+    return urls?.first(where: {
+      allowedExtensions.contains($0.pathExtension.lowercased())
+    })
   }
 
   override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
