@@ -19,11 +19,24 @@ class GifEditorController extends ChangeNotifier {
   Timer? _tick;
   bool _disposed = false;
 
+  // Timeline selection (indices into doc.frames) + the shift-range anchor.
+  // Selection is UI state, not document state: changing it never touches the
+  // undo history, but mementos capture it so undo restores the full picture.
+  final Set<int> _selection = {};
+  int? _selAnchor;
+
+  static const int _undoCap = 100;
+  final List<_Memento> _undoStack = [];
+  final List<_Memento> _redoStack = [];
+
   FrameStore? get store => _store;
   GifDocument? get doc => _doc;
   int get current => _current;
   bool get playing => _playing;
   bool get opening => _opening;
+  Set<int> get selection => Set.unmodifiable(_selection);
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
 
   /// Decode [gifBytes] into a fresh session store and make it the document.
   /// The previous store (if any) is disposed after the swap.
@@ -44,6 +57,10 @@ class GifEditorController extends ChangeNotifier {
         _doc = doc;
         _current = 0;
         _playing = false;
+        _selection.clear();
+        _selAnchor = null;
+        _undoStack.clear();
+        _redoStack.clear();
         unawaited(old?.dispose());
       } catch (_) {
         unawaited(store.dispose());
@@ -87,15 +104,136 @@ class GifEditorController extends ChangeNotifier {
   }
 
   /// Drop the document and return to the no-document (landing) state. The
-  /// store is disposed asynchronously; S1 has no dirty state to guard.
+  /// store is disposed asynchronously.
   void close() {
     _stopTicker();
     _playing = false;
     _current = 0;
+    _selection.clear();
+    _selAnchor = null;
+    _undoStack.clear();
+    _redoStack.clear();
     final old = _store;
     _store = null;
     _doc = null;
     unawaited(old?.dispose());
+    notifyListeners();
+  }
+
+  // --- selection ----------------------------------------------------------
+
+  /// Select frame [i]: plain click replaces the selection and re-anchors,
+  /// [toggle] flips membership (cmd/ctrl-click), [range] replaces with the
+  /// anchor..i span (shift-click). Selection never enters the undo history.
+  void select(int i, {bool toggle = false, bool range = false}) {
+    final doc = _doc;
+    if (doc == null || i < 0 || i >= doc.frameCount) return;
+    if (range) {
+      final a = _selAnchor ?? _current;
+      _selection
+        ..clear()
+        ..addAll([
+          for (var k = a <= i ? a : i; k <= (a <= i ? i : a); k++) k,
+        ]);
+    } else if (toggle) {
+      if (!_selection.remove(i)) _selection.add(i);
+      _selAnchor = i;
+    } else {
+      _selection
+        ..clear()
+        ..add(i);
+      _selAnchor = i;
+    }
+    notifyListeners();
+  }
+
+  void selectAll() {
+    final doc = _doc;
+    if (doc == null) return;
+    _selection
+      ..clear()
+      ..addAll(List.generate(doc.frameCount, (i) => i));
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    if (_selection.isEmpty) return;
+    _selection.clear();
+    _selAnchor = null;
+    notifyListeners();
+  }
+
+  // --- undo/redo ----------------------------------------------------------
+
+  /// Snapshot the mutable document state BEFORE a mutation. Frame pixels
+  /// stay in the store (frames are immutable value objects), so a memento is
+  /// just the list + metadata — cheap enough for every operation.
+  void _pushUndo() {
+    final doc = _doc!;
+    _undoStack.add(_Memento(
+      frames: List.of(doc.frames),
+      loopCount: doc.loopCount,
+      selection: Set.of(_selection),
+      current: _current,
+    ));
+    if (_undoStack.length > _undoCap) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  _Memento _snapshot() => _Memento(
+        frames: List.of(_doc!.frames),
+        loopCount: _doc!.loopCount,
+        selection: Set.of(_selection),
+        current: _current,
+      );
+
+  void _restore(_Memento m) {
+    _doc = GifDocument(frames: m.frames, loopCount: m.loopCount);
+    _selection
+      ..clear()
+      ..addAll(m.selection);
+    _current = m.current.clamp(0, m.frames.length - 1);
+    notifyListeners();
+  }
+
+  void undo() {
+    if (_undoStack.isEmpty) return;
+    pause();
+    _redoStack.add(_snapshot());
+    _restore(_undoStack.removeLast());
+  }
+
+  void redo() {
+    if (_redoStack.isEmpty) return;
+    pause();
+    _undoStack.add(_snapshot());
+    _restore(_redoStack.removeLast());
+  }
+
+  // --- frame operations ---------------------------------------------------
+
+  /// Delete the selected frames. Refused when nothing is selected or the
+  /// selection covers every frame (a document always keeps one frame). The
+  /// playhead and selection collapse onto the frame that now occupies the
+  /// first deleted slot.
+  void deleteSelected() {
+    final doc = _doc;
+    if (doc == null || _selection.isEmpty) return;
+    if (_selection.length >= doc.frameCount) return;
+    pause();
+    _pushUndo();
+    final first = _selection.reduce((a, b) => a < b ? a : b);
+    final kept = <GifFrame>[
+      for (var i = 0; i < doc.frameCount; i++)
+        if (!_selection.contains(i)) doc.frames[i],
+    ];
+    _doc = GifDocument(frames: kept, loopCount: doc.loopCount);
+    final landing = first.clamp(0, kept.length - 1);
+    _selection
+      ..clear()
+      ..add(landing);
+    _selAnchor = landing;
+    _current = landing;
     notifyListeners();
   }
 
@@ -124,4 +262,20 @@ class GifEditorController extends ChangeNotifier {
     unawaited(_store?.dispose());
     super.dispose();
   }
+}
+
+/// One undo/redo snapshot: the frame list is copied but the frames (and the
+/// pixels behind their store keys) are shared immutable values.
+class _Memento {
+  const _Memento({
+    required this.frames,
+    required this.loopCount,
+    required this.selection,
+    required this.current,
+  });
+
+  final List<GifFrame> frames;
+  final int loopCount;
+  final Set<int> selection;
+  final int current;
 }

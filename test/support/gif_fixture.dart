@@ -1,5 +1,43 @@
 import 'dart:typed_data';
 
+import 'package:glimpr/gif_editor/encode/gif_writer.dart';
+
+/// Encode an N-frame 2x2 GIF of solid frames for controller/op tests.
+///
+/// [colors] indexes a small preset palette; equal entries produce
+/// byte-identical frames (duplicate-removal tests rely on that).
+Uint8List solidFramesGif({
+  required List<int> colors,
+  required List<int> delays,
+  int loopCount = 0,
+}) {
+  assert(colors.length == delays.length);
+  const presets = [
+    [255, 0, 0],
+    [0, 255, 0],
+    [0, 0, 255],
+    [255, 255, 255],
+    [255, 255, 0],
+    [0, 255, 255],
+    [255, 0, 255],
+    [0, 0, 0],
+  ];
+  final frames = <FrameSpec>[];
+  for (var i = 0; i < colors.length; i++) {
+    final c = presets[colors[i] % presets.length];
+    final rgba = Uint8List(2 * 2 * 4);
+    for (var p = 0; p < 4; p++) {
+      rgba[p * 4] = c[0];
+      rgba[p * 4 + 1] = c[1];
+      rgba[p * 4 + 2] = c[2];
+      rgba[p * 4 + 3] = 255;
+    }
+    frames.add(FrameSpec(rgba, delays[i]));
+  }
+  return encodeGifFrames(
+      frames: frames, width: 2, height: 2, loopCount: loopCount);
+}
+
 /// A hand-assembled, byte-exact 2-frame 2x2 GIF89a used by the import and
 /// writer round-trip tests.
 ///

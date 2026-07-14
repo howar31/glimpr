@@ -67,6 +67,153 @@ void main() {
     expect(c.current, 1);
   });
 
+  Future<void> openN(List<int> colors, List<int> delays) =>
+      c.openBytes(solidFramesGif(colors: colors, delays: delays));
+
+  group('selection', () {
+    test('plain select replaces and anchors', () async {
+      await openN([0, 1, 2, 3], [100, 100, 100, 100]);
+      c.select(2);
+      expect(c.selection, {2});
+      c.select(0);
+      expect(c.selection, {0});
+    });
+
+    test('toggle adds and removes', () async {
+      await openN([0, 1, 2, 3], [100, 100, 100, 100]);
+      c.select(1);
+      c.select(3, toggle: true);
+      expect(c.selection, {1, 3});
+      c.select(1, toggle: true);
+      expect(c.selection, {3});
+    });
+
+    test('range selects from the anchor', () async {
+      await openN([0, 1, 2, 3, 4], [100, 100, 100, 100, 100]);
+      c.select(1);
+      c.select(3, range: true);
+      expect(c.selection, {1, 2, 3});
+      // Range in the other direction from the same anchor.
+      c.select(0, range: true);
+      expect(c.selection, {0, 1});
+    });
+
+    test('selectAll and clearSelection', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.selectAll();
+      expect(c.selection, {0, 1, 2});
+      c.clearSelection();
+      expect(c.selection, isEmpty);
+    });
+
+    test('selection changes do not create undo history', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.select(1);
+      c.selectAll();
+      expect(c.canUndo, isFalse);
+    });
+  });
+
+  group('deleteSelected + undo/redo', () {
+    test('removes the selected frames and collapses the selection',
+        () async {
+      await openN([0, 1, 2, 3], [100, 150, 200, 250]);
+      c.select(1);
+      c.select(2, toggle: true);
+      c.deleteSelected();
+      expect(c.doc!.frameCount, 2);
+      expect(c.doc!.frames[0].delayMs, 100);
+      expect(c.doc!.frames[1].delayMs, 250);
+      // Selection lands on the frame now sitting at the first deleted slot.
+      expect(c.selection, {1});
+      expect(c.current, 1);
+    });
+
+    test('never deletes every frame', () async {
+      await openN([0, 1], [100, 100]);
+      c.selectAll();
+      c.deleteSelected();
+      expect(c.doc!.frameCount, 2); // refused
+    });
+
+    test('no selection is a no-op', () async {
+      await openN([0, 1], [100, 100]);
+      c.deleteSelected();
+      expect(c.doc!.frameCount, 2);
+      expect(c.canUndo, isFalse);
+    });
+
+    test('undo restores frames, selection and current; redo reapplies',
+        () async {
+      await openN([0, 1, 2], [100, 150, 200]);
+      c.seek(2);
+      c.select(2);
+      c.deleteSelected();
+      expect(c.doc!.frameCount, 2);
+      expect(c.canUndo, isTrue);
+      c.undo();
+      expect(c.doc!.frameCount, 3);
+      expect(c.doc!.frames[2].delayMs, 200);
+      expect(c.selection, {2});
+      expect(c.current, 2);
+      expect(c.canRedo, isTrue);
+      c.redo();
+      expect(c.doc!.frameCount, 2);
+      expect(c.canRedo, isFalse);
+    });
+
+    test('a new mutation clears the redo branch', () async {
+      await openN([0, 1, 2, 3], [100, 100, 100, 100]);
+      c.select(0);
+      c.deleteSelected();
+      c.undo();
+      expect(c.canRedo, isTrue);
+      c.select(1);
+      c.deleteSelected();
+      expect(c.canRedo, isFalse);
+    });
+
+    test('mutating while playing pauses playback', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.togglePlay();
+      expect(c.playing, isTrue);
+      c.select(0);
+      c.deleteSelected();
+      expect(c.playing, isFalse);
+    });
+
+    test('undo history caps at 100 entries', () async {
+      final colors = List.generate(120, (i) => i);
+      await openN(colors, List.filled(120, 100));
+      for (var i = 0; i < 105; i++) {
+        c.select(0);
+        c.deleteSelected();
+      }
+      expect(c.doc!.frameCount, 15);
+      var undos = 0;
+      while (c.canUndo) {
+        c.undo();
+        undos++;
+      }
+      expect(undos, 100);
+      expect(c.doc!.frameCount, 115); // the 5 oldest deletes are gone
+    });
+
+    test('open and close clear the history', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.select(0);
+      c.deleteSelected();
+      expect(c.canUndo, isTrue);
+      await openN([0, 1], [100, 100]);
+      expect(c.canUndo, isFalse);
+      c.select(0);
+      c.deleteSelected();
+      c.close();
+      expect(c.canUndo, isFalse);
+      expect(c.selection, isEmpty);
+    });
+  });
+
   test('close clears the document back to the landing state', () async {
     await c.openBytes(twoFrameGifFixture());
     c.togglePlay();
