@@ -3236,6 +3236,120 @@ abstract class AppLocalizations {
   /// **'Count'**
   String get gifEditorLoopCount;
 
+  /// GIF Editor timeline toolbar: undo tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get gifEditorUndo;
+
+  /// GIF Editor timeline toolbar: redo tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get gifEditorRedo;
+
+  /// GIF Editor timeline toolbar: delete selected frames tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get gifEditorDeleteFrames;
+
+  /// GIF Editor timeline toolbar: move selected frames one slot left
+  ///
+  /// In en, this message translates to:
+  /// **'Move left'**
+  String get gifEditorMoveLeft;
+
+  /// GIF Editor timeline toolbar: move selected frames one slot right
+  ///
+  /// In en, this message translates to:
+  /// **'Move right'**
+  String get gifEditorMoveRight;
+
+  /// GIF Editor timeline toolbar: reverse frames tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Reverse'**
+  String get gifEditorReverse;
+
+  /// GIF Editor timeline toolbar: append the reversed sequence (forward then back playback)
+  ///
+  /// In en, this message translates to:
+  /// **'Yoyo'**
+  String get gifEditorYoyo;
+
+  /// GIF Editor timeline toolbar: collapse consecutive identical frames
+  ///
+  /// In en, this message translates to:
+  /// **'Remove duplicates'**
+  String get gifEditorRemoveDuplicates;
+
+  /// GIF Editor timeline toolbar: reduce framerate popover trigger
+  ///
+  /// In en, this message translates to:
+  /// **'Reduce frames'**
+  String get gifEditorReduceFrames;
+
+  /// GIF Editor reduce popover: explanation of the N picker
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the first of every N frames'**
+  String get gifEditorReduceKeepFirst;
+
+  /// GIF Editor timeline toolbar: delay operations popover trigger
+  ///
+  /// In en, this message translates to:
+  /// **'Delay'**
+  String get gifEditorDelay;
+
+  /// GIF Editor delay popover: override mode (set delays to a value)
+  ///
+  /// In en, this message translates to:
+  /// **'Set'**
+  String get gifEditorDelaySet;
+
+  /// GIF Editor delay popover: shift mode (add or subtract milliseconds)
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust'**
+  String get gifEditorDelayAdjust;
+
+  /// GIF Editor delay popover: scale mode (percentage)
+  ///
+  /// In en, this message translates to:
+  /// **'Scale'**
+  String get gifEditorDelayScale;
+
+  /// GIF Editor popovers: apply button
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get gifEditorApply;
+
+  /// GIF Editor timeline toolbar: cut selected frames to the frame clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Cut'**
+  String get gifEditorCut;
+
+  /// GIF Editor timeline toolbar: copy selected frames to the frame clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get gifEditorCopy;
+
+  /// GIF Editor timeline toolbar: paste clipboard frames after the current frame
+  ///
+  /// In en, this message translates to:
+  /// **'Paste'**
+  String get gifEditorPaste;
+
+  /// GIF Editor timeline toolbar: selection summary
+  ///
+  /// In en, this message translates to:
+  /// **'{selected} of {total} selected'**
+  String gifEditorSelectedCount(int selected, int total);
+
   /// Tray menu: reveal the GIF Editor window (provisional entry)
   ///
   /// In en, this message translates to:

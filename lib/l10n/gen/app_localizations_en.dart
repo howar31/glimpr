@@ -1705,5 +1705,64 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorLoopCount => 'Count';
 
   @override
+  String get gifEditorUndo => 'Undo';
+
+  @override
+  String get gifEditorRedo => 'Redo';
+
+  @override
+  String get gifEditorDeleteFrames => 'Delete';
+
+  @override
+  String get gifEditorMoveLeft => 'Move left';
+
+  @override
+  String get gifEditorMoveRight => 'Move right';
+
+  @override
+  String get gifEditorReverse => 'Reverse';
+
+  @override
+  String get gifEditorYoyo => 'Yoyo';
+
+  @override
+  String get gifEditorRemoveDuplicates => 'Remove duplicates';
+
+  @override
+  String get gifEditorReduceFrames => 'Reduce frames';
+
+  @override
+  String get gifEditorReduceKeepFirst => 'Keep the first of every N frames';
+
+  @override
+  String get gifEditorDelay => 'Delay';
+
+  @override
+  String get gifEditorDelaySet => 'Set';
+
+  @override
+  String get gifEditorDelayAdjust => 'Adjust';
+
+  @override
+  String get gifEditorDelayScale => 'Scale';
+
+  @override
+  String get gifEditorApply => 'Apply';
+
+  @override
+  String get gifEditorCut => 'Cut';
+
+  @override
+  String get gifEditorCopy => 'Copy';
+
+  @override
+  String get gifEditorPaste => 'Paste';
+
+  @override
+  String gifEditorSelectedCount(int selected, int total) {
+    return '$selected of $total selected';
+  }
+
+  @override
   String get trayOpenGifEditor => 'Open GIF Editor';
 }

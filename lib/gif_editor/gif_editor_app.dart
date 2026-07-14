@@ -66,6 +66,7 @@ class _GifEditorAppState extends State<GifEditorApp>
     if (_ownsController) _c.dispose();
     _strip.dispose();
     _loopField.dispose();
+    _delayField.dispose();
     _toastTimer?.cancel();
     _toastClearTimer?.cancel();
     super.dispose();
@@ -91,13 +92,26 @@ class _GifEditorAppState extends State<GifEditorApp>
   final TextEditingController _loopField = TextEditingController(text: '1');
   GifDocument? _seededDoc;
 
+  // Timeline panels (delay / reduce) share the popover surface; at most one
+  // of them (or the export options popover) is open at a time.
+  _TimelinePanel _panel = _TimelinePanel.none;
+  _DelayMode _delayMode = _DelayMode.set;
+  final TextEditingController _delayField =
+      TextEditingController(text: '100');
+  int _reduceN = 2;
+
+  void _closePanels() {
+    _optionsOpen = false;
+    _panel = _TimelinePanel.none;
+  }
+
   /// Re-seed the loop option from each newly opened document (the other
   /// options are sticky for the window's lifetime).
   void _seedOptions() {
     final doc = _c.doc;
     if (identical(doc, _seededDoc)) return;
     _seededDoc = doc;
-    _optionsOpen = false;
+    _closePanels();
     if (doc != null) {
       _optLoopForever = doc.loopCount == 0;
       _optLoopCount = doc.loopCount == 0 ? 1 : doc.loopCount;
@@ -253,6 +267,30 @@ class _GifEditorAppState extends State<GifEditorApp>
             const SingleActivator(LogicalKeyboardKey.space): () {
               if (_c.doc != null) _c.togglePlay();
             },
+            // Timeline editing (all no-ops on the landing).
+            SingleActivator(LogicalKeyboardKey.keyZ,
+                meta: !platformIsWindows,
+                control: platformIsWindows): _c.undo,
+            SingleActivator(LogicalKeyboardKey.keyZ,
+                shift: true,
+                meta: !platformIsWindows,
+                control: platformIsWindows): _c.redo,
+            SingleActivator(LogicalKeyboardKey.keyA,
+                meta: !platformIsWindows,
+                control: platformIsWindows): _c.selectAll,
+            SingleActivator(LogicalKeyboardKey.keyX,
+                meta: !platformIsWindows,
+                control: platformIsWindows): _c.cutSelected,
+            SingleActivator(LogicalKeyboardKey.keyC,
+                meta: !platformIsWindows,
+                control: platformIsWindows): _c.copySelected,
+            SingleActivator(LogicalKeyboardKey.keyV,
+                meta: !platformIsWindows,
+                control: platformIsWindows): _c.pasteFrames,
+            const SingleActivator(LogicalKeyboardKey.delete):
+                _c.deleteSelected,
+            const SingleActivator(LogicalKeyboardKey.backspace):
+                _c.deleteSelected,
           },
           child: Focus(
             // Shortcuts need a focused subtree; the canvas has no focusable
@@ -292,17 +330,22 @@ class _GifEditorAppState extends State<GifEditorApp>
                         child: _FloatingHomeButton(
                             key: const Key('gif-home'), onTap: _goHome),
                       ),
-                    // Export options: outside-tap barrier + anchored panel.
-                    if (_optionsOpen && _c.doc != null) ...[
+                    // Anchored panels (export options / delay / reduce)
+                    // share one outside-tap barrier.
+                    if ((_optionsOpen || _panel != _TimelinePanel.none) &&
+                        _c.doc != null) ...[
                       Positioned.fill(
                         child: GestureDetector(
                           key: const Key('gif-options-barrier'),
                           behavior: HitTestBehavior.opaque,
-                          onTap: () =>
-                              setState(() => _optionsOpen = false),
+                          onTap: () => setState(_closePanels),
                         ),
                       ),
-                      _optionsPopover(tokens),
+                      if (_optionsOpen) _optionsPopover(tokens),
+                      if (_panel == _TimelinePanel.delay)
+                        _delayPanel(tokens),
+                      if (_panel == _TimelinePanel.reduce)
+                        _reducePanel(tokens),
                     ],
                     _toastLayer(tokens),
                   ],
@@ -414,10 +457,294 @@ class _GifEditorAppState extends State<GifEditorApp>
           ),
         ),
         _controlsRow(t, doc),
+        _opsRow(t, doc),
         _filmstrip(t, doc, store),
       ],
     );
   }
+
+  /// Timeline editing toolbar: history, clipboard, frame and delay ops.
+  Widget _opsRow(GlimprTokens t, GifDocument doc) {
+    final sel = _c.selection;
+    final hasSel = sel.isNotEmpty;
+    final many = doc.frameCount >= 2;
+    final deletable = hasSel && sel.length < doc.frameCount;
+    Widget divider() => Container(
+          width: 1,
+          height: 18,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          color: t.divider,
+        );
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: Row(
+        children: [
+          _OpButton(
+            key: const Key('gif-op-undo'),
+            icon: Icons.undo_rounded,
+            tooltip: _l.gifEditorUndo,
+            enabled: _c.canUndo,
+            onTap: _c.undo,
+          ),
+          _OpButton(
+            key: const Key('gif-op-redo'),
+            icon: Icons.redo_rounded,
+            tooltip: _l.gifEditorRedo,
+            enabled: _c.canRedo,
+            onTap: _c.redo,
+          ),
+          divider(),
+          _OpButton(
+            key: const Key('gif-op-cut'),
+            icon: Icons.content_cut_rounded,
+            tooltip: _l.gifEditorCut,
+            enabled: deletable,
+            onTap: _c.cutSelected,
+          ),
+          _OpButton(
+            key: const Key('gif-op-copy'),
+            icon: Icons.content_copy_rounded,
+            tooltip: _l.gifEditorCopy,
+            enabled: hasSel,
+            onTap: _c.copySelected,
+          ),
+          _OpButton(
+            key: const Key('gif-op-paste'),
+            icon: Icons.content_paste_rounded,
+            tooltip: _l.gifEditorPaste,
+            enabled: _c.clipboardHasFrames,
+            onTap: _c.pasteFrames,
+          ),
+          divider(),
+          _OpButton(
+            key: const Key('gif-op-delete'),
+            icon: Icons.delete_outline_rounded,
+            tooltip: _l.gifEditorDeleteFrames,
+            enabled: deletable,
+            onTap: _c.deleteSelected,
+          ),
+          _OpButton(
+            key: const Key('gif-op-left'),
+            icon: Icons.arrow_back_rounded,
+            tooltip: _l.gifEditorMoveLeft,
+            enabled: hasSel,
+            onTap: () => _c.moveSelected(-1),
+          ),
+          _OpButton(
+            key: const Key('gif-op-right'),
+            icon: Icons.arrow_forward_rounded,
+            tooltip: _l.gifEditorMoveRight,
+            enabled: hasSel,
+            onTap: () => _c.moveSelected(1),
+          ),
+          divider(),
+          _OpButton(
+            key: const Key('gif-op-reverse'),
+            icon: Icons.swap_horiz_rounded,
+            tooltip: _l.gifEditorReverse,
+            enabled: many,
+            onTap: _c.reverse,
+          ),
+          _OpButton(
+            key: const Key('gif-op-yoyo'),
+            icon: Icons.sync_alt_rounded,
+            tooltip: _l.gifEditorYoyo,
+            enabled: many,
+            onTap: _c.yoyo,
+          ),
+          _OpButton(
+            key: const Key('gif-op-dedupe'),
+            icon: Icons.layers_clear_rounded,
+            tooltip: _l.gifEditorRemoveDuplicates,
+            enabled: many,
+            onTap: _c.removeDuplicates,
+          ),
+          _OpButton(
+            key: const Key('gif-op-reduce'),
+            icon: Icons.compress_rounded,
+            tooltip: _l.gifEditorReduceFrames,
+            enabled: many,
+            active: _panel == _TimelinePanel.reduce,
+            onTap: () => setState(() {
+              final open = _panel == _TimelinePanel.reduce;
+              _closePanels();
+              if (!open) _panel = _TimelinePanel.reduce;
+            }),
+          ),
+          _OpButton(
+            key: const Key('gif-op-delay'),
+            icon: Icons.timer_outlined,
+            tooltip: _l.gifEditorDelay,
+            active: _panel == _TimelinePanel.delay,
+            onTap: () => setState(() {
+              final open = _panel == _TimelinePanel.delay;
+              _closePanels();
+              if (!open) _panel = _TimelinePanel.delay;
+            }),
+          ),
+          const Spacer(),
+          if (hasSel)
+            Text(
+              _l.gifEditorSelectedCount(sel.length, doc.frameCount),
+              style: GlimprType.sansStyle(11.5, 500, t.fg3),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Delay operations panel (set / adjust / scale + value + apply).
+  Widget _delayPanel(GlimprTokens t) {
+    final suffix = _delayMode == _DelayMode.scale ? '%' : 'ms';
+    return Positioned(
+      left: 12,
+      bottom: 86 + 40 + 8,
+      child: Container(
+        key: const Key('gif-delay-panel'),
+        width: 332,
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+        decoration: _panelDecoration(t),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.gifEditorDelay,
+                style: GlimprType.sansStyle(11.5, 600, t.fg3,
+                    letterSpacing: 0.2)),
+            const SizedBox(height: 10),
+            Segmented<_DelayMode>(
+              value: _delayMode,
+              onChanged: (m) => setState(() => _delayMode = m),
+              options: [
+                (_DelayMode.set, _l.gifEditorDelaySet),
+                (_DelayMode.adjust, _l.gifEditorDelayAdjust),
+                (_DelayMode.scale, _l.gifEditorDelayScale),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(
+                  width: 84,
+                  child: TextField(
+                    key: const Key('gif-delay-field'),
+                    controller: _delayField,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      // Adjust accepts a leading minus; the others digits.
+                      FilteringTextInputFormatter.allow(
+                          _delayMode == _DelayMode.adjust
+                              ? RegExp(r'^-?[0-9]*$')
+                              : RegExp(r'^[0-9]*$')),
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: GlimprType.sansStyle(12.5, 600, t.fg1),
+                    decoration: _fieldDecoration(t),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(suffix, style: GlimprType.sansStyle(12, 500, t.fg3)),
+                const Spacer(),
+                AccentButton(
+                  _l.gifEditorApply,
+                  key: const Key('gif-delay-apply'),
+                  onTap: _applyDelay,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applyDelay() {
+    final n = int.tryParse(_delayField.text);
+    if (n == null) return;
+    switch (_delayMode) {
+      case _DelayMode.set:
+        _c.overrideDelay(n);
+      case _DelayMode.adjust:
+        _c.shiftDelay(n);
+      case _DelayMode.scale:
+        if (n > 0) _c.scaleDelay(n);
+    }
+    setState(_closePanels);
+  }
+
+  /// Reduce-frames panel (keep the first of every N).
+  Widget _reducePanel(GlimprTokens t) {
+    return Positioned(
+      left: 12,
+      bottom: 86 + 40 + 8,
+      child: Container(
+        key: const Key('gif-reduce-panel'),
+        width: 332,
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+        decoration: _panelDecoration(t),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.gifEditorReduceKeepFirst,
+                style: GlimprType.sansStyle(11.5, 600, t.fg3,
+                    letterSpacing: 0.2)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Segmented<int>(
+                  value: _reduceN,
+                  onChanged: (n) => setState(() => _reduceN = n),
+                  options: const [(2, '2'), (3, '3'), (4, '4'), (5, '5')],
+                ),
+                const Spacer(),
+                AccentButton(
+                  _l.gifEditorApply,
+                  key: const Key('gif-reduce-apply'),
+                  onTap: () {
+                    _c.reduceFrames(_reduceN);
+                    setState(_closePanels);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _panelDecoration(GlimprTokens t) => BoxDecoration(
+        color: t.hudBg,
+        borderRadius: BorderRadius.circular(GlimprTokens.radiusBar),
+        border: Border.all(color: t.hudBorder),
+        boxShadow: [
+          BoxShadow(
+            color:
+                t.isDark ? const Color(0x66000000) : const Color(0x2E0F172A),
+            blurRadius: 16,
+          ),
+        ],
+      );
+
+  InputDecoration _fieldDecoration(GlimprTokens t) => InputDecoration(
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(7),
+          borderSide: BorderSide(color: t.cardBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(7),
+          borderSide: const BorderSide(color: GlimprTokens.accent),
+        ),
+      );
 
   Widget _controlsRow(GlimprTokens t, GifDocument doc) {
     final seconds = doc.totalDuration.inMilliseconds / 1000;
@@ -468,7 +795,11 @@ class _GifEditorAppState extends State<GifEditorApp>
             waitDuration: const Duration(milliseconds: 500),
             child: GestureDetector(
               key: const Key('gif-export-options'),
-              onTap: () => setState(() => _optionsOpen = !_optionsOpen),
+              onTap: () => setState(() {
+                final open = _optionsOpen;
+                _closePanels();
+                _optionsOpen = !open;
+              }),
               child: Container(
                 width: 30,
                 height: 30,
@@ -533,7 +864,7 @@ class _GifEditorAppState extends State<GifEditorApp>
 
     return Positioned(
       right: 12,
-      bottom: 86 + 44 + 8, // clear the filmstrip + controls row
+      bottom: 86 + 40 + 44 + 8, // clear filmstrip + ops row + controls row
       child: Container(
         key: const Key('gif-options-popover'),
         width: 332,
@@ -668,19 +999,44 @@ class _GifEditorAppState extends State<GifEditorApp>
         itemCount: doc.frameCount,
         itemBuilder: (ctx, i) {
           final f = doc.frames[i];
-          final selected = i == _c.current;
+          final isCurrent = i == _c.current;
+          final isSelected = _c.selection.contains(i);
           return GestureDetector(
             key: Key('gif-frame-$i'),
-            onTap: () => _c.seek(i),
+            // Plain click selects AND seeks; shift extends a range from the
+            // anchor; cmd (mac) / ctrl (win) toggles membership. Modified
+            // clicks only shape the selection, the playhead stays put.
+            onTap: () {
+              final keys = HardwareKeyboard.instance.logicalKeysPressed;
+              final shift =
+                  keys.contains(LogicalKeyboardKey.shiftLeft) ||
+                      keys.contains(LogicalKeyboardKey.shiftRight);
+              final mod = platformIsWindows
+                  ? (keys.contains(LogicalKeyboardKey.controlLeft) ||
+                      keys.contains(LogicalKeyboardKey.controlRight))
+                  : (keys.contains(LogicalKeyboardKey.metaLeft) ||
+                      keys.contains(LogicalKeyboardKey.metaRight));
+              if (shift) {
+                _c.select(i, range: true);
+              } else if (mod) {
+                _c.select(i, toggle: true);
+              } else {
+                _c.select(i);
+                _c.seek(i);
+              }
+            },
             child: Container(
               width: 84,
               margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                // Accent marks the CURRENT frame (accent = active/selected).
+                // Accent border marks the CURRENT frame; selected members
+                // get an accent veil below.
                 border: Border.all(
-                  color: selected ? GlimprTokens.accent : t.cardBorder,
-                  width: selected ? 2 : 1,
+                  color: isCurrent || isSelected
+                      ? GlimprTokens.accent
+                      : t.cardBorder,
+                  width: isCurrent ? 2 : 1,
                 ),
               ),
               child: Column(
@@ -689,15 +1045,24 @@ class _GifEditorAppState extends State<GifEditorApp>
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(7)),
-                      child: _FramePreview(store: store, frame: f),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _FramePreview(store: store, frame: f),
+                          if (isSelected)
+                            Container(
+                                color:
+                                    GlimprTokens.accent.withValues(alpha: 0.16)),
+                        ],
+                      ),
                     ),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     child: Text(
                       '${i + 1} · ${f.delayMs} ms',
-                      style: GlimprType.sansStyle(
-                          9.5, 500, selected ? t.fg1 : t.fg4),
+                      style: GlimprType.sansStyle(9.5, 500,
+                          isCurrent || isSelected ? t.fg1 : t.fg4),
                     ),
                   ),
                 ],
@@ -752,6 +1117,81 @@ class _GifEditorAppState extends State<GifEditorApp>
                       ),
                     ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Which timeline panel is open above the ops row.
+enum _TimelinePanel { none, delay, reduce }
+
+/// Delay-popover operation modes.
+enum _DelayMode { set, adjust, scale }
+
+/// Small icon button for the timeline ops row: hover highlight, disabled
+/// dimming, optional active (accent) state for popover triggers.
+class _OpButton extends StatefulWidget {
+  const _OpButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.enabled = true,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool enabled;
+  final bool active;
+
+  @override
+  State<_OpButton> createState() => _OpButtonState();
+}
+
+class _OpButtonState extends State<_OpButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final color = !widget.enabled
+        ? t.fg4
+        : widget.active || _hover
+            ? t.fg1
+            : t.fg2;
+    return MouseRegion(
+      cursor: widget.enabled
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.enabled ? widget.onTap : null,
+        child: Tooltip(
+          message: widget.tooltip,
+          waitDuration: const Duration(milliseconds: 500),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 28,
+            height: 28,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.active
+                  ? GlimprTokens.accent.withValues(alpha: 0.18)
+                  : _hover && widget.enabled
+                      ? t.navHoverBg
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+              border: widget.active
+                  ? Border.all(color: GlimprTokens.accent)
+                  : null,
+            ),
+            child: Icon(widget.icon, size: 16, color: color),
           ),
         ),
       ),

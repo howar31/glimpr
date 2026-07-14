@@ -1645,5 +1645,64 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorLoopCount => '次數';
 
   @override
+  String get gifEditorUndo => '復原';
+
+  @override
+  String get gifEditorRedo => '重做';
+
+  @override
+  String get gifEditorDeleteFrames => '刪除';
+
+  @override
+  String get gifEditorMoveLeft => '左移';
+
+  @override
+  String get gifEditorMoveRight => '右移';
+
+  @override
+  String get gifEditorReverse => '反轉';
+
+  @override
+  String get gifEditorYoyo => '來回循環';
+
+  @override
+  String get gifEditorRemoveDuplicates => '移除重複幀';
+
+  @override
+  String get gifEditorReduceFrames => '減少幀數';
+
+  @override
+  String get gifEditorReduceKeepFirst => '每 N 幀保留第一幀';
+
+  @override
+  String get gifEditorDelay => '延遲';
+
+  @override
+  String get gifEditorDelaySet => '設定';
+
+  @override
+  String get gifEditorDelayAdjust => '增減';
+
+  @override
+  String get gifEditorDelayScale => '縮放';
+
+  @override
+  String get gifEditorApply => '套用';
+
+  @override
+  String get gifEditorCut => '剪下';
+
+  @override
+  String get gifEditorCopy => '複製';
+
+  @override
+  String get gifEditorPaste => '貼上';
+
+  @override
+  String gifEditorSelectedCount(int selected, int total) {
+    return '已選取 $selected／$total 幀';
+  }
+
+  @override
   String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }

@@ -279,6 +279,117 @@ void main() {
     expect(reread!.loopCount, 4);
   }, timeout: const Timeout(Duration(seconds: 60)));
 
+  Future<GifEditorController> preloadedN(
+      WidgetTester tester, List<int> colors, List<int> delaysMs) async {
+    final c = GifEditorController();
+    addTearDown(c.dispose);
+    await tester.runAsync(() =>
+        c.openBytes(solidFramesGif(colors: colors, delays: delaysMs)));
+    return c;
+  }
+
+  testWidgets('filmstrip clicks select (plain, shift-range, mod-toggle)',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c =
+        await preloadedN(tester, [0, 1, 2, 3], [100, 100, 100, 100]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-frame-1')));
+    await tester.pump();
+    expect(c.selection, {1});
+    expect(c.current, 1);
+    // Shift-click extends the range; the playhead stays.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tap(find.byKey(const Key('gif-frame-3')));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(c.selection, {1, 2, 3});
+    expect(c.current, 1);
+    // Cmd-click toggles one member off.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.tap(find.byKey(const Key('gif-frame-2')));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(c.selection, {1, 3});
+  });
+
+  testWidgets('toolbar delete and undo round-trip', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1, 2], [100, 150, 200]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-frame-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-delete')));
+    await tester.pump();
+    expect(c.doc!.frameCount, 2);
+    await tester.tap(find.byKey(const Key('gif-op-undo')));
+    await tester.pump();
+    expect(c.doc!.frameCount, 3);
+    expect(c.doc!.frames[1].delayMs, 150);
+  });
+
+  testWidgets('delay panel applies the chosen mode', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1], [100, 150]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-delay')));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-delay-panel')), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('gif-delay-field')), '500');
+    await tester.tap(find.byKey(const Key('gif-delay-apply')));
+    await tester.pump();
+    // No selection: applies to every frame; the panel closes.
+    expect([for (final f in c.doc!.frames) f.delayMs], [500, 500]);
+    expect(find.byKey(const Key('gif-delay-panel')), findsNothing);
+  });
+
+  testWidgets('reduce panel keeps the first of every n', (tester) async {
+    mockMethodChannel(_channel);
+    final c =
+        await preloadedN(tester, [0, 1, 2, 3], [100, 100, 100, 100]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-reduce')));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-reduce-panel')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gif-reduce-apply')));
+    await tester.pump();
+    expect(c.doc!.frameCount, 2); // default n = 2
+    expect(c.doc!.frames[0].delayMs, 200);
+  });
+
+  testWidgets('undo and select-all hotkeys reach the controller',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1, 2], [100, 100, 100]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(c.selection, {0, 1, 2});
+    // Delete two of them (keep one), then undo via the hotkey.
+    await tester.tap(find.byKey(const Key('gif-frame-1')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tap(find.byKey(const Key('gif-frame-2')));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pump();
+    expect(c.doc!.frameCount, 1);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(c.doc!.frameCount, 3);
+  });
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.

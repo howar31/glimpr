@@ -2039,6 +2039,86 @@
   "@gifEditorLoopCount": {
     "description": "GIF Editor export options: loop segment for a finite play count"
   },
+  "gifEditorUndo": "Undo",
+  "@gifEditorUndo": {
+    "description": "GIF Editor timeline toolbar: undo tooltip"
+  },
+  "gifEditorRedo": "Redo",
+  "@gifEditorRedo": {
+    "description": "GIF Editor timeline toolbar: redo tooltip"
+  },
+  "gifEditorDeleteFrames": "Delete",
+  "@gifEditorDeleteFrames": {
+    "description": "GIF Editor timeline toolbar: delete selected frames tooltip"
+  },
+  "gifEditorMoveLeft": "Move left",
+  "@gifEditorMoveLeft": {
+    "description": "GIF Editor timeline toolbar: move selected frames one slot left"
+  },
+  "gifEditorMoveRight": "Move right",
+  "@gifEditorMoveRight": {
+    "description": "GIF Editor timeline toolbar: move selected frames one slot right"
+  },
+  "gifEditorReverse": "Reverse",
+  "@gifEditorReverse": {
+    "description": "GIF Editor timeline toolbar: reverse frames tooltip"
+  },
+  "gifEditorYoyo": "Yoyo",
+  "@gifEditorYoyo": {
+    "description": "GIF Editor timeline toolbar: append the reversed sequence (forward then back playback)"
+  },
+  "gifEditorRemoveDuplicates": "Remove duplicates",
+  "@gifEditorRemoveDuplicates": {
+    "description": "GIF Editor timeline toolbar: collapse consecutive identical frames"
+  },
+  "gifEditorReduceFrames": "Reduce frames",
+  "@gifEditorReduceFrames": {
+    "description": "GIF Editor timeline toolbar: reduce framerate popover trigger"
+  },
+  "gifEditorReduceKeepFirst": "Keep the first of every N frames",
+  "@gifEditorReduceKeepFirst": {
+    "description": "GIF Editor reduce popover: explanation of the N picker"
+  },
+  "gifEditorDelay": "Delay",
+  "@gifEditorDelay": {
+    "description": "GIF Editor timeline toolbar: delay operations popover trigger"
+  },
+  "gifEditorDelaySet": "Set",
+  "@gifEditorDelaySet": {
+    "description": "GIF Editor delay popover: override mode (set delays to a value)"
+  },
+  "gifEditorDelayAdjust": "Adjust",
+  "@gifEditorDelayAdjust": {
+    "description": "GIF Editor delay popover: shift mode (add or subtract milliseconds)"
+  },
+  "gifEditorDelayScale": "Scale",
+  "@gifEditorDelayScale": {
+    "description": "GIF Editor delay popover: scale mode (percentage)"
+  },
+  "gifEditorApply": "Apply",
+  "@gifEditorApply": {
+    "description": "GIF Editor popovers: apply button"
+  },
+  "gifEditorCut": "Cut",
+  "@gifEditorCut": {
+    "description": "GIF Editor timeline toolbar: cut selected frames to the frame clipboard"
+  },
+  "gifEditorCopy": "Copy",
+  "@gifEditorCopy": {
+    "description": "GIF Editor timeline toolbar: copy selected frames to the frame clipboard"
+  },
+  "gifEditorPaste": "Paste",
+  "@gifEditorPaste": {
+    "description": "GIF Editor timeline toolbar: paste clipboard frames after the current frame"
+  },
+  "gifEditorSelectedCount": "{selected} of {total} selected",
+  "@gifEditorSelectedCount": {
+    "description": "GIF Editor timeline toolbar: selection summary",
+    "placeholders": {
+      "selected": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
     "description": "Tray menu: reveal the GIF Editor window (provisional entry)"
