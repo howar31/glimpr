@@ -2167,6 +2167,19 @@
   "@gifEditorCancel": {
     "description": "GIF Editor crop confirm bar: cancel button"
   },
+  "gifEditorAnnotate": "Annotate",
+  "@gifEditorAnnotate": {
+    "description": "GIF Editor toolbar: annotate (burn-in overlay) mode toggle tooltip"
+  },
+  "gifEditorBakeSelected": "Apply to {n} selected frames",
+  "@gifEditorBakeSelected": {
+    "description": "GIF Editor annotate bar: target label when frames are selected",
+    "placeholders": { "n": { "type": "int" } }
+  },
+  "gifEditorBakeAll": "Apply to all frames",
+  "@gifEditorBakeAll": {
+    "description": "GIF Editor annotate bar: target label when nothing is selected"
+  },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
     "description": "Tray menu: reveal the GIF Editor window (provisional entry)"

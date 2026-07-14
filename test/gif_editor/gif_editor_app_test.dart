@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
+import 'package:glimpr/editor/editor_core.dart';
 import 'package:glimpr/gif_editor/encode/gif_writer.dart';
 import 'package:glimpr/gif_editor/frame_store.dart';
 import 'package:glimpr/gif_editor/gif_editor_app.dart';
 import 'package:glimpr/gif_editor/gif_editor_controller.dart';
 import 'package:glimpr/gif_editor/gif_import.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
+import 'package:glimpr/overlay/toolbar.dart';
 import 'package:glimpr/platform_gate.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/gif_fixture.dart';
 import '../support/mock_channels.dart';
@@ -497,6 +501,109 @@ void main() {
     await tester.pump();
     expect(c.doc!.frames.first.width, 100);
   }, timeout: const Timeout(Duration(seconds: 60)));
+
+  group('annotate mode', () {
+    setUp(() {
+      // EditorCore reads hud/loupe/tool prefs; marching ants must be OFF or
+      // a selection's dashed highlight leaves a periodic timer running.
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData({
+        'hud_marching_ants': false,
+        'hud_crosshair': false,
+      });
+    });
+
+    // The shared editor toolbar pill is deliberately not scrollable (image
+    // editor precedent), so the annotate surface needs a window wide enough
+    // to host it — same constraint as the Image Editor window.
+    Future<void> sizeView(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
+
+    testWidgets('opens EditorCore with the toolbar and cancels clean',
+        (tester) async {
+      await sizeView(tester);
+      mockMethodChannel(_channel);
+      final c = await preloadedSized(tester, 100, 50);
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('gif-op-annotate')));
+      await tester.pump();
+      // The base image loads through the store (real async).
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (find.byType(EditorCore).evaluate().isEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 5)));
+        await tester.pump();
+      }
+      expect(find.byType(EditorCore), findsOneWidget);
+      expect(find.byType(EditorToolbar), findsOneWidget);
+      expect(find.text(_en.gifEditorBakeAll), findsOneWidget);
+      // The region/crop tool is hidden from the annotate toolbar.
+      expect(find.byTooltip(_en.toolCropPinCombined), findsNothing);
+      await tester.tap(find.byKey(const Key('gif-annotate-cancel')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(EditorCore), findsNothing);
+      expect(c.canUndo, isFalse); // nothing baked
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    testWidgets('drawing a rectangle and applying bakes the frames',
+        (tester) async {
+      await sizeView(tester);
+      mockMethodChannel(_channel);
+      final c = await preloadedSized(tester, 100, 50);
+      final before = await tester.runAsync(() async => File(
+              c.store!.pathFor(c.doc!.frames.first.key))
+          .readAsBytes());
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('gif-op-annotate')));
+      await tester.pump();
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (find.byType(EditorCore).evaluate().isEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 5)));
+        await tester.pump();
+      }
+      // Draw a rectangle (the default annotate tool). The viewport does not
+      // upscale a small image, so the 100x50 card sits at 1:1 around the
+      // center — keep the drag inside it.
+      final core = tester.getRect(find.byType(EditorCore));
+      final gesture =
+          await tester.startGesture(core.center - const Offset(40, 20));
+      await tester.pump();
+      await gesture.moveTo(core.center + const Offset(40, 20));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('gif-annotate-apply')));
+      await tester.pump();
+      // The bake runs on real async (decode/toImage/store IO).
+      final bakeDeadline = DateTime.now().add(const Duration(seconds: 20));
+      var after = before!;
+      while (DateTime.now().isBefore(bakeDeadline)) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+        if (!c.transforming && c.canUndo) {
+          after = (await tester.runAsync(() async => File(
+                  c.store!.pathFor(c.doc!.frames.first.key))
+              .readAsBytes()))!;
+          break;
+        }
+      }
+      expect(find.byType(EditorCore), findsNothing);
+      expect(c.canUndo, isTrue, reason: 'the bake must have committed');
+      expect(after, isNot(equals(before)),
+          reason: 'baked pixels must differ from the original frame');
+    }, timeout: const Timeout(Duration(seconds: 60)));
+  });
 
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);

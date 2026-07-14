@@ -1800,5 +1800,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorCancel => 'Cancel';
 
   @override
+  String get gifEditorAnnotate => 'Annotate';
+
+  @override
+  String gifEditorBakeSelected(int n) {
+    return 'Apply to $n selected frames';
+  }
+
+  @override
+  String get gifEditorBakeAll => 'Apply to all frames';
+
+  @override
   String get trayOpenGifEditor => 'Open GIF Editor';
 }

@@ -3422,6 +3422,24 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get gifEditorCancel;
 
+  /// GIF Editor toolbar: annotate (burn-in overlay) mode toggle tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Annotate'**
+  String get gifEditorAnnotate;
+
+  /// GIF Editor annotate bar: target label when frames are selected
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to {n} selected frames'**
+  String gifEditorBakeSelected(int n);
+
+  /// GIF Editor annotate bar: target label when nothing is selected
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to all frames'**
+  String get gifEditorBakeAll;
+
   /// Tray menu: reveal the GIF Editor window (provisional entry)
   ///
   /// In en, this message translates to:

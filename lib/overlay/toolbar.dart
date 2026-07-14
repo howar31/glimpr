@@ -68,6 +68,10 @@ class EditorToolbar extends StatelessWidget {
   // must always be visible, including the replace-at-cap case.
   final String? layerCaption;
   final bool layerAccent;
+  // Hide the region/crop tool slot entirely (the GIF editor's annotate
+  // surface: a crop there would desync the baked canvas from the frame
+  // document, which has its own whole-document crop op).
+  final bool hideRegionTool;
   const EditorToolbar({
     super.key,
     required this.controller,
@@ -83,6 +87,7 @@ class EditorToolbar extends StatelessWidget {
     this.recordOverrides,
     this.layerCaption,
     this.layerAccent = false,
+    this.hideRegionTool = false,
   });
 
   @override
@@ -151,7 +156,8 @@ class EditorToolbar extends StatelessWidget {
                     ),
                   ),
                 for (final (kind, icon) in kEditorToolMeta)
-                  if (!recordMode || kind == ToolKind.crop)
+                  if ((!recordMode || kind == ToolKind.crop) &&
+                      !(hideRegionTool && kind == ToolKind.crop))
                   _ToolButton(
                     controller: controller,
                     kind: kind,

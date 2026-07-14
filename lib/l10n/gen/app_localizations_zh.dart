@@ -1740,5 +1740,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorCancel => '取消';
 
   @override
+  String get gifEditorAnnotate => '標註';
+
+  @override
+  String gifEditorBakeSelected(int n) {
+    return '套用到選取的 $n 幀';
+  }
+
+  @override
+  String get gifEditorBakeAll => '套用到全部幀';
+
+  @override
   String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }

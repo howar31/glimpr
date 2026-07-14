@@ -7,10 +7,23 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../editor/draw_style.dart';
+import '../editor/editor_controller.dart';
+import '../editor/editor_core.dart';
+import '../editor/hud_config.dart';
+import '../editor/loupe_config.dart';
+import '../editor/tool_style_store.dart';
+import '../editor/viewport.dart';
 import '../image_editor/checkerboard.dart';
+import '../image_editor/image_editor_host.dart';
 import '../l10n/gen/app_localizations.dart';
+import '../overlay/toolbar.dart';
 import '../platform_gate.dart';
 import '../settings/app_locale.dart';
+import '../settings/settings.dart';
+import '../shortcuts/hotkey_binding.dart';
+import '../shortcuts/shortcut_actions.dart';
+import '../shortcuts/shortcut_store.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'export_service.dart';
@@ -69,12 +82,19 @@ class _GifEditorAppState extends State<GifEditorApp>
     _delayField.dispose();
     _resizeW.dispose();
     _resizeH.dispose();
+    _annotate?.dispose();
+    _annotateActive.dispose();
     _toastTimer?.cancel();
     _toastClearTimer?.cancel();
     super.dispose();
   }
 
-  void _onControllerChanged() => setState(_seedOptions);
+  void _onControllerChanged() {
+    setState(_seedOptions);
+    // Annotating tracks the playhead: rebase EditorCore on the new frame
+    // (the editor controller, and with it the drawables, persist).
+    if (_annotateMode) unawaited(_loadAnnotateImage());
+  }
 
   @override
   void didChangePlatformBrightness() => setState(() {});
@@ -111,11 +131,109 @@ class _GifEditorAppState extends State<GifEditorApp>
   bool _cropMode = false;
   Rect? _cropRect;
 
+  // Annotate (burn-in) mode: EditorCore over the current frame. The editor
+  // controller persists across frame switches so drawables can be placed
+  // against any frame in the range before baking.
+  bool _annotateMode = false;
+  EditorController? _annotate;
+  ui.Image? _annotateImage;
+  FrameKey? _annotateKey;
+  final EditorViewportController _annotateViewport =
+      EditorViewportController();
+  final ValueNotifier<({int id, Offset cursor})> _annotateActive =
+      ValueNotifier((id: ImageEditorHost.kImageEditorHostId,
+          cursor: Offset.zero));
+
+  // Shared editor context (styles / bindings / loupe / hud), loaded once
+  // like the Image Editor does; failures fall back to defaults so tests
+  // without a settings platform still build.
+  final Map<ToolKind, DrawStyle> _toolStyles = {};
+  Map<String, HotkeyBinding?> _editorBindings = {
+    ...effectiveDefaultBindings()
+  };
+  LoupeConfig _loupe = const LoupeConfig();
+  HudConfig _hud = const HudConfig();
+  bool _editorPrefsLoaded = false;
+
+  void _loadEditorPrefsOnce() {
+    if (_editorPrefsLoaded) return;
+    _editorPrefsLoaded = true;
+    try {
+      ToolStyleStore(Settings.instance.store).load().then((styles) {
+        if (mounted) setState(() => _toolStyles.addAll(styles));
+      }).catchError((_) {});
+    } catch (_) {}
+    try {
+      ShortcutStore(Settings.instance.store).all().then((b) {
+        if (mounted) setState(() => _editorBindings = b);
+      }).catchError((_) {});
+    } catch (_) {}
+    try {
+      Settings.instance.loadLoupe().then((l) {
+        if (mounted) setState(() => _loupe = l);
+      }).catchError((_) {});
+      Settings.instance.loadHud().then((h) {
+        if (mounted) setState(() => _hud = h);
+      }).catchError((_) {});
+    } catch (_) {}
+  }
+
+  void _toggleAnnotateMode() {
+    if (_annotateMode) {
+      setState(_closePanels);
+      return;
+    }
+    _loadEditorPrefsOnce();
+    _c.pause();
+    setState(() {
+      _closePanels();
+      _annotateMode = true;
+      _annotate = EditorController(toolStyles: _toolStyles)
+        ..selectTool(ToolKind.rectangle);
+    });
+    unawaited(_loadAnnotateImage());
+  }
+
+  /// (Re)load the CURRENT frame as the annotate base; called on entry and
+  /// whenever the playhead moves while annotating.
+  Future<void> _loadAnnotateImage() async {
+    final doc = _c.doc;
+    final store = _c.store;
+    if (doc == null || store == null || !_annotateMode) return;
+    final frame = doc.frames[_c.current];
+    if (frame.key == _annotateKey) return;
+    final img = await store.image(frame.key, frame.width, frame.height);
+    if (!mounted || !_annotateMode) return;
+    setState(() {
+      _annotateImage = img;
+      _annotateKey = frame.key;
+    });
+  }
+
+  void _applyAnnotate() {
+    final drawables = _annotate?.document.value.drawables ?? const [];
+    setState(_closePanels);
+    if (drawables.isNotEmpty) {
+      unawaited(_c.bakeDrawables(List.of(drawables)));
+    }
+  }
+
   void _closePanels() {
     _optionsOpen = false;
     _panel = _TimelinePanel.none;
     _cropMode = false;
     _cropRect = null;
+    _annotateMode = false;
+    // Dispose the editor controller only after the frame that unmounts
+    // EditorCore (it detaches its listeners during that build).
+    final oldAnnotate = _annotate;
+    if (oldAnnotate != null) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => oldAnnotate.dispose());
+    }
+    _annotate = null;
+    _annotateImage = null;
+    _annotateKey = null;
   }
 
   void _toggleCropMode() {
@@ -324,7 +442,8 @@ class _GifEditorAppState extends State<GifEditorApp>
                 meta: !platformIsWindows,
                 control: platformIsWindows): () => unawaited(_openPanel()),
             const SingleActivator(LogicalKeyboardKey.space): () {
-              if (_c.doc != null) _c.togglePlay();
+              // Not while annotating: EditorCore owns the keyboard there.
+              if (_c.doc != null && !_annotateMode) _c.togglePlay();
             },
             // Timeline editing (all no-ops on the landing).
             SingleActivator(LogicalKeyboardKey.keyZ,
@@ -522,17 +641,19 @@ class _GifEditorAppState extends State<GifEditorApp>
               Positioned.fill(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: _cropMode
-                      ? _CropOverlay(
-                          store: store,
-                          frame: frame,
-                          rect: _cropRect,
-                          onRectChanged: (r) =>
-                              setState(() => _cropRect = r),
-                          onApply: _applyCrop,
-                          onCancel: () => setState(_closePanels),
-                        )
-                      : _FramePreview(store: store, frame: frame),
+                  child: _annotateMode
+                      ? _annotateSurface(t)
+                      : _cropMode
+                          ? _CropOverlay(
+                              store: store,
+                              frame: frame,
+                              rect: _cropRect,
+                              onRectChanged: (r) =>
+                                  setState(() => _cropRect = r),
+                              onApply: _applyCrop,
+                              onCancel: () => setState(_closePanels),
+                            )
+                          : _FramePreview(store: store, frame: frame),
                 ),
               ),
             ],
@@ -541,6 +662,99 @@ class _GifEditorAppState extends State<GifEditorApp>
         _controlsRow(t, doc),
         _opsRow(t, doc),
         _filmstrip(t, doc, store),
+      ],
+    );
+  }
+
+  /// Annotate surface: EditorCore on the current frame with the shared
+  /// editor toolbar docked as a bottom pill and an apply bar up top. The
+  /// region/crop tool is hidden (the document has its own crop op).
+  Widget _annotateSurface(GlimprTokens t) {
+    final img = _annotateImage;
+    final annotate = _annotate;
+    if (img == null || annotate == null) {
+      return const SizedBox.expand();
+    }
+    final host = ImageEditorHost(
+      image: img,
+      onComplete: () async => _applyAnnotate(),
+      activeSignal: _annotateActive,
+      onClose: () => setState(_closePanels),
+      onOpenSettings: () => _channel.invokeMethod('openSettings'),
+    );
+    final sel = _c.selection;
+    final target = sel.isEmpty
+        ? _l.gifEditorBakeAll
+        : _l.gifEditorBakeSelected(sel.length);
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: EditorCore(
+            key: ValueKey(img), // fresh core per rebased frame
+            controller: annotate,
+            editorBindings: _editorBindings,
+            loupe: _loupe,
+            hud: _hud,
+            host: host,
+            viewportController: _annotateViewport,
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 12,
+          child: Center(
+            child: EditorToolbar(
+              controller: annotate,
+              editorBindings: _editorBindings,
+              showDragHandle: false,
+              onMove: (_) {},
+              onPtEditingDone: annotate.requestFocus,
+              hideRegionTool: true,
+            ),
+          ),
+        ),
+        Positioned(
+          top: 10,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: t.hudBg,
+                borderRadius:
+                    BorderRadius.circular(GlimprTokens.radiusBar),
+                border: Border.all(color: t.hudBorder),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(target,
+                      style: GlimprType.sansStyle(12.5, 600, t.fg2)),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    key: const Key('gif-annotate-cancel'),
+                    onTap: () => setState(_closePanels),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                      child: Text(_l.gifEditorCancel,
+                          style: GlimprType.sansStyle(12.5, 600, t.fg3)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AccentButton(
+                    _l.gifEditorApply,
+                    key: const Key('gif-annotate-apply'),
+                    onTap: _applyAnnotate,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -679,6 +893,14 @@ class _GifEditorAppState extends State<GifEditorApp>
             }),
           ),
           divider(),
+          _OpButton(
+            key: const Key('gif-op-annotate'),
+            icon: Icons.brush_rounded,
+            tooltip: _l.gifEditorAnnotate,
+            enabled: !busy,
+            active: _annotateMode,
+            onTap: _toggleAnnotateMode,
+          ),
           _OpButton(
             key: const Key('gif-op-crop'),
             icon: Icons.crop_rounded,
