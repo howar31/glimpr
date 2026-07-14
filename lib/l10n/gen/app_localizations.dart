@@ -3350,6 +3350,78 @@ abstract class AppLocalizations {
   /// **'{selected} of {total} selected'**
   String gifEditorSelectedCount(int selected, int total);
 
+  /// GIF Editor toolbar: crop mode toggle tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Crop'**
+  String get gifEditorCrop;
+
+  /// GIF Editor crop mode: hint shown before a rectangle is drawn
+  ///
+  /// In en, this message translates to:
+  /// **'Drag on the preview to choose an area'**
+  String get gifEditorCropHint;
+
+  /// GIF Editor toolbar: resize panel trigger tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Resize'**
+  String get gifEditorResize;
+
+  /// GIF Editor toolbar: mirror frames left-right
+  ///
+  /// In en, this message translates to:
+  /// **'Flip horizontal'**
+  String get gifEditorFlipH;
+
+  /// GIF Editor toolbar: mirror frames top-bottom
+  ///
+  /// In en, this message translates to:
+  /// **'Flip vertical'**
+  String get gifEditorFlipV;
+
+  /// GIF Editor toolbar: rotate frames a quarter turn counter-clockwise
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate left'**
+  String get gifEditorRotateLeft;
+
+  /// GIF Editor toolbar: rotate frames a quarter turn clockwise
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate right'**
+  String get gifEditorRotateRight;
+
+  /// GIF Editor resize panel: width field label
+  ///
+  /// In en, this message translates to:
+  /// **'Width'**
+  String get gifEditorWidth;
+
+  /// GIF Editor resize panel: height field label
+  ///
+  /// In en, this message translates to:
+  /// **'Height'**
+  String get gifEditorHeight;
+
+  /// GIF Editor resize panel: aspect-lock toggle label
+  ///
+  /// In en, this message translates to:
+  /// **'Lock aspect ratio'**
+  String get gifEditorKeepAspect;
+
+  /// GIF Editor toolbar: label while a canvas transform runs (a percentage follows)
+  ///
+  /// In en, this message translates to:
+  /// **'Processing'**
+  String get gifEditorProcessing;
+
+  /// GIF Editor crop confirm bar: cancel button
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get gifEditorCancel;
+
   /// Tray menu: reveal the GIF Editor window (provisional entry)
   ///
   /// In en, this message translates to:

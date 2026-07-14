@@ -67,6 +67,8 @@ class _GifEditorAppState extends State<GifEditorApp>
     _strip.dispose();
     _loopField.dispose();
     _delayField.dispose();
+    _resizeW.dispose();
+    _resizeH.dispose();
     _toastTimer?.cancel();
     _toastClearTimer?.cancel();
     super.dispose();
@@ -92,17 +94,72 @@ class _GifEditorAppState extends State<GifEditorApp>
   final TextEditingController _loopField = TextEditingController(text: '1');
   GifDocument? _seededDoc;
 
-  // Timeline panels (delay / reduce) share the popover surface; at most one
-  // of them (or the export options popover) is open at a time.
+  // Timeline panels (delay / reduce / resize) share the popover surface; at
+  // most one of them (or the export options popover) is open at a time.
   _TimelinePanel _panel = _TimelinePanel.none;
   _DelayMode _delayMode = _DelayMode.set;
   final TextEditingController _delayField =
       TextEditingController(text: '100');
   int _reduceN = 2;
 
+  // Resize panel state (fields re-seed from the document when it opens).
+  final TextEditingController _resizeW = TextEditingController();
+  final TextEditingController _resizeH = TextEditingController();
+  bool _resizeLock = true;
+
+  // Crop mode: the rect lives in IMAGE pixel coordinates.
+  bool _cropMode = false;
+  Rect? _cropRect;
+
   void _closePanels() {
     _optionsOpen = false;
     _panel = _TimelinePanel.none;
+    _cropMode = false;
+    _cropRect = null;
+  }
+
+  void _toggleCropMode() {
+    setState(() {
+      final was = _cropMode;
+      _closePanels();
+      _cropMode = !was;
+      if (_cropMode) _c.pause();
+    });
+  }
+
+  void _applyCrop() {
+    final r = _cropRect;
+    if (r == null) return;
+    final x = r.left.round();
+    final y = r.top.round();
+    final w = r.right.round() - x;
+    final h = r.bottom.round() - y;
+    setState(_closePanels);
+    if (w >= 1 && h >= 1) {
+      unawaited(_c.cropDoc(x, y, w, h));
+    }
+  }
+
+  /// Aspect-locked companion update: editing one resize field rewrites the
+  /// other from the document's ratio (programmatic .text changes do not
+  /// re-enter onChanged).
+  void _resizeFieldEdited({required bool widthEdited}) {
+    if (!_resizeLock) return;
+    final doc = _c.doc;
+    if (doc == null) return;
+    final iw = doc.frames.first.width;
+    final ih = doc.frames.first.height;
+    if (widthEdited) {
+      final w = int.tryParse(_resizeW.text);
+      if (w != null && w > 0) {
+        _resizeH.text = '${(w * ih / iw).round().clamp(1, 16384)}';
+      }
+    } else {
+      final h = int.tryParse(_resizeH.text);
+      if (h != null && h > 0) {
+        _resizeW.text = '${(h * iw / ih).round().clamp(1, 16384)}';
+      }
+    }
   }
 
   /// Re-seed the loop option from each newly opened document (the other
@@ -146,7 +203,9 @@ class _GifEditorAppState extends State<GifEditorApp>
   Future<void> _export() async {
     final doc = _c.doc;
     final store = _c.store;
-    if (doc == null || store == null || _exporting) return;
+    if (doc == null || store == null || _exporting || _c.transforming) {
+      return;
+    }
     final suggested = '$_sourceName-edited.gif';
     String? out;
     if (platformIsWindows) {
@@ -291,6 +350,17 @@ class _GifEditorAppState extends State<GifEditorApp>
                 _c.deleteSelected,
             const SingleActivator(LogicalKeyboardKey.backspace):
                 _c.deleteSelected,
+            // Crop mode commits on Enter; Escape backs out of any panel.
+            const SingleActivator(LogicalKeyboardKey.enter): () {
+              if (_cropMode) _applyCrop();
+            },
+            const SingleActivator(LogicalKeyboardKey.escape): () {
+              if (_cropMode ||
+                  _optionsOpen ||
+                  _panel != _TimelinePanel.none) {
+                setState(_closePanels);
+              }
+            },
           },
           child: Focus(
             // Shortcuts need a focused subtree; the canvas has no focusable
@@ -346,6 +416,8 @@ class _GifEditorAppState extends State<GifEditorApp>
                         _delayPanel(tokens),
                       if (_panel == _TimelinePanel.reduce)
                         _reducePanel(tokens),
+                      if (_panel == _TimelinePanel.resize)
+                        _resizePanel(tokens),
                     ],
                     _toastLayer(tokens),
                   ],
@@ -450,7 +522,17 @@ class _GifEditorAppState extends State<GifEditorApp>
               Positioned.fill(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: _FramePreview(store: store, frame: frame),
+                  child: _cropMode
+                      ? _CropOverlay(
+                          store: store,
+                          frame: frame,
+                          rect: _cropRect,
+                          onRectChanged: (r) =>
+                              setState(() => _cropRect = r),
+                          onApply: _applyCrop,
+                          onCancel: () => setState(_closePanels),
+                        )
+                      : _FramePreview(store: store, frame: frame),
                 ),
               ),
             ],
@@ -465,10 +547,12 @@ class _GifEditorAppState extends State<GifEditorApp>
 
   /// Timeline editing toolbar: history, clipboard, frame and delay ops.
   Widget _opsRow(GlimprTokens t, GifDocument doc) {
+    final busy = _c.transforming || _exporting;
     final sel = _c.selection;
-    final hasSel = sel.isNotEmpty;
-    final many = doc.frameCount >= 2;
-    final deletable = hasSel && sel.length < doc.frameCount;
+    final hasSel = sel.isNotEmpty && !busy;
+    final many = doc.frameCount >= 2 && !busy;
+    final deletable =
+        sel.isNotEmpty && sel.length < doc.frameCount && !busy;
     Widget divider() => Container(
           width: 1,
           height: 18,
@@ -483,18 +567,25 @@ class _GifEditorAppState extends State<GifEditorApp>
       ),
       child: Row(
         children: [
+          // The button strip scrolls when the window is narrower than the
+          // full set; the status text stays pinned on the right.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
           _OpButton(
             key: const Key('gif-op-undo'),
             icon: Icons.undo_rounded,
             tooltip: _l.gifEditorUndo,
-            enabled: _c.canUndo,
+            enabled: _c.canUndo && !busy,
             onTap: _c.undo,
           ),
           _OpButton(
             key: const Key('gif-op-redo'),
             icon: Icons.redo_rounded,
             tooltip: _l.gifEditorRedo,
-            enabled: _c.canRedo,
+            enabled: _c.canRedo && !busy,
             onTap: _c.redo,
           ),
           divider(),
@@ -516,7 +607,7 @@ class _GifEditorAppState extends State<GifEditorApp>
             key: const Key('gif-op-paste'),
             icon: Icons.content_paste_rounded,
             tooltip: _l.gifEditorPaste,
-            enabled: _c.clipboardHasFrames,
+            enabled: _c.clipboardHasFrames && !busy,
             onTap: _c.pasteFrames,
           ),
           divider(),
@@ -579,6 +670,7 @@ class _GifEditorAppState extends State<GifEditorApp>
             key: const Key('gif-op-delay'),
             icon: Icons.timer_outlined,
             tooltip: _l.gifEditorDelay,
+            enabled: !busy,
             active: _panel == _TimelinePanel.delay,
             onTap: () => setState(() {
               final open = _panel == _TimelinePanel.delay;
@@ -586,13 +678,170 @@ class _GifEditorAppState extends State<GifEditorApp>
               if (!open) _panel = _TimelinePanel.delay;
             }),
           ),
-          const Spacer(),
-          if (hasSel)
+          divider(),
+          _OpButton(
+            key: const Key('gif-op-crop'),
+            icon: Icons.crop_rounded,
+            tooltip: _l.gifEditorCrop,
+            enabled: !busy,
+            active: _cropMode,
+            onTap: _toggleCropMode,
+          ),
+          _OpButton(
+            key: const Key('gif-op-resize'),
+            icon: Icons.aspect_ratio_rounded,
+            tooltip: _l.gifEditorResize,
+            enabled: !busy,
+            active: _panel == _TimelinePanel.resize,
+            onTap: () => setState(() {
+              final open = _panel == _TimelinePanel.resize;
+              _closePanels();
+              if (!open) {
+                _panel = _TimelinePanel.resize;
+                _resizeW.text = '${doc.frames.first.width}';
+                _resizeH.text = '${doc.frames.first.height}';
+              }
+            }),
+          ),
+          _OpButton(
+            key: const Key('gif-op-flip-h'),
+            icon: Icons.flip_rounded,
+            tooltip: _l.gifEditorFlipH,
+            enabled: !busy,
+            onTap: () => unawaited(_c.flipDoc(horizontal: true)),
+          ),
+          _OpButton(
+            key: const Key('gif-op-flip-v'),
+            icon: Icons.flip_camera_android_rounded,
+            tooltip: _l.gifEditorFlipV,
+            enabled: !busy,
+            onTap: () => unawaited(_c.flipDoc(horizontal: false)),
+          ),
+          _OpButton(
+            key: const Key('gif-op-rotate-left'),
+            icon: Icons.rotate_90_degrees_ccw_rounded,
+            tooltip: _l.gifEditorRotateLeft,
+            enabled: !busy,
+            onTap: () => unawaited(_c.rotateDoc(-1)),
+          ),
+          _OpButton(
+            key: const Key('gif-op-rotate-right'),
+            icon: Icons.rotate_90_degrees_cw_rounded,
+            tooltip: _l.gifEditorRotateRight,
+            enabled: !busy,
+            onTap: () => unawaited(_c.rotateDoc(1)),
+          ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (_c.transforming)
+            Text(
+              '${_l.gifEditorProcessing} '
+              '${(_c.transformProgress * 100).round()}%',
+              style: GlimprType.sansStyle(11.5, 500, t.fg3),
+            )
+          else if (sel.isNotEmpty)
             Text(
               _l.gifEditorSelectedCount(sel.length, doc.frameCount),
               style: GlimprType.sansStyle(11.5, 500, t.fg3),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Resize panel (width / height with an aspect lock).
+  Widget _resizePanel(GlimprTokens t) {
+    Widget field(String label, Key key, TextEditingController ctrl,
+            {required bool isWidth}) =>
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: GlimprType.sansStyle(12, 500, t.fg3)),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 64,
+              child: TextField(
+                key: key,
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(5),
+                ],
+                textAlign: TextAlign.center,
+                style: GlimprType.sansStyle(12.5, 600, t.fg1),
+                decoration: _fieldDecoration(t),
+                onChanged: (_) => _resizeFieldEdited(widthEdited: isWidth),
+              ),
+            ),
+          ],
+        );
+
+    return Positioned(
+      left: 12,
+      bottom: 86 + 40 + 8,
+      child: Container(
+        key: const Key('gif-resize-panel'),
+        width: 332,
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+        decoration: _panelDecoration(t),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.gifEditorResize,
+                style: GlimprType.sansStyle(11.5, 600, t.fg3,
+                    letterSpacing: 0.2)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                field(_l.gifEditorWidth, const Key('gif-resize-w'),
+                    _resizeW,
+                    isWidth: true),
+                const SizedBox(width: 12),
+                field(_l.gifEditorHeight, const Key('gif-resize-h'),
+                    _resizeH,
+                    isWidth: false),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(_l.gifEditorKeepAspect,
+                      style: GlimprType.sansStyle(12.5, 500, t.fg2)),
+                ),
+                GlassToggle(
+                  key: const Key('gif-resize-lock'),
+                  value: _resizeLock,
+                  onChanged: (v) => setState(() {
+                    _resizeLock = v;
+                    if (v) _resizeFieldEdited(widthEdited: true);
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: AccentButton(
+                _l.gifEditorApply,
+                key: const Key('gif-resize-apply'),
+                onTap: () {
+                  final w = int.tryParse(_resizeW.text);
+                  final h = int.tryParse(_resizeH.text);
+                  setState(_closePanels);
+                  if (w != null && h != null && w > 0 && h > 0) {
+                    unawaited(_c.resizeDoc(w, h));
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1125,7 +1374,7 @@ class _GifEditorAppState extends State<GifEditorApp>
 }
 
 /// Which timeline panel is open above the ops row.
-enum _TimelinePanel { none, delay, reduce }
+enum _TimelinePanel { none, delay, reduce, resize }
 
 /// Delay-popover operation modes.
 enum _DelayMode { set, adjust, scale }
@@ -1197,6 +1446,302 @@ class _OpButtonState extends State<_OpButton> {
       ),
     );
   }
+}
+
+/// Crop mode surface over the preview: draw a rectangle, move it, resize it
+/// by its 8 handles, and confirm or cancel. The rect is kept in IMAGE pixel
+/// coordinates; this widget maps pointer positions through the same
+/// contain-fit math the preview paints with.
+class _CropOverlay extends StatefulWidget {
+  const _CropOverlay({
+    required this.store,
+    required this.frame,
+    required this.rect,
+    required this.onRectChanged,
+    required this.onApply,
+    required this.onCancel,
+  });
+
+  final FrameStore store;
+  final GifFrame frame;
+  final Rect? rect;
+  final ValueChanged<Rect?> onRectChanged;
+  final VoidCallback onApply;
+  final VoidCallback onCancel;
+
+  @override
+  State<_CropOverlay> createState() => _CropOverlayState();
+}
+
+/// What a drag that started on the crop rect is doing.
+enum _CropDrag { draw, move, resize }
+
+class _CropOverlayState extends State<_CropOverlay> {
+  _CropDrag _drag = _CropDrag.draw;
+  Offset _anchor = Offset.zero; // image coords: draw origin / move grab
+  Rect _grabRect = Rect.zero; // rect at move-start
+  // Which edges the active resize handle owns.
+  bool _hLeft = false, _hRight = false, _hTop = false, _hBottom = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = GlimprTheme.of(context);
+    final l = AppLocalizations.of(context);
+    final iw = widget.frame.width.toDouble();
+    final ih = widget.frame.height.toDouble();
+    return LayoutBuilder(builder: (context, box) {
+      final scale =
+          (box.maxWidth / iw < box.maxHeight / ih)
+              ? box.maxWidth / iw
+              : box.maxHeight / ih;
+      final dispW = iw * scale;
+      final dispH = ih * scale;
+      final off = Offset(
+          (box.maxWidth - dispW) / 2, (box.maxHeight - dispH) / 2);
+
+      Offset toImage(Offset local) => Offset(
+            ((local.dx - off.dx) / scale).clamp(0, iw),
+            ((local.dy - off.dy) / scale).clamp(0, ih),
+          );
+      Rect toView(Rect img) => Rect.fromLTRB(
+            off.dx + img.left * scale,
+            off.dy + img.top * scale,
+            off.dx + img.right * scale,
+            off.dy + img.bottom * scale,
+          );
+
+      final viewRect = widget.rect == null ? null : toView(widget.rect!);
+
+      void panStart(DragStartDetails d) {
+        final p = d.localPosition;
+        if (viewRect != null) {
+          const grab = 14.0;
+          bool near(double a, double b) => (a - b).abs() <= grab;
+          final onLeft = near(p.dx, viewRect.left);
+          final onRight = near(p.dx, viewRect.right);
+          final onTop = near(p.dy, viewRect.top);
+          final onBottom = near(p.dy, viewRect.bottom);
+          final inX = p.dx >= viewRect.left - grab &&
+              p.dx <= viewRect.right + grab;
+          final inY = p.dy >= viewRect.top - grab &&
+              p.dy <= viewRect.bottom + grab;
+          if ((onLeft || onRight) && inY || (onTop || onBottom) && inX) {
+            _drag = _CropDrag.resize;
+            _hLeft = onLeft && inY;
+            _hRight = onRight && inY && !_hLeft;
+            _hTop = onTop && inX;
+            _hBottom = onBottom && inX && !_hTop;
+            return;
+          }
+          if (viewRect.contains(p)) {
+            _drag = _CropDrag.move;
+            _anchor = toImage(p);
+            _grabRect = widget.rect!;
+            return;
+          }
+        }
+        _drag = _CropDrag.draw;
+        _anchor = toImage(p);
+        widget.onRectChanged(Rect.fromPoints(_anchor, _anchor));
+      }
+
+      void panUpdate(DragUpdateDetails d) {
+        final img = toImage(d.localPosition);
+        switch (_drag) {
+          case _CropDrag.draw:
+            widget.onRectChanged(Rect.fromPoints(_anchor, img));
+          case _CropDrag.move:
+            final delta = img - _anchor;
+            final dx = delta.dx
+                .clamp(-_grabRect.left, iw - _grabRect.right);
+            final dy =
+                delta.dy.clamp(-_grabRect.top, ih - _grabRect.bottom);
+            widget.onRectChanged(_grabRect.shift(Offset(dx, dy)));
+          case _CropDrag.resize:
+            final r = widget.rect!;
+            widget.onRectChanged(Rect.fromLTRB(
+              _hLeft ? img.dx : r.left,
+              _hTop ? img.dy : r.top,
+              _hRight ? img.dx : r.right,
+              _hBottom ? img.dy : r.bottom,
+            ));
+        }
+      }
+
+      void panEnd(DragEndDetails d) {
+        final r = widget.rect;
+        if (r == null) return;
+        // Normalize (a resize may cross itself) and drop empty rects.
+        final norm = Rect.fromLTRB(
+          r.left < r.right ? r.left : r.right,
+          r.top < r.bottom ? r.top : r.bottom,
+          r.left < r.right ? r.right : r.left,
+          r.top < r.bottom ? r.bottom : r.top,
+        );
+        widget.onRectChanged(
+            norm.width < 1 || norm.height < 1 ? null : norm);
+      }
+
+      final intW = widget.rect == null
+          ? 0
+          : widget.rect!.right.round() - widget.rect!.left.round();
+      final intH = widget.rect == null
+          ? 0
+          : widget.rect!.bottom.round() - widget.rect!.top.round();
+
+      return Stack(
+        children: [
+          Positioned.fill(
+              child: _FramePreview(store: widget.store, frame: widget.frame)),
+          Positioned.fill(
+            child: GestureDetector(
+              key: const Key('gif-crop-overlay'),
+              behavior: HitTestBehavior.opaque,
+              onPanStart: panStart,
+              onPanUpdate: panUpdate,
+              onPanEnd: panEnd,
+              child: CustomPaint(
+                painter: _CropPainter(
+                  imageRect: Rect.fromLTWH(off.dx, off.dy, dispW, dispH),
+                  rect: viewRect,
+                  dark: t.isDark,
+                ),
+              ),
+            ),
+          ),
+          // Hint before a rect exists; dims + confirm bar once drawn.
+          if (widget.rect == null)
+            Positioned(
+              top: 10,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: t.hudBg,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: t.hudBorder),
+                    ),
+                    child: Text(l.gifEditorCropHint,
+                        style: GlimprType.sansStyle(12, 500, t.fg2)),
+                  ),
+                ),
+              ),
+            )
+          else
+            Positioned(
+              bottom: 10,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: t.hudBg,
+                    borderRadius:
+                        BorderRadius.circular(GlimprTokens.radiusBar),
+                    border: Border.all(color: t.hudBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('$intW×$intH',
+                          style: GlimprType.sansStyle(12.5, 600, t.fg2)),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        key: const Key('gif-crop-cancel'),
+                        onTap: widget.onCancel,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 4),
+                          child: Text(l.gifEditorCancel,
+                              style:
+                                  GlimprType.sansStyle(12.5, 600, t.fg3)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      AccentButton(
+                        l.gifEditorApply,
+                        key: const Key('gif-crop-apply'),
+                        onTap: widget.onApply,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+/// Dim outside the crop rect, stroke it, and draw its 8 handles.
+class _CropPainter extends CustomPainter {
+  const _CropPainter(
+      {required this.imageRect, required this.rect, required this.dark});
+
+  final Rect imageRect;
+  final Rect? rect;
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final dim = Paint()
+      ..color = dark ? const Color(0x8A000000) : const Color(0x66000000);
+    final r = rect;
+    if (r == null) {
+      canvas.drawRect(imageRect, dim);
+      return;
+    }
+    final clipped = r.intersect(imageRect);
+    canvas.drawRect(
+        Rect.fromLTRB(
+            imageRect.left, imageRect.top, imageRect.right, clipped.top),
+        dim);
+    canvas.drawRect(
+        Rect.fromLTRB(imageRect.left, clipped.bottom, imageRect.right,
+            imageRect.bottom),
+        dim);
+    canvas.drawRect(
+        Rect.fromLTRB(
+            imageRect.left, clipped.top, clipped.left, clipped.bottom),
+        dim);
+    canvas.drawRect(
+        Rect.fromLTRB(
+            clipped.right, clipped.top, imageRect.right, clipped.bottom),
+        dim);
+
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = GlimprTokens.accent;
+    canvas.drawRect(clipped, stroke);
+
+    final handle = Paint()..color = GlimprTokens.accent;
+    const s = 7.0;
+    for (final c in [
+      clipped.topLeft,
+      Offset(clipped.center.dx, clipped.top),
+      clipped.topRight,
+      Offset(clipped.left, clipped.center.dy),
+      Offset(clipped.right, clipped.center.dy),
+      clipped.bottomLeft,
+      Offset(clipped.center.dx, clipped.bottom),
+      clipped.bottomRight,
+    ]) {
+      canvas.drawRect(
+          Rect.fromCenter(center: c, width: s, height: s), handle);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CropPainter old) =>
+      old.rect != rect || old.imageRect != imageRect || old.dark != dark;
 }
 
 /// Paints one stored frame, keeping the PREVIOUS image on screen while the

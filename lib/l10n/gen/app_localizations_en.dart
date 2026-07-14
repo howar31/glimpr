@@ -1764,5 +1764,41 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get gifEditorCrop => 'Crop';
+
+  @override
+  String get gifEditorCropHint => 'Drag on the preview to choose an area';
+
+  @override
+  String get gifEditorResize => 'Resize';
+
+  @override
+  String get gifEditorFlipH => 'Flip horizontal';
+
+  @override
+  String get gifEditorFlipV => 'Flip vertical';
+
+  @override
+  String get gifEditorRotateLeft => 'Rotate left';
+
+  @override
+  String get gifEditorRotateRight => 'Rotate right';
+
+  @override
+  String get gifEditorWidth => 'Width';
+
+  @override
+  String get gifEditorHeight => 'Height';
+
+  @override
+  String get gifEditorKeepAspect => 'Lock aspect ratio';
+
+  @override
+  String get gifEditorProcessing => 'Processing';
+
+  @override
+  String get gifEditorCancel => 'Cancel';
+
+  @override
   String get trayOpenGifEditor => 'Open GIF Editor';
 }

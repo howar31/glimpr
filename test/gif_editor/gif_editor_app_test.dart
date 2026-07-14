@@ -390,6 +390,114 @@ void main() {
     expect(c.doc!.frameCount, 3);
   });
 
+  Future<GifEditorController> preloadedSized(
+      WidgetTester tester, int w, int h) async {
+    final c = GifEditorController();
+    addTearDown(c.dispose);
+    final rgba = Uint8List(w * h * 4);
+    for (var i = 0; i < w * h; i++) {
+      rgba[i * 4] = 60;
+      rgba[i * 4 + 1] = 120;
+      rgba[i * 4 + 2] = 180;
+      rgba[i * 4 + 3] = 255;
+    }
+    await tester.runAsync(() => c.openBytes(encodeGifFrames(
+        frames: [FrameSpec(rgba, 100)], width: w, height: h, loopCount: 0)));
+    return c;
+  }
+
+  Future<void> pumpUntilDone(
+      WidgetTester tester, bool Function() cond) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (!cond() && DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+  }
+
+  testWidgets('crop mode: drag a rect on the preview and apply',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedSized(tester, 100, 50);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-crop')));
+    await tester.pump();
+    final overlay = find.byKey(const Key('gif-crop-overlay'));
+    expect(overlay, findsOneWidget);
+    expect(find.text(_en.gifEditorCropHint), findsOneWidget);
+    // Map image coords through the same contain-fit math the overlay uses.
+    final box = tester.getRect(overlay);
+    final scale = (box.width / 100 < box.height / 50)
+        ? box.width / 100
+        : box.height / 50;
+    final off = Offset(box.left + (box.width - 100 * scale) / 2,
+        box.top + (box.height - 50 * scale) / 2);
+    Offset img(double x, double y) =>
+        Offset(off.dx + x * scale, off.dy + y * scale);
+    // Drag from image (20, 10) to (80, 40): a 60x30 rect.
+    final gesture = await tester.startGesture(img(20, 10));
+    await gesture.moveTo(img(80, 40));
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('60×30'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gif-crop-apply')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => c.doc!.frames.first.width == 60);
+    expect(c.doc!.frames.first.width, 60);
+    expect(c.doc!.frames.first.height, 30);
+    // Crop mode exited.
+    expect(find.byKey(const Key('gif-crop-overlay')), findsNothing);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('resize panel: aspect-locked fields apply', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedSized(tester, 100, 50);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-resize')));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-resize-panel')), findsOneWidget);
+    // Fields seed from the document.
+    expect(
+        (tester
+                .widget<TextField>(find.byKey(const Key('gif-resize-w')))
+                .controller)!
+            .text,
+        '100');
+    // Editing width rewrites height through the lock.
+    await tester.enterText(find.byKey(const Key('gif-resize-w')), '50');
+    await tester.pump();
+    expect(
+        (tester
+                .widget<TextField>(find.byKey(const Key('gif-resize-h')))
+                .controller)!
+            .text,
+        '25');
+    await tester.tap(find.byKey(const Key('gif-resize-apply')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => c.doc!.frames.first.width == 50);
+    expect(c.doc!.frames.first.width, 50);
+    expect(c.doc!.frames.first.height, 25);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('rotate button swaps document dimensions', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedSized(tester, 100, 50);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-rotate-right')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => c.doc!.frames.first.width == 50);
+    expect(c.doc!.frames.first.width, 50);
+    expect(c.doc!.frames.first.height, 100);
+    // Undo brings the original canvas back.
+    await tester.tap(find.byKey(const Key('gif-op-undo')));
+    await tester.pump();
+    expect(c.doc!.frames.first.width, 100);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.

@@ -1704,5 +1704,41 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get gifEditorCrop => '裁切';
+
+  @override
+  String get gifEditorCropHint => '在預覽上拖曳選取範圍';
+
+  @override
+  String get gifEditorResize => '調整大小';
+
+  @override
+  String get gifEditorFlipH => '水平翻轉';
+
+  @override
+  String get gifEditorFlipV => '垂直翻轉';
+
+  @override
+  String get gifEditorRotateLeft => '向左旋轉';
+
+  @override
+  String get gifEditorRotateRight => '向右旋轉';
+
+  @override
+  String get gifEditorWidth => '寬度';
+
+  @override
+  String get gifEditorHeight => '高度';
+
+  @override
+  String get gifEditorKeepAspect => '鎖定比例';
+
+  @override
+  String get gifEditorProcessing => '處理中';
+
+  @override
+  String get gifEditorCancel => '取消';
+
+  @override
   String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }

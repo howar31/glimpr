@@ -2119,6 +2119,54 @@
       "total": { "type": "int" }
     }
   },
+  "gifEditorCrop": "Crop",
+  "@gifEditorCrop": {
+    "description": "GIF Editor toolbar: crop mode toggle tooltip"
+  },
+  "gifEditorCropHint": "Drag on the preview to choose an area",
+  "@gifEditorCropHint": {
+    "description": "GIF Editor crop mode: hint shown before a rectangle is drawn"
+  },
+  "gifEditorResize": "Resize",
+  "@gifEditorResize": {
+    "description": "GIF Editor toolbar: resize panel trigger tooltip"
+  },
+  "gifEditorFlipH": "Flip horizontal",
+  "@gifEditorFlipH": {
+    "description": "GIF Editor toolbar: mirror frames left-right"
+  },
+  "gifEditorFlipV": "Flip vertical",
+  "@gifEditorFlipV": {
+    "description": "GIF Editor toolbar: mirror frames top-bottom"
+  },
+  "gifEditorRotateLeft": "Rotate left",
+  "@gifEditorRotateLeft": {
+    "description": "GIF Editor toolbar: rotate frames a quarter turn counter-clockwise"
+  },
+  "gifEditorRotateRight": "Rotate right",
+  "@gifEditorRotateRight": {
+    "description": "GIF Editor toolbar: rotate frames a quarter turn clockwise"
+  },
+  "gifEditorWidth": "Width",
+  "@gifEditorWidth": {
+    "description": "GIF Editor resize panel: width field label"
+  },
+  "gifEditorHeight": "Height",
+  "@gifEditorHeight": {
+    "description": "GIF Editor resize panel: height field label"
+  },
+  "gifEditorKeepAspect": "Lock aspect ratio",
+  "@gifEditorKeepAspect": {
+    "description": "GIF Editor resize panel: aspect-lock toggle label"
+  },
+  "gifEditorProcessing": "Processing",
+  "@gifEditorProcessing": {
+    "description": "GIF Editor toolbar: label while a canvas transform runs (a percentage follows)"
+  },
+  "gifEditorCancel": "Cancel",
+  "@gifEditorCancel": {
+    "description": "GIF Editor crop confirm bar: cancel button"
+  },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
     "description": "Tray menu: reveal the GIF Editor window (provisional entry)"

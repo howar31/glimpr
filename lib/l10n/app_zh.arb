@@ -542,5 +542,17 @@
   "gifEditorCopy": "複製",
   "gifEditorPaste": "貼上",
   "gifEditorSelectedCount": "已選取 {selected}／{total} 幀",
+  "gifEditorCrop": "裁切",
+  "gifEditorCropHint": "在預覽上拖曳選取範圍",
+  "gifEditorResize": "調整大小",
+  "gifEditorFlipH": "水平翻轉",
+  "gifEditorFlipV": "垂直翻轉",
+  "gifEditorRotateLeft": "向左旋轉",
+  "gifEditorRotateRight": "向右旋轉",
+  "gifEditorWidth": "寬度",
+  "gifEditorHeight": "高度",
+  "gifEditorKeepAspect": "鎖定比例",
+  "gifEditorProcessing": "處理中",
+  "gifEditorCancel": "取消",
   "trayOpenGifEditor": "開啟 GIF 編輯器"
 }
