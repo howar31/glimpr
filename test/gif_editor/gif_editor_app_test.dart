@@ -670,6 +670,91 @@ void main() {
     expect([bytes[o], bytes[o + 1], bytes[o + 2]], [60, 120, 180]);
   }, timeout: const Timeout(Duration(seconds: 60)));
 
+  testWidgets('transition panel inserts generated frames', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1], [100, 150]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    c.clearSelection();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('gif-op-transition')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-transition')));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-transition-panel')), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('gif-transition-steps')), '2');
+    await tester.tap(find.byKey(const Key('gif-transition-apply')));
+    await tester.pump();
+    await pumpUntilDone(
+        tester, () => !c.transforming && c.doc!.frameCount == 4);
+    expect(c.doc!.frameCount, 4);
+    expect(c.doc!.frames[1].delayMs, 33);
+    expect(c.selection, {1, 2});
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('smooth loop appends the default fade run', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1], [100, 150]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    c.clearSelection();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('gif-op-smooth-loop')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-smooth-loop')));
+    await tester.pump();
+    await pumpUntilDone(
+        tester, () => !c.transforming && c.doc!.frameCount == 12);
+    expect(c.doc!.frameCount, 12); // 2 + default 10 steps
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('cinemagraph mode drags a region and applies', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedSized(tester, 100, 50);
+    // A second, different frame so freezing has something to freeze.
+    await tester.runAsync(() async {
+      c.selectAll();
+      c.copySelected();
+      c.pasteFrames();
+      c.clearSelection();
+      c.seek(0);
+    });
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester
+        .ensureVisible(find.byKey(const Key('gif-op-cinemagraph')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-cinemagraph')));
+    await tester.pump();
+    final overlay = find.byKey(const Key('gif-crop-overlay'));
+    expect(overlay, findsOneWidget);
+    // Map image coords through the overlay's contain-fit math (the small
+    // image renders as a 1:1 card; distant drags clamp to nothing).
+    final box = tester.getRect(overlay);
+    final scale = (box.width / 100 < box.height / 50)
+        ? box.width / 100
+        : box.height / 50;
+    final off = Offset(box.left + (box.width - 100 * scale) / 2,
+        box.top + (box.height - 50 * scale) / 2);
+    Offset img(double x, double y) =>
+        Offset(off.dx + x * scale, off.dy + y * scale);
+    final gesture = await tester.startGesture(img(20, 10));
+    await tester.pump();
+    await gesture.moveTo(img(80, 40));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    final keyBefore = c.doc!.frames.last.key;
+    await tester.tap(find.byKey(const Key('gif-crop-apply')));
+    await tester.pump();
+    await pumpUntilDone(tester,
+        () => !c.transforming && c.doc!.frames.last.key != keyBefore);
+    expect(c.doc!.frames.last.key, isNot(keyBefore));
+    expect(c.doc!.frameCount, 2);
+    expect(find.byKey(const Key('gif-crop-overlay')), findsNothing);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.

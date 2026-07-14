@@ -3458,6 +3458,66 @@ abstract class AppLocalizations {
   /// **'Border'**
   String get gifEditorBorder;
 
+  /// GIF Editor toolbar: transition panel trigger (generated in-between frames)
+  ///
+  /// In en, this message translates to:
+  /// **'Transition'**
+  String get gifEditorTransition;
+
+  /// GIF Editor transition panel: crossfade mode
+  ///
+  /// In en, this message translates to:
+  /// **'Fade'**
+  String get gifEditorTransitionFade;
+
+  /// GIF Editor transition panel: slide-in mode
+  ///
+  /// In en, this message translates to:
+  /// **'Slide'**
+  String get gifEditorTransitionSlide;
+
+  /// GIF Editor transition panel: generated frame count field label
+  ///
+  /// In en, this message translates to:
+  /// **'Frames'**
+  String get gifEditorTransitionSteps;
+
+  /// GIF Editor transition panel: slide enters from the left
+  ///
+  /// In en, this message translates to:
+  /// **'Left'**
+  String get gifEditorDirLeft;
+
+  /// GIF Editor transition panel: slide enters from the right
+  ///
+  /// In en, this message translates to:
+  /// **'Right'**
+  String get gifEditorDirRight;
+
+  /// GIF Editor transition panel: slide enters from the top
+  ///
+  /// In en, this message translates to:
+  /// **'Top'**
+  String get gifEditorDirUp;
+
+  /// GIF Editor transition panel: slide enters from the bottom
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom'**
+  String get gifEditorDirDown;
+
+  /// GIF Editor toolbar: append a fade from the last frame back to the first
+  ///
+  /// In en, this message translates to:
+  /// **'Smooth loop'**
+  String get gifEditorSmoothLoop;
+
+  /// GIF Editor toolbar: freeze everything outside a chosen region
+  ///
+  /// In en, this message translates to:
+  /// **'Cinemagraph'**
+  String get gifEditorCinemagraph;
+
   /// Tray menu: reveal the GIF Editor window (provisional entry)
   ///
   /// In en, this message translates to:

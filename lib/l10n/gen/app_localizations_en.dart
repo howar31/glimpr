@@ -1820,5 +1820,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorBorder => 'Border';
 
   @override
+  String get gifEditorTransition => 'Transition';
+
+  @override
+  String get gifEditorTransitionFade => 'Fade';
+
+  @override
+  String get gifEditorTransitionSlide => 'Slide';
+
+  @override
+  String get gifEditorTransitionSteps => 'Frames';
+
+  @override
+  String get gifEditorDirLeft => 'Left';
+
+  @override
+  String get gifEditorDirRight => 'Right';
+
+  @override
+  String get gifEditorDirUp => 'Top';
+
+  @override
+  String get gifEditorDirDown => 'Bottom';
+
+  @override
+  String get gifEditorSmoothLoop => 'Smooth loop';
+
+  @override
+  String get gifEditorCinemagraph => 'Cinemagraph';
+
+  @override
   String get trayOpenGifEditor => 'Open GIF Editor';
 }

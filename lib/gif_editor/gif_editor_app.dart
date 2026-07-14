@@ -30,6 +30,7 @@ import 'export_service.dart';
 import 'frame_store.dart';
 import 'gif_document.dart';
 import 'gif_editor_controller.dart';
+import 'motion.dart';
 
 /// Standalone GIF Editor window (the third editor surface, next to the
 /// Settings window and the Image Editor). Same Aurora chrome recipe as the
@@ -83,6 +84,8 @@ class _GifEditorAppState extends State<GifEditorApp>
     _resizeW.dispose();
     _resizeH.dispose();
     _borderW.dispose();
+    _transSteps.dispose();
+    _transDelay.dispose();
     _annotate?.dispose();
     _annotateActive.dispose();
     _toastTimer?.cancel();
@@ -134,6 +137,28 @@ class _GifEditorAppState extends State<GifEditorApp>
   static const List<int> _borderSwatches = [
     0xFF000000, 0xFFFFFFFF, 0xFF8E8E93, 0xFFFF3B30, 0xFF60A5FA, 0xFFFFCC00,
   ];
+
+  // Transition panel state.
+  bool _transFade = true;
+  SlideFrom _transFrom = SlideFrom.right;
+  final TextEditingController _transSteps = TextEditingController(text: '10');
+  final TextEditingController _transDelay = TextEditingController(text: '33');
+
+  // Cinemagraph mode shares the crop overlay's rect state.
+  bool _cinemagraphMode = false;
+
+  void _applyCinemagraph() {
+    final r = _cropRect;
+    setState(_closePanels);
+    if (r == null) return;
+    final x = r.left.round();
+    final y = r.top.round();
+    final w = r.right.round() - x;
+    final h = r.bottom.round() - y;
+    if (w >= 1 && h >= 1) {
+      unawaited(_c.cinemagraph(x, y, w, h));
+    }
+  }
 
   // Crop mode: the rect lives in IMAGE pixel coordinates.
   bool _cropMode = false;
@@ -230,6 +255,7 @@ class _GifEditorAppState extends State<GifEditorApp>
     _optionsOpen = false;
     _panel = _TimelinePanel.none;
     _cropMode = false;
+    _cinemagraphMode = false;
     _cropRect = null;
     _annotateMode = false;
     // Dispose the editor controller only after the frame that unmounts
@@ -477,12 +503,14 @@ class _GifEditorAppState extends State<GifEditorApp>
                 _c.deleteSelected,
             const SingleActivator(LogicalKeyboardKey.backspace):
                 _c.deleteSelected,
-            // Crop mode commits on Enter; Escape backs out of any panel.
+            // Rect modes commit on Enter; Escape backs out of any panel.
             const SingleActivator(LogicalKeyboardKey.enter): () {
               if (_cropMode) _applyCrop();
+              if (_cinemagraphMode) _applyCinemagraph();
             },
             const SingleActivator(LogicalKeyboardKey.escape): () {
               if (_cropMode ||
+                  _cinemagraphMode ||
                   _optionsOpen ||
                   _panel != _TimelinePanel.none) {
                 setState(_closePanels);
@@ -547,6 +575,8 @@ class _GifEditorAppState extends State<GifEditorApp>
                         _resizePanel(tokens),
                       if (_panel == _TimelinePanel.border)
                         _borderPanel(tokens),
+                      if (_panel == _TimelinePanel.transition)
+                        _transitionPanel(tokens),
                     ],
                     _toastLayer(tokens),
                   ],
@@ -653,14 +683,16 @@ class _GifEditorAppState extends State<GifEditorApp>
                   padding: const EdgeInsets.all(24),
                   child: _annotateMode
                       ? _annotateSurface(t)
-                      : _cropMode
+                      : _cropMode || _cinemagraphMode
                           ? _CropOverlay(
                               store: store,
                               frame: frame,
                               rect: _cropRect,
                               onRectChanged: (r) =>
                                   setState(() => _cropRect = r),
-                              onApply: _applyCrop,
+                              onApply: _cinemagraphMode
+                                  ? _applyCinemagraph
+                                  : _applyCrop,
                               onCancel: () => setState(_closePanels),
                             )
                           : _FramePreview(store: store, frame: frame),
@@ -841,6 +873,25 @@ class _GifEditorAppState extends State<GifEditorApp>
             enabled: !busy,
             onTap: () => unawaited(_c.insertTitleFrame()),
           ),
+          _OpButton(
+            key: const Key('gif-op-transition'),
+            icon: Icons.gradient_rounded,
+            tooltip: _l.gifEditorTransition,
+            enabled: many,
+            active: _panel == _TimelinePanel.transition,
+            onTap: () => setState(() {
+              final open = _panel == _TimelinePanel.transition;
+              _closePanels();
+              if (!open) _panel = _TimelinePanel.transition;
+            }),
+          ),
+          _OpButton(
+            key: const Key('gif-op-smooth-loop'),
+            icon: Icons.all_inclusive_rounded,
+            tooltip: _l.gifEditorSmoothLoop,
+            enabled: many,
+            onTap: () => unawaited(_c.smoothLoop()),
+          ),
           divider(),
           _OpButton(
             key: const Key('gif-op-delete'),
@@ -989,6 +1040,19 @@ class _GifEditorAppState extends State<GifEditorApp>
             enabled: many,
             onTap: () => unawaited(
                 _c.bakeProgressBar(color: GlimprTokens.accent)),
+          ),
+          _OpButton(
+            key: const Key('gif-op-cinemagraph'),
+            icon: Icons.motion_photos_on_rounded,
+            tooltip: _l.gifEditorCinemagraph,
+            enabled: many,
+            active: _cinemagraphMode,
+            onTap: () => setState(() {
+              final was = _cinemagraphMode;
+              _closePanels();
+              _cinemagraphMode = !was;
+              if (_cinemagraphMode) _c.pause();
+            }),
           ),
                 ],
               ),
@@ -1220,6 +1284,115 @@ class _GifEditorAppState extends State<GifEditorApp>
                   },
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Transition panel: fade or slide (with a direction), generated frame
+  /// count and per-frame delay; applies between the current frame and the
+  /// next (the last frame wraps to the first).
+  Widget _transitionPanel(GlimprTokens t) {
+    Widget numField(Key key, TextEditingController ctrl, String label,
+            String suffix) =>
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: GlimprType.sansStyle(12, 500, t.fg3)),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 56,
+              child: TextField(
+                key: key,
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(4),
+                ],
+                textAlign: TextAlign.center,
+                style: GlimprType.sansStyle(12.5, 600, t.fg1),
+                decoration: _fieldDecoration(t),
+              ),
+            ),
+            if (suffix.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Text(suffix, style: GlimprType.sansStyle(12, 500, t.fg3)),
+            ],
+          ],
+        );
+
+    return Positioned(
+      left: 12,
+      bottom: 86 + 40 + 8,
+      child: Container(
+        key: const Key('gif-transition-panel'),
+        width: 356,
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+        decoration: _panelDecoration(t),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.gifEditorTransition,
+                style: GlimprType.sansStyle(11.5, 600, t.fg3,
+                    letterSpacing: 0.2)),
+            const SizedBox(height: 10),
+            Segmented<bool>(
+              value: _transFade,
+              onChanged: (v) => setState(() => _transFade = v),
+              options: [
+                (true, _l.gifEditorTransitionFade),
+                (false, _l.gifEditorTransitionSlide),
+              ],
+            ),
+            if (!_transFade) ...[
+              const SizedBox(height: 8),
+              Segmented<SlideFrom>(
+                value: _transFrom,
+                onChanged: (v) => setState(() => _transFrom = v),
+                options: [
+                  (SlideFrom.left, _l.gifEditorDirLeft),
+                  (SlideFrom.right, _l.gifEditorDirRight),
+                  (SlideFrom.top, _l.gifEditorDirUp),
+                  (SlideFrom.bottom, _l.gifEditorDirDown),
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                numField(const Key('gif-transition-steps'), _transSteps,
+                    _l.gifEditorTransitionSteps, ''),
+                const SizedBox(width: 12),
+                numField(const Key('gif-transition-delay'), _transDelay,
+                    _l.gifEditorDelay, 'ms'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: AccentButton(
+                _l.gifEditorApply,
+                key: const Key('gif-transition-apply'),
+                onTap: () {
+                  final steps = int.tryParse(_transSteps.text);
+                  final delay = int.tryParse(_transDelay.text);
+                  final fade = _transFade;
+                  final from = _transFrom;
+                  setState(_closePanels);
+                  if (steps != null && steps > 0 && delay != null) {
+                    unawaited(_c.insertTransition(
+                      fade: fade,
+                      from: from,
+                      steps: steps,
+                      stepDelayMs: delay,
+                    ));
+                  }
+                },
+              ),
             ),
           ],
         ),
@@ -1717,7 +1890,7 @@ class _GifEditorAppState extends State<GifEditorApp>
 }
 
 /// Which timeline panel is open above the ops row.
-enum _TimelinePanel { none, delay, reduce, resize, border }
+enum _TimelinePanel { none, delay, reduce, resize, border, transition }
 
 /// Delay-popover operation modes.
 enum _DelayMode { set, adjust, scale }

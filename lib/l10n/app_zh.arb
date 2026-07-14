@@ -560,5 +560,15 @@
   "gifEditorTitleFrame": "插入標題幀",
   "gifEditorProgressBar": "進度列",
   "gifEditorBorder": "邊框",
+  "gifEditorTransition": "轉場",
+  "gifEditorTransitionFade": "淡出",
+  "gifEditorTransitionSlide": "滑動",
+  "gifEditorTransitionSteps": "幀數",
+  "gifEditorDirLeft": "左",
+  "gifEditorDirRight": "右",
+  "gifEditorDirUp": "上",
+  "gifEditorDirDown": "下",
+  "gifEditorSmoothLoop": "平滑循環",
+  "gifEditorCinemagraph": "局部動態",
   "trayOpenGifEditor": "開啟 GIF 編輯器"
 }

@@ -2192,6 +2192,46 @@
   "@gifEditorBorder": {
     "description": "GIF Editor toolbar: border panel trigger"
   },
+  "gifEditorTransition": "Transition",
+  "@gifEditorTransition": {
+    "description": "GIF Editor toolbar: transition panel trigger (generated in-between frames)"
+  },
+  "gifEditorTransitionFade": "Fade",
+  "@gifEditorTransitionFade": {
+    "description": "GIF Editor transition panel: crossfade mode"
+  },
+  "gifEditorTransitionSlide": "Slide",
+  "@gifEditorTransitionSlide": {
+    "description": "GIF Editor transition panel: slide-in mode"
+  },
+  "gifEditorTransitionSteps": "Frames",
+  "@gifEditorTransitionSteps": {
+    "description": "GIF Editor transition panel: generated frame count field label"
+  },
+  "gifEditorDirLeft": "Left",
+  "@gifEditorDirLeft": {
+    "description": "GIF Editor transition panel: slide enters from the left"
+  },
+  "gifEditorDirRight": "Right",
+  "@gifEditorDirRight": {
+    "description": "GIF Editor transition panel: slide enters from the right"
+  },
+  "gifEditorDirUp": "Top",
+  "@gifEditorDirUp": {
+    "description": "GIF Editor transition panel: slide enters from the top"
+  },
+  "gifEditorDirDown": "Bottom",
+  "@gifEditorDirDown": {
+    "description": "GIF Editor transition panel: slide enters from the bottom"
+  },
+  "gifEditorSmoothLoop": "Smooth loop",
+  "@gifEditorSmoothLoop": {
+    "description": "GIF Editor toolbar: append a fade from the last frame back to the first"
+  },
+  "gifEditorCinemagraph": "Cinemagraph",
+  "@gifEditorCinemagraph": {
+    "description": "GIF Editor toolbar: freeze everything outside a chosen region"
+  },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
     "description": "Tray menu: reveal the GIF Editor window (provisional entry)"

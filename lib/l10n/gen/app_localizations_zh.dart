@@ -1760,5 +1760,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorBorder => '邊框';
 
   @override
+  String get gifEditorTransition => '轉場';
+
+  @override
+  String get gifEditorTransitionFade => '淡出';
+
+  @override
+  String get gifEditorTransitionSlide => '滑動';
+
+  @override
+  String get gifEditorTransitionSteps => '幀數';
+
+  @override
+  String get gifEditorDirLeft => '左';
+
+  @override
+  String get gifEditorDirRight => '右';
+
+  @override
+  String get gifEditorDirUp => '上';
+
+  @override
+  String get gifEditorDirDown => '下';
+
+  @override
+  String get gifEditorSmoothLoop => '平滑循環';
+
+  @override
+  String get gifEditorCinemagraph => '局部動態';
+
+  @override
   String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }
