@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+
+import 'transform.dart' show resizeBilinear;
 
 /// Opaque identity of one stored frame. Value semantics so documents and
 /// undo mementos can reference frames cheaply.
@@ -110,6 +113,47 @@ class FrameStore {
     return img;
   }
 
+  /// Thumbnail LRU capacity: small images (a few KB each), so a whole long
+  /// filmstrip can stay warm.
+  static const int thumbCacheCap = 256;
+
+  final LinkedHashMap<FrameKey, ui.Image> _thumbs =
+      LinkedHashMap<FrameKey, ui.Image>();
+
+  /// A small decoded image for the filmstrip: the frame downscaled so its
+  /// LONG side is [target] px (never upscaled). Full frames through
+  /// [image]'s LRU are ~8MB each at 1080p and the strip evicts them under
+  /// scrolling; thumbnails make long documents cheap. The downscale runs on
+  /// a worker isolate (file read + bilinear), only the small decode happens
+  /// here.
+  Future<ui.Image> thumbnail(
+      FrameKey key, int width, int height, int target) async {
+    final cached = _thumbs.remove(key);
+    if (cached != null) {
+      _thumbs[key] = cached;
+      return cached;
+    }
+    final long = width > height ? width : height;
+    final scale = long <= target ? 1.0 : target / long;
+    final tw = (width * scale).round().clamp(1, width);
+    final th = (height * scale).round().clamp(1, height);
+    final path = pathFor(key);
+    final small = await Isolate.run(() async {
+      final rgba = await File(path).readAsBytes();
+      return resizeBilinear(rgba, width, height, tw, th);
+    });
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+        small, tw, th, ui.PixelFormat.rgba8888, completer.complete);
+    final img = await completer.future;
+    _thumbs[key] = img;
+    if (_thumbs.length > thumbCacheCap) {
+      // Evict without disposing (same reasoning as the full-image cache).
+      _thumbs.remove(_thumbs.keys.first);
+    }
+    return img;
+  }
+
   /// Drop every cached image and delete the backing directory. Best-effort:
   /// on Windows the recursive delete fails with a sharing violation while an
   /// async frame read is still in flight (document swap / teardown race) —
@@ -120,6 +164,10 @@ class FrameStore {
       img.dispose();
     }
     _images.clear();
+    for (final img in _thumbs.values) {
+      img.dispose();
+    }
+    _thumbs.clear();
     try {
       if (dir.existsSync()) {
         await dir.delete(recursive: true);

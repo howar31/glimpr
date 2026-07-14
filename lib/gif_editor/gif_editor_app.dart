@@ -71,6 +71,16 @@ class _GifEditorAppState extends State<GifEditorApp>
     _ownsController = widget.controller == null;
     _c = widget.controller ?? GifEditorController();
     _c.addListener(_onControllerChanged);
+    // Native pushes (a file dropped on the window).
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'loadPath') {
+        final path = call.arguments as String?;
+        if (path != null && path.isNotEmpty && !_c.opening) {
+          unawaited(_openFromPath(path));
+        }
+      }
+      return null;
+    });
   }
 
   @override
@@ -341,6 +351,12 @@ class _GifEditorAppState extends State<GifEditorApp>
       path = await _channel.invokeMethod<String>('openPanel');
     }
     if (path == null || path.isEmpty || !mounted) return;
+    await _openFromPath(path);
+  }
+
+  /// Open [path] as the document (picker and drag-drop route). Replaces the
+  /// current document directly, exactly like cmd-O.
+  Future<void> _openFromPath(String path) async {
     try {
       final bytes = await File(path).readAsBytes();
       await _c.openBytes(bytes);
@@ -348,7 +364,7 @@ class _GifEditorAppState extends State<GifEditorApp>
       final dot = base.lastIndexOf('.');
       _sourceName = dot > 0 ? base.substring(0, dot) : base;
     } catch (_) {
-      _toast(_l.gifEditorOpenFailed);
+      if (mounted) _toast(_l.gifEditorOpenFailed);
     }
   }
 
@@ -503,6 +519,32 @@ class _GifEditorAppState extends State<GifEditorApp>
                 _c.deleteSelected,
             const SingleActivator(LogicalKeyboardKey.backspace):
                 _c.deleteSelected,
+            // Frame navigation (not while annotating: EditorCore owns
+            // arrows for nudging there).
+            const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
+              if (_c.doc != null && !_annotateMode) {
+                _c.pause();
+                _c.seek(_c.current - 1);
+              }
+            },
+            const SingleActivator(LogicalKeyboardKey.arrowRight): () {
+              if (_c.doc != null && !_annotateMode) {
+                _c.pause();
+                _c.seek(_c.current + 1);
+              }
+            },
+            const SingleActivator(LogicalKeyboardKey.home): () {
+              if (_c.doc != null && !_annotateMode) {
+                _c.pause();
+                _c.seek(0);
+              }
+            },
+            const SingleActivator(LogicalKeyboardKey.end): () {
+              if (_c.doc != null && !_annotateMode) {
+                _c.pause();
+                _c.seek(_c.doc!.frameCount - 1);
+              }
+            },
             // Rect modes commit on Enter; Escape backs out of any panel.
             const SingleActivator(LogicalKeyboardKey.enter): () {
               if (_cropMode) _applyCrop();
@@ -1813,7 +1855,8 @@ class _GifEditorAppState extends State<GifEditorApp>
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          _FramePreview(store: store, frame: f),
+                          _FramePreview(
+                              store: store, frame: f, thumbnailTarget: 168),
                           if (isSelected)
                             Container(
                                 color:
@@ -2262,11 +2305,16 @@ class _CropPainter extends CustomPainter {
 
 /// Paints one stored frame, keeping the PREVIOUS image on screen while the
 /// next one decodes (a FutureBuilder would flash empty on every seek).
+/// [thumbnailTarget] switches to the store's small thumbnail cache (the
+/// filmstrip): full frames are ~8MB of decoded pixels each at 1080p and the
+/// tile only paints ~84 logical px.
 class _FramePreview extends StatefulWidget {
-  const _FramePreview({required this.store, required this.frame});
+  const _FramePreview(
+      {required this.store, required this.frame, this.thumbnailTarget});
 
   final FrameStore store;
   final GifFrame frame;
+  final int? thumbnailTarget;
 
   @override
   State<_FramePreview> createState() => _FramePreviewState();
@@ -2290,9 +2338,12 @@ class _FramePreviewState extends State<_FramePreview> {
 
   Future<void> _load() async {
     final f = widget.frame;
+    final target = widget.thumbnailTarget;
     final ui.Image img;
     try {
-      img = await widget.store.image(f.key, f.width, f.height);
+      img = target == null
+          ? await widget.store.image(f.key, f.width, f.height)
+          : await widget.store.thumbnail(f.key, f.width, f.height, target);
     } catch (_) {
       // The store can be disposed mid-load (home / document swap); the
       // widget unmounts moments later, so just keep the stale image.

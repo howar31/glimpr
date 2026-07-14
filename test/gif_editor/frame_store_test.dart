@@ -77,5 +77,27 @@ void main() {
       await store.dispose();
       expect(dir.existsSync(), isFalse);
     });
+
+    test('thumbnail downscales the long side to the target', () async {
+      // 8x4 solid teal downscales to 4x2; never upscales a small frame.
+      final rgba = Uint8List(8 * 4 * 4);
+      for (var i = 0; i < 8 * 4; i++) {
+        rgba[i * 4] = 0;
+        rgba[i * 4 + 1] = 128;
+        rgba[i * 4 + 2] = 128;
+        rgba[i * 4 + 3] = 255;
+      }
+      final key = await store.put(rgba, 8, 4);
+      final thumb = await store.thumbnail(key, 8, 4, 4);
+      expect(thumb.width, 4);
+      expect(thumb.height, 2);
+      final data = await thumb.toByteData();
+      expect(data!.getUint8(1), 128); // solid survives the downscale
+      final same = await store.thumbnail(key, 8, 4, 4);
+      expect(identical(thumb, same), isTrue); // cached (keyed per frame)
+      final key2 = await store.put(rgba, 8, 4);
+      final small = await store.thumbnail(key2, 8, 4, 100);
+      expect(small.width, 8); // no upscale
+    });
   });
 }

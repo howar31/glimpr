@@ -755,6 +755,45 @@ void main() {
     expect(find.byKey(const Key('gif-crop-overlay')), findsNothing);
   }, timeout: const Timeout(Duration(seconds: 60)));
 
+  testWidgets('native loadPath push opens the dropped file', (tester) async {
+    final dir = (await tester
+        .runAsync(() => Directory.systemTemp.createTemp('gifed_drop')))!;
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final gifPath = '${dir.path}/dropped.gif';
+    File(gifPath).writeAsBytesSync(twoFrameGifFixture());
+    mockMethodChannel(_channel);
+    await tester.pumpWidget(const GifEditorApp());
+    await tester.pump();
+    await pushFromNative(_channel, 'loadPath', gifPath);
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (find.byKey(const Key('gif-editor-canvas')).evaluate().isEmpty &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('arrow keys step frames, home and end jump', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1, 2], [100, 100, 100]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(c.current, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.pump();
+    expect(c.current, 2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(c.current, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
+    await tester.pump();
+    expect(c.current, 0);
+  });
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.
