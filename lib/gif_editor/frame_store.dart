@@ -43,14 +43,33 @@ class FrameStore {
   int _nextKey = 0;
   final LinkedHashMap<FrameKey, ui.Image> _images =
       LinkedHashMap<FrameKey, ui.Image>();
+  final Map<FrameKey, int> _hashes = {};
 
   /// Persist one frame of raw RGBA pixels; returns its key.
   Future<FrameKey> put(Uint8List rgba, int width, int height) async {
     assert(rgba.length == width * height * 4,
         'rgba length must be width*height*4');
     final key = FrameKey(_nextKey++);
+    _hashes[key] = _fnv1a(rgba);
     await File(pathFor(key)).writeAsBytes(rgba, flush: false);
     return key;
+  }
+
+  /// Content hash of the stored pixels (FNV-1a 64-bit, computed at [put]).
+  ///
+  /// Duplicate detection compares HASHES ONLY: reading frames back for a
+  /// byte confirm would pull the whole document through the UI isolate
+  /// (hundreds of MB), and an accidental 64-bit collision between two
+  /// different frames of one recording is not a realistic event.
+  int hashFor(FrameKey key) => _hashes[key]!;
+
+  static int _fnv1a(Uint8List bytes) {
+    var h = 0xcbf29ce484222325;
+    for (final b in bytes) {
+      h ^= b;
+      h *= 0x100000001b3;
+    }
+    return h;
   }
 
   /// Absolute path of the raw RGBA file for [key]. The export isolate reads

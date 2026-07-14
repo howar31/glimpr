@@ -294,6 +294,60 @@ class GifEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Collapse runs of consecutive identical frames (store content hash);
+  /// the run's first frame survives and absorbs the removed delays.
+  void removeDuplicates() {
+    final doc = _doc;
+    final store = _store;
+    if (doc == null || store == null || doc.frameCount < 2) return;
+    final kept = <GifFrame>[doc.frames.first];
+    var changed = false;
+    for (var i = 1; i < doc.frameCount; i++) {
+      final f = doc.frames[i];
+      final last = kept.last;
+      if (store.hashFor(f.key) == store.hashFor(last.key) &&
+          f.width == last.width &&
+          f.height == last.height) {
+        kept[kept.length - 1] = last.withDelay(last.delayMs + f.delayMs);
+        changed = true;
+      } else {
+        kept.add(f);
+      }
+    }
+    if (!changed) return;
+    pause();
+    _pushUndo();
+    _doc = GifDocument(frames: kept, loopCount: doc.loopCount);
+    _selection.clear();
+    _selAnchor = null;
+    _current = _current.clamp(0, kept.length - 1);
+    notifyListeners();
+  }
+
+  /// Keep the first frame of every [keepEvery]-sized group; the removed
+  /// frames' delays merge into their group's survivor, so the total
+  /// duration is preserved while the frame rate drops.
+  void reduceFrames(int keepEvery) {
+    assert(keepEvery >= 2);
+    final doc = _doc;
+    if (doc == null || doc.frameCount < 2) return;
+    pause();
+    _pushUndo();
+    final kept = <GifFrame>[];
+    for (var i = 0; i < doc.frameCount; i += keepEvery) {
+      var delay = doc.frames[i].delayMs;
+      for (var k = i + 1; k < i + keepEvery && k < doc.frameCount; k++) {
+        delay += doc.frames[k].delayMs;
+      }
+      kept.add(doc.frames[i].withDelay(delay));
+    }
+    _doc = GifDocument(frames: kept, loopCount: doc.loopCount);
+    _selection.clear();
+    _selAnchor = null;
+    _current = (_current ~/ keepEvery).clamp(0, kept.length - 1);
+    notifyListeners();
+  }
+
   /// Append the whole sequence reversed (forward-then-back playback).
   void yoyo() {
     final doc = _doc;

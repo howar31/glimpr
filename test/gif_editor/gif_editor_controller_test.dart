@@ -270,6 +270,46 @@ void main() {
     });
   });
 
+  group('removeDuplicates / reduceFrames', () {
+    List<int> delays() => [for (final f in c.doc!.frames) f.delayMs];
+
+    test('collapses consecutive identical frames and merges delays',
+        () async {
+      await openN([0, 1, 1, 2], [100, 150, 200, 250]);
+      c.removeDuplicates();
+      expect(delays(), [100, 350, 250]);
+      expect(c.selection, isEmpty);
+      c.undo();
+      expect(delays(), [100, 150, 200, 250]);
+    });
+
+    test('non-consecutive duplicates survive', () async {
+      await openN([1, 0, 1], [100, 150, 200]);
+      c.removeDuplicates();
+      expect(c.doc!.frameCount, 3);
+      expect(c.canUndo, isFalse); // nothing changed, no history entry
+    });
+
+    test('reduceFrames keeps every nth and preserves total duration',
+        () async {
+      await openN([0, 1, 2, 3, 4], [100, 100, 100, 100, 100]);
+      c.seek(3);
+      c.reduceFrames(2);
+      expect(delays(), [200, 200, 100]);
+      expect(c.doc!.totalDuration.inMilliseconds, 500);
+      expect(c.current, 1); // playhead lands on its group's survivor
+      c.undo();
+      expect(delays(), [100, 100, 100, 100, 100]);
+    });
+
+    test('reduceFrames on a single frame is a no-op', () async {
+      await openN([0], [100]);
+      c.reduceFrames(2);
+      expect(c.doc!.frameCount, 1);
+      expect(c.canUndo, isFalse);
+    });
+  });
+
   test('close clears the document back to the landing state', () async {
     await c.openBytes(twoFrameGifFixture());
     c.togglePlay();
