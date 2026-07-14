@@ -26,6 +26,17 @@ inline bool IsEditorImagePath(const std::wstring& path) {
   return false;
 }
 
+// True when [path] names a .gif -- the GIF Editor window's drop filter.
+inline bool IsGifPath(const std::wstring& path) {
+  const size_t dot = path.find_last_of(L'.');
+  if (dot == std::wstring::npos) return false;
+  const size_t slash = path.find_last_of(L"\\/");
+  if (slash != std::wstring::npos && slash > dot) return false;
+  std::wstring ext = path.substr(dot + 1);
+  for (wchar_t& c : ext) c = static_cast<wchar_t>(std::towlower(c));
+  return ext == L"gif";
+}
+
 }  // namespace dropfilter
 
 #endif  // RUNNER_DROP_FILTER_H_

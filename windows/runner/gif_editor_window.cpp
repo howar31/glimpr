@@ -1,11 +1,16 @@
 #include "gif_editor_window.h"
 
 #include <flutter_windows.h>
+#include <ole2.h>
+#include <shellapi.h>
 
 #include <flutter/generated_plugin_registrant.h>
 
+#include <atomic>
+#include <optional>
 #include <utility>
 
+#include "drop_filter.h"
 #include "perf_log.h"
 #include "utils.h"
 
@@ -14,12 +19,95 @@ using flutter::EncodableValue;
 
 namespace {
 // GIF Editor default content size + minimum (matching the macOS window:
-// 1180x700, min 760x560 -- the minimum keeps the controls row intact and a
-// usable preview above the filmstrip).
+// 1180x700; the minimum width fits the annotate mode's docked editor
+// toolbar pill -- the Image Editor constraint -- and the height keeps a
+// usable preview above the ops row + filmstrip).
 constexpr int kDefaultW = 1180;
 constexpr int kDefaultH = 700;
-constexpr int kMinW = 760;
-constexpr int kMinH = 560;
+constexpr int kMinW = 1060;
+constexpr int kMinH = 640;
+
+// OLE drop target for the GIF Editor window: same shape as the Image
+// Editor's (hover-time veto), filtered to .gif files only.
+class GifDropTarget : public IDropTarget {
+ public:
+  explicit GifDropTarget(GifEditorWindow* owner) : owner_(owner) {}
+  virtual ~GifDropTarget() = default;
+
+  // IUnknown --
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+    if (!ppv) return E_POINTER;
+    if (riid == IID_IUnknown || riid == IID_IDropTarget) {
+      *ppv = static_cast<IDropTarget*>(this);
+      AddRef();
+      return S_OK;
+    }
+    *ppv = nullptr;
+    return E_NOINTERFACE;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override {
+    return static_cast<ULONG>(++refs_);
+  }
+  ULONG STDMETHODCALLTYPE Release() override {
+    const ULONG n = static_cast<ULONG>(--refs_);
+    if (n == 0) delete this;
+    return n;
+  }
+
+  // IDropTarget --
+  HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL,
+                                      DWORD* effect) override {
+    accept_ = FirstGifPath(data).has_value();
+    if (effect) *effect = accept_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL, DWORD* effect) override {
+    if (effect) *effect = accept_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE DragLeave() override {
+    accept_ = false;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL,
+                                 DWORD* effect) override {
+    const std::optional<std::string> path = FirstGifPath(data);
+    if (effect) *effect = path ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    if (path && owner_) owner_->OpenWithPath(*path);
+    accept_ = false;
+    return S_OK;
+  }
+
+  void Detach() { owner_ = nullptr; }
+
+ private:
+  // The first dragged .gif (as UTF-8), or nullopt.
+  static std::optional<std::string> FirstGifPath(IDataObject* data) {
+    if (!data) return std::nullopt;
+    FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    STGMEDIUM medium{};
+    if (FAILED(data->GetData(&fmt, &medium))) return std::nullopt;
+    std::optional<std::string> out;
+    if (auto* drop = static_cast<HDROP>(GlobalLock(medium.hGlobal))) {
+      const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+      for (UINT i = 0; i < count && !out; ++i) {
+        const UINT len = DragQueryFileW(drop, i, nullptr, 0);
+        if (len == 0) continue;
+        std::wstring path(len + 1, L'\0');
+        if (DragQueryFileW(drop, i, path.data(), len + 1) == 0) continue;
+        path.resize(len);
+        if (dropfilter::IsGifPath(path)) out = Utf8FromUtf16(path);
+      }
+      GlobalUnlock(medium.hGlobal);
+    }
+    ReleaseStgMedium(&medium);
+    return out;
+  }
+
+  GifEditorWindow* owner_;
+  std::atomic<long> refs_{1};
+  bool accept_ = false;
+};
 }  // namespace
 
 GifEditorWindow::GifEditorWindow(const flutter::DartProject& project,
@@ -143,10 +231,29 @@ bool GifEditorWindow::OnCreate() {
   sound_channel_ = std::make_unique<SoundChannel>(messenger);
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  // Accept Explorer .gif drags anywhere on the window (parity with the
+  // macOS registerForDraggedTypes filter, including the hover-time veto).
+  drop_target_ = new GifDropTarget(this);
+  RegisterDragDrop(GetHandle(), drop_target_);
   return true;
 }
 
+void GifEditorWindow::OpenWithPath(const std::string& path) {
+  // Drops only land on a visible window, so the engine is running and the
+  // Dart handler is attached; forward directly.
+  if (gif_editor_channel_) {
+    gif_editor_channel_->InvokeMethod(
+        "loadPath", std::make_unique<EncodableValue>(path));
+  }
+}
+
 void GifEditorWindow::OnDestroy() {
+  if (drop_target_) {
+    if (GetHandle()) RevokeDragDrop(GetHandle());
+    static_cast<GifDropTarget*>(drop_target_)->Detach();
+    drop_target_->Release();
+    drop_target_ = nullptr;
+  }
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

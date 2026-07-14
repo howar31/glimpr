@@ -15,11 +15,13 @@
 #include "sound_channel.h"
 #include "win32_window.h"
 
+struct IDropTarget;
+
 // The standalone GIF Editor: a resident, revealable top-level window hosting
 // its OWN Flutter engine (role 'gif-editor'), mirroring EditorWindow's
 // lifecycle (deferred warm-up or lazy creation on first reveal; closing only
-// hides; never destroyed until the app quits). S1 hosts no file dialogs
-// (Dart's file_selector owns them on Windows) and accepts no drops yet.
+// hides; never destroyed until the app quits). Hosts no file dialogs (Dart's
+// file_selector owns them on Windows); a dropped .gif opens via loadPath.
 class GifEditorWindow : public Win32Window {
  public:
   GifEditorWindow(const flutter::DartProject& project, HWND control_hwnd);
@@ -32,6 +34,8 @@ class GifEditorWindow : public Win32Window {
   void WarmUp();
   // Reveal the GIF Editor (lazy-creates the engine if warm-up hasn't run).
   void RevealEditor();
+  // Open the dropped .gif in the editor (forwards loadPath to Dart).
+  void OpenWithPath(const std::string& path);
 
   // The export "processing" pulse: glimpr/gifEditor setProcessing relays here
   // -> the control engine's tray (set once by FlutterWindow).
@@ -62,6 +66,10 @@ class GifEditorWindow : public Win32Window {
 
   // Export pulse (+ tooltip label) -> control tray.
   std::function<void(bool, const std::string&)> proc_cb_;
+
+  // OLE drop target (GifDropTarget): vetoes non-gif drags at hover, a
+  // dropped .gif forwards to Dart via loadPath.
+  IDropTarget* drop_target_ = nullptr;
 };
 
 #endif  // RUNNER_GIF_EDITOR_WINDOW_H_
