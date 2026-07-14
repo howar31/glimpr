@@ -10,6 +10,14 @@ import 'package:glimpr/gif_editor/gif_editor_controller.dart';
 
 import '../support/gif_fixture.dart';
 
+Uint8List _solidRgba(int w, int h, List<int> rgba) {
+  final out = Uint8List(w * h * 4);
+  for (var i = 0; i < w * h; i++) {
+    out.setRange(i * 4, i * 4 + 4, rgba);
+  }
+  return out;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -623,6 +631,95 @@ void main() {
       expect(c.doc!.frames[2].delayMs, 150);
       c.undo();
       expect(c.doc!.frameCount, 3);
+    });
+  });
+
+  group('motion', () {
+    Uint8List gray(int v) {
+      final f = Uint8List(4 * 4 * 4);
+      for (var i = 0; i < 16; i++) {
+        f[i * 4] = v;
+        f[i * 4 + 1] = v;
+        f[i * 4 + 2] = v;
+        f[i * 4 + 3] = 255;
+      }
+      return f;
+    }
+
+    Future<void> openBW() => c.openBytes(encodeGifFrames(
+          frames: [FrameSpec(gray(0), 100), FrameSpec(gray(255), 150)],
+          width: 4,
+          height: 4,
+          loopCount: 0,
+        ));
+
+    Uint8List frameBytes(int i) =>
+        File(c.store!.pathFor(c.doc!.frames[i].key)).readAsBytesSync();
+
+    test('insertTransition fades between current and next', () async {
+      await openBW();
+      await c.insertTransition(fade: true, steps: 2, stepDelayMs: 40);
+      expect(c.doc!.frameCount, 4);
+      expect(c.doc!.frames[1].delayMs, 40);
+      expect(c.doc!.frames[2].delayMs, 40);
+      // t = 1/3 and 2/3 blends between black and white.
+      expect(frameBytes(1)[0], inInclusiveRange(80, 90));
+      expect(frameBytes(2)[0], inInclusiveRange(165, 175));
+      expect(c.selection, {1, 2});
+      expect(c.current, 1);
+      c.undo();
+      expect(c.doc!.frameCount, 2);
+    });
+
+    test('the last frame wraps: transition lands at the end toward frame 0',
+        () async {
+      await openBW();
+      c.seek(1);
+      await c.insertTransition(fade: true, steps: 2, stepDelayMs: 40);
+      expect(c.doc!.frameCount, 4);
+      // Inserted after the last: blends white -> black.
+      expect(frameBytes(2)[0], inInclusiveRange(165, 175));
+      expect(frameBytes(3)[0], inInclusiveRange(80, 90));
+    });
+
+    test('smoothLoop appends a fade back to the first frame', () async {
+      await openBW();
+      await c.smoothLoop(steps: 2, stepDelayMs: 40);
+      expect(c.doc!.frameCount, 4);
+      expect(frameBytes(2)[0], inInclusiveRange(165, 175));
+      expect(frameBytes(3)[0], inInclusiveRange(80, 90));
+      c.undo();
+      expect(c.doc!.frameCount, 2);
+    });
+
+    test('cinemagraph freezes outside the rect to the current frame',
+        () async {
+      await c.openBytes(encodeGifFrames(
+        frames: [
+          FrameSpec(_solidRgba(4, 4, [255, 0, 0, 255]), 100),
+          FrameSpec(_solidRgba(4, 4, [0, 255, 0, 255]), 100),
+        ],
+        width: 4,
+        height: 4,
+        loopCount: 0,
+      ));
+      await c.cinemagraph(1, 1, 2, 2);
+      // Frame 1 outside the rect is frozen red (frame 0 = reference);
+      // inside stays its own green.
+      final f1 = frameBytes(1);
+      expect([f1[0], f1[1], f1[2]], [255, 0, 0]); // (0,0) frozen
+      final inside = (1 * 4 + 1) * 4;
+      expect([f1[inside], f1[inside + 1], f1[inside + 2]], [0, 255, 0]);
+      expect(c.doc!.frames[1].delayMs, 100);
+      c.undo();
+      final back = frameBytes(1);
+      expect([back[0], back[1], back[2]], [0, 255, 0]);
+    });
+
+    test('full-canvas cinemagraph rect is refused', () async {
+      await openBW();
+      await c.cinemagraph(0, 0, 4, 4);
+      expect(c.canUndo, isFalse);
     });
   });
 

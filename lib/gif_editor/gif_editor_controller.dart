@@ -10,6 +10,7 @@ import 'document_transform.dart';
 import 'frame_store.dart';
 import 'gif_document.dart';
 import 'gif_import.dart';
+import 'motion.dart';
 
 /// State owner for one GIF Editor window: the open document, the current
 /// frame, and playback. Widgets listen; edit operations land here in later
@@ -277,6 +278,146 @@ class GifEditorController extends ChangeNotifier {
       -1 => const CanvasOp.rotateCcw(),
       _ => const CanvasOp.rotate180(),
     });
+  }
+
+  // --- motion (transitions / smooth loop / cinemagraph) --------------------
+
+  /// Insert a generated transition between the CURRENT frame and the next
+  /// (the last frame wraps to the first, i.e. a loop transition).
+  Future<void> insertTransition({
+    required bool fade,
+    SlideFrom from = SlideFrom.right,
+    int steps = 10,
+    int stepDelayMs = 33,
+  }) =>
+      _insertTransitionAt(_current,
+          fade: fade, from: from, steps: steps, stepDelayMs: stepDelayMs);
+
+  /// One-click smooth loop: a fade from the last frame back to the first,
+  /// appended at the end.
+  Future<void> smoothLoop({int steps = 10, int stepDelayMs = 33}) async {
+    final doc = _doc;
+    if (doc == null) return;
+    await _insertTransitionAt(doc.frameCount - 1,
+        fade: true, steps: steps, stepDelayMs: stepDelayMs);
+  }
+
+  Future<void> _insertTransitionAt(
+    int aIdx, {
+    required bool fade,
+    SlideFrom from = SlideFrom.right,
+    required int steps,
+    required int stepDelayMs,
+  }) async {
+    final doc = _doc;
+    final store = _store;
+    if (doc == null || store == null || _transforming) return;
+    if (doc.frameCount < 2) return;
+    pause();
+    _transforming = true;
+    _transformProgress = 0;
+    notifyListeners();
+    try {
+      final a = doc.frames[aIdx];
+      final b = doc.frames[(aIdx + 1) % doc.frameCount];
+      final n = steps.clamp(2, 60);
+      final keys = [for (var i = 0; i < n; i++) store.reserve()];
+      final hashes = await generateTransition(
+        aPath: store.pathFor(a.key),
+        bPath: store.pathFor(b.key),
+        outPaths: [for (final k in keys) store.pathFor(k)],
+        width: a.width,
+        height: a.height,
+        fade: fade,
+        from: from,
+        onProgress: (done, total) {
+          _transformProgress = done / total;
+          if (!_disposed) notifyListeners();
+        },
+      );
+      if (!identical(_doc, doc)) return;
+      for (var i = 0; i < keys.length; i++) {
+        store.registerHash(keys[i], hashes[i]);
+      }
+      _pushUndo();
+      final delay = stepDelayMs.clamp(10, 0xFFFF * 10);
+      final inserted = [
+        for (final k in keys)
+          GifFrame(key: k, width: a.width, height: a.height, delayMs: delay),
+      ];
+      _doc = GifDocument(
+        frames: [
+          ...doc.frames.sublist(0, aIdx + 1),
+          ...inserted,
+          ...doc.frames.sublist(aIdx + 1),
+        ],
+        loopCount: doc.loopCount,
+      );
+      // Select the inserted run so a follow-up op can target it directly.
+      _selection
+        ..clear()
+        ..addAll([for (var i = 0; i < n; i++) aIdx + 1 + i]);
+      _selAnchor = aIdx + 1;
+      _current = aIdx + 1;
+    } finally {
+      _transforming = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Cinemagraph: every frame keeps its own pixels inside the rect and
+  /// takes the CURRENT frame's pixels outside it. A rect covering the whole
+  /// canvas would change nothing and is refused.
+  Future<void> cinemagraph(int rx, int ry, int rw, int rh) async {
+    final doc = _doc;
+    final store = _store;
+    if (doc == null || store == null || _transforming) return;
+    final w = doc.frames.first.width;
+    final h = doc.frames.first.height;
+    if (rw < 1 || rh < 1) return;
+    if (rx <= 0 && ry <= 0 && rx + rw >= w && ry + rh >= h) return;
+    pause();
+    _transforming = true;
+    _transformProgress = 0;
+    notifyListeners();
+    try {
+      final keys = [for (final _ in doc.frames) store.reserve()];
+      final hashes = await generateCinemagraph(
+        framePaths: [for (final f in doc.frames) store.pathFor(f.key)],
+        refPath: store.pathFor(doc.frames[_current].key),
+        outPaths: [for (final k in keys) store.pathFor(k)],
+        width: w,
+        height: h,
+        rx: rx,
+        ry: ry,
+        rw: rw,
+        rh: rh,
+        onProgress: (done, total) {
+          _transformProgress = done / total;
+          if (!_disposed) notifyListeners();
+        },
+      );
+      if (!identical(_doc, doc)) return;
+      for (var i = 0; i < keys.length; i++) {
+        store.registerHash(keys[i], hashes[i]);
+      }
+      _pushUndo();
+      _doc = GifDocument(
+        frames: [
+          for (var i = 0; i < keys.length; i++)
+            GifFrame(
+              key: keys[i],
+              width: w,
+              height: h,
+              delayMs: doc.frames[i].delayMs,
+            ),
+        ],
+        loopCount: doc.loopCount,
+      );
+    } finally {
+      _transforming = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   // --- burn-in (annotate bake / progress bar / title frame) ----------------
