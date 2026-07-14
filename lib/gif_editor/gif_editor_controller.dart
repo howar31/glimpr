@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'document_transform.dart';
 import 'frame_store.dart';
 import 'gif_document.dart';
 import 'gif_import.dart';
@@ -37,6 +38,13 @@ class GifEditorController extends ChangeNotifier {
   Set<int> get selection => Set.unmodifiable(_selection);
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
+
+  // Canvas transform in flight: mutators refuse while true (the transform
+  // captured the document at its start; concurrent edits would be lost).
+  bool _transforming = false;
+  double _transformProgress = 0;
+  bool get transforming => _transforming;
+  double get transformProgress => _transformProgress;
 
   /// Decode [gifBytes] into a fresh session store and make it the document.
   /// The previous store (if any) is disposed after the swap.
@@ -199,17 +207,93 @@ class GifEditorController extends ChangeNotifier {
   }
 
   void undo() {
-    if (_undoStack.isEmpty) return;
+    if (_undoStack.isEmpty || _transforming) return;
     pause();
     _redoStack.add(_snapshot());
     _restore(_undoStack.removeLast());
   }
 
   void redo() {
-    if (_redoStack.isEmpty) return;
+    if (_redoStack.isEmpty || _transforming) return;
     pause();
     _undoStack.add(_snapshot());
     _restore(_redoStack.removeLast());
+  }
+
+  // --- canvas operations (whole-document pixel transforms) -----------------
+
+  /// Crop every frame to the given canvas rectangle (clamped; a full-frame
+  /// crop is a no-op).
+  Future<void> cropDoc(int x, int y, int w, int h) async {
+    final doc = _doc;
+    if (doc == null) return;
+    final cw = doc.frames.first.width;
+    final ch = doc.frames.first.height;
+    final cx = x.clamp(0, cw - 1);
+    final cy = y.clamp(0, ch - 1);
+    final rw = w.clamp(1, cw - cx);
+    final rh = h.clamp(1, ch - cy);
+    if (cx == 0 && cy == 0 && rw == cw && rh == ch) return;
+    await _applyCanvasOp(CanvasOp.crop(cx, cy, rw, rh));
+  }
+
+  /// Bilinear-resize every frame to [w] x [h] (a same-size call is a no-op).
+  Future<void> resizeDoc(int w, int h) async {
+    final doc = _doc;
+    if (doc == null) return;
+    final tw = w.clamp(1, 16384);
+    final th = h.clamp(1, 16384);
+    if (tw == doc.frames.first.width && th == doc.frames.first.height) {
+      return;
+    }
+    await _applyCanvasOp(CanvasOp.resize(tw, th));
+  }
+
+  /// Mirror every frame horizontally or vertically.
+  Future<void> flipDoc({required bool horizontal}) => _applyCanvasOp(
+      horizontal ? const CanvasOp.flipH() : const CanvasOp.flipV());
+
+  /// Rotate every frame: 1 = clockwise quarter, -1 = counter-clockwise
+  /// quarter, 2 = half turn.
+  Future<void> rotateDoc(int quarterTurns) async {
+    assert(quarterTurns == 1 || quarterTurns == -1 || quarterTurns == 2);
+    await _applyCanvasOp(switch (quarterTurns) {
+      1 => const CanvasOp.rotateCw(),
+      -1 => const CanvasOp.rotateCcw(),
+      _ => const CanvasOp.rotate180(),
+    });
+  }
+
+  Future<void> _applyCanvasOp(CanvasOp op) async {
+    final doc = _doc;
+    final store = _store;
+    if (doc == null || store == null || _transforming) return;
+    pause();
+    _transforming = true;
+    _transformProgress = 0;
+    notifyListeners();
+    try {
+      final frames = await transformDocument(
+        doc: doc,
+        store: store,
+        op: op,
+        onProgress: (done, total) {
+          _transformProgress = done / total;
+          if (!_disposed) notifyListeners();
+        },
+      );
+      // The document swapped under the transform (new file opened, window
+      // went home): the result belongs to a dead document — discard it.
+      if (!identical(_doc, doc)) return;
+      _pushUndo();
+      _doc = GifDocument(frames: frames, loopCount: doc.loopCount);
+      _selection.clear();
+      _selAnchor = null;
+      _current = _current.clamp(0, frames.length - 1);
+    } finally {
+      _transforming = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   // --- frame operations ---------------------------------------------------
@@ -226,7 +310,7 @@ class GifEditorController extends ChangeNotifier {
 
   void _removeSelection({required bool toClipboard}) {
     final doc = _doc;
-    if (doc == null || _selection.isEmpty) return;
+    if (doc == null || _selection.isEmpty || _transforming) return;
     if (_selection.length >= doc.frameCount) return;
     pause();
     _pushUndo();
@@ -274,7 +358,7 @@ class GifEditorController extends ChangeNotifier {
   /// becomes the selection with the playhead on its first frame.
   void pasteFrames() {
     final doc = _doc;
-    if (doc == null || _clipboard.isEmpty) return;
+    if (doc == null || _clipboard.isEmpty || _transforming) return;
     pause();
     _pushUndo();
     final at = (_current + 1).clamp(0, doc.frameCount);
@@ -307,7 +391,7 @@ class GifEditorController extends ChangeNotifier {
   /// model floor keeps playback math sane). No-change ops leave no history.
   void _mapDelays(int Function(int delayMs) f) {
     final doc = _doc;
-    if (doc == null) return;
+    if (doc == null || _transforming) return;
     final all = _selection.isEmpty;
     var changed = false;
     final frames = <GifFrame>[];
@@ -335,7 +419,7 @@ class GifEditorController extends ChangeNotifier {
   void moveSelected(int delta) {
     assert(delta == -1 || delta == 1);
     final doc = _doc;
-    if (doc == null || _selection.isEmpty) return;
+    if (doc == null || _selection.isEmpty || _transforming) return;
     final frames = List.of(doc.frames);
     final order = _selection.toList()
       ..sort((a, b) => delta < 0 ? a - b : b - a);
@@ -367,7 +451,7 @@ class GifEditorController extends ChangeNotifier {
   /// or the whole document when the selection is empty or a single frame.
   void reverse() {
     final doc = _doc;
-    if (doc == null || doc.frameCount < 2) return;
+    if (doc == null || doc.frameCount < 2 || _transforming) return;
     pause();
     _pushUndo();
     final frames = List.of(doc.frames);
@@ -390,7 +474,9 @@ class GifEditorController extends ChangeNotifier {
   void removeDuplicates() {
     final doc = _doc;
     final store = _store;
-    if (doc == null || store == null || doc.frameCount < 2) return;
+    if (doc == null || store == null || doc.frameCount < 2 || _transforming) {
+      return;
+    }
     final kept = <GifFrame>[doc.frames.first];
     var changed = false;
     for (var i = 1; i < doc.frameCount; i++) {
@@ -421,7 +507,7 @@ class GifEditorController extends ChangeNotifier {
   void reduceFrames(int keepEvery) {
     assert(keepEvery >= 2);
     final doc = _doc;
-    if (doc == null || doc.frameCount < 2) return;
+    if (doc == null || doc.frameCount < 2 || _transforming) return;
     pause();
     _pushUndo();
     final kept = <GifFrame>[];
@@ -442,7 +528,7 @@ class GifEditorController extends ChangeNotifier {
   /// Append the whole sequence reversed (forward-then-back playback).
   void yoyo() {
     final doc = _doc;
-    if (doc == null || doc.frameCount < 2) return;
+    if (doc == null || doc.frameCount < 2 || _transforming) return;
     pause();
     _pushUndo();
     _doc = GifDocument(

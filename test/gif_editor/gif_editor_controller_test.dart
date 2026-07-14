@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/gif_editor/encode/gif_writer.dart';
 import 'package:glimpr/gif_editor/gif_editor_controller.dart';
 
 import '../support/gif_fixture.dart';
@@ -394,6 +398,122 @@ void main() {
       expect(c.clipboardHasFrames, isTrue);
       await openN([0, 1], [100, 150]);
       expect(c.clipboardHasFrames, isFalse);
+    });
+  });
+
+  group('canvas ops', () {
+    // A 2x2 frame with four exactly-representable distinct colors laid out
+    // [R G / B W]; position checks read the raw store bytes back.
+    final quad = Uint8List.fromList([
+      255, 0, 0, 255, //
+      0, 255, 0, 255, //
+      0, 0, 255, 255, //
+      255, 255, 255, 255, //
+    ]);
+
+    Future<void> openQuad() => c.openBytes(encodeGifFrames(
+          frames: [FrameSpec(quad, 100), FrameSpec(quad, 150)],
+          width: 2,
+          height: 2,
+          loopCount: 0,
+        ));
+
+    Uint8List frameBytes(int i) =>
+        File(c.store!.pathFor(c.doc!.frames[i].key)).readAsBytesSync();
+
+    test('flipDoc horizontal mirrors every frame and is undoable',
+        () async {
+      await openQuad();
+      await c.flipDoc(horizontal: true);
+      expect(
+          frameBytes(0),
+          Uint8List.fromList([
+            0, 255, 0, 255, 255, 0, 0, 255, //
+            255, 255, 255, 255, 0, 0, 255, 255, //
+          ]));
+      expect(c.doc!.frames[1].delayMs, 150); // delays preserved
+      expect(c.transforming, isFalse);
+      c.undo();
+      expect(frameBytes(0), quad);
+    });
+
+    test('rotateDoc swaps dimensions and places pixels correctly',
+        () async {
+      await openQuad();
+      await c.rotateDoc(1); // clockwise: [B R / W G]
+      expect(c.doc!.frames[0].width, 2);
+      expect(c.doc!.frames[0].height, 2);
+      expect(
+          frameBytes(0),
+          Uint8List.fromList([
+            0, 0, 255, 255, 255, 0, 0, 255, //
+            255, 255, 255, 255, 0, 255, 0, 255, //
+          ]));
+      await c.rotateDoc(-1); // back
+      expect(frameBytes(0), quad);
+    });
+
+    test('cropDoc cuts every frame to the rect', () async {
+      await openQuad();
+      await c.cropDoc(1, 0, 1, 2); // right column: [G / W]
+      expect(c.doc!.frames[0].width, 1);
+      expect(c.doc!.frames[0].height, 2);
+      expect(
+          frameBytes(0),
+          Uint8List.fromList([
+            0, 255, 0, 255, //
+            255, 255, 255, 255, //
+          ]));
+      c.undo();
+      expect(c.doc!.frames[0].width, 2);
+      expect(frameBytes(0), quad);
+    });
+
+    test('full-frame crop and same-size resize are no-ops', () async {
+      await openQuad();
+      await c.cropDoc(0, 0, 2, 2);
+      await c.resizeDoc(2, 2);
+      expect(c.canUndo, isFalse);
+    });
+
+    test('resizeDoc scales dimensions and keeps solids solid', () async {
+      final solid = Uint8List(2 * 2 * 4);
+      for (var i = 0; i < 4; i++) {
+        solid[i * 4] = 40;
+        solid[i * 4 + 1] = 80;
+        solid[i * 4 + 2] = 120;
+        solid[i * 4 + 3] = 255;
+      }
+      await c.openBytes(encodeGifFrames(
+        frames: [FrameSpec(solid, 100)],
+        width: 2,
+        height: 2,
+        loopCount: 0,
+      ));
+      await c.resizeDoc(4, 4);
+      expect(c.doc!.frames[0].width, 4);
+      expect(c.doc!.frames[0].height, 4);
+      final out = frameBytes(0);
+      expect(out.length, 4 * 4 * 4);
+      for (var i = 0; i < 16; i++) {
+        expect([out[i * 4], out[i * 4 + 1], out[i * 4 + 2]], [40, 80, 120]);
+      }
+    });
+
+    test('progress reports and duplicate detection works on new frames',
+        () async {
+      await openQuad();
+      final seen = <double>[];
+      c.addListener(() {
+        if (c.transforming) seen.add(c.transformProgress);
+      });
+      await c.flipDoc(horizontal: false);
+      expect(seen, isNotEmpty);
+      // Both frames were identical before and stay identical after the
+      // flip: the new store entries carry hashes, so dedupe still works.
+      c.removeDuplicates();
+      expect(c.doc!.frameCount, 1);
+      expect(c.doc!.frames[0].delayMs, 250);
     });
   });
 

@@ -50,7 +50,7 @@ class FrameStore {
     assert(rgba.length == width * height * 4,
         'rgba length must be width*height*4');
     final key = FrameKey(_nextKey++);
-    _hashes[key] = _fnv1a(rgba);
+    _hashes[key] = contentHash(rgba);
     await File(pathFor(key)).writeAsBytes(rgba, flush: false);
     return key;
   }
@@ -63,7 +63,17 @@ class FrameStore {
   /// different frames of one recording is not a realistic event.
   int hashFor(FrameKey key) => _hashes[key]!;
 
-  static int _fnv1a(Uint8List bytes) {
+  /// Allocate a key WITHOUT writing pixels: a worker isolate writes
+  /// [pathFor] itself (the store object cannot cross isolates) and the
+  /// caller hands the worker-computed content hash back via [registerHash].
+  FrameKey reserve() => FrameKey(_nextKey++);
+
+  /// Register the content hash for a [reserve]d key once its file exists.
+  void registerHash(FrameKey key, int hash) => _hashes[key] = hash;
+
+  /// The store's content-hash function, public so worker isolates hash the
+  /// frames they write with the same algorithm [put] uses.
+  static int contentHash(Uint8List bytes) {
     var h = 0xcbf29ce484222325;
     for (final b in bytes) {
       h ^= b;
