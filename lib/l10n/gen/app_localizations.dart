@@ -3440,6 +3440,24 @@ abstract class AppLocalizations {
   /// **'Apply to all frames'**
   String get gifEditorBakeAll;
 
+  /// GIF Editor toolbar: insert a blank black 1s frame before the playhead
+  ///
+  /// In en, this message translates to:
+  /// **'Insert title frame'**
+  String get gifEditorTitleFrame;
+
+  /// GIF Editor toolbar: burn a playback progress bar onto every frame
+  ///
+  /// In en, this message translates to:
+  /// **'Progress bar'**
+  String get gifEditorProgressBar;
+
+  /// GIF Editor toolbar: border panel trigger
+  ///
+  /// In en, this message translates to:
+  /// **'Border'**
+  String get gifEditorBorder;
+
   /// Tray menu: reveal the GIF Editor window (provisional entry)
   ///
   /// In en, this message translates to:

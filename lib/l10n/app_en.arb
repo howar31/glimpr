@@ -2180,6 +2180,18 @@
   "@gifEditorBakeAll": {
     "description": "GIF Editor annotate bar: target label when nothing is selected"
   },
+  "gifEditorTitleFrame": "Insert title frame",
+  "@gifEditorTitleFrame": {
+    "description": "GIF Editor toolbar: insert a blank black 1s frame before the playhead"
+  },
+  "gifEditorProgressBar": "Progress bar",
+  "@gifEditorProgressBar": {
+    "description": "GIF Editor toolbar: burn a playback progress bar onto every frame"
+  },
+  "gifEditorBorder": "Border",
+  "@gifEditorBorder": {
+    "description": "GIF Editor toolbar: border panel trigger"
+  },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
     "description": "Tray menu: reveal the GIF Editor window (provisional entry)"

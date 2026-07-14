@@ -605,6 +605,71 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 60)));
   });
 
+  testWidgets('title frame button inserts a frame before the playhead',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1], [100, 150]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-title')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => c.doc!.frameCount == 3);
+    expect(c.doc!.frameCount, 3);
+    expect(c.doc!.frames[0].delayMs, 1000);
+    expect(c.current, 0);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('progress bar button bakes every frame', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedSized(tester, 20, 10);
+    final before = (await tester.runAsync(() async =>
+        File(c.store!.pathFor(c.doc!.frames.first.key)).readAsBytes()))!;
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    // A single frame keeps the button disabled; add a second via title.
+    await tester.tap(find.byKey(const Key('gif-op-title')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => c.doc!.frameCount == 2);
+    final keyBefore = c.doc!.frames.last.key;
+    // The ops strip scrolls horizontally; the progress button sits at its
+    // far end and can be off-viewport at the test width. Clear the selection
+    // first so the pinned status text does not overlap the scrolled strip.
+    c.clearSelection();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('gif-op-progress')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-progress')));
+    await tester.pump();
+    await pumpUntilDone(tester,
+        () => !c.transforming && c.doc!.frames.last.key != keyBefore);
+    final after = (await tester.runAsync(() async =>
+        File(c.store!.pathFor(c.doc!.frames.last.key)).readAsBytes()))!;
+    expect(after, isNot(equals(before)),
+        reason: 'the progress bar must have painted the bottom rows');
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('border panel applies width and color', (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedSized(tester, 20, 10);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-border')));
+    await tester.pump();
+    expect(find.byKey(const Key('gif-border-panel')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('gif-border-width')), '1');
+    await tester.tap(find.byKey(const Key('gif-border-swatch-ffffffff')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-border-apply')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => !c.transforming && c.canUndo);
+    final bytes = (await tester.runAsync(() async =>
+        File(c.store!.pathFor(c.doc!.frames.first.key)).readAsBytes()))!;
+    expect([bytes[0], bytes[1], bytes[2], bytes[3]], [255, 255, 255, 255]);
+    // Interior pixel keeps the original solid color.
+    final o = (5 * 20 + 10) * 4;
+    expect([bytes[o], bytes[o + 1], bytes[o + 2]], [60, 120, 180]);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.

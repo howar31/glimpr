@@ -82,6 +82,7 @@ class _GifEditorAppState extends State<GifEditorApp>
     _delayField.dispose();
     _resizeW.dispose();
     _resizeH.dispose();
+    _borderW.dispose();
     _annotate?.dispose();
     _annotateActive.dispose();
     _toastTimer?.cancel();
@@ -126,6 +127,13 @@ class _GifEditorAppState extends State<GifEditorApp>
   final TextEditingController _resizeW = TextEditingController();
   final TextEditingController _resizeH = TextEditingController();
   bool _resizeLock = true;
+
+  // Border panel state.
+  final TextEditingController _borderW = TextEditingController(text: '4');
+  int _borderArgb = 0xFF000000;
+  static const List<int> _borderSwatches = [
+    0xFF000000, 0xFFFFFFFF, 0xFF8E8E93, 0xFFFF3B30, 0xFF60A5FA, 0xFFFFCC00,
+  ];
 
   // Crop mode: the rect lives in IMAGE pixel coordinates.
   bool _cropMode = false;
@@ -537,6 +545,8 @@ class _GifEditorAppState extends State<GifEditorApp>
                         _reducePanel(tokens),
                       if (_panel == _TimelinePanel.resize)
                         _resizePanel(tokens),
+                      if (_panel == _TimelinePanel.border)
+                        _borderPanel(tokens),
                     ],
                     _toastLayer(tokens),
                   ],
@@ -824,6 +834,13 @@ class _GifEditorAppState extends State<GifEditorApp>
             enabled: _c.clipboardHasFrames && !busy,
             onTap: _c.pasteFrames,
           ),
+          _OpButton(
+            key: const Key('gif-op-title'),
+            icon: Icons.title_rounded,
+            tooltip: _l.gifEditorTitleFrame,
+            enabled: !busy,
+            onTap: () => unawaited(_c.insertTitleFrame()),
+          ),
           divider(),
           _OpButton(
             key: const Key('gif-op-delete'),
@@ -952,6 +969,26 @@ class _GifEditorAppState extends State<GifEditorApp>
             tooltip: _l.gifEditorRotateRight,
             enabled: !busy,
             onTap: () => unawaited(_c.rotateDoc(1)),
+          ),
+          _OpButton(
+            key: const Key('gif-op-border'),
+            icon: Icons.border_outer_rounded,
+            tooltip: _l.gifEditorBorder,
+            enabled: !busy,
+            active: _panel == _TimelinePanel.border,
+            onTap: () => setState(() {
+              final open = _panel == _TimelinePanel.border;
+              _closePanels();
+              if (!open) _panel = _TimelinePanel.border;
+            }),
+          ),
+          _OpButton(
+            key: const Key('gif-op-progress'),
+            icon: Icons.linear_scale_rounded,
+            tooltip: _l.gifEditorProgressBar,
+            enabled: many,
+            onTap: () => unawaited(
+                _c.bakeProgressBar(color: GlimprTokens.accent)),
           ),
                 ],
               ),
@@ -1183,6 +1220,90 @@ class _GifEditorAppState extends State<GifEditorApp>
                   },
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Border panel (width + a small swatch set).
+  Widget _borderPanel(GlimprTokens t) {
+    return Positioned(
+      left: 12,
+      bottom: 86 + 40 + 8,
+      child: Container(
+        key: const Key('gif-border-panel'),
+        width: 332,
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 16),
+        decoration: _panelDecoration(t),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_l.gifEditorBorder,
+                style: GlimprType.sansStyle(11.5, 600, t.fg3,
+                    letterSpacing: 0.2)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(_l.gifEditorWidth,
+                    style: GlimprType.sansStyle(12, 500, t.fg3)),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 56,
+                  child: TextField(
+                    key: const Key('gif-border-width'),
+                    controller: _borderW,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: GlimprType.sansStyle(12.5, 600, t.fg1),
+                    decoration: _fieldDecoration(t),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                for (final argb in _borderSwatches)
+                  GestureDetector(
+                    key: Key('gif-border-swatch-'
+                        '${argb.toRadixString(16)}'),
+                    onTap: () => setState(() => _borderArgb = argb),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      margin: const EdgeInsets.only(right: 5),
+                      decoration: BoxDecoration(
+                        color: Color(argb),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _borderArgb == argb
+                              ? GlimprTokens.accent
+                              : t.cardBorder,
+                          width: _borderArgb == argb ? 2 : 1,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: AccentButton(
+                _l.gifEditorApply,
+                key: const Key('gif-border-apply'),
+                onTap: () {
+                  final w = int.tryParse(_borderW.text);
+                  final argb = _borderArgb;
+                  setState(_closePanels);
+                  if (w != null && w > 0) {
+                    unawaited(_c.borderDoc(w, argb));
+                  }
+                },
+              ),
             ),
           ],
         ),
@@ -1596,7 +1717,7 @@ class _GifEditorAppState extends State<GifEditorApp>
 }
 
 /// Which timeline panel is open above the ops row.
-enum _TimelinePanel { none, delay, reduce, resize }
+enum _TimelinePanel { none, delay, reduce, resize, border }
 
 /// Delay-popover operation modes.
 enum _DelayMode { set, adjust, scale }

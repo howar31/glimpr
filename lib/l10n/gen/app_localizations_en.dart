@@ -1811,5 +1811,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorBakeAll => 'Apply to all frames';
 
   @override
+  String get gifEditorTitleFrame => 'Insert title frame';
+
+  @override
+  String get gifEditorProgressBar => 'Progress bar';
+
+  @override
+  String get gifEditorBorder => 'Border';
+
+  @override
   String get trayOpenGifEditor => 'Open GIF Editor';
 }

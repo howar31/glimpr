@@ -1751,5 +1751,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorBakeAll => '套用到全部幀';
 
   @override
+  String get gifEditorTitleFrame => '插入標題幀';
+
+  @override
+  String get gifEditorProgressBar => '進度列';
+
+  @override
+  String get gifEditorBorder => '邊框';
+
+  @override
   String get trayOpenGifEditor => '開啟 GIF 編輯器';
 }

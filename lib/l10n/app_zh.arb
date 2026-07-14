@@ -557,5 +557,8 @@
   "gifEditorAnnotate": "標註",
   "gifEditorBakeSelected": "套用到選取的 {n} 幀",
   "gifEditorBakeAll": "套用到全部幀",
+  "gifEditorTitleFrame": "插入標題幀",
+  "gifEditorProgressBar": "進度列",
+  "gifEditorBorder": "邊框",
   "trayOpenGifEditor": "開啟 GIF 編輯器"
 }
