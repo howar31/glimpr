@@ -310,6 +310,93 @@ void main() {
     });
   });
 
+  group('delay ops', () {
+    List<int> delays() => [for (final f in c.doc!.frames) f.delayMs];
+
+    test('overrideDelay hits the selection, or all when none', () async {
+      await openN([0, 1, 2], [100, 150, 200]);
+      c.select(1);
+      c.overrideDelay(500);
+      expect(delays(), [100, 500, 200]);
+      c.clearSelection();
+      c.overrideDelay(80);
+      expect(delays(), [80, 80, 80]);
+      c.undo();
+      expect(delays(), [100, 500, 200]);
+    });
+
+    test('shiftDelay clamps at the 10ms floor', () async {
+      await openN([0, 1], [100, 30]);
+      c.shiftDelay(-50);
+      expect(delays(), [50, 10]);
+      c.shiftDelay(25);
+      expect(delays(), [75, 35]);
+    });
+
+    test('scaleDelay scales by percent and rounds', () async {
+      await openN([0, 1], [100, 150]);
+      c.scaleDelay(50);
+      expect(delays(), [50, 75]);
+      c.scaleDelay(1); // 1% of tiny values clamps to the floor
+      expect(delays(), [10, 10]);
+    });
+
+    test('a delay op that changes nothing leaves no history', () async {
+      await openN([0, 1], [100, 100]);
+      c.overrideDelay(100);
+      expect(c.canUndo, isFalse);
+    });
+  });
+
+  group('frame clipboard', () {
+    List<int> delays() => [for (final f in c.doc!.frames) f.delayMs];
+
+    test('copy + paste inserts after the current frame', () async {
+      await openN([0, 1, 2, 3], [100, 150, 200, 250]);
+      c.select(1);
+      c.select(2, toggle: true);
+      c.copySelected();
+      expect(c.clipboardHasFrames, isTrue);
+      expect(c.doc!.frameCount, 4); // copy does not mutate
+      c.seek(3);
+      c.pasteFrames();
+      expect(delays(), [100, 150, 200, 250, 150, 200]);
+      expect(c.selection, {4, 5});
+      expect(c.current, 4);
+      c.undo();
+      expect(delays(), [100, 150, 200, 250]);
+    });
+
+    test('cut removes and paste restores the content', () async {
+      await openN([0, 1, 2], [100, 150, 200]);
+      c.select(1);
+      c.cutSelected();
+      expect(delays(), [100, 200]);
+      expect(c.clipboardHasFrames, isTrue);
+      c.seek(1);
+      c.pasteFrames();
+      expect(delays(), [100, 200, 150]);
+    });
+
+    test('cutting every frame is refused', () async {
+      await openN([0, 1], [100, 150]);
+      c.selectAll();
+      c.cutSelected();
+      expect(c.doc!.frameCount, 2);
+      expect(c.clipboardHasFrames, isFalse);
+    });
+
+    test('a new document clears the clipboard (stale store keys)',
+        () async {
+      await openN([0, 1], [100, 150]);
+      c.select(0);
+      c.copySelected();
+      expect(c.clipboardHasFrames, isTrue);
+      await openN([0, 1], [100, 150]);
+      expect(c.clipboardHasFrames, isFalse);
+    });
+  });
+
   test('close clears the document back to the landing state', () async {
     await c.openBytes(twoFrameGifFixture());
     c.togglePlay();

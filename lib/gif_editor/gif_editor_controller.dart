@@ -61,6 +61,7 @@ class GifEditorController extends ChangeNotifier {
         _selAnchor = null;
         _undoStack.clear();
         _redoStack.clear();
+        _clipboard.clear(); // entries reference the outgoing store
         unawaited(old?.dispose());
       } catch (_) {
         unawaited(store.dispose());
@@ -113,6 +114,7 @@ class GifEditorController extends ChangeNotifier {
     _selAnchor = null;
     _undoStack.clear();
     _redoStack.clear();
+    _clipboard.clear();
     final old = _store;
     _store = null;
     _doc = null;
@@ -216,12 +218,24 @@ class GifEditorController extends ChangeNotifier {
   /// selection covers every frame (a document always keeps one frame). The
   /// playhead and selection collapse onto the frame that now occupies the
   /// first deleted slot.
-  void deleteSelected() {
+  void deleteSelected() => _removeSelection(toClipboard: false);
+
+  /// Delete the selected frames, first placing value copies on the internal
+  /// frame clipboard. Same refusal rules as [deleteSelected].
+  void cutSelected() => _removeSelection(toClipboard: true);
+
+  void _removeSelection({required bool toClipboard}) {
     final doc = _doc;
     if (doc == null || _selection.isEmpty) return;
     if (_selection.length >= doc.frameCount) return;
     pause();
     _pushUndo();
+    if (toClipboard) {
+      final pos = _selection.toList()..sort();
+      _clipboard
+        ..clear()
+        ..addAll([for (final i in pos) doc.frames[i]]);
+    }
     final first = _selection.reduce((a, b) => a < b ? a : b);
     final kept = <GifFrame>[
       for (var i = 0; i < doc.frameCount; i++)
@@ -234,6 +248,83 @@ class GifEditorController extends ChangeNotifier {
       ..add(landing);
     _selAnchor = landing;
     _current = landing;
+    notifyListeners();
+  }
+
+  // --- frame clipboard ----------------------------------------------------
+
+  /// Internal, session-scoped: entries reference this document's frame
+  /// store, so the clipboard clears whenever the store changes hands.
+  final List<GifFrame> _clipboard = [];
+
+  bool get clipboardHasFrames => _clipboard.isNotEmpty;
+
+  /// Copy the selected frames (value copies; nothing mutates).
+  void copySelected() {
+    final doc = _doc;
+    if (doc == null || _selection.isEmpty) return;
+    final pos = _selection.toList()..sort();
+    _clipboard
+      ..clear()
+      ..addAll([for (final i in pos) doc.frames[i]]);
+    notifyListeners();
+  }
+
+  /// Insert the clipboard frames after the current frame; the pasted run
+  /// becomes the selection with the playhead on its first frame.
+  void pasteFrames() {
+    final doc = _doc;
+    if (doc == null || _clipboard.isEmpty) return;
+    pause();
+    _pushUndo();
+    final at = (_current + 1).clamp(0, doc.frameCount);
+    final frames = [
+      ...doc.frames.sublist(0, at),
+      ..._clipboard,
+      ...doc.frames.sublist(at),
+    ];
+    _doc = GifDocument(frames: frames, loopCount: doc.loopCount);
+    _selection
+      ..clear()
+      ..addAll([for (var i = 0; i < _clipboard.length; i++) at + i]);
+    _selAnchor = at;
+    _current = at;
+    notifyListeners();
+  }
+
+  // --- delay operations ---------------------------------------------------
+
+  /// Set the delay of the selection (or all frames) to [ms].
+  void overrideDelay(int ms) => _mapDelays((_) => ms);
+
+  /// Add [deltaMs] (may be negative) to the selection's (or all) delays.
+  void shiftDelay(int deltaMs) => _mapDelays((d) => d + deltaMs);
+
+  /// Scale the selection's (or all) delays by [percent] (100 = unchanged).
+  void scaleDelay(int percent) => _mapDelays((d) => (d * percent / 100).round());
+
+  /// Delays clamp to a 10ms floor (the encoder floors at 2cs anyway; the
+  /// model floor keeps playback math sane). No-change ops leave no history.
+  void _mapDelays(int Function(int delayMs) f) {
+    final doc = _doc;
+    if (doc == null) return;
+    final all = _selection.isEmpty;
+    var changed = false;
+    final frames = <GifFrame>[];
+    for (var i = 0; i < doc.frameCount; i++) {
+      final frame = doc.frames[i];
+      if (all || _selection.contains(i)) {
+        final next = f(frame.delayMs).clamp(10, 0xFFFF * 10);
+        if (next != frame.delayMs) changed = true;
+        frames.add(frame.withDelay(next));
+      } else {
+        frames.add(frame);
+      }
+    }
+    if (!changed) return;
+    pause();
+    _pushUndo();
+    _doc = GifDocument(frames: frames, loopCount: doc.loopCount);
     notifyListeners();
   }
 
