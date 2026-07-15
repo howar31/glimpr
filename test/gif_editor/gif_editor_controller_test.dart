@@ -617,6 +617,26 @@ void main() {
       expect(px(frameBytes(0), 0, 7), [0, 0, 200, 255]);
     });
 
+    test('playback advances through an inserted title frame (owner repro)',
+        () async {
+      // Owner report 2026-07-15: playback after inserting a title frame
+      // appeared stuck. The title frame legitimately holds 1000ms; this
+      // guards that the ticker then moves on through the real delays.
+      await openThree();
+      await c.insertTitleFrame();
+      expect(c.current, 0);
+      final seen = <int>[];
+      c.addListener(() {
+        if (c.playing) seen.add(c.current);
+      });
+      c.togglePlay();
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+      c.pause();
+      expect(seen, contains(1),
+          reason: 'must advance past the 1000ms title frame');
+      expect(seen, contains(2));
+    });
+
     test('insertTitleFrame adds a black 1s frame before the current',
         () async {
       await openThree();

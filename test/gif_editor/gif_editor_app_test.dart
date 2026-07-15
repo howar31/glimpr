@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -617,6 +618,57 @@ void main() {
     expect(c.doc!.frameCount, 3);
     expect(c.doc!.frames[0].delayMs, 1000);
     expect(c.current, 0);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('title insert then play advances and repaints (owner repro)',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1], [100, 150]);
+    await tester.pumpWidget(GifEditorApp(controller: c));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-title')));
+    await tester.pump();
+    await pumpUntilDone(tester, () => c.doc!.frameCount == 3);
+    expect(c.current, 0); // the 1000ms title frame
+    await tester.tap(find.byKey(const Key('gif-play-toggle')));
+    await tester.pump();
+    expect(c.playing, isTrue);
+    // Pump past the title's hold; the playhead must move on.
+    await tester.pump(const Duration(milliseconds: 1050));
+    expect(c.current, 1,
+        reason: 'playback must advance past the title frame');
+    // The PAINTED preview follows: capture the RawImage identity, advance a
+    // frame, and require the painted object to change.
+    ui.Image? painted() {
+      final raws = tester.widgetList<RawImage>(find.descendant(
+          of: find.byKey(const Key('gif-editor-canvas')),
+          matching: find.byType(RawImage)));
+      return raws.isEmpty ? null : raws.first.image;
+    }
+
+    var deadline = DateTime.now().add(const Duration(seconds: 5));
+    ui.Image? p1;
+    while (p1 == null && DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+      p1 = painted();
+    }
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(c.current, 2);
+    deadline = DateTime.now().add(const Duration(seconds: 5));
+    ui.Image? p2 = painted();
+    while ((p2 == null || identical(p2, p1)) &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+      p2 = painted();
+    }
+    expect(identical(p1, p2), isFalse,
+        reason: 'the preview must repaint with the advanced frame');
+    c.pause();
+    await tester.pump();
   }, timeout: const Timeout(Duration(seconds: 60)));
 
   testWidgets('progress bar button bakes every frame', (tester) async {
