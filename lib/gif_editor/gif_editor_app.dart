@@ -108,6 +108,21 @@ class _GifEditorAppState extends State<GifEditorApp>
     // Annotating tracks the playhead: rebase EditorCore on the new frame
     // (the editor controller, and with it the drawables, persist).
     if (_annotateMode) unawaited(_loadAnnotateImage());
+    // Playback diagnostics (native PerfLog drops these unless debugHooks).
+    if (_c.playing != _wasPlaying || (_c.playing && _c.current != _wasCurrent)) {
+      _perfMark('gifPlay playing=${_c.playing} current=${_c.current}');
+    }
+    _wasPlaying = _c.playing;
+    _wasCurrent = _c.current;
+  }
+
+  bool _wasPlaying = false;
+  int _wasCurrent = -1;
+
+  void _perfMark(String label) {
+    _channel
+        .invokeMethod('perfMark', {'label': label})
+        .catchError((_) {});
   }
 
   @override
@@ -2323,37 +2338,55 @@ class _FramePreview extends StatefulWidget {
 class _FramePreviewState extends State<_FramePreview> {
   ui.Image? _image;
   FrameKey? _shownKey;
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
   }
 
   @override
   void didUpdateWidget(_FramePreview old) {
     super.didUpdateWidget(old);
-    if (old.frame.key != widget.frame.key) _load();
+    if (old.frame.key != widget.frame.key) unawaited(_load());
   }
 
+  /// Load-and-paint loop. A completed load PAINTS even when the playhead
+  /// already moved on (dropping it wedges the preview solid whenever the
+  /// load latency exceeds the frame delay — fast GIFs on cache-miss
+  /// documents; the image is at most one load behind and visibly moving),
+  /// then a stale completion immediately chains a load of the now-current
+  /// frame. Single-flight: a change arriving mid-load is picked up by the
+  /// running loop's stale check instead of racing a second loader.
   Future<void> _load() async {
-    final f = widget.frame;
-    final target = widget.thumbnailTarget;
-    final ui.Image img;
+    if (_loading) return;
+    _loading = true;
     try {
-      img = target == null
-          ? await widget.store.image(f.key, f.width, f.height)
-          : await widget.store.thumbnail(f.key, f.width, f.height, target);
-    } catch (_) {
-      // The store can be disposed mid-load (home / document swap); the
-      // widget unmounts moments later, so just keep the stale image.
-      return;
+      while (mounted) {
+        final f = widget.frame;
+        final target = widget.thumbnailTarget;
+        final ui.Image img;
+        try {
+          img = target == null
+              ? await widget.store.image(f.key, f.width, f.height)
+              : await widget.store
+                  .thumbnail(f.key, f.width, f.height, target);
+        } catch (_) {
+          // The store can be disposed mid-load (home / document swap); the
+          // widget unmounts moments later, so keep the stale image.
+          return;
+        }
+        if (!mounted) return;
+        setState(() {
+          _image = img;
+          _shownKey = f.key;
+        });
+        if (widget.frame.key == f.key) return; // caught up
+      }
+    } finally {
+      _loading = false;
     }
-    if (!mounted || widget.frame.key != f.key) return;
-    setState(() {
-      _image = img;
-      _shownKey = f.key;
-    });
   }
 
   @override
