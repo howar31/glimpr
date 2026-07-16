@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "clipboard_channel.h"
@@ -34,8 +35,12 @@ class GifEditorWindow : public Win32Window {
   void WarmUp();
   // Reveal the GIF Editor (lazy-creates the engine if warm-up hasn't run).
   void RevealEditor();
-  // Open the dropped .gif in the editor (forwards loadPath to Dart).
+  // Reveal + open a .gif (drops, the after-recording flow, routing, Open
+  // With). Queued until the Dart side reports editorReady.
   void OpenWithPath(const std::string& path);
+  // Reveal + open the clipboard's copied .gif file (global hotkey). Queued
+  // like OpenWithPath.
+  void LoadClipboard();
 
   // The export "processing" pulse: glimpr/gifEditor setProcessing relays here
   // -> the control engine's tray (set once by FlutterWindow).
@@ -70,6 +75,12 @@ class GifEditorWindow : public Win32Window {
   // OLE drop target (GifDropTarget): vetoes non-gif drags at hover, a
   // dropped .gif forwards to Dart via loadPath.
   IDropTarget* drop_target_ = nullptr;
+
+  // Dart handler attach is async after engine creation: loads queue here
+  // until the app sends editorReady (mirrors EditorWindow).
+  bool ready_ = false;
+  std::optional<std::string> pending_path_;
+  bool pending_clipboard_ = false;
 };
 
 #endif  // RUNNER_GIF_EDITOR_WINDOW_H_

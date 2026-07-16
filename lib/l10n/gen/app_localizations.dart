@@ -3422,6 +3422,24 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get gifEditorCancel;
 
+  /// GIF Editor: toast when clipboard-open finds no copied .gif file
+  ///
+  /// In en, this message translates to:
+  /// **'No GIF file on the clipboard'**
+  String get gifEditorClipboardEmpty;
+
+  /// Settings > Recording > after-recording flow: open the finished recording in the GIF editor
+  ///
+  /// In en, this message translates to:
+  /// **'Open in GIF Editor'**
+  String get settingsFlowOpenGifEditor;
+
+  /// Settings > Recording: hint under the open-in-GIF-editor toggle
+  ///
+  /// In en, this message translates to:
+  /// **'GIF recordings only; other formats are skipped'**
+  String get settingsFlowOpenGifEditorHint;
+
   /// GIF Editor: discard-confirm body when closing or replacing an edited document
   ///
   /// In en, this message translates to:

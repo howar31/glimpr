@@ -173,6 +173,20 @@ bool GifEditorWindow::OnCreate() {
         if (m == "hideEditor") {
           if (GetHandle()) ShowWindow(GetHandle(), SW_HIDE);
           result->Success();
+        } else if (m == "editorReady") {
+          // The Dart app attached its handlers: flush any queued open.
+          ready_ = true;
+          if (pending_path_ && gif_editor_channel_) {
+            const std::string p = *pending_path_;
+            pending_path_.reset();
+            gif_editor_channel_->InvokeMethod(
+                "loadPath", std::make_unique<EncodableValue>(p));
+          }
+          if (pending_clipboard_ && gif_editor_channel_) {
+            pending_clipboard_ = false;
+            gif_editor_channel_->InvokeMethod("loadClipboard", nullptr);
+          }
+          result->Success();
         } else if (m == "setProcessing") {
           // Export commit (true) / delivered (false): relay to the control
           // engine's tray to drive the processing pulse (label = tooltip).
@@ -239,11 +253,21 @@ bool GifEditorWindow::OnCreate() {
 }
 
 void GifEditorWindow::OpenWithPath(const std::string& path) {
-  // Drops only land on a visible window, so the engine is running and the
-  // Dart handler is attached; forward directly.
-  if (gif_editor_channel_) {
+  RevealEditor();
+  if (ready_ && gif_editor_channel_) {
     gif_editor_channel_->InvokeMethod(
         "loadPath", std::make_unique<EncodableValue>(path));
+  } else {
+    pending_path_ = path;  // flushed on editorReady
+  }
+}
+
+void GifEditorWindow::LoadClipboard() {
+  RevealEditor();
+  if (ready_ && gif_editor_channel_) {
+    gif_editor_channel_->InvokeMethod("loadClipboard", nullptr);
+  } else {
+    pending_clipboard_ = true;
   }
 }
 

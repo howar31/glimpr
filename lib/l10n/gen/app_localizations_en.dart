@@ -1800,6 +1800,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorCancel => 'Cancel';
 
   @override
+  String get gifEditorClipboardEmpty => 'No GIF file on the clipboard';
+
+  @override
+  String get settingsFlowOpenGifEditor => 'Open in GIF Editor';
+
+  @override
+  String get settingsFlowOpenGifEditorHint =>
+      'GIF recordings only; other formats are skipped';
+
+  @override
   String get gifEditorDiscardMessage =>
       'You have unexported edits. Discard them?';
 

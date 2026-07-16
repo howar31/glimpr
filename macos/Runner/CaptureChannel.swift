@@ -437,6 +437,13 @@ enum ClipboardChannel {
       case "readImage":
         // NSPasteboard reads on the platform (main) thread.
         result(Self.readImage().map { FlutterStandardTypedData(bytes: $0) })
+      case "readFilePath":
+        // The first copied FILE's path (Finder copy puts fileURLs on the
+        // pasteboard), or nil. The GIF editor's clipboard-open uses this.
+        let urls = NSPasteboard.general.readObjects(
+          forClasses: [NSURL.self],
+          options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        result(urls?.first?.path)
       default:
         result(FlutterMethodNotImplemented)
       }

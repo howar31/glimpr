@@ -230,6 +230,29 @@ bool FlutterWindow::OnCreate() {
         } else if (m == "openImageEditorClipboard") {
           if (editor_window_) editor_window_->LoadClipboard();
           result->Success();
+        } else if (m == "openGifEditor") {
+          // Reveal and (when a path rides along) load: the global hotkey,
+          // the after-recording flow, and .gif routing all land here.
+          std::string path;
+          if (const auto* a = std::get_if<EncodableMap>(call.arguments())) {
+            auto it = a->find(EncodableValue(std::string("path")));
+            if (it != a->end()) {
+              if (const auto* s = std::get_if<std::string>(&it->second)) {
+                path = *s;
+              }
+            }
+          }
+          if (gif_editor_window_) {
+            if (path.empty()) {
+              gif_editor_window_->RevealEditor();
+            } else {
+              gif_editor_window_->OpenWithPath(path);  // reveals itself
+            }
+          }
+          result->Success();
+        } else if (m == "openGifEditorClipboard") {
+          if (gif_editor_window_) gif_editor_window_->LoadClipboard();
+          result->Success();
         } else if (m == "setTrayLabels") {
           // The control engine's Dart pushes the localized tray-menu labels
           // (the runner C++ is ASCII-only, so it cannot hold the zh strings).

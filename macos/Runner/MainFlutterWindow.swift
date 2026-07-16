@@ -165,6 +165,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         self?.isShortcutRecording = (call.arguments as? Bool) ?? false
         result(nil)
       case "openImageEditorClipboard": self?.openImageEditorClipboard(); result(nil)
+      // GIF editor globals + the after-recording flow: reveal and load a path.
+      case "openGifEditor":
+        let path = (call.arguments as? [String: Any])?["path"] as? String
+        self?.openGifEditorWithPath(path)
+        result(nil)
+      case "openGifEditorClipboard":
+        self?.revealGifEditor()
+        self?.gifEditorChannel?.invokeMethod("loadClipboard", arguments: nil)
+        result(nil)
       // Settings > Advanced: relaunch the app — spawn a detached watcher that
       // re-opens the bundle once this process exits, then terminate normally
       // (so the warm-engine count and other launch-read settings re-apply).
@@ -744,6 +753,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       case "hideEditor":
         self?.hideGifEditor()
         result(nil)
+      case "editorReady":
+        // The Dart app attached its handlers (mac loads invoke directly, so
+        // nothing is queued; the case exists to answer the notification).
+        result(nil)
       case "titleBarDoubleClick":
         self?.handleTitleBarDoubleClick(on: self?.gifEditorWindow)
         result(nil)
@@ -815,6 +828,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   }
 
   /// Reveal the warm GIF Editor window (landing or last state).
+  /// Reveal the GIF editor and (when non-nil) load [path] into it. Shared by
+  /// the global hotkey, the after-recording flow, Open With routing and the
+  /// image editor's .gif forwarding.
+  func openGifEditorWithPath(_ path: String?) {
+    revealGifEditor()
+    if let path = path, !path.isEmpty {
+      gifEditorChannel?.invokeMethod("loadPath", arguments: path)
+    }
+  }
+
   private func requestCloseGifEditor() {
     gifEditorChannel?.invokeMethod("requestClose", arguments: nil)
   }

@@ -1,14 +1,18 @@
 #include "clipboard_channel.h"
 
 #include <windows.h>
+#include <shellapi.h>
 #include <wincodec.h>
 
 #include <flutter/standard_method_codec.h>
 #include <winrt/base.h>
 
 #include <cstring>
+#include <string>
 #include <utility>
 #include <vector>
+
+#include "utils.h"
 
 #include "clipboard_dib.h"
 #include "image_codec.h"
@@ -308,6 +312,33 @@ void ClipboardChannel::HandleMethodCall(
       result->Success(EncodableValue());  // null -> Dart clipboardReadImage null
     } else {
       result->Success(EncodableValue(std::move(png)));
+    }
+    return;
+  }
+  if (call.method_name() == "readFilePath") {
+    // The first copied FILE's path (an Explorer copy puts CF_HDROP on the
+    // clipboard), or null. The GIF editor's clipboard-open uses this.
+    std::string path;
+    if (OpenClipboard(nullptr)) {
+      if (HANDLE h = GetClipboardData(CF_HDROP)) {
+        if (auto* drop = static_cast<HDROP>(GlobalLock(h))) {
+          const UINT len = DragQueryFileW(drop, 0, nullptr, 0);
+          if (len > 0) {
+            std::wstring wide(len + 1, L'\0');
+            if (DragQueryFileW(drop, 0, wide.data(), len + 1) > 0) {
+              wide.resize(len);
+              path = Utf8FromUtf16(wide);
+            }
+          }
+          GlobalUnlock(h);
+        }
+      }
+      CloseClipboard();
+    }
+    if (path.empty()) {
+      result->Success(EncodableValue());
+    } else {
+      result->Success(EncodableValue(path));
     }
     return;
   }

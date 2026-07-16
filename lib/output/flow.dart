@@ -19,6 +19,7 @@ enum FlowAction {
   showInFinder, // reveal the saved file in Finder (needs save)
   shareSheet, // macOS share menu (AirDrop / Messages / ...) for the file
   pin, // float the image as an always-on-top pin window
+  openGifEditor, // open the finished recording in the GIF editor (gif only)
 }
 
 /// Parse a comma-joined name list (the persisted form). Unknown names are
@@ -73,10 +74,12 @@ Set<FlowAction> normalizeFlow(Set<FlowAction> s, {required bool forCapture}) {
 /// The after-recording flow's applicable subset: a video never loads as
 /// image bytes, so only the path-based legs make sense. save is inherent
 /// (the recording IS the file); copy-image / pin / openEditor are not offered.
+/// openGifEditor applies to GIF-format takes only (the runner skips others).
 const kRecordingFlowActions = <FlowAction>{
   FlowAction.copyPath,
   FlowAction.showInFinder,
   FlowAction.shareSheet,
+  FlowAction.openGifEditor,
 };
 
 /// Decoration is an OUTPUT treatment: the pin leg always consumes the
@@ -277,6 +280,15 @@ Future<void> revealInFileManager(String path) async {
   } else {
     await Process.run('open', ['-R', path]);
   }
+}
+
+/// Open a saved .gif in the standalone GIF editor (reveal + load). Used by
+/// the after-recording flow; the native side relays to the GIF editor engine
+/// on both platforms.
+Future<void> openInGifEditor(String path) async {
+  try {
+    await kRoleChannel.invokeMethod('openGifEditor', {'path': path});
+  } catch (_) {}
 }
 
 /// Open a folder in the OS file manager (no selection). The folder-opening

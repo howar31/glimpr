@@ -121,6 +121,7 @@ void main() {
   late List<String> revealed;
   late List<String> copied;
   late List<String> shared;
+  late List<String> gifEdits;
   late int liveSelects;
   late int completes;
   late int recordHotkeys;
@@ -137,6 +138,7 @@ void main() {
     revealed = [];
     copied = [];
     shared = [];
+    gifEdits = [];
     liveSelects = 0;
     completes = 0;
     recordHotkeys = 0;
@@ -152,6 +154,7 @@ void main() {
       copyTextFn: (t) async => copied.add(t),
       revealFn: (p) async => revealed.add(p),
       shareFn: (p) async => shared.add(p),
+      openGifEditorFn: (p) async => gifEdits.add(p),
       now: () => DateTime(2026, 6, 12, 10, 30),
     );
   }
@@ -543,6 +546,29 @@ void main() {
       expect(copied, ['/tmp/rec.mp4']);
       expect(shared, isEmpty);
       expect(rc.phase, RecordPhase.idle);
+    });
+
+    test('openGifEditor flow action opens a finished gif take', () async {
+      final rc = build();
+      await Settings(store)
+          .setAfterRecordingFlow({FlowAction.openGifEditor});
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.GIF');
+      await Future<void>.delayed(Duration.zero);
+      expect(gifEdits, ['/tmp/rec.GIF']);
+      expect(rc.phase, RecordPhase.idle);
+    });
+
+    test('openGifEditor flow action skips non-gif takes', () async {
+      final rc = build();
+      await Settings(store)
+          .setAfterRecordingFlow({FlowAction.openGifEditor});
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.mp4');
+      await Future<void>.delayed(Duration.zero);
+      expect(gifEdits, isEmpty);
     });
 
     test('default flow is NONE: silent save', () async {

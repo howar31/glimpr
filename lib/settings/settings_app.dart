@@ -1798,6 +1798,12 @@ class _SettingsAppState extends State<SettingsApp>
               hint: _l.settingsFlowShareSheetHint,
               trailing: _recordingFlowToggle(FlowAction.shareSheet),
             ),
+          SettingRow(
+            divider: true,
+            title: _l.settingsFlowOpenGifEditor,
+            hint: _l.settingsFlowOpenGifEditorHint,
+            trailing: _recordingFlowToggle(FlowAction.openGifEditor),
+          ),
         ]),
       ],
     ];

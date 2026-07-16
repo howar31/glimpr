@@ -2167,6 +2167,18 @@
   "@gifEditorCancel": {
     "description": "GIF Editor crop confirm bar: cancel button"
   },
+  "gifEditorClipboardEmpty": "No GIF file on the clipboard",
+  "@gifEditorClipboardEmpty": {
+    "description": "GIF Editor: toast when clipboard-open finds no copied .gif file"
+  },
+  "settingsFlowOpenGifEditor": "Open in GIF Editor",
+  "@settingsFlowOpenGifEditor": {
+    "description": "Settings > Recording > after-recording flow: open the finished recording in the GIF editor"
+  },
+  "settingsFlowOpenGifEditorHint": "GIF recordings only; other formats are skipped",
+  "@settingsFlowOpenGifEditorHint": {
+    "description": "Settings > Recording: hint under the open-in-GIF-editor toggle"
+  },
   "gifEditorDiscardMessage": "You have unexported edits. Discard them?",
   "@gifEditorDiscardMessage": {
     "description": "GIF Editor: discard-confirm body when closing or replacing an edited document"

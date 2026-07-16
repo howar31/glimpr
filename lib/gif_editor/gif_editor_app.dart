@@ -72,19 +72,42 @@ class _GifEditorAppState extends State<GifEditorApp>
     _ownsController = widget.controller == null;
     _c = widget.controller ?? GifEditorController();
     _c.addListener(_onControllerChanged);
-    // Native pushes: a file dropped on the window, and the close gesture
-    // (red button / Cmd-W) routed through Dart for the dirty confirm.
+    // Native pushes: a file dropped on the window, the clipboard-open
+    // hotkey, and the close gesture (red button / Cmd-W) routed through
+    // Dart for the dirty confirm.
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'loadPath') {
         final path = call.arguments as String?;
         if (path != null && path.isNotEmpty && !_c.opening) {
           unawaited(_openFromPath(path));
         }
+      } else if (call.method == 'loadClipboard') {
+        unawaited(_openFromClipboard());
       } else if (call.method == 'requestClose') {
         unawaited(_requestClose());
       }
       return null;
     });
+    // Handlers are attached: native may flush a queued open now.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _channel.invokeMethod('editorReady').catchError((_) {});
+    });
+  }
+
+  /// Clipboard-open (global hotkey): a .gif FILE copied to the clipboard
+  /// (Finder / Explorer copy) opens as the document; anything else toasts.
+  Future<void> _openFromClipboard() async {
+    if (_c.opening) return;
+    String? path;
+    try {
+      path = await const MethodChannel('glimpr/clipboard')
+          .invokeMethod<String>('readFilePath');
+    } catch (_) {}
+    if (path == null || !path.toLowerCase().endsWith('.gif')) {
+      _toast(_l.gifEditorClipboardEmpty);
+      return;
+    }
+    await _openFromPath(path);
   }
 
   @override

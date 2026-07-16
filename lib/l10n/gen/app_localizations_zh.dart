@@ -1740,6 +1740,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorCancel => '取消';
 
   @override
+  String get gifEditorClipboardEmpty => '剪貼簿沒有 GIF 檔案';
+
+  @override
+  String get settingsFlowOpenGifEditor => '在 GIF 編輯器開啟';
+
+  @override
+  String get settingsFlowOpenGifEditorHint => '僅限 GIF 錄影；其他格式會略過';
+
+  @override
   String get gifEditorDiscardMessage => '尚有未輸出的編輯。要捨棄嗎？';
 
   @override
