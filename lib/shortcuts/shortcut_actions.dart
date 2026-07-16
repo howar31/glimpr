@@ -65,6 +65,14 @@ const kRecordWindowKey = 'global.recordWindow';
 const kRecordDisplayKey = 'global.recordDisplay';
 const kRecordLastRegionKey = 'global.recordLastRegion';
 
+/// The editor-open actions, for UI grouping (own Shortcuts section).
+const kEditorOpenActionKeys = <String>{
+  kOpenEditorKey,
+  kOpenEditorClipboardKey,
+  kOpenGifEditorKey,
+  kOpenGifEditorClipboardKey,
+};
+
 /// The recording actions, for UI grouping (own Shortcuts section / pane).
 const kRecordActionKeys = <String>{
   kRecordRegionKey,

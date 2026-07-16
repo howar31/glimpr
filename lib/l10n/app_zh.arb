@@ -168,6 +168,7 @@
   "settingsSectionPin": "釘選",
   "settingsPinHoverGlow": "周邊光暈",
   "settingsPinHoverGlowHint": "滑鼠停在釘選浮動窗上時顯示周邊光暈；關閉後仍會出現控制項",
+  "settingsSectionEditors": "編輯器",
   "settingsSectionRecording": "螢幕錄影",
   "settingsRecordingUnavailable": "螢幕錄影需要 macOS 15 或更新版本。",
   "settingsRecordingFps": "影格率",

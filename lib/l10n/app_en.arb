@@ -555,6 +555,10 @@
   "@settingsPinHoverGlowHint": {
     "description": "Settings > Screenshot > Pin: hover-glow toggle hint"
   },
+  "settingsSectionEditors": "Editors",
+  "@settingsSectionEditors": {
+    "description": "Settings > Shortcuts: section header grouping the Image Editor and GIF Editor open actions"
+  },
   "settingsSectionRecording": "Screen recording",
   "@settingsSectionRecording": {
     "description": "Settings > Capture: screen recording section label"

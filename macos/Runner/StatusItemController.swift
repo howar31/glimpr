@@ -137,6 +137,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
     rebuildRecent([]) // seed the placeholder until Dart pushes the list
+    menu.addItem(menuItem(
+      title: L.s("Open Save Folder", "開啟儲存資料夾"),
+      action: #selector(openSaveFolder), key: ""))
+    // GIF editor group, separated from the image/output cluster above.
+    menu.addItem(.separator())
     // Reveals the warm GIF Editor window (hinted with the global binding).
     let openGif = menuItem(
       title: L.s("Open GIF Editor", "開啟 GIF 編輯器"),
@@ -146,9 +151,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.addItem(globalItem(
       L.s("Open GIF Editor with Clipboard", "以剪貼簿開啟 GIF 編輯器"),
       "global.openGifEditorClipboard"))
-    menu.addItem(menuItem(
-      title: L.s("Open Save Folder", "開啟儲存資料夾"),
-      action: #selector(openSaveFolder), key: ""))
     menu.addItem(.separator())
     let update = menuItem(
       title: L.s("Check for updates", "檢查更新"),

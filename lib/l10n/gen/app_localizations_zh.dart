@@ -537,6 +537,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPinHoverGlowHint => '滑鼠停在釘選浮動窗上時顯示周邊光暈；關閉後仍會出現控制項';
 
   @override
+  String get settingsSectionEditors => '編輯器';
+
+  @override
   String get settingsSectionRecording => '螢幕錄影';
 
   @override

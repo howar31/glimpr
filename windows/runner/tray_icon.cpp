@@ -280,14 +280,15 @@ void TrayIcon::ShowMenu() {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
                 Utf16FromUtf8(L("openRecent", "Open Recent")).c_str());
   }
-  // Reveals the GIF Editor window (hinted with the global binding).
+  AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
+             "", true);
+  // GIF editor group, separated from the image/output cluster above.
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendItem(menu, kCmdOpenGifEditor, L("gifEditor", "Open GIF Editor"),
              hotkeys_->AcceleratorLabel(kActOpenGifEditor), true);
   AppendItem(menu, kCmdOpenGifEditorClipboard,
              L("gifEditorClipboard", "Open GIF Editor with Clipboard"),
              hotkeys_->AcceleratorLabel(kActOpenGifEditorClipboard), true);
-  AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
-             "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Dart pushes an "Update available: vX.Y.Z" label when the update check
   // finds a newer release (SetUpdateStatus); idle falls back to the pushed

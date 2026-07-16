@@ -560,6 +560,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Show the glowing halo around a pinned window on hover; the controls still appear when off';
 
   @override
+  String get settingsSectionEditors => 'Editors';
+
+  @override
   String get settingsSectionRecording => 'Screen recording';
 
   @override

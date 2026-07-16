@@ -69,11 +69,10 @@ void main() {
     // it for a host-platform-stable check. Scope to the Global card: the Editor
     // section also has a bare '1' (the Rectangle tool).
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    // The global card has 10 rows (captureArea + 3 Phase-4 modes + 2 open-
-    // editor actions + 2 gif-editor actions + 2 pin actions): 8 rows carry 3
-    // caps (⌘⌥ pair + digit) and the 2 gif rows carry 4 (⌘⌥⇧ + digit) = 32;
-    // the 4 record actions live in their OWN section card below.
-    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(32));
+    // The capture card has 6 rows (captureArea + 3 Phase-4 modes + 2 pin
+    // actions), each with 3 caps (⌘⌥ pair + digit) = 18; the editor-open
+    // quartet and the 4 record actions live in their OWN section cards.
+    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(18));
   });
 
   testWidgets('Tools / Commands / Reserved sections render their rows',
@@ -82,7 +81,7 @@ void main() {
     // (a lazy ListView would leave the lower sections unbuilt); enlarge the
     // surface so the whole pane renders for the structural assertions
     // (incl. the Recording shortcuts card above the editor sections).
-    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.physicalSize = const Size(1000, 4600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -235,7 +234,7 @@ void main() {
     // (two modifiers + the digit '1'; all global rows back to their defaults).
     expect(find.text('Apply'), findsNothing);
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
-    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(32));
+    expect(_inGlobal(find.byType(KeyCap)), findsNWidgets(18));
   });
 
   testWidgets('clearing during recording disables the global hotkey',
@@ -267,7 +266,7 @@ void main() {
       (tester) async {
     // The legend above the cards pushes the capture rows down, so enlarge the
     // surface to keep them (and their reset buttons) on-screen for interaction.
-    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.physicalSize = const Size(1000, 4600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -300,7 +299,7 @@ void main() {
       (tester) async {
     // The legend above the cards pushes the second capture row down; enlarge the
     // surface so both rows being bound are on-screen for interaction.
-    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.physicalSize = const Size(1000, 4600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -356,7 +355,7 @@ void main() {
       (tester) async {
     // Editor cards sit below the Capture + Recording cards; enlarge the
     // surface so the TOOLS card is built and on-screen for direct interaction.
-    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.physicalSize = const Size(1000, 4600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

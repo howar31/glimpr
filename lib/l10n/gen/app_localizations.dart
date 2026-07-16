@@ -1106,6 +1106,12 @@ abstract class AppLocalizations {
   /// **'Show the glowing halo around a pinned window on hover; the controls still appear when off'**
   String get settingsPinHoverGlowHint;
 
+  /// Settings > Shortcuts: section header grouping the Image Editor and GIF Editor open actions
+  ///
+  /// In en, this message translates to:
+  /// **'Editors'**
+  String get settingsSectionEditors;
+
   /// Settings > Capture: screen recording section label
   ///
   /// In en, this message translates to:

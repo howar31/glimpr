@@ -2522,9 +2522,30 @@ class _SettingsAppState extends State<SettingsApp>
       SectionLabel(_l.settingsPaneCapture, icon: Icons.crop_free),
       GlassCard.rows([
         for (final a in kGlobalActions)
-          // Hide globals that are not available on this platform (Windows:
-          // pin / open-editor land in S4, recording in S6).
+          // Hide globals that are not available on this platform; the
+          // editor-open quartet lives in its own section below.
           if (!kRecordActionKeys.contains(a.actionKey) &&
+              !kEditorOpenActionKeys.contains(a.actionKey) &&
+              isGlobalActionAvailable(a.actionKey))
+            SettingRow(
+              title: globalActionLabel(_l, a.actionKey),
+              hint: globalActionHint(_l, a.actionKey),
+              tag: _scopeChip(_l.scopeGlobal),
+              warning: _bindingWarning(a.actionKey, dupes),
+              trailing: _bindingRow(
+                t: t,
+                actionKey: a.actionKey,
+                dupes: dupes,
+              ),
+            ),
+      ]),
+      _sectionNote(t, _l.settingsShortcutsCaptureNote),
+      const SizedBox(height: 24),
+      // Editor-open globals (Image Editor + GIF Editor), owner grouping.
+      SectionLabel(_l.settingsSectionEditors, icon: Icons.edit_outlined),
+      GlassCard.rows([
+        for (final a in kGlobalActions)
+          if (kEditorOpenActionKeys.contains(a.actionKey) &&
               isGlobalActionAvailable(a.actionKey))
             SettingRow(
               title: globalActionLabel(_l, a.actionKey),
