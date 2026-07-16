@@ -2238,6 +2238,6 @@
   },
   "trayOpenGifEditor": "Open GIF Editor",
   "@trayOpenGifEditor": {
-    "description": "Tray menu: reveal the GIF Editor window (provisional entry)"
+    "description": "Tray menu: reveal the GIF Editor window"
   }
 }

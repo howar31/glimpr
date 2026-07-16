@@ -277,8 +277,7 @@ void TrayIcon::ShowMenu() {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
                 Utf16FromUtf8(L("openRecent", "Open Recent")).c_str());
   }
-  // Provisional entry (final entry points are a pending integration
-  // discussion): reveals the GIF Editor window.
+  // Reveals the GIF Editor window.
   AppendItem(menu, kCmdOpenGifEditor, L("gifEditor", "Open GIF Editor"), "",
              true);
   AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),

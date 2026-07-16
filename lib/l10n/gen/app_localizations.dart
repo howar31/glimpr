@@ -3524,7 +3524,7 @@ abstract class AppLocalizations {
   /// **'Cinemagraph'**
   String get gifEditorCinemagraph;
 
-  /// Tray menu: reveal the GIF Editor window (provisional entry)
+  /// Tray menu: reveal the GIF Editor window
   ///
   /// In en, this message translates to:
   /// **'Open GIF Editor'**
