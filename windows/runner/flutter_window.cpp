@@ -441,6 +441,10 @@ bool FlutterWindow::OnCreate() {
   capture_channel_->SetPinManager(pin_manager_.get());
   overlay_manager_->SetPinManager(pin_manager_.get());
   editor_window_->SetPinManager(pin_manager_.get());
+  // .gif files ingested by the image editor route to the GIF editor.
+  editor_window_->SetOpenGifRelay([this](const std::string& path) {
+    if (gif_editor_window_) gif_editor_window_->OpenWithPath(path);
+  });
 
   // System tray (the menu-bar analogue). Live items fire through the same Dart
   // dispatcher as the hotkeys; Settings / About / Quit are native callbacks.

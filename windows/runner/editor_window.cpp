@@ -309,6 +309,12 @@ bool EditorWindow::OnCreate() {
           result->Success();
         } else if (m == "shareSheet") {
           result->Success();  // Windows v1: no system share surface
+        } else if (m == "openGifEditor") {
+          // A .gif reached this editor: hand it to the GIF editor window.
+          if (const auto* s = std::get_if<std::string>(call.arguments())) {
+            if (open_gif_relay_) open_gif_relay_(*s);
+          }
+          result->Success();
         } else if (m == "openSettings") {
           if (control_hwnd_) {
             static UINT reveal = RegisterWindowMessageW(L"GlimprRevealSettings");

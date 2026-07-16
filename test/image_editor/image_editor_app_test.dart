@@ -102,6 +102,25 @@ void main() {
     expect(find.text('Recent'), findsNothing);
   });
 
+  testWidgets('a .gif ingested here forwards to the GIF editor',
+      (tester) async {
+    // Route check only: the gif must NOT load into this editor, and the
+    // forward must ride the editor channel (native reveals the GIF window).
+    final calls = mockMethodChannel(channel);
+    final gifPath = '${tmp.path}/anim.GIF';
+    File(gifPath).writeAsBytesSync([0x47, 0x49, 0x46]); // content unread
+    await pumpApp(tester);
+    await pushFromNative(channel, 'loadPath', gifPath);
+    await tester.pump();
+    final forward =
+        calls.where((c) => c.method == 'openGifEditor').toList();
+    expect(forward, hasLength(1));
+    expect(forward.single.arguments, gifPath);
+    // Still on the landing: nothing was loaded or recorded here.
+    expect(find.text('Open an image to edit'), findsOneWidget);
+    expect(find.text('Recent'), findsNothing);
+  });
+
   testWidgets('seeded recents -> the gallery grid + open bar', (tester) async {
     await seedRecents();
     await pumpApp(tester);

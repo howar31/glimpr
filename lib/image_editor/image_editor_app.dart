@@ -260,6 +260,15 @@ class _ImageEditorAppState extends State<ImageEditorApp>
 
   /// Read, decode, and show [path] in the editor.
   Future<void> _loadPath(String path, {bool confirmed = false}) async {
+    // Every file ingest (Open panel, drag-drop, Open With, recents) funnels
+    // here: .gif belongs to the GIF editor, so forward and leave this window
+    // untouched (no dirty confirm — nothing here is replaced).
+    if (path.toLowerCase().endsWith('.gif')) {
+      try {
+        await _channel.invokeMethod('openGifEditor', path);
+      } catch (_) {}
+      return;
+    }
     // Replacing the current image: confirm if dirty — unless the caller already
     // did (the Open button confirms BEFORE showing the file picker). Direct loads
     // (Finder "Open With" / drag-drop, later) pass confirmed=false.

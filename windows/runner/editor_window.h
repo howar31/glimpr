@@ -60,6 +60,12 @@ class EditorWindow : public Win32Window {
   // here -> the control engine's tray (set once by FlutterWindow). Mirrors macOS,
   // where the editor's Done/export drives the status-item processing pulse.
   // The label (localized, UTF-8) is the tray's hover tooltip while pulsing.
+  // A .gif reached the image editor (drop / Open dialog / recents): Dart
+  // forwards it here and FlutterWindow relays to the GIF editor window.
+  void SetOpenGifRelay(std::function<void(const std::string&)> cb) {
+    open_gif_relay_ = std::move(cb);
+  }
+
   void SetProcessingCallback(std::function<void(bool, const std::string&)> cb) {
     proc_cb_ = std::move(cb);
   }
@@ -94,6 +100,7 @@ class EditorWindow : public Win32Window {
   std::optional<std::string> pending_path_;
 
   std::function<void(std::vector<std::string>)> recent_cb_;
+  std::function<void(const std::string&)> open_gif_relay_;
   // Editor-export pulse (+ tooltip label) -> control tray.
   std::function<void(bool, const std::string&)> proc_cb_;
   PinManager* pin_manager_ = nullptr;

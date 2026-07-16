@@ -555,6 +555,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           self?.pinImage(path: path, rect: nil)
         }
         result(nil)
+      // A .gif reached the image editor (drop / Open panel / recents): it
+      // belongs to the GIF editor — reveal it there instead.
+      case "openGifEditor":
+        self?.openGifEditorWithPath(call.arguments as? String)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -754,8 +759,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         self?.hideGifEditor()
         result(nil)
       case "editorReady":
-        // The Dart app attached its handlers (mac loads invoke directly, so
-        // nothing is queued; the case exists to answer the notification).
+        // The Dart app attached its handlers: flush a path that Open With /
+        // a flow delivered during a cold start.
+        self?.gifEditorReady = true
+        if let pending = self?.pendingGifPath {
+          self?.pendingGifPath = nil
+          self?.gifEditorChannel?.invokeMethod("loadPath", arguments: pending)
+        }
         result(nil)
       case "titleBarDoubleClick":
         self?.handleTitleBarDoubleClick(on: self?.gifEditorWindow)
@@ -828,13 +838,21 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   }
 
   /// Reveal the warm GIF Editor window (landing or last state).
+  // Cold-start buffering for GIF loads (the Image Editor pattern): a path
+  // arriving before the Dart app attaches its handlers waits for editorReady.
+  private var gifEditorReady = false
+  private var pendingGifPath: String?
+
   /// Reveal the GIF editor and (when non-nil) load [path] into it. Shared by
   /// the global hotkey, the after-recording flow, Open With routing and the
   /// image editor's .gif forwarding.
   func openGifEditorWithPath(_ path: String?) {
     revealGifEditor()
-    if let path = path, !path.isEmpty {
+    guard let path = path, !path.isEmpty else { return }
+    if gifEditorReady {
       gifEditorChannel?.invokeMethod("loadPath", arguments: path)
+    } else {
+      pendingGifPath = path
     }
   }
 
