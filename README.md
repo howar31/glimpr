@@ -30,6 +30,10 @@ Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
 - **Record** – screen recording (H.264 / HEVC including HDR10, GIF) in
   region, window, display, and last-region modes; system audio and
   microphone; pause / resume; auto-stop.
+- **GIF Editor** – edit any GIF on a frame timeline: trim, reorder and
+  retime frames, crop / resize / rotate, burn in annotations, transitions,
+  smooth loop, cinemagraph and a progress bar; re-encodes with an adaptive
+  palette, optional dithering and file-size optimization.
 - **Pin** – float any screenshot as an always-on-top pin with drag and zoom.
 - **Flows** – configurable after-capture and after-edit actions: save, copy,
   open editor, pin, share; filename templates and date subfolders.
