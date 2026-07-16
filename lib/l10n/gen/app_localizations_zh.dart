@@ -1740,6 +1740,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorCancel => '取消';
 
   @override
+  String get gifEditorDiscardMessage => '尚有未輸出的編輯。要捨棄嗎？';
+
+  @override
   String get gifEditorAnnotate => '標註';
 
   @override

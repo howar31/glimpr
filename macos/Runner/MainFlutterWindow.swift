@@ -770,7 +770,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       contentRect: NSRect(x: 0, y: 0, width: 1180, height: 700),
       styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered, defer: false)
-    w.onCloseShortcut = { [weak self] in self?.hideGifEditor() }
+    w.onCloseShortcut = { [weak self] in self?.requestCloseGifEditor() }
     w.title = L.s("GIF Editor", "GIF 編輯器")
     w.titleVisibility = .hidden
     w.titlebarAppearsTransparent = true
@@ -792,9 +792,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     w.center()
     w.setFrameAutosaveName("GlimprGifEditorWindow")
     let delegate = ImageEditorWindowDelegate(
-      // S1 has no dirty state yet: the red button hides directly (the engine
-      // stays warm). A Dart-side dirty confirm arrives with the edit slices.
-      onClose: { [weak self] in self?.hideGifEditor() },
+      // Close routes through Dart (requestClose) for the unsaved-edits
+      // confirm; Dart calls hideEditor when the close is accepted.
+      onClose: { [weak self] in self?.requestCloseGifEditor() },
       onBecomeKey: {},
       onResignKey: {})
     w.delegate = delegate
@@ -815,6 +815,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   }
 
   /// Reveal the warm GIF Editor window (landing or last state).
+  private func requestCloseGifEditor() {
+    gifEditorChannel?.invokeMethod("requestClose", arguments: nil)
+  }
+
   func revealGifEditor() {
     guard let w = gifEditorWindow else { return }
     w.alphaValue = 1

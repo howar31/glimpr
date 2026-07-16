@@ -743,6 +743,36 @@ void main() {
     });
   });
 
+  group('dirty tracking', () {
+    test('open is clean, mutations dirty, markClean resets', () async {
+      await openN([0, 1], [100, 150]);
+      expect(c.dirty, isFalse);
+      c.select(0); // selection alone is not an edit
+      expect(c.dirty, isFalse);
+      c.overrideDelay(300);
+      expect(c.dirty, isTrue);
+      c.markClean();
+      expect(c.dirty, isFalse);
+      // Sticky like the Image Editor: undoing past the clean point still
+      // counts as dirty (the document diverged from what was exported).
+      c.undo();
+      expect(c.dirty, isTrue);
+      c.redo();
+      expect(c.dirty, isTrue);
+    });
+
+    test('reopening and close reset dirty', () async {
+      await openN([0, 1], [100, 150]);
+      c.overrideDelay(300);
+      expect(c.dirty, isTrue);
+      await openN([0, 1], [100, 150]);
+      expect(c.dirty, isFalse);
+      c.overrideDelay(300);
+      c.close();
+      expect(c.dirty, isFalse);
+    });
+  });
+
   test('close clears the document back to the landing state', () async {
     await c.openBytes(twoFrameGifFixture());
     c.togglePlay();

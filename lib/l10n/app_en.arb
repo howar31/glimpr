@@ -2167,6 +2167,10 @@
   "@gifEditorCancel": {
     "description": "GIF Editor crop confirm bar: cancel button"
   },
+  "gifEditorDiscardMessage": "You have unexported edits. Discard them?",
+  "@gifEditorDiscardMessage": {
+    "description": "GIF Editor: discard-confirm body when closing or replacing an edited document"
+  },
   "gifEditorAnnotate": "Annotate",
   "@gifEditorAnnotate": {
     "description": "GIF Editor toolbar: annotate (burn-in overlay) mode toggle tooltip"

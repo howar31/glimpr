@@ -24,6 +24,7 @@ import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
 import '../shortcuts/shortcut_store.dart';
+import '../theme/confirm_dialog.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'export_service.dart';
@@ -71,13 +72,16 @@ class _GifEditorAppState extends State<GifEditorApp>
     _ownsController = widget.controller == null;
     _c = widget.controller ?? GifEditorController();
     _c.addListener(_onControllerChanged);
-    // Native pushes (a file dropped on the window).
+    // Native pushes: a file dropped on the window, and the close gesture
+    // (red button / Cmd-W) routed through Dart for the dirty confirm.
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'loadPath') {
         final path = call.arguments as String?;
         if (path != null && path.isNotEmpty && !_c.opening) {
           unawaited(_openFromPath(path));
         }
+      } else if (call.method == 'requestClose') {
+        unawaited(_requestClose());
       }
       return null;
     });
@@ -369,9 +373,10 @@ class _GifEditorAppState extends State<GifEditorApp>
     await _openFromPath(path);
   }
 
-  /// Open [path] as the document (picker and drag-drop route). Replaces the
-  /// current document directly, exactly like cmd-O.
+  /// Open [path] as the document (picker and drag-drop route). Replacing a
+  /// document with unexported edits asks first (the Image Editor behavior).
   Future<void> _openFromPath(String path) async {
+    if (!await _confirmDiscardIfDirty()) return;
     try {
       final bytes = await File(path).readAsBytes();
       await _c.openBytes(bytes);
@@ -423,6 +428,7 @@ class _GifEditorAppState extends State<GifEditorApp>
         onProgress: (done, total) =>
             setState(() => _exportProgress = done / total),
       );
+      _c.markClean(); // exported = nothing left to lose on close
       _toast(_l.gifEditorExportDone);
     } catch (_) {
       _toast(_l.gifEditorExportFailed);
@@ -455,13 +461,53 @@ class _GifEditorAppState extends State<GifEditorApp>
     });
   }
 
-  void _requestClose() {
-    _channel.invokeMethod('hideEditor');
+  // Discard-confirm plumbing (the Image Editor recipe): dialogs need a
+  // Navigator, so the MaterialApp carries a key; _confirming/_closePending
+  // keep repeated close gestures from stacking dialogs.
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _confirming = false;
+  bool _closePending = false;
+
+  /// True when there is nothing to lose; otherwise prompts. Used before
+  /// unloading (close / Home) or replacing (open / drop) the document.
+  Future<bool> _confirmDiscardIfDirty() async {
+    if (_c.doc == null || !_c.dirty) return true;
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null || _confirming) return false;
+    _confirming = true;
+    try {
+      return await showDiscardConfirm(
+        ctx,
+        title: _l.editorDiscardTitle,
+        message: _l.gifEditorDiscardMessage,
+      );
+    } finally {
+      _confirming = false;
+    }
   }
 
-  /// Back to the landing: drop the current document (S1 has no dirty state
-  /// to confirm; the frame store is disposed by the controller).
-  void _goHome() => _c.close();
+  /// A close gesture (red button / Cmd-W / Ctrl-W), routed here by native as
+  /// requestClose: confirm if dirty, then hide the window (engine stays
+  /// warm) and unload back to the landing — the Image Editor behavior.
+  Future<void> _requestClose() async {
+    if (_closePending) return;
+    _closePending = true;
+    try {
+      if (!await _confirmDiscardIfDirty()) return;
+      try {
+        await _channel.invokeMethod('hideEditor');
+      } catch (_) {}
+      _c.close();
+    } finally {
+      _closePending = false;
+    }
+  }
+
+  /// Back to the landing: drop the current document (dirty-confirmed; the
+  /// frame store is disposed by the controller).
+  Future<void> _goHome() async {
+    if (await _confirmDiscardIfDirty()) _c.close();
+  }
 
   // Windows only: push the localized title to the OS caption (no Flutter
   // title bar there; the runner C++ is ASCII-only and owns no l10n strings).
@@ -484,6 +530,7 @@ class _GifEditorAppState extends State<GifEditorApp>
     final tokens = GlimprTokens.forBrightness(brightness);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       locale: appLocaleOverride,
       localeListResolutionCallback: resolveAppLocale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -500,9 +547,9 @@ class _GifEditorAppState extends State<GifEditorApp>
           bindings: {
             if (platformIsWindows)
               const SingleActivator(LogicalKeyboardKey.keyW, control: true):
-                  _requestClose,
-            // Open a (new) GIF from anywhere; S1 has no dirty state so the
-            // current document is simply replaced.
+                  () => unawaited(_requestClose()),
+            // Open a (new) GIF from anywhere; a dirty document confirms
+            // before being replaced (inside _openFromPath).
             SingleActivator(LogicalKeyboardKey.keyO,
                 meta: !platformIsWindows,
                 control: platformIsWindows): () => unawaited(_openPanel()),
@@ -610,7 +657,7 @@ class _GifEditorAppState extends State<GifEditorApp>
                         top: 12,
                         left: 12,
                         child: _FloatingHomeButton(
-                            key: const Key('gif-home'), onTap: _goHome),
+                            key: const Key('gif-home'), onTap: () => unawaited(_goHome())),
                       ),
                     // Anchored panels (export options / delay / reduce)
                     // share one outside-tap barrier.
@@ -664,7 +711,7 @@ class _GifEditorAppState extends State<GifEditorApp>
             // Back to the landing (open another GIF) — same top-left home
             // idiom as the Image Editor; landing has nowhere to go back to.
             if (_c.doc != null) ...[
-              _TitleBarHome(key: const Key('gif-home'), onTap: _goHome),
+              _TitleBarHome(key: const Key('gif-home'), onTap: () => unawaited(_goHome())),
               const SizedBox(width: 6),
             ],
             const GlimprMark(size: 18),

@@ -34,6 +34,13 @@ class GifEditorController extends ChangeNotifier {
   final List<_Memento> _undoStack = [];
   final List<_Memento> _redoStack = [];
 
+  // Dirty = the document diverged from its last clean point (open / export).
+  // A monotonic mutation counter (bumped by every mutation, undo and redo)
+  // compared against the mark taken at the clean points — sticky like the
+  // Image Editor's flag: undoing back to the original still counts dirty.
+  int _mutations = 0;
+  int _cleanMutations = 0;
+
   FrameStore? get store => _store;
   GifDocument? get doc => _doc;
   int get current => _current;
@@ -42,6 +49,14 @@ class GifEditorController extends ChangeNotifier {
   Set<int> get selection => Set.unmodifiable(_selection);
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
+  bool get dirty => _mutations != _cleanMutations;
+
+  /// The document was persisted (successful export): from here on [dirty]
+  /// means "edited since the export".
+  void markClean() {
+    _cleanMutations = _mutations;
+    notifyListeners();
+  }
 
   // Canvas transform in flight: mutators refuse while true (the transform
   // captured the document at its start; concurrent edits would be lost).
@@ -74,6 +89,8 @@ class GifEditorController extends ChangeNotifier {
         _undoStack.clear();
         _redoStack.clear();
         _clipboard.clear(); // entries reference the outgoing store
+        _mutations = 0;
+        _cleanMutations = 0;
         unawaited(old?.dispose());
       } catch (_) {
         unawaited(store.dispose());
@@ -127,6 +144,8 @@ class GifEditorController extends ChangeNotifier {
     _undoStack.clear();
     _redoStack.clear();
     _clipboard.clear();
+    _mutations = 0;
+    _cleanMutations = 0;
     final old = _store;
     _store = null;
     _doc = null;
@@ -184,6 +203,7 @@ class GifEditorController extends ChangeNotifier {
   /// just the list + metadata — cheap enough for every operation.
   void _pushUndo() {
     final doc = _doc!;
+    _mutations++;
     _undoStack.add(_Memento(
       frames: List.of(doc.frames),
       loopCount: doc.loopCount,
@@ -213,6 +233,7 @@ class GifEditorController extends ChangeNotifier {
   void undo() {
     if (_undoStack.isEmpty || _transforming) return;
     pause();
+    _mutations++;
     _redoStack.add(_snapshot());
     _restore(_undoStack.removeLast());
   }
@@ -220,6 +241,7 @@ class GifEditorController extends ChangeNotifier {
   void redo() {
     if (_redoStack.isEmpty || _transforming) return;
     pause();
+    _mutations++;
     _undoStack.add(_snapshot());
     _restore(_redoStack.removeLast());
   }

@@ -3422,6 +3422,12 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get gifEditorCancel;
 
+  /// GIF Editor: discard-confirm body when closing or replacing an edited document
+  ///
+  /// In en, this message translates to:
+  /// **'You have unexported edits. Discard them?'**
+  String get gifEditorDiscardMessage;
+
   /// GIF Editor toolbar: annotate (burn-in overlay) mode toggle tooltip
   ///
   /// In en, this message translates to:

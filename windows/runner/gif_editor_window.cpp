@@ -264,10 +264,14 @@ LRESULT GifEditorWindow::MessageHandler(HWND hwnd, UINT message, WPARAM wparam,
                                         LPARAM lparam) noexcept {
   switch (message) {
     case WM_CLOSE:
-      // S1 has no dirty state: close hides directly (the engine stays warm;
-      // the window is never destroyed until quit). A Dart-side dirty confirm
-      // arrives with the edit slices.
-      ShowWindow(hwnd, SW_HIDE);
+      // Mirror macOS: ask Dart to run its unsaved-edits check; Dart calls
+      // hideEditor to hide. The window is never destroyed (engine warm), so
+      // do NOT fall through to the default destroy.
+      if (gif_editor_channel_) {
+        gif_editor_channel_->InvokeMethod("requestClose", nullptr);
+      } else {
+        ShowWindow(hwnd, SW_HIDE);
+      }
       return 0;
     case WM_GETMINMAXINFO: {
       auto* info = reinterpret_cast<MINMAXINFO*>(lparam);

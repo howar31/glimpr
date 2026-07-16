@@ -554,6 +554,7 @@
   "gifEditorKeepAspect": "鎖定比例",
   "gifEditorProcessing": "處理中",
   "gifEditorCancel": "取消",
+  "gifEditorDiscardMessage": "尚有未輸出的編輯。要捨棄嗎？",
   "gifEditorAnnotate": "標註",
   "gifEditorBakeSelected": "套用到選取的 {n} 幀",
   "gifEditorBakeAll": "套用到全部幀",

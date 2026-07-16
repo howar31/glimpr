@@ -846,6 +846,113 @@ void main() {
     expect(c.current, 0);
   });
 
+  group('close parity with the Image Editor', () {
+    testWidgets('clean document: requestClose hides and resets to landing',
+        (tester) async {
+      final calls = mockMethodChannel(_channel);
+      final c = await preloadedN(tester, [0, 1], [100, 150]);
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      await pushFromNative(_channel, 'requestClose', null);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text(_en.editorDiscardTitle), findsNothing);
+      expect(calls.map((call) => call.method), contains('hideEditor'));
+      expect(c.doc, isNull); // unloaded -> landing on next reveal
+      expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
+    });
+
+    testWidgets('dirty document: confirm discards, cancel keeps',
+        (tester) async {
+      final calls = mockMethodChannel(_channel);
+      final c = await preloadedN(tester, [0, 1], [100, 150]);
+      c.overrideDelay(300); // dirty
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      // Cancel first: document survives, window stays.
+      await pushFromNative(_channel, 'requestClose', null);
+      await tester.pump();
+      expect(find.text(_en.editorDiscardTitle), findsOneWidget);
+      await tester.tap(find.text(_en.confirmCancel));
+      await tester.pump();
+      await tester.pump();
+      expect(c.doc, isNotNull);
+      expect(calls.map((call) => call.method),
+          isNot(contains('hideEditor')));
+      // Confirm second: hides and unloads.
+      await pushFromNative(_channel, 'requestClose', null);
+      await tester.pump();
+      await tester.tap(find.text(_en.confirmDiscard));
+      await tester.pump();
+      await tester.pump();
+      expect(calls.map((call) => call.method), contains('hideEditor'));
+      expect(c.doc, isNull);
+    });
+
+    testWidgets('export marks clean so close no longer confirms',
+        (tester) async {
+      final dir = (await tester
+          .runAsync(() => Directory.systemTemp.createTemp('gifed_clean')))!;
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final outPath = '${dir.path}/out.gif';
+      final calls = mockMethodChannel(_channel, handler: (call) {
+        if (call.method == 'savePanel') return outPath;
+        return null;
+      });
+      final c = await preloadedN(tester, [0, 1], [100, 150]);
+      c.overrideDelay(300); // dirty
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      await tester.tap(find.text(_en.gifEditorExportButton));
+      await tester.pump();
+      await pumpUntilDone(tester,
+          () => find.text(_en.gifEditorExportDone).evaluate().isNotEmpty);
+      expect(c.dirty, isFalse);
+      await pushFromNative(_channel, 'requestClose', null);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text(_en.editorDiscardTitle), findsNothing);
+      expect(calls.map((call) => call.method), contains('hideEditor'));
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    testWidgets('home confirms on a dirty document', (tester) async {
+      mockMethodChannel(_channel);
+      final c = await preloadedN(tester, [0, 1], [100, 150]);
+      c.overrideDelay(300);
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('gif-home')));
+      await tester.pump(const Duration(milliseconds: 400)); // double-tap arena
+      expect(find.text(_en.editorDiscardTitle), findsOneWidget);
+      await tester.tap(find.text(_en.confirmDiscard));
+      await tester.pump();
+      await tester.pump();
+      expect(c.doc, isNull);
+      expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
+    });
+
+    testWidgets('loadPath onto a dirty document confirms first',
+        (tester) async {
+      final dir = (await tester
+          .runAsync(() => Directory.systemTemp.createTemp('gifed_replace')))!;
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final gifPath = '${dir.path}/other.gif';
+      File(gifPath).writeAsBytesSync(twoFrameGifFixture());
+      mockMethodChannel(_channel);
+      final c = await preloadedN(tester, [0, 1, 2], [100, 100, 100]);
+      c.overrideDelay(300);
+      await tester.pumpWidget(GifEditorApp(controller: c));
+      await tester.pump();
+      await pushFromNative(_channel, 'loadPath', gifPath);
+      await tester.pump();
+      expect(find.text(_en.editorDiscardTitle), findsOneWidget);
+      await tester.tap(find.text(_en.confirmDiscard));
+      await tester.pump();
+      await pumpUntilDone(tester, () => c.doc?.frameCount == 2);
+      expect(c.doc!.frameCount, 2); // the dropped file replaced the doc
+    }, timeout: const Timeout(Duration(seconds: 60)));
+  });
+
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
     // 30 frames so the strip overflows the 800px test surface.

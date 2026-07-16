@@ -1800,6 +1800,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorCancel => 'Cancel';
 
   @override
+  String get gifEditorDiscardMessage =>
+      'You have unexported edits. Discard them?';
+
+  @override
   String get gifEditorAnnotate => 'Annotate';
 
   @override
