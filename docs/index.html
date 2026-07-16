@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glimpr — screenshot, annotation and screen recording for macOS and Windows</title>
-<meta name="description" content="Pixel-precise screenshot, annotation and screen recording for macOS and Windows. Free and open source, Apache-2.0.">
+<meta name="description" content="Pixel-precise screenshot, annotation, screen recording and GIF editing for macOS and Windows. Free and open source, Apache-2.0.">
 <link rel="canonical" href="https://glimpr.howar31.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Glimpr">
 <meta property="og:title" content="Glimpr — capture it exactly">
-<meta property="og:description" content="Pixel-precise screenshot, annotation and screen recording for macOS and Windows. Free and open source.">
+<meta property="og:description" content="Pixel-precise screenshot, annotation, screen recording and GIF editing for macOS and Windows. Free and open source.">
 <meta property="og:url" content="https://glimpr.howar31.com/">
 <meta property="og:image" content="https://glimpr.howar31.com/media/og-card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Glimpr — capture it exactly">
-<meta name="twitter:description" content="Pixel-precise screenshot, annotation and screen recording for macOS and Windows. Free and open source.">
+<meta name="twitter:description" content="Pixel-precise screenshot, annotation, screen recording and GIF editing for macOS and Windows. Free and open source.">
 <meta name="twitter:image" content="https://glimpr.howar31.com/media/og-card.png">
 <link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="13 13 70 70"><defs><linearGradient id="m" gradientUnits="userSpaceOnUse" x1="13.45" y1="13.45" x2="82.55" y2="82.55"><stop offset="0" stop-color="%2322d3ee"/><stop offset=".52" stop-color="%233b82f6"/><stop offset="1" stop-color="%23a78bfa"/></linearGradient></defs><g fill="none" stroke="url(%23m)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"><path d="M36 18 H23 A5 5 0 0 0 18 23 V36"/><path d="M60 18 H73 A5 5 0 0 1 78 23 V36"/><path d="M78 60 V73 A5 5 0 0 1 73 78 H60"/><path d="M18 60 V73 A5 5 0 0 0 23 78 H36"/></g><path fill="url(%23m)" d="M48 31 C49.7 43 53 46.3 65 48 C53 49.7 49.7 53 48 65 C46.3 53 43 49.7 31 48 C43 46.3 46.3 43 48 31 Z"/></svg>'>
 <script>
@@ -314,6 +314,44 @@
     :root:not([data-theme]) .shot .img-dark { display: none; }
     :root:not([data-theme]) .shot .img-light { display: block; }
   }
+  /* one screenshot card, two editors: the pills swap which set renders */
+  .shot[data-shot="editor"] .s-gifed { display: none !important; }
+  .shot[data-shot="gifed"] .s-editor { display: none !important; }
+  .shot .tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 14px; }
+  .shot .tab {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 14px;
+    font: 550 12px/1 var(--mono);
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  .shot .tab:hover, .shot .tab:focus-visible { color: var(--fg); }
+  .shot .tab[aria-selected="true"] { color: var(--fg); border-color: var(--muted); }
+  .shot .snav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    background: var(--bg2);
+    border: 1px solid var(--hair);
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: .92;
+  }
+  .shot .snav:hover, .shot .snav:focus-visible { color: var(--fg); border-color: var(--muted); }
+  .shot .snav svg { width: 16px; height: 16px; }
+  .shot .snav.prev { left: 14px; }
+  .shot .snav.next { right: 14px; }
 
   /* ---- features -------------------------------------------------------- */
   .features { padding: 84px 0 20px; }
@@ -412,7 +450,7 @@
     .marquee { padding: 22px 18px 26px; }
     .features .grid, .install .cols { grid-template-columns: 1fr; }
     .vf { inset: 20px 2px 14px; }
-    header nav { gap: 12px; }
+    header nav { gap: 12px; flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .ants rect { animation: none; }
@@ -446,6 +484,7 @@
     <div class="word"><b>Glimpr</b></div>
     <nav>
       <a href="#features"><span class="i-en">Features</span><span class="i-zh">功能</span></a>
+      <a href="#gif-editor"><span class="i-en">GIF Editor</span><span class="i-zh">GIF 編輯器</span></a>
       <a href="#install"><span class="i-en">Install</span><span class="i-zh">安裝</span></a>
       <a href="https://github.com/howar31/glimpr">GitHub</a>
       <button class="ctl" id="langBtn" type="button" aria-label="Switch language / 切換語言">
@@ -504,17 +543,39 @@
     </div>
   </section>
 
-  <section class="shot">
+  <section class="shot" id="gif-editor" data-shot="editor">
     <div class="wrap">
+      <div class="tabs" role="tablist" aria-label="Editor screenshots">
+        <button class="tab" type="button" role="tab" data-target="editor" aria-selected="true">
+          <span class="i-en">Image Editor</span><span class="i-zh">圖片編輯器</span>
+        </button>
+        <button class="tab" type="button" role="tab" data-target="gifed" aria-selected="false">
+          <span class="i-en">GIF Editor</span><span class="i-zh">GIF 編輯器</span>
+        </button>
+      </div>
       <figure>
-        <img class="img-dark i-en" src="media/editor-mac.png" width="1600" height="1003" loading="lazy"
+        <img class="s-editor img-dark i-en" src="media/editor-mac.png" width="1600" height="1003" loading="lazy"
              alt="The Glimpr editor in dark mode: annotation toolbar over a frozen frame.">
-        <img class="img-light i-en" src="media/editor-mac-light.png" width="1600" height="1003" loading="lazy"
+        <img class="s-editor img-light i-en" src="media/editor-mac-light.png" width="1600" height="1003" loading="lazy"
              alt="The Glimpr editor in light mode: annotation toolbar over a frozen frame.">
-        <img class="img-dark i-zh" src="media/editor-mac-zh.png" width="1600" height="1003" loading="lazy"
+        <img class="s-editor img-dark i-zh" src="media/editor-mac-zh.png" width="1600" height="1003" loading="lazy"
              alt="深色模式的 Glimpr 圖片編輯器：凍結畫面上的標註工具列。">
-        <img class="img-light i-zh" src="media/editor-mac-zh-light.png" width="1600" height="1003" loading="lazy"
+        <img class="s-editor img-light i-zh" src="media/editor-mac-zh-light.png" width="1600" height="1003" loading="lazy"
              alt="淺色模式的 Glimpr 圖片編輯器：凍結畫面上的標註工具列。">
+        <img class="s-gifed img-dark i-en" src="media/gif-editor-mac.png" width="1600" height="1003" loading="lazy"
+             alt="The Glimpr GIF editor in dark mode: frame timeline under the preview.">
+        <img class="s-gifed img-light i-en" src="media/gif-editor-mac-light.png" width="1600" height="1003" loading="lazy"
+             alt="The Glimpr GIF editor in light mode: frame timeline under the preview.">
+        <img class="s-gifed img-dark i-zh" src="media/gif-editor-mac-zh.png" width="1600" height="1003" loading="lazy"
+             alt="深色模式的 Glimpr GIF 編輯器：預覽下方的幀時間軸。">
+        <img class="s-gifed img-light i-zh" src="media/gif-editor-mac-zh-light.png" width="1600" height="1003" loading="lazy"
+             alt="淺色模式的 Glimpr GIF 編輯器：預覽下方的幀時間軸。">
+        <button class="snav prev" type="button" aria-label="Previous screenshot / 上一張截圖">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5 8 12l6.5 7"/></svg>
+        </button>
+        <button class="snav next" type="button" aria-label="Next screenshot / 下一張截圖">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5 16 12l-6.5 7"/></svg>
+        </button>
       </figure>
     </div>
   </section>
@@ -537,10 +598,28 @@
              <span class="i-zh">形狀、箭頭、畫筆、螢光筆、文字、模糊、聚光燈與步驟標記 — 所有螢幕同時進行。</span></p>
         </div>
         <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="5" width="16" height="13" rx="2"/><path d="M9 9.5h6M9 13h4" stroke-linecap="round"/></svg>
+          <h3><span class="i-en">Element snap</span><span class="i-zh">元素框選</span></h3>
+          <p><span class="i-en">Selections snap to windows, buttons, toolbars and page elements — no hand-tracing rectangles.</span>
+             <span class="i-zh">選取範圍自動貼合視窗、按鈕、工具列與網頁元素 — 不必手描框。</span></p>
+        </div>
+        <div class="card">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="3.4" fill="url(#gicon)" stroke="none"/></svg>
           <h3><span class="i-en">Record the screen</span><span class="i-zh">螢幕錄影</span></h3>
           <p><span class="i-en">MP4 (H.264 / HEVC), GIF and HDR10, with system audio and microphone mixed into one clean track.</span>
              <span class="i-zh">MP4（H.264 / HEVC）、GIF 與 HDR10；系統音訊與麥克風混成單一音軌。</span></p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3.5 9.5h4M3.5 14.5h4M16.5 9.5h4M16.5 14.5h4"/></svg>
+          <h3><span class="i-en">GIF Editor</span><span class="i-zh">GIF 編輯器</span></h3>
+          <p><span class="i-en">Trim, retime, crop and annotate any GIF on a frame timeline, then re-encode it smaller with an adaptive palette.</span>
+             <span class="i-zh">在幀時間軸上修剪、調整時間、裁切並標註任何 GIF，再以自適應調色盤重新編碼成更小的檔案。</span></p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="9.8" r="1.5"/><path d="M4 16.5 8.5 12l3.5 3.5 3-3 5 5"/></svg>
+          <h3><span class="i-en">Image Editor</span><span class="i-zh">圖片編輯器</span></h3>
+          <p><span class="i-en">Reopen any capture in a standalone editor with a gallery of recent shots — annotate, crop and export long after the moment.</span>
+             <span class="i-zh">在獨立編輯器中重新開啟任何截圖，內建最近截圖圖庫 — 事後隨時標註、裁切與輸出。</span></p>
         </div>
         <div class="card">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l1 7 3 2v2H5v-2l3-2 1-7z"/><path d="M12 15v6"/></svg>
@@ -549,16 +628,34 @@
              <span class="i-zh">把任何截圖浮在工作上方 — 隨意拖曳、縮放 25–300%，對照時一直留著。</span></p>
         </div>
         <div class="card">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="5" width="16" height="13" rx="2"/><path d="M9 9.5h6M9 13h4" stroke-linecap="round"/></svg>
-          <h3><span class="i-en">Element snap</span><span class="i-zh">元素框選</span></h3>
-          <p><span class="i-en">Selections snap to windows, buttons, toolbars and page elements — no hand-tracing rectangles.</span>
-             <span class="i-zh">選取範圍自動貼合視窗、按鈕、工具列與網頁元素 — 不必手描框。</span></p>
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h6.5c4 0 4-5.5 7.5-5.5M11 12c4 0 4 5.5 7.5 5.5"/><path d="M16 4 18.5 6.5 16 9M16 15 18.5 17.5 16 20"/></svg>
+          <h3><span class="i-en">Flows that finish the job</span><span class="i-zh">完成流程</span></h3>
+          <p><span class="i-en">After each capture: save, copy, pin or open an editor — with filename templates and date subfolders, automatically.</span>
+             <span class="i-zh">截圖完成後自動接手：儲存、複製、釘選或開啟編輯器 — 加上檔名範本與日期子資料夾。</span></p>
         </div>
         <div class="card">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M6.5 9.5h.01M10 9.5h.01M13.5 9.5h.01M17 9.5h.01M6.5 12.5h.01M17 12.5h.01M8.5 15h7"/></svg>
+          <h3><span class="i-en">Hotkeys, your way</span><span class="i-zh">全域快捷鍵</span></h3>
+          <p><span class="i-en">Every action is rebindable — PrintScreen, F13 and up, even bare keys — to fit the muscle memory you already have.</span>
+             <span class="i-zh">每個動作都能重新綁定 — PrintScreen、F13 以上、甚至單鍵 — 貼合你既有的肌肉記憶。</span></p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18"/></svg>
           <h3><span class="i-en">HDR faithful</span><span class="i-zh">忠實 HDR</span></h3>
           <p><span class="i-en">HDR10 recording and HDR screenshots on supported displays; SDR output stays tone-mapped and true.</span>
              <span class="i-zh">支援的顯示器上可 HDR10 錄影與 HDR 截圖；SDR 輸出維持正確的色調映射。</span></p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 19 6v5c0 4.6-3 7.9-7 9.5-4-1.6-7-4.9-7-9.5V6l7-2.5z"/><path d="M9.2 11.8l2 2 3.6-3.8"/></svg>
+          <h3><span class="i-en">Private by design</span><span class="i-zh">隱私優先</span></h3>
+          <p><span class="i-en">No telemetry, no account. Captures never leave your machine; the only network request is the optional update check.</span>
+             <span class="i-zh">無遙測、無帳號。截圖內容不離開你的電腦；唯一的網路連線是可關閉的更新檢查。</span></p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 8 5 12l3.5 4M15.5 8 19 12l-3.5 4"/><path d="M13 6.5l-2 11"/></svg>
+          <h3><span class="i-en">Free &amp; open source</span><span class="i-zh">免費且開放原始碼</span></h3>
+          <p><span class="i-en">Apache-2.0 on GitHub, free forever — and installed builds update themselves in one click.</span>
+             <span class="i-zh">Apache-2.0，完整公開於 GitHub，永久免費 — 已安裝版本一鍵自我更新。</span></p>
         </div>
       </div>
     </div>
@@ -627,6 +724,30 @@
       root.dataset.theme = next;
       localStorage.setItem('glimpr-theme', next);
     });
+    // Screenshot pills: one card shows either editor; the nav's GIF Editor
+    // anchor (and any #gif-editor deep link) auto-selects the GIF tab.
+    var shotSec = document.getElementById('gif-editor')
+    function setShot(which) {
+      shotSec.dataset.shot = which
+      shotSec.querySelectorAll('.tab').forEach(function (t) {
+        t.setAttribute('aria-selected', t.dataset.target === which ? 'true' : 'false')
+      })
+    }
+    shotSec.querySelectorAll('.tab').forEach(function (t) {
+      t.addEventListener('click', function () { setShot(t.dataset.target) })
+    })
+    var shotOrder = ['editor', 'gifed']
+    function stepShot(delta) {
+      var i = shotOrder.indexOf(shotSec.dataset.shot)
+      setShot(shotOrder[(i + delta + shotOrder.length) % shotOrder.length])
+    }
+    shotSec.querySelector('.snav.prev').addEventListener('click', function () { stepShot(-1) })
+    shotSec.querySelector('.snav.next').addEventListener('click', function () { stepShot(1) })
+    function syncShotToHash() {
+      if (location.hash === '#gif-editor') setShot('gifed')
+    }
+    window.addEventListener('hashchange', syncShotToHash)
+    syncShotToHash()
     // Size the marching-ants rect in px so the dash pattern stays uniform on
     // every edge and travels the perimeter at one speed.
     var marquee = document.querySelector('.marquee');
