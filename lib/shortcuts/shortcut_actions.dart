@@ -16,6 +16,8 @@ String globalActionLabel(AppLocalizations l10n, String actionKey) =>
       kCaptureLastRegionKey => l10n.actionCaptureLastRegion,
       kOpenEditorKey => l10n.actionOpenEditor,
       kOpenEditorClipboardKey => l10n.actionOpenEditorClipboard,
+      kOpenGifEditorKey => l10n.actionOpenGifEditor,
+      kOpenGifEditorClipboardKey => l10n.actionOpenGifEditorClipboard,
       kPinAreaKey => l10n.actionPinCapture,
       kPinClipboardKey => l10n.actionPinClipboard,
       kRecordRegionKey => l10n.actionRecordRegion,
@@ -33,6 +35,8 @@ String globalActionHint(AppLocalizations l10n, String actionKey) =>
       kCaptureLastRegionKey => l10n.actionCaptureLastRegionHint,
       kOpenEditorKey => l10n.actionOpenEditorHint,
       kOpenEditorClipboardKey => l10n.actionOpenEditorClipboardHint,
+      kOpenGifEditorKey => l10n.actionOpenGifEditorHint,
+      kOpenGifEditorClipboardKey => l10n.actionOpenGifEditorClipboardHint,
       kPinAreaKey => l10n.actionPinCaptureHint,
       kPinClipboardKey => l10n.actionPinClipboardHint,
       kRecordRegionKey => l10n.actionRecordRegionHint,
@@ -49,6 +53,8 @@ const kCaptureWindowKey = 'global.captureWindow';
 const kCaptureLastRegionKey = 'global.captureLastRegion';
 const kOpenEditorKey = 'global.openEditor';
 const kOpenEditorClipboardKey = 'global.openEditorClipboard';
+const kOpenGifEditorKey = 'global.openGifEditor';
+const kOpenGifEditorClipboardKey = 'global.openGifEditorClipboard';
 const kPinAreaKey = 'global.pinArea';
 const kPinClipboardKey = 'global.pinClipboard';
 // Screen recording (macOS 15+; the dispatcher no-ops when unavailable). Every
@@ -128,6 +134,14 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kOpenEditorClipboardKey: _b(
       PhysicalKeyboardKey.digit0, LogicalKeyboardKey.digit0,
       {HotkeyModifier.meta, HotkeyModifier.alt}),
+  // GIF editor: the Image Editor pair + Shift (owner default). Digits 9/0
+  // stay clear of the macOS screenshot family (⌘⇧3/4/5, which the OS grabs
+  // even with an extra ⌥ held).
+  kOpenGifEditorKey: _b(PhysicalKeyboardKey.digit9, LogicalKeyboardKey.digit9,
+      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
+  kOpenGifEditorClipboardKey: _b(
+      PhysicalKeyboardKey.digit0, LogicalKeyboardKey.digit0,
+      {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift}),
   // Pin to screen: ⌘⌥5 = capture a region straight to a pin; ⌘⌥6 = pin the
   // clipboard image (no capture).
   kPinAreaKey: _b(PhysicalKeyboardKey.digit5, LogicalKeyboardKey.digit5,
@@ -251,6 +265,20 @@ final Map<String, HotkeyBinding?> kWindowsDefaultOverrides = {
   kOpenEditorClipboardKey: _b(
       PhysicalKeyboardKey.digit0, LogicalKeyboardKey.digit0,
       {HotkeyModifier.control, HotkeyModifier.alt, HotkeyModifier.meta}),
+  // GIF editor: the win Image Editor pair + Shift (mirrors the macOS rule).
+  kOpenGifEditorKey: _b(PhysicalKeyboardKey.digit9, LogicalKeyboardKey.digit9, {
+    HotkeyModifier.control,
+    HotkeyModifier.alt,
+    HotkeyModifier.meta,
+    HotkeyModifier.shift,
+  }),
+  kOpenGifEditorClipboardKey: _b(
+      PhysicalKeyboardKey.digit0, LogicalKeyboardKey.digit0, {
+    HotkeyModifier.control,
+    HotkeyModifier.alt,
+    HotkeyModifier.meta,
+    HotkeyModifier.shift,
+  }),
   // Recording (S6): Ctrl+Alt+Win+Shift+digit -- a collision-free combo parallel
   // to the capture globals (Ctrl+Alt+Win+digit), the way macOS recording
   // (Ctrl+Cmd+digit) differs from capture (Cmd+Alt+digit) by its modifier set.
@@ -439,6 +467,16 @@ const kGlobalActions = <GlobalAction>[
     actionKey: kOpenEditorClipboardKey,
     label: 'Open Image Editor with Clipboard',
     hint: 'Open the Image Editor and load the clipboard image',
+  ),
+  GlobalAction(
+    actionKey: kOpenGifEditorKey,
+    label: 'Open GIF Editor',
+    hint: 'Open the GIF Editor',
+  ),
+  GlobalAction(
+    actionKey: kOpenGifEditorClipboardKey,
+    label: 'Open GIF Editor with Clipboard',
+    hint: 'Open the GIF Editor and load the copied GIF file',
   ),
   GlobalAction(
     actionKey: kPinAreaKey,

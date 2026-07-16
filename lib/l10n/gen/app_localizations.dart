@@ -1976,6 +1976,30 @@ abstract class AppLocalizations {
   /// **'Open the Image Editor and load the clipboard image'**
   String get actionOpenEditorClipboardHint;
 
+  /// Global action label: open the GIF editor
+  ///
+  /// In en, this message translates to:
+  /// **'Open GIF Editor'**
+  String get actionOpenGifEditor;
+
+  /// Global action hint: open the GIF editor
+  ///
+  /// In en, this message translates to:
+  /// **'Open the GIF Editor'**
+  String get actionOpenGifEditorHint;
+
+  /// Global action label: open the GIF editor with the copied file
+  ///
+  /// In en, this message translates to:
+  /// **'Open GIF Editor with Clipboard'**
+  String get actionOpenGifEditorClipboard;
+
+  /// Global action hint: open the GIF editor with the copied file
+  ///
+  /// In en, this message translates to:
+  /// **'Open the GIF Editor and load the copied GIF file'**
+  String get actionOpenGifEditorClipboardHint;
+
   /// Global action label: pin capture
   ///
   /// In en, this message translates to:

@@ -96,6 +96,10 @@ Future<void> main() async {
         control.invokeMethod('openImageEditor');
       case kOpenEditorClipboardKey:
         control.invokeMethod('openImageEditorClipboard');
+      case kOpenGifEditorKey:
+        control.invokeMethod('openGifEditor');
+      case kOpenGifEditorClipboardKey:
+        control.invokeMethod('openGifEditorClipboard');
       case kPinAreaKey:
         // Capture a region straight to a floating pin (the overlay session
         // runs {pin} only, ignoring the configured after-capture flow).
@@ -164,6 +168,7 @@ Future<void> main() async {
       'openEditor': globalActionLabel(l, kOpenEditorKey),
       'openEditorClipboard': globalActionLabel(l, kOpenEditorClipboardKey),
       'gifEditor': l.trayOpenGifEditor,
+      'gifEditorClipboard': globalActionLabel(l, kOpenGifEditorClipboardKey),
       'openRecent': l.trayOpenRecent,
       'clearRecent': l.trayClearRecent,
       'openSaveFolder': l.trayOpenSaveFolder,

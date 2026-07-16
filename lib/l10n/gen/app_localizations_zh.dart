@@ -995,6 +995,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionOpenEditorClipboardHint => '開啟圖片編輯器並載入剪貼簿圖片';
 
   @override
+  String get actionOpenGifEditor => '開啟 GIF 編輯器';
+
+  @override
+  String get actionOpenGifEditorHint => '開啟 GIF 編輯器';
+
+  @override
+  String get actionOpenGifEditorClipboard => '以剪貼簿開啟 GIF 編輯器';
+
+  @override
+  String get actionOpenGifEditorClipboardHint => '開啟 GIF 編輯器並載入剪貼簿複製的 GIF 檔案';
+
+  @override
   String get actionPinCapture => '釘選截圖';
 
   @override

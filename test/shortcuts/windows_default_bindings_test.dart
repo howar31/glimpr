@@ -39,6 +39,19 @@ void main() {
     expect(w[kOpenEditorKey]!.modifiers, ctrlAltWin);
     expect(w[kOpenEditorClipboardKey]!.physicalKey, PhysicalKeyboardKey.digit0);
     expect(w[kOpenEditorClipboardKey]!.modifiers, ctrlAltWin);
+    // GIF editor = the image-editor pair + Shift (owner default).
+    const ctrlAltWinShiftGif = {
+      HotkeyModifier.control,
+      HotkeyModifier.alt,
+      HotkeyModifier.meta,
+      HotkeyModifier.shift,
+    };
+    expect(w[kOpenGifEditorKey]!.physicalKey, PhysicalKeyboardKey.digit9);
+    expect(w[kOpenGifEditorKey]!.modifiers, ctrlAltWinShiftGif);
+    expect(w[kOpenGifEditorClipboardKey]!.physicalKey,
+        PhysicalKeyboardKey.digit0);
+    expect(
+        w[kOpenGifEditorClipboardKey]!.modifiers, ctrlAltWinShiftGif);
     // Record modes: region/last-region ride the capture-family keys with an
     // extra Ctrl (PrtScr / F14); window/display keep Ctrl+Alt+Win+Shift+2/3.
     const ctrlAltWinShift = {
@@ -96,3 +109,4 @@ void main() {
     expect(isGlobalActionAvailable(kRecordRegionKey, isWindows: false), isTrue);
   });
 }
+

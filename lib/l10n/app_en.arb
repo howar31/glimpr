@@ -1144,6 +1144,22 @@
   "@actionOpenEditorClipboardHint": {
     "description": "Global action hint: open editor with clipboard"
   },
+  "actionOpenGifEditor": "Open GIF Editor",
+  "@actionOpenGifEditor": {
+    "description": "Global action label: open the GIF editor"
+  },
+  "actionOpenGifEditorHint": "Open the GIF Editor",
+  "@actionOpenGifEditorHint": {
+    "description": "Global action hint: open the GIF editor"
+  },
+  "actionOpenGifEditorClipboard": "Open GIF Editor with Clipboard",
+  "@actionOpenGifEditorClipboard": {
+    "description": "Global action label: open the GIF editor with the copied file"
+  },
+  "actionOpenGifEditorClipboardHint": "Open the GIF Editor and load the copied GIF file",
+  "@actionOpenGifEditorClipboardHint": {
+    "description": "Global action hint: open the GIF editor with the copied file"
+  },
   "actionPinCapture": "Pin Screenshot",
   "@actionPinCapture": {
     "description": "Global action label: pin capture"

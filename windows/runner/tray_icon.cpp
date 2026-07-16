@@ -29,6 +29,7 @@ enum TrayCommand : UINT {
   kCmdOpenEditor,
   kCmdOpenEditorClipboard,
   kCmdOpenGifEditor,
+  kCmdOpenGifEditorClipboard,
   kCmdClearRecent,
   kCmdOpenSaveFolder,
   kCmdCheckUpdates,
@@ -53,6 +54,8 @@ constexpr char kActRecordDisplay[] = "global.recordDisplay";
 constexpr char kActRecordLast[] = "global.recordLastRegion";
 constexpr char kActOpenEditor[] = "global.openEditor";
 constexpr char kActOpenEditorClipboard[] = "global.openEditorClipboard";
+constexpr char kActOpenGifEditor[] = "global.openGifEditor";
+constexpr char kActOpenGifEditorClipboard[] = "global.openGifEditorClipboard";
 constexpr char kActOpenSaveFolder[] = "menu.openSaveFolder";
 
 std::wstring Basename(const std::string& path) {
@@ -277,9 +280,12 @@ void TrayIcon::ShowMenu() {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(recent),
                 Utf16FromUtf8(L("openRecent", "Open Recent")).c_str());
   }
-  // Reveals the GIF Editor window.
-  AppendItem(menu, kCmdOpenGifEditor, L("gifEditor", "Open GIF Editor"), "",
-             true);
+  // Reveals the GIF Editor window (hinted with the global binding).
+  AppendItem(menu, kCmdOpenGifEditor, L("gifEditor", "Open GIF Editor"),
+             hotkeys_->AcceleratorLabel(kActOpenGifEditor), true);
+  AppendItem(menu, kCmdOpenGifEditorClipboard,
+             L("gifEditorClipboard", "Open GIF Editor with Clipboard"),
+             hotkeys_->AcceleratorLabel(kActOpenGifEditorClipboard), true);
   AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
              "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -333,6 +339,9 @@ void TrayIcon::OnCommand(UINT command_id) {
       break;
     case kCmdOpenGifEditor:
       if (cb_.on_open_gif_editor) cb_.on_open_gif_editor();
+      break;
+    case kCmdOpenGifEditorClipboard:
+      hotkeys_->FireAction(kActOpenGifEditorClipboard);
       break;
     case kCmdClearRecent: if (cb_.on_clear_recent) cb_.on_clear_recent(); break;
     case kCmdOpenSaveFolder: hotkeys_->FireAction(kActOpenSaveFolder); break;

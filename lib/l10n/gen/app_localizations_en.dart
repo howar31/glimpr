@@ -1040,6 +1040,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Open the Image Editor and load the clipboard image';
 
   @override
+  String get actionOpenGifEditor => 'Open GIF Editor';
+
+  @override
+  String get actionOpenGifEditorHint => 'Open the GIF Editor';
+
+  @override
+  String get actionOpenGifEditorClipboard => 'Open GIF Editor with Clipboard';
+
+  @override
+  String get actionOpenGifEditorClipboardHint =>
+      'Open the GIF Editor and load the copied GIF file';
+
+  @override
   String get actionPinCapture => 'Pin Screenshot';
 
   @override
