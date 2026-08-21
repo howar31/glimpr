@@ -12,6 +12,16 @@ import 'package:glimpr/overlay/crop_hud.dart';
 
 import '../support/fake_editor_host.dart';
 
+// The snap tools whose TAP commits a drawable (crop exports instead). Both the
+// window-snap and the element-snap expectations run over this list.
+const kDrawableSnapTools = [
+  ToolKind.blur,
+  ToolKind.pixelate,
+  ToolKind.rectangle,
+  ToolKind.ellipse,
+  ToolKind.spotlight,
+];
+
 // Capture-time windows, front-to-back: A is topmost and overlaps B.
 const winARect = Rect.fromLTRB(50, 50, 400, 300);
 const winBRect = Rect.fromLTRB(200, 100, 700, 500);
@@ -86,20 +96,24 @@ void main() {
       expect(host.exports.single.window?.windowId, 11);
     });
 
-    testWidgets('rectangle tap on a window commits a drawable spanning it',
-        (tester) async {
-      final host = FakeEditorHost(baseImage: baseImage, snapWindows: windows);
-      final c = await pumpEditorCore(tester, host);
-      c.selectTool(ToolKind.rectangle);
-      await tester.pump();
+    // Every snap tool that commits a DRAWABLE (crop exports instead) spans the
+    // snapped window. Looped so a newly added snap tool has to opt in here too.
+    for (final tool in kDrawableSnapTools) {
+      testWidgets('${tool.name} tap on a window commits a drawable spanning it',
+          (tester) async {
+        final host = FakeEditorHost(baseImage: baseImage, snapWindows: windows);
+        final c = await pumpEditorCore(tester, host);
+        c.selectTool(tool);
+        await tester.pump();
 
-      await tester.tapAt(const Offset(500, 400)); // inside B only
-      await tester.pump();
+        await tester.tapAt(const Offset(500, 400)); // inside B only
+        await tester.pump();
 
-      final d = c.document.value.drawables.single as RectangleDrawable;
-      expect(d.rect, winBRect);
-      expect(host.exports, isEmpty); // annotation, not a capture
-    });
+        final d = c.document.value.drawables.single as RectShaped;
+        expect(d.rect, winBRect);
+        expect(host.exports, isEmpty); // annotation, not a capture
+      });
+    }
 
     testWidgets('the snap highlight is suppressed while dragging',
         (tester) async {
@@ -242,6 +256,30 @@ void main() {
       expect(w.app, 'AppA');
       expect(w.windowId, isNull); // element commits are rectangular crops
     });
+
+    // The window-snap loop's element counterpart: a tool wired into the snap
+    // pipeline (highlight + tree-walk) must COMMIT what the highlight showed —
+    // the element when one resolved, not the raw window rect underneath it.
+    for (final tool in kDrawableSnapTools) {
+      testWidgets('${tool.name} tap commits the ELEMENT rect, not the window',
+          (tester) async {
+        final (host, _) = elementHost((p, walk) => element(elRect));
+        final c = await pumpEditorCore(tester, host);
+        c.selectTool(tool);
+        await tester.pump();
+
+        final mouse = await mousePointer(tester);
+        await mouse.moveTo(const Offset(250, 150)); // inside elRect and winA
+        await tester.pumpAndSettle(); // flush the async element reply
+        expect(highlightRect(tester), elRect);
+
+        await tester.tapAt(const Offset(250, 150));
+        await tester.pump();
+
+        final d = c.document.value.drawables.single as RectShaped;
+        expect(d.rect, elRect);
+      });
+    }
 
     testWidgets('switching to a non-snap tool drops the highlight',
         (tester) async {

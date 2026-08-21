@@ -556,8 +556,9 @@ class _EditorCoreState extends State<EditorCore> {
   Rect get _fullDisplayRect =>
       Rect.fromLTWH(2, 2, _canvasSize.width - 4, _canvasSize.height - 4);
 
-  /// Tools whose tap snaps to a hovered window's bounds (ShareX-style): crop
-  /// captures it; blur/pixelate/rectangle/ellipse add a drawable spanning it.
+  /// Tools whose tap snaps to the hovered window / AX element (ShareX-style):
+  /// crop captures it; blur/pixelate/rectangle/ellipse/spotlight add a drawable
+  /// spanning it.
   static const _snapTools = {
     ToolKind.crop,
     ToolKind.blur,
@@ -1660,13 +1661,17 @@ class _EditorCoreState extends State<EditorCore> {
     }
     final p = _eventPosition(d.localPosition);
     // Window-snap (ShareX-style): a tap on a window applies the snap tool to that
-    // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse add a
-    // drawable spanning it. With NO window under the cursor the tools fall back
-    // to their normal tap (crop -> whole display; the rest select).
-    final win = topmostWindowAt(_windows, p);
+    // window's bounds — crop captures it; blur/pixelate/rectangle/ellipse/
+    // spotlight add a drawable spanning it. With NO window under the cursor the
+    // tools fall back to their normal tap (crop -> whole display; the rest
+    // select).
+    //
     // The snap rect for the drawable tools: the AX element (element mode) else
-    // the window. The crop/confirm path uses _snapCommit (it also needs the
-    // SnapWindow for naming + the window-shape mask).
+    // the window. EVERY drawable snap tool commits THIS rect — the highlight
+    // resolves the same way, so a tool reading the raw window rect instead would
+    // commit something other than what the user saw. The crop/confirm path uses
+    // _snapCommit (it also needs the SnapWindow for naming + the window-shape
+    // mask).
     final snapRect = _snapRectAt(p);
     final style = c.style.value;
     switch (c.tool.value) {
@@ -1766,8 +1771,9 @@ class _EditorCoreState extends State<EditorCore> {
       case ToolKind.spotlight:
         if (_hitActiveType(p) case final hit?) {
           _selectAndPin(hit);
-        } else if (win != null) {
-          c.commitSpotlight(SpotlightDrawable(win.rect, style));
+        } else if (snapRect != null) {
+          c.commitSpotlight(SpotlightDrawable(snapRect, style));
+          _markElementDivergence();
         } else {
           _selectAndPin(null);
         }
@@ -1903,9 +1909,9 @@ class _EditorCoreState extends State<EditorCore> {
     if (!_active) return;
     final p = _eventPosition(e.localPosition);
     // Window-snap: highlight the top-most window under the cursor for the snap
-    // tools (crop/blur/pixelate/rectangle/ellipse), but not while dragging and not
-    // while hovering an annotation the tool would engage (then the snap frame is
-    // redundant). The full-screen crosshair / reticle still follow the pointer.
+    // tools ([_snapTools]), but not while dragging and not while hovering an
+    // annotation the tool would engage (then the snap frame is redundant). The
+    // full-screen crosshair / reticle still follow the pointer.
     final wantSnap =
         _snapEligible && !_dragging && !_overAnnotation(p);
     final hover = wantSnap ? topmostWindowAt(_windows, p) : null;
