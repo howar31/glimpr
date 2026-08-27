@@ -50,9 +50,52 @@ void main() {
     expect(textBackgroundRadius(const Rect.fromLTWH(0, 0, 100, 4), 20), 2);
   });
 
-  test('textOutlineWidth is font-scaled and clamped', () {
-    expect(textOutlineWidth(50), 50 * 0.12); // 6
-    expect(textOutlineWidth(4), 1.0); // clamp floor (4*0.12=0.48 -> 1)
-    expect(textOutlineWidth(200), 10.0); // clamp ceiling (200*0.12=24 -> 10)
+  test('textOutlineWidthAuto is 12% of the font size, floored, uncapped', () {
+    expect(textOutlineWidthAuto(50), 6); // 50*0.12
+    expect(textOutlineWidthAuto(4), 1.0); // floor (4*0.12=0.48 -> 1)
+    expect(textOutlineWidthAuto(200), 24); // NO ceiling: proportions hold
+    expect(textOutlineWidthAuto(1000), 120);
+  });
+
+  test('resolveTextOutlineWidth: auto width follows the font size', () {
+    expect(resolveTextOutlineWidth(const DrawStyle(fontSize: 50)), 6);
+    expect(resolveTextOutlineWidth(const DrawStyle(fontSize: 4)), 1.0);
+    expect(resolveTextOutlineWidth(const DrawStyle(fontSize: 200)), 24);
+    canvasFontScale = 2.0;
+    try {
+      // Auto is IMAGE-px based: 6 image px bake as 3 canvas units on a 2x
+      // canvas, so the baked ring matches the standalone editor's.
+      expect(resolveTextOutlineWidth(const DrawStyle(fontSize: 50)), 3);
+    } finally {
+      canvasFontScale = 1.0;
+    }
+  });
+
+  test('resolveTextOutlineWidth: explicit width is IMAGE px over the scale', () {
+    const s = DrawStyle(fontSize: 50, outlineWidth: 6);
+    expect(resolveTextOutlineWidth(s), 6); // scale 1: canvas == image px
+    canvasFontScale = 2.0;
+    try {
+      expect(resolveTextOutlineWidth(s), 3);
+    } finally {
+      canvasFontScale = 1.0;
+    }
+  });
+
+  test('textOutlineWidthAutoSeed: image px, scale-independent, in range', () {
+    expect(textOutlineWidthAutoSeed(const DrawStyle(fontSize: 50)), 6);
+    canvasFontScale = 2.0;
+    try {
+      // Image-px based, so the seed does not depend on the canvas scale.
+      expect(textOutlineWidthAutoSeed(const DrawStyle(fontSize: 50)), 6);
+      expect(textOutlineWidthAutoSeed(const DrawStyle(fontSize: 200)), 24);
+    } finally {
+      canvasFontScale = 1.0;
+    }
+    // The seed always lands inside the slider range.
+    expect(textOutlineWidthAutoSeed(const DrawStyle(fontSize: 4)),
+        kTextOutlineWidthMin);
+    expect(textOutlineWidthAutoSeed(const DrawStyle(fontSize: 5000)),
+        kTextOutlineWidthMax); // 600 -> ceiling clamp
   });
 }

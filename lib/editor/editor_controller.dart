@@ -313,6 +313,12 @@ class EditorController {
   // offer a per-field "Auto" without the all-options reset button.
   void setCornerRadiusAuto() =>
       _updateStyle(style.value.copyWith(cornerRadius: kCornerRadiusAuto));
+  // Text glyph-outline width; the auto sentinel bypasses the clamp (same
+  // pattern as cornerRadius).
+  void setOutlineWidth(double w) => _updateStyle(style.value.copyWith(
+      outlineWidth: w.clamp(kTextOutlineWidthMin, kTextOutlineWidthMax)));
+  void setOutlineWidthAuto() =>
+      _updateStyle(style.value.copyWith(outlineWidth: kTextOutlineWidthAuto));
 
   // copyWith cannot clear fontFamily back to null (null means "keep existing"),
   // so we rebuild the style explicitly without a fontFamily. The other fields

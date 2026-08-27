@@ -1388,6 +1388,19 @@
   "@toolbarTextOutline": {
     "description": "Toolbar > Text tool options: outline colour button tooltip"
   },
+  "toolbarOutlineWidthLabel": "Outline: {value}",
+  "@toolbarOutlineWidthLabel": {
+    "description": "Toolbar > Text tool options: outline width pill label; {value} is the width (e.g. '3 px' or 'Auto')",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "toolbarOutlineWidth": "Outline width",
+  "@toolbarOutlineWidth": {
+    "description": "Toolbar > Text tool options: outline width pill tooltip"
+  },
   "toolbarColour": "Colour",
   "@toolbarColour": {
     "description": "Toolbar: default colour button tooltip"
@@ -1596,6 +1609,14 @@
   "popoverRadiusAutoHint": "Radius scales with the rectangle’s size",
   "@popoverRadiusAutoHint": {
     "description": "Radius picker popover: hint below the Auto toggle"
+  },
+  "popoverOutlineWidth": "Outline width",
+  "@popoverOutlineWidth": {
+    "description": "Text outline width popover: title label"
+  },
+  "popoverOutlineWidthAutoHint": "Outline width scales with the font size",
+  "@popoverOutlineWidthAutoHint": {
+    "description": "Text outline width popover: hint below the Auto toggle"
   },
   "editorTitleBar": "Image Editor",
   "@editorTitleBar": {

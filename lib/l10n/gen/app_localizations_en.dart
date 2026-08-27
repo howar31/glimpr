@@ -1230,6 +1230,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolbarTextOutline => 'Text outline';
 
   @override
+  String toolbarOutlineWidthLabel(String value) {
+    return 'Outline: $value';
+  }
+
+  @override
+  String get toolbarOutlineWidth => 'Outline width';
+
+  @override
   String get toolbarColour => 'Colour';
 
   @override
@@ -1383,6 +1391,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get popoverRadiusAutoHint => 'Radius scales with the rectangle’s size';
+
+  @override
+  String get popoverOutlineWidth => 'Outline width';
+
+  @override
+  String get popoverOutlineWidthAutoHint =>
+      'Outline width scales with the font size';
 
   @override
   String get editorTitleBar => 'Image Editor';

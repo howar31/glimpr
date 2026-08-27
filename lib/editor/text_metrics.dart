@@ -57,5 +57,28 @@ Rect textBackgroundRect(Rect textRect, double fontSize) => Rect.fromLTRB(
 double textBackgroundRadius(Rect bgRect, double fontSize) =>
     (fontSize * 0.3).clamp(0.0, bgRect.shortestSide / 2);
 
-/// Glyph outline stroke width — font-scaled, clamped to a legible range.
-double textOutlineWidth(double fontSize) => (fontSize * 0.12).clamp(1.0, 10.0);
+/// Auto glyph-outline width in IMAGE PIXELS: font-relative (12% of the image-px
+/// font size), floored to stay visible on tiny text, deliberately UNCAPPED so
+/// large text keeps its proportions (the legacy 10px ceiling read hairline-thin
+/// there; owner 2026-08-27). Image-px based, so the same font size bakes the
+/// same ring on every platform/scale (unlike the old canvas-unit formula).
+double textOutlineWidthAuto(double fontSize) =>
+    (fontSize * 0.12).clamp(1.0, double.infinity);
+
+/// Resolve the effective glyph-outline stroke width in CANVAS units. Both the
+/// auto width and an explicit [DrawStyle.outlineWidth] are IMAGE PIXELS (like
+/// fontSize: the baked ring is that many pixels thick anywhere), so they divide
+/// by [canvasFontScale]. Pure so it is unit testable — the painter itself
+/// cannot be headless-rasterized.
+double resolveTextOutlineWidth(DrawStyle s) {
+  final imagePx =
+      s.outlineWidth < 0 ? textOutlineWidthAuto(s.fontSize) : s.outlineWidth;
+  return canvasFontScale > 0 ? imagePx / canvasFontScale : imagePx;
+}
+
+/// The auto outline width rounded into the slider range: what the option bar
+/// seeds when the user leaves Auto, so the ring keeps its width instead of
+/// jumping to a fixed baseline.
+double textOutlineWidthAutoSeed(DrawStyle s) => textOutlineWidthAuto(s.fontSize)
+    .roundToDouble()
+    .clamp(kTextOutlineWidthMin, kTextOutlineWidthMax);

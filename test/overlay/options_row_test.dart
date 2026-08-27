@@ -39,6 +39,22 @@ void main() {
     expect(find.byKey(const ValueKey('stroke-stepper')), findsNothing);
   });
 
+  testWidgets('outline width pill shows only for Text with an outline colour', (
+    t,
+  ) async {
+    final c = EditorController();
+    c.selectTool(ToolKind.text);
+    await t.pumpWidget(_host(c));
+    // Default outline colour is transparent: no ring to size, pill hidden.
+    expect(find.byKey(const ValueKey('outline-width-picker')), findsNothing);
+    c.setOutlineColor(const Color(0xFF000000));
+    await t.pump();
+    expect(find.byKey(const ValueKey('outline-width-picker')), findsOneWidget);
+    c.selectTool(ToolKind.rectangle);
+    await t.pumpWidget(_host(c));
+    expect(find.byKey(const ValueKey('outline-width-picker')), findsNothing);
+  });
+
   testWidgets(
     'committing the stroke field hands keyboard focus back to the host',
     (t) async {

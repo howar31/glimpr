@@ -105,6 +105,18 @@ double resolveCornerRadius(double cornerRadius, Rect rect) => cornerRadius < 0
     ? (rect.shortestSide / 4).clamp(0.0, 12.0)
     : cornerRadius.clamp(0.0, rect.shortestSide / 2);
 
+/// Text glyph-outline width sentinels (text tool only). [kTextOutlineWidthAuto]
+/// (-1) is the font-relative auto width: 12% of [DrawStyle.fontSize], floor 1
+/// (owner 2026-08-27: uncapped — the legacy 10px ceiling made large text
+/// hairline-thin). An explicit value is in IMAGE PIXELS (like fontSize: the
+/// baked ring is that many pixels thick on any platform);
+/// [kTextOutlineWidthMin]/[kTextOutlineWidthMax] bound the option-bar slider
+/// (max sized with headroom over the 1000px font ceiling's 120px auto).
+/// Resolution lives in text_metrics.dart (resolveTextOutlineWidth).
+const double kTextOutlineWidthAuto = -1;
+const double kTextOutlineWidthMin = 1;
+const double kTextOutlineWidthMax = 500;
+
 /// Arrowhead size multiplier (arrow tool only). 1.0 = the legacy head size
 /// (headLen = strokeWidth * 4.9), so the default keeps the export byte-identical;
 /// the head still scales with stroke width, this just multiplies on top.
@@ -188,6 +200,7 @@ class DrawStyle {
   final Color fillColor; // rect/ellipse solid fill (own alpha); 0 alpha = no fill
   final double cornerRadius; // rectangle corner radius; kCornerRadiusAuto = legacy
   final Color outlineColor; // text glyph outline (own alpha); 0 alpha = no outline
+  final double outlineWidth; // text outline width (image px); kTextOutlineWidthAuto = legacy
   final double arrowHeadScale; // arrow head size multiplier; 1.0 = legacy size
   final int stepStart; // step badge numbering floor; 1 = legacy auto-from-1
   final StepShape stepShape; // step badge outline shape; circle = legacy
@@ -210,6 +223,7 @@ class DrawStyle {
     this.fillColor = const Color(0x00000000),
     this.cornerRadius = kCornerRadiusAuto,
     this.outlineColor = const Color(0x00000000),
+    this.outlineWidth = kTextOutlineWidthAuto,
     this.arrowHeadScale = kArrowHeadScaleDefault,
     this.stepStart = kStepStartDefault,
     this.stepShape = StepShape.circle,
@@ -240,6 +254,7 @@ class DrawStyle {
     Color? fillColor,
     double? cornerRadius,
     Color? outlineColor,
+    double? outlineWidth,
     double? arrowHeadScale,
     int? stepStart,
     StepShape? stepShape,
@@ -262,6 +277,7 @@ class DrawStyle {
     fillColor: fillColor ?? this.fillColor,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     outlineColor: outlineColor ?? this.outlineColor,
+    outlineWidth: outlineWidth ?? this.outlineWidth,
     arrowHeadScale: arrowHeadScale ?? this.arrowHeadScale,
     stepStart: stepStart ?? this.stepStart,
     stepShape: stepShape ?? this.stepShape,
@@ -286,6 +302,7 @@ class DrawStyle {
     if (fillColor.a != 0) 'fillColor': fillColor.toARGB32(),
     if (cornerRadius != kCornerRadiusAuto) 'cornerRadius': cornerRadius,
     if (outlineColor.a != 0) 'outlineColor': outlineColor.toARGB32(),
+    if (outlineWidth != kTextOutlineWidthAuto) 'outlineWidth': outlineWidth,
     if (arrowHeadScale != kArrowHeadScaleDefault) 'arrowHeadScale': arrowHeadScale,
     if (stepStart != kStepStartDefault) 'stepStart': stepStart,
     if (stepShape != StepShape.circle) 'stepShape': stepShape.name,
@@ -314,6 +331,8 @@ class DrawStyle {
     fillColor: Color((j['fillColor'] as num?)?.toInt() ?? 0x00000000),
     cornerRadius: (j['cornerRadius'] as num?)?.toDouble() ?? kCornerRadiusAuto,
     outlineColor: Color((j['outlineColor'] as num?)?.toInt() ?? 0x00000000),
+    // No clamp: the auto sentinel (-1) must survive (like cornerRadius).
+    outlineWidth: (j['outlineWidth'] as num?)?.toDouble() ?? kTextOutlineWidthAuto,
     arrowHeadScale:
         ((j['arrowHeadScale'] as num?)?.toDouble() ?? kArrowHeadScaleDefault)
             .clamp(kArrowHeadScaleMin, kArrowHeadScaleMax),
@@ -347,6 +366,7 @@ class DrawStyle {
       other.fillColor == fillColor &&
       other.cornerRadius == cornerRadius &&
       other.outlineColor == outlineColor &&
+      other.outlineWidth == outlineWidth &&
       other.arrowHeadScale == arrowHeadScale &&
       other.stepStart == stepStart &&
       other.stepShape == stepShape &&
@@ -358,7 +378,7 @@ class DrawStyle {
   @override
   int get hashCode => Object.hashAll([color, strokeWidth, fontSize, fontFamily,
       texture, shadow, lineStyle, arrowHeads, curvePoints, strength, fillColor,
-      cornerRadius, outlineColor, arrowHeadScale, stepStart, stepShape,
+      cornerRadius, outlineColor, outlineWidth, arrowHeadScale, stepStart, stepShape,
       magnifyFactor, magnifyConnector, spotlightDim, spotlightEffect,
       spotlightFeather]);
 }

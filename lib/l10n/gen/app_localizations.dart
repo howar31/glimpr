@@ -2342,6 +2342,18 @@ abstract class AppLocalizations {
   /// **'Text outline'**
   String get toolbarTextOutline;
 
+  /// Toolbar > Text tool options: outline width pill label; {value} is the width (e.g. '3 px' or 'Auto')
+  ///
+  /// In en, this message translates to:
+  /// **'Outline: {value}'**
+  String toolbarOutlineWidthLabel(String value);
+
+  /// Toolbar > Text tool options: outline width pill tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Outline width'**
+  String get toolbarOutlineWidth;
+
   /// Toolbar: default colour button tooltip
   ///
   /// In en, this message translates to:
@@ -2647,6 +2659,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Radius scales with the rectangle’s size'**
   String get popoverRadiusAutoHint;
+
+  /// Text outline width popover: title label
+  ///
+  /// In en, this message translates to:
+  /// **'Outline width'**
+  String get popoverOutlineWidth;
+
+  /// Text outline width popover: hint below the Auto toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Outline width scales with the font size'**
+  String get popoverOutlineWidthAutoHint;
 
   /// Image Editor: window title bar label
   ///

@@ -455,7 +455,7 @@ class DrawablePainter extends CustomPainter {
               ..paint(canvas, d.position);
           }
 
-          final w = textOutlineWidth(d.style.fontSizeCanvas);
+          final w = resolveTextOutlineWidth(d.style);
           // The outline casts the drop shadow when no pill does. A TextStyle.shadows
           // on a stroke run renders as the narrower glyph FILL (hidden behind the
           // wider outline), so paint an explicit stroke-shaped shadow instead — its

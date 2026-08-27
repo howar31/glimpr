@@ -1316,7 +1316,9 @@ String radiusLabel(AppLocalizations l10n, double r) =>
 /// Corner-radius picker: the design-system [GlimprSlider] for an explicit radius
 /// plus a labeled [GlassToggle] for "Auto" (the legacy size-relative radius, the
 /// default). Opened from the option bar's "Radius" pill, so "Auto" has a clear
-/// home instead of floating beside an anonymous stepper.
+/// home instead of floating beside an anonymous stepper. The Text tool's
+/// outline-width pill reuses it with overridden strings/range/baseline (same
+/// value-or-auto-sentinel model).
 class RadiusPickerPopover extends StatelessWidget {
   const RadiusPickerPopover({
     Key? key,
@@ -1324,12 +1326,27 @@ class RadiusPickerPopover extends StatelessWidget {
     required this.max,
     required this.onChanged,
     required this.onAuto,
+    this.min = 0,
+    this.baseline = kCornerRadiusBaseline,
+    this.title,
+    this.autoLabel,
+    this.autoHint,
   }) : super(key: key);
 
   final double value;
   final double max;
   final ValueChanged<double> onChanged;
   final VoidCallback onAuto;
+  final double min;
+
+  /// Explicit value seeded when the Auto toggle is switched OFF.
+  final double baseline;
+
+  /// Overridable copy; null falls back to the corner-radius strings (the
+  /// original client of this popover).
+  final String? title;
+  final String? autoLabel;
+  final String? autoHint;
 
   @override
   Widget build(BuildContext context) {
@@ -1349,7 +1366,7 @@ class RadiusPickerPopover extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              l10n.popoverCornerRadius,
+              title ?? l10n.popoverCornerRadius,
               style: GlimprType.sansStyle(13.5, 600, tokens.fg1),
             ),
             // The explicit slider only shows when Auto is off; Auto's own meaning
@@ -1358,8 +1375,8 @@ class RadiusPickerPopover extends StatelessWidget {
             if (!isAuto) ...[
               const SizedBox(height: 12),
               GlimprSlider(
-                value: value.clamp(0.0, max),
-                min: 0,
+                value: value.clamp(min, max),
+                min: min,
                 max: max,
                 onChanged: onChanged,
                 suffix: 'px',
@@ -1373,12 +1390,12 @@ class RadiusPickerPopover extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        l10n.popoverRadiusAuto,
+                        autoLabel ?? l10n.popoverRadiusAuto,
                         style: GlimprType.sansStyle(13.5, 600, tokens.fg2),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        l10n.popoverRadiusAutoHint,
+                        autoHint ?? l10n.popoverRadiusAutoHint,
                         style:
                             GlimprType.sansStyle(12, 400, tokens.fg3, height: 1.3),
                       ),
@@ -1390,8 +1407,7 @@ class RadiusPickerPopover extends StatelessWidget {
                 // slider has a sensible starting value.
                 GlassToggle(
                   value: isAuto,
-                  onChanged: (on) =>
-                      on ? onAuto() : onChanged(kCornerRadiusBaseline),
+                  onChanged: (on) => on ? onAuto() : onChanged(baseline),
                 ),
               ],
             ),

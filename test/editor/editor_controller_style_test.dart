@@ -114,6 +114,28 @@ void main() {
     expect(c.style.value.outlineColor, const Color(0x00000000));
   });
 
+  test('setOutlineWidth clamps to [min, max]', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.text);
+    c.setOutlineWidth(6);
+    expect(c.style.value.outlineWidth, 6);
+    c.setOutlineWidth(999);
+    expect(c.style.value.outlineWidth, kTextOutlineWidthMax);
+    c.setOutlineWidth(0);
+    expect(c.style.value.outlineWidth, kTextOutlineWidthMin);
+  });
+
+  test('setOutlineWidthAuto reverts to the auto sentinel, leaving other fields', () {
+    final c = EditorController();
+    c.selectTool(ToolKind.text);
+    c.setOutlineColor(const Color(0xFFFFFFFF));
+    c.setOutlineWidth(6);
+    expect(c.style.value.outlineWidth, 6);
+    c.setOutlineWidthAuto();
+    expect(c.style.value.outlineWidth, kTextOutlineWidthAuto);
+    expect(c.style.value.outlineColor, const Color(0xFFFFFFFF)); // untouched
+  });
+
   test('setArrowHeadScale clamps to [min, max]', () {
     final c = EditorController();
     c.selectTool(ToolKind.arrow);

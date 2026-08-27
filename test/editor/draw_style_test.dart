@@ -228,6 +228,23 @@ void main() {
         const Color(0xFF000000));
   });
 
+  test('outlineWidth defaults to auto, omitted from JSON, round-trips', () {
+    expect(const DrawStyle().outlineWidth, kTextOutlineWidthAuto);
+    expect(const DrawStyle().toJson().containsKey('outlineWidth'), isFalse);
+    final o = const DrawStyle().copyWith(outlineWidth: 6);
+    expect(o.toJson()['outlineWidth'], 6);
+    expect(DrawStyle.fromJson(o.toJson()).outlineWidth, 6);
+    // Old blobs (no key) load as auto.
+    expect(DrawStyle.fromJson({'color': 0xFFFF0000}).outlineWidth,
+        kTextOutlineWidthAuto);
+  });
+
+  test('equality and copyWith include outlineWidth', () {
+    const a = DrawStyle();
+    expect(a.copyWith(outlineWidth: 3) == a, isFalse);
+    expect(a.copyWith(outlineWidth: 3).outlineWidth, 3);
+  });
+
   test('arrowHeadScale defaults to 1, omitted from JSON, round-trips, clamps', () {
     expect(const DrawStyle().arrowHeadScale, kArrowHeadScaleDefault);
     expect(const DrawStyle().toJson().containsKey('arrowHeadScale'), isFalse);

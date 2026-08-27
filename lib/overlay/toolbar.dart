@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../editor/draw_style.dart';
 import '../editor/editor_controller.dart';
 import '../editor/font_bridge.dart';
+import '../editor/text_metrics.dart';
 import '../editor/tool_meta.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../editor/tool_style_store.dart';
@@ -817,6 +818,7 @@ enum _OpenPopover {
   color,
   fill,
   outline,
+  outlineWidth,
   radius,
   font,
   texture,
@@ -1013,6 +1015,36 @@ class _OptionsRowState extends State<_OptionsRow> {
         onChanged: _c.setOutlineColor,
         pushTransparent: false,
       );
+
+  // The text outline-width picker: the corner-radius popover reused with the
+  // outline strings/range; Auto = the legacy font-scaled width. Leaving Auto
+  // seeds the CURRENT resolved width (in image px) so the ring doesn't jump.
+  void _openOutlineWidthPopover() {
+    if (_open == _OpenPopover.outlineWidth) {
+      _closePopover();
+      return;
+    }
+    _closePopover();
+    final l10n = AppLocalizations.of(context);
+    _showPopover(
+      _OpenPopover.outlineWidth,
+      _barLink,
+      width: 220,
+      child: ValueListenableBuilder<DrawStyle>(
+        valueListenable: _c.style,
+        builder: (_, st, _) => RadiusPickerPopover(
+          value: st.outlineWidth,
+          min: kTextOutlineWidthMin,
+          max: kTextOutlineWidthMax,
+          baseline: textOutlineWidthAutoSeed(st),
+          title: l10n.popoverOutlineWidth,
+          autoHint: l10n.popoverOutlineWidthAutoHint,
+          onChanged: _c.setOutlineWidth,
+          onAuto: _c.setOutlineWidthAuto,
+        ),
+      ),
+    );
+  }
 
   // The corner-radius picker (rectangle only): a slider plus an Auto toggle. The
   // child listens to the style so dragging the slider moves its own knob live.
@@ -1494,6 +1526,19 @@ class _OptionsRowState extends State<_OptionsRow> {
                       glyph: Icons.format_color_text,
                       onTap: _openOutlinePopover,
                     ),
+                    // Width rides the outline colour: with no outline there is
+                    // no ring to size, so the pill hides (the bar rebuilds on
+                    // every style change, so it appears the moment one is set).
+                    if (style.outlineColor.a > 0) ...[
+                      const SizedBox(width: 6),
+                      _TextureButton(
+                        key: const ValueKey('outline-width-picker'),
+                        label: l10n.toolbarOutlineWidthLabel(
+                            radiusLabel(l10n, style.outlineWidth)),
+                        tooltip: l10n.toolbarOutlineWidth,
+                        onTap: _openOutlineWidthPopover,
+                      ),
+                    ],
                   ],
                   if (isRasterEffect)
                     _NumberStepper(

@@ -1178,6 +1178,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolbarTextOutline => '文字外框';
 
   @override
+  String toolbarOutlineWidthLabel(String value) {
+    return '外框：$value';
+  }
+
+  @override
+  String get toolbarOutlineWidth => '外框粗細';
+
+  @override
   String get toolbarColour => '顏色';
 
   @override
@@ -1331,6 +1339,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get popoverRadiusAutoHint => '圓角隨矩形大小縮放';
+
+  @override
+  String get popoverOutlineWidth => '外框粗細';
+
+  @override
+  String get popoverOutlineWidthAutoHint => '外框粗細隨字體大小縮放';
 
   @override
   String get editorTitleBar => '圖片編輯器';
