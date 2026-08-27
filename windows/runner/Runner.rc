@@ -92,12 +92,24 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "Howar31" "\0"
+            // Dev-identity builds (GLIMPR_DEV_IDENTITY, see app_identity.h)
+            // rename the product: ProductName also selects the settings dir
+            // (%APPDATA%\CompanyName\ProductName), so dev settings separate.
+#ifdef GLIMPR_DEV_IDENTITY
+            VALUE "FileDescription", "GlimprDev" "\0"
+            VALUE "FileVersion", VERSION_AS_STRING "\0"
+            VALUE "InternalName", "glimpr_dev" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Howar31. All rights reserved." "\0"
+            VALUE "OriginalFilename", "glimpr_dev.exe" "\0"
+            VALUE "ProductName", "GlimprDev" "\0"
+#else
             VALUE "FileDescription", "Glimpr" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "glimpr" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 Howar31. All rights reserved." "\0"
             VALUE "OriginalFilename", "glimpr.exe" "\0"
             VALUE "ProductName", "Glimpr" "\0"
+#endif
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

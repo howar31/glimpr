@@ -11,6 +11,7 @@
 #include <optional>
 #include <utility>
 
+#include "app_identity.h"
 #include "drop_filter.h"
 #include "perf_log.h"
 #include "pin_window.h"
@@ -317,7 +318,7 @@ bool EditorWindow::OnCreate() {
           result->Success();
         } else if (m == "openSettings") {
           if (control_hwnd_) {
-            static UINT reveal = RegisterWindowMessageW(L"GlimprRevealSettings");
+            static UINT reveal = RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
             PostMessage(control_hwnd_, reveal, 0, 0);
           }
           result->Success();

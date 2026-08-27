@@ -53,6 +53,17 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# --- Dev build identity -----------------------------------------------------
+# Configure with GLIMPR_DEV=1 in the environment to give the build a distinct
+# identity (glimpr_dev.exe / "GlimprDev", own settings dir and single-instance
+# scope; see app_identity.h) so it never collides with an installed copy.
+# Official builds leave the variable unset. Read at CMake CONFIGURE time.
+# Mirrors the macOS Debug-config GlimprDev identity (AppInfo.xcconfig).
+if(DEFINED ENV{GLIMPR_DEV})
+  set_target_properties(${BINARY_NAME} PROPERTIES OUTPUT_NAME "glimpr_dev")
+  target_compile_definitions(${BINARY_NAME} PRIVATE "GLIMPR_DEV_IDENTITY")
+endif()
+
 # Vendored Ed25519 verifier (orlp/ed25519, zlib license; verify-only subset)
 # for the self-update installer signature check. Built as its own library so
 # the third-party sources are exempt from the runner's /W4 /WX wall.

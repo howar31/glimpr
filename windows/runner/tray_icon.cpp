@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "app_identity.h"
 #include "resource.h"
 #include "utils.h"
 
@@ -95,6 +96,22 @@ void AppendItem(HMENU menu, UINT id, const std::string& label,
   UINT flags = MF_STRING | (enabled ? MF_ENABLED : MF_GRAYED);
   AppendMenuW(menu, flags, id, wide.c_str());
 }
+
+// Rebrand a Dart-pushed label for the dev identity: every tray label that
+// embeds the app name carries the literal ASCII "Glimpr" in BOTH locales, so
+// a plain substring swap localizes correctly. Identity no-op officially.
+std::string WithAppName(std::string label) {
+#ifdef GLIMPR_DEV_IDENTITY
+  const std::string from = "Glimpr";
+  const std::string to = GLIMPR_APP_NAME;
+  size_t pos = 0;
+  while ((pos = label.find(from, pos)) != std::string::npos) {
+    label.replace(pos, from.size(), to);
+    pos += to.size();
+  }
+#endif
+  return label;
+}
 }  // namespace
 
 TrayIcon::TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,
@@ -109,7 +126,7 @@ TrayIcon::TrayIcon(HWND owner, HINSTANCE instance, HotkeyHost* hotkeys,
   nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
   nid.uCallbackMessage = WM_GLIMPR_TRAY;
   nid.hIcon = icon_;
-  wcscpy_s(nid.szTip, L"Glimpr");
+  wcscpy_s(nid.szTip, GLIMPR_APP_NAME_W);
   added_ = Shell_NotifyIconW(NIM_ADD, &nid) == TRUE;
   s_record_instance_ = this;  // one tray; routes the record-tick timer
 }
@@ -225,12 +242,13 @@ void TrayIcon::ShowMenu() {
   // push arrives.
   auto L = [this](const char* id, const char* fallback) -> std::string {
     auto it = labels_.find(id);
-    return it != labels_.end() ? it->second : std::string(fallback);
+    return WithAppName(it != labels_.end() ? it->second
+                                           : std::string(fallback));
   };
 
   HMENU menu = CreatePopupMenu();
   // Header (disabled). Brand name, never translated.
-  AppendItem(menu, 0, "Glimpr", "", false);
+  AppendItem(menu, 0, GLIMPR_APP_NAME, "", false);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Live screenshot actions, with accelerator hints from the bound hotkeys.
   AppendItem(menu, kCmdCaptureRegion, L("captureArea", "Screenshot Region"),
@@ -610,7 +628,7 @@ void TrayIcon::OnProcTick() {
       proc_timer_ = 0;
     }
     ApplyIcon(LoadThemeIcon());
-    SetTip(L"Glimpr");  // drop the "Processing ..." hover tooltip
+    SetTip(GLIMPR_APP_NAME_W);  // drop the "Processing ..." hover tooltip
     return;
   }
   double intensity = 1.0;

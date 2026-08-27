@@ -4,6 +4,7 @@
 // shellapi.h (CommandLineToArgvW) must follow windows.h.
 #include <shellapi.h>
 
+#include "app_identity.h"
 #include "crash_dump.h"
 #include "flutter_window.h"
 #include "perf_log.h"
@@ -59,10 +60,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Single instance: a resident tray app must not run twice (a second tray icon
   // + a RegisterHotKey collision). If one is already running, ask it to reveal
   // its Settings window, then exit.
+  // Identity-scoped (app_identity.h): a dev build and the installed copy each
+  // keep their own single-instance scope and reveal broadcast, so they can
+  // coexist without the second launch silently deferring to the other one.
   HANDLE instance_mutex =
-      ::CreateMutexW(nullptr, TRUE, L"Glimpr_SingleInstance_8F3A");
+      ::CreateMutexW(nullptr, TRUE, GLIMPR_MUTEX_NAME_W);
   if (instance_mutex && ::GetLastError() == ERROR_ALREADY_EXISTS) {
-    UINT reveal = ::RegisterWindowMessageW(L"GlimprRevealSettings");
+    UINT reveal = ::RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
     ::PostMessage(HWND_BROADCAST, reveal, 0, 0);
     ::OleUninitialize();
     return EXIT_SUCCESS;

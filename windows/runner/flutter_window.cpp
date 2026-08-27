@@ -13,6 +13,7 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include "app_identity.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "perf_log.h"
 #include "update_installer.h"
@@ -203,6 +204,14 @@ bool FlutterWindow::OnCreate() {
           result->Success();  // no native key interceptor on Windows -> no-op
         } else if (m == "appVersion") {
           result->Success(EncodableValue(AppVersionString()));
+        } else if (m == "appIsDev") {
+          // Display-only dev-identity flag (app_identity.h). appVersion stays
+          // pure -- the update compare parses it.
+#ifdef GLIMPR_DEV_IDENTITY
+          result->Success(EncodableValue(true));
+#else
+          result->Success(EncodableValue(false));
+#endif
         } else if (m == "openExternalUrl") {
           if (const auto* args = std::get_if<EncodableMap>(call.arguments())) {
             auto it = args->find(EncodableValue(std::string("url")));
@@ -518,7 +527,7 @@ bool FlutterWindow::OnCreate() {
       });
 
   // A second instance posts this to reveal the running one's Settings.
-  reveal_message_ = RegisterWindowMessageW(L"GlimprRevealSettings");
+  reveal_message_ = RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
 
   // Deferred background warm-up: a short while after launch, pre-build the
   // overlay engines (instant first capture) and the editor engine (instant first

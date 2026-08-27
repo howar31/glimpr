@@ -13,6 +13,7 @@
 #include <string>
 #include <thread>
 
+#include "app_identity.h"
 #include "channel_args.h"
 #include "cursor_image.h"
 #include "dpi_util.h"
@@ -976,7 +977,7 @@ void OverlayManager::HandleOverlayCapture(
     // (show + ForceRedraw + foreground) is the single reveal path.
     DismissAll();
     if (control_hwnd_) {
-      static UINT reveal = RegisterWindowMessageW(L"GlimprRevealSettings");
+      static UINT reveal = RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
       PostMessage(control_hwnd_, reveal, 0, 0);
     }
     result->Success();

@@ -366,6 +366,19 @@ class _SettingsAppState extends State<SettingsApp>
     }
   }
 
+  // Version + dev-identity flag for DISPLAY ONLY: the update compare keeps
+  // parsing the pure [_appVersionFuture] string. Any channel error/absence
+  // reads as not-dev, so an official build can never gain the "Dev" marker.
+  late final Future<({String version, bool dev})> _versionDisplayFuture =
+      () async {
+    final v = await _appVersionFuture;
+    var dev = false;
+    try {
+      dev = await _roleChannel.invokeMethod<bool>('appIsDev') ?? false;
+    } catch (_) {}
+    return (version: v, dev: dev);
+  }();
+
   void _openUrl(String url) =>
       _roleChannel.invokeMethod('openExternalUrl', {'url': url});
 
@@ -890,12 +903,14 @@ class _SettingsAppState extends State<SettingsApp>
             // The real bundle version (same source as the About pane), so the
             // caption can never go stale on a version bump. The About pane
             // shows the full "x.y.z (build)"; the sidebar keeps just x.y.z.
-            child: FutureBuilder<String>(
-              future: _appVersionFuture,
+            child: FutureBuilder<({String version, bool dev})>(
+              future: _versionDisplayFuture,
               builder: (_, snap) {
-                final v = (snap.data ?? '').split(' ').first;
+                final v = (snap.data?.version ?? '').split(' ').first;
+                final name =
+                    (snap.data?.dev ?? false) ? 'GlimprDev' : 'Glimpr';
                 return Text(
-                  v.isEmpty ? 'Glimpr' : 'Glimpr $v',
+                  v.isEmpty ? name : '$name $v',
                   style: GlimprType.sansStyle(11.5, 500, t.fg4),
                 );
               },
@@ -973,10 +988,12 @@ class _SettingsAppState extends State<SettingsApp>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FutureBuilder<String>(
-                  future: _appVersionFuture,
+                FutureBuilder<({String version, bool dev})>(
+                  future: _versionDisplayFuture,
                   builder: (_, snap) => Text(
-                    snap.data ?? '',
+                    snap.data == null
+                        ? ''
+                        : '${snap.data!.version}${snap.data!.dev ? ' Dev' : ''}',
                     style: GlimprType.sansStyle(12.5, 500, t.fg4),
                   ),
                 ),

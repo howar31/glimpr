@@ -38,6 +38,29 @@ void main() {
     expect(find.textContaining('Update available'), findsNothing);
   });
 
+  testWidgets('official identity shows the plain version, no Dev marker',
+      (tester) async {
+    // appIsDev absent (null) = official / older native: the display MUST stay
+    // byte-identical to the pre-marker About pane. Guards the production path.
+    mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    await openAbout(tester, Settings(FakeStore()));
+    expect(find.text('1.0.0 (1)'), findsOneWidget);
+    expect(find.textContaining('Dev'), findsNothing);
+  });
+
+  testWidgets('dev identity appends the Dev marker to the version',
+      (tester) async {
+    mockMethodChannel(kRoleChannel, handler: (c) {
+      if (c.method == 'appVersion') return '1.0.0 (1)';
+      if (c.method == 'appIsDev') return true;
+      return null;
+    });
+    await openAbout(tester, Settings(FakeStore()));
+    expect(find.text('1.0.0 (1) Dev'), findsOneWidget);
+    expect(find.text('1.0.0 (1)'), findsNothing); // replaced, not duplicated
+  });
+
   testWidgets('persisted newer release shows the update badge row',
       (tester) async {
     mockMethodChannel(kRoleChannel,

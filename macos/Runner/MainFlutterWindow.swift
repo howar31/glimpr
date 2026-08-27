@@ -212,6 +212,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           as? String ?? ""
         let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
         result(b.isEmpty ? v : "\(v) (\(b))")
+      // Display-only dev-identity flag (the GlimprDev build). The version
+      // string above stays pure — the update compare parses it.
+      case "appIsDev":
+        result(Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true)
       default: result(FlutterMethodNotImplemented)
       }
     }

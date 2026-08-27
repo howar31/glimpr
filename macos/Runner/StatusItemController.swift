@@ -1,5 +1,13 @@
 import Cocoa
 
+/// User-facing app name from the bundle: release builds are "Glimpr", the
+/// dev-identity Debug build "GlimprDev". Every tray surface that names the app
+/// (menu header, About/Quit items, tooltip, accessibility labels) uses this so
+/// the running copy is identifiable next to an installed one — mirrored by the
+/// Windows tray (app_identity.h).
+private let kAppName =
+  (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Glimpr"
+
 /// The menu-bar (NSStatusItem) shell. Every global action gets a menu item
 /// whose key-equivalent HINT mirrors the effective (rebindable) hotkey —
 /// refreshed on each menu open via [keyHint]. Actions are injected so this
@@ -78,17 +86,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // menu-bar appearance (white on a dark bar, black on a light one). Falls back
     // to the system viewfinder symbol if the asset is somehow unavailable.
     let mark = NSImage(named: "StatusBarIcon")
-      ?? NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Glimpr")
+      ?? NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: kAppName)
     mark?.isTemplate = true
     normalImage = mark
     super.init()
     item.button?.image = mark
+    item.button?.toolTip = kAppName
 
     let menu = NSMenu()
     menu.delegate = self // refresh the key-equivalent hints on each open
     // App-name header: disabled, non-clickable. action == nil + autoenablesItems
     // (on by default) renders it greyed out; isEnabled = false makes the intent explicit.
-    let header = NSMenuItem(title: "Glimpr", action: nil, keyEquivalent: "")
+    let header = NSMenuItem(title: kAppName, action: nil, keyEquivalent: "")
     header.isEnabled = false
     menu.addItem(header)
     menu.addItem(.separator())
@@ -157,10 +166,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       action: #selector(checkUpdates), key: "")
     updateItem = update
     menu.addItem(update)
-    menu.addItem(menuItem(title: L.s("About Glimpr", "關於 Glimpr"), action: #selector(about), key: ""))
+    menu.addItem(menuItem(title: L.s("About \(kAppName)", "關於 \(kAppName)"), action: #selector(about), key: ""))
     menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
-    menu.addItem(menuItem(title: L.s("Quit Glimpr", "結束 Glimpr"), action: #selector(quit), key: "q"))
+    menu.addItem(menuItem(title: L.s("Quit \(kAppName)", "結束 \(kAppName)"), action: #selector(quit), key: "q"))
     item.menu = menu
   }
 
@@ -252,7 +261,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         pulse.invalidate()
         processingTimer = nil
         processingUnbounded = false
-        item.button?.toolTip = nil
+        item.button?.toolTip = kAppName
       }
       recordingPhase = 0
       if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -272,9 +281,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         recordingTimer = timer
         item.button?.image = recordingIcon(mix: 0)
       }
-      item.button?.setAccessibilityLabel(L.s("Glimpr, recording", "Glimpr，錄影中"))
+      item.button?.setAccessibilityLabel(L.s("\(kAppName), recording", "\(kAppName)，錄影中"))
     } else {
-      item.button?.setAccessibilityLabel("Glimpr")
+      item.button?.setAccessibilityLabel(kAppName)
       let from = recordingMix
       recordingMix = 0
       if graceful, from > 0.02,
@@ -418,15 +427,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
           if self.processingTimer === tm { self.processingTimer = nil }
           self.processingUnbounded = false
           self.item.button?.image = self.normalImage
-          self.item.button?.toolTip = nil
-          self.item.button?.setAccessibilityLabel("Glimpr")
+          self.item.button?.toolTip = kAppName
+          self.item.button?.setAccessibilityLabel(kAppName)
         }
         self.processingLastCycle = cycle
       }
       RunLoop.main.add(timer, forMode: .common)
       processingTimer = timer
       item.button?.setAccessibilityLabel(
-        L.s("Glimpr, processing", "Glimpr，處理中"))
+        L.s("\(kAppName), processing", "\(kAppName)，處理中"))
     } else {
       processingStop = true
     }
