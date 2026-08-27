@@ -16,6 +16,11 @@
 PRODUCT_NAME = Glimpr
 PRODUCT_NAME[config=Debug] = GlimprDev
 
+// The Swift MODULE stays `Glimpr` in every config (it defaults to
+// PRODUCT_NAME): RunnerTests' `@testable import Glimpr` and the CI native-test
+// job must not care which app name the config produces.
+PRODUCT_MODULE_NAME = Glimpr
+
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.howar31.glimpr
 PRODUCT_BUNDLE_IDENTIFIER[config=Debug] = com.howar31.glimpr.dev

@@ -502,7 +502,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.howar31.glimpr.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glimpr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Glimpr";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GlimprDev.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GlimprDev";
 			};
 			name = Debug;
 		};
