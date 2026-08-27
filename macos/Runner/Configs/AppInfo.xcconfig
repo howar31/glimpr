@@ -6,10 +6,19 @@
 
 // The application's name (user-facing display name). Lowercase package name / bundle id
 // stay as-is; this is the brand-cased display name.
+//
+// Debug builds carry a DISTINCT dev identity (name + bundle id): TCC keeps one
+// privacy row per bundle id bound to one code-signing requirement, so a debug
+// build sharing the release id fights the installed copy over the Screen
+// Recording / Accessibility grants (each launch of one invalidates the other's).
+// A separate id gives the dev build its own rows: grant once, stable forever
+// (the Debug config already signs with the stable local cert).
 PRODUCT_NAME = Glimpr
+PRODUCT_NAME[config=Debug] = GlimprDev
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.howar31.glimpr
+PRODUCT_BUNDLE_IDENTIFIER[config=Debug] = com.howar31.glimpr.dev
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Howar31. All rights reserved.
