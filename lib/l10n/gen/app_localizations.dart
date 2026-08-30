@@ -146,11 +146,11 @@ abstract class AppLocalizations {
   /// **'About'**
   String get settingsPaneAbout;
 
-  /// About pane: link to the creator's Ko-fi tip page (Ko-fi brand logo leads the row)
+  /// About pane: link to the creator's sponsor page (heart mark leads the row)
   ///
   /// In en, this message translates to:
-  /// **'Support'**
-  String get settingsAboutKofi;
+  /// **'Sponsor'**
+  String get settingsAboutSponsor;
 
   /// About pane: link to the GitHub repository (GitHub brand logo leads the row)
   ///

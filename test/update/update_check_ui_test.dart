@@ -155,12 +155,12 @@ void main() {
     await tester.pumpAndSettle();
     await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
     await tester.pumpAndSettle();
-    // No URL opened; the About pane is showing (Ko-fi row is About-only) and
+    // No URL opened; the About pane is showing (Sponsor row is About-only) and
     // a (clean) status push happened after the check resolved. The real
     // fetch is blocked by flutter_test's HttpOverrides, so the check yields
     // null -> the label resets to the idle "check" wording.
     expect(calls.where((c) => c.method == 'openExternalUrl'), isEmpty);
-    expect(find.text('Support'), findsOneWidget);
+    expect(find.text('Sponsor'), findsOneWidget);
     final push = calls.where((c) => c.method == 'setUpdateStatus').toList();
     expect(push, isNotEmpty);
     final args = (push.last.arguments as Map).cast<String, Object?>();

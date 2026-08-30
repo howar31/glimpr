@@ -1031,10 +1031,11 @@ class _SettingsAppState extends State<SettingsApp>
       const SizedBox(height: 18),
       GlassCard.rows([
         _aboutLinkRow(t,
-            icon: SimpleIcons.kofi,
-            label: _l.settingsAboutKofi,
+            // The sponsor page routes donors itself; the heart is its mark.
+            iconWidget: SponsorMark(size: 18, color: t.accentFg),
+            label: _l.settingsAboutSponsor,
             divider: true,
-            onTap: () => _openUrl('https://ko-fi.com/howar31')),
+            onTap: () => _openUrl('https://donate.howar31.com/')),
         _aboutLinkRow(t,
             icon: SimpleIcons.github,
             label: _l.settingsAboutGithub,

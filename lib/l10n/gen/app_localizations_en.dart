@@ -33,7 +33,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPaneAbout => 'About';
 
   @override
-  String get settingsAboutKofi => 'Support';
+  String get settingsAboutSponsor => 'Sponsor';
 
   @override
   String get settingsAboutGithub => 'Source code';

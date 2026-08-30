@@ -33,7 +33,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPaneAbout => '關於';
 
   @override
-  String get settingsAboutKofi => '贊助';
+  String get settingsAboutSponsor => '贊助';
 
   @override
   String get settingsAboutGithub => '原始碼';

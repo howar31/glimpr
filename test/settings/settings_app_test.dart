@@ -250,7 +250,7 @@ void main() {
     await tester.tap(find.text('About'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Support'), findsOneWidget);
+    expect(find.text('Sponsor'), findsOneWidget);
     expect(find.text('Source code'), findsOneWidget);
     expect(find.text('Website'), findsOneWidget);
     expect(find.text('Licenses & acknowledgements'), findsOneWidget);
@@ -258,9 +258,16 @@ void main() {
     expect(find.text('2.1.0 (42)'), findsOneWidget);
     expect(find.text('Glimpr 2.1.0'), findsOneWidget);
 
+    // The sponsor row opens the sponsor page (not a provider directly).
+    await tester.tap(find.text('Sponsor'));
+    await tester.pump();
+    final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
+    expect(opened, hasLength(1));
+    expect(opened.single.arguments, {'url': 'https://donate.howar31.com/'});
+
     await tester.tap(find.text('Source code'));
     await tester.pump();
-    expect(calls.any((c) => c.method == 'openExternalUrl'), isTrue);
+    expect(calls.where((c) => c.method == 'openExternalUrl'), hasLength(2));
   });
 
   // ---- Advanced pane, platform-shaped ------------------------------------

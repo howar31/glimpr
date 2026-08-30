@@ -32,9 +32,9 @@
   "@settingsPaneAbout": {
     "description": "Settings sidebar: About pane label"
   },
-  "settingsAboutKofi": "Support",
-  "@settingsAboutKofi": {
-    "description": "About pane: link to the creator's Ko-fi tip page (Ko-fi brand logo leads the row)"
+  "settingsAboutSponsor": "Sponsor",
+  "@settingsAboutSponsor": {
+    "description": "About pane: link to the creator's sponsor page (heart mark leads the row)"
   },
   "settingsAboutGithub": "Source code",
   "@settingsAboutGithub": {

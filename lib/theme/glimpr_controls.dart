@@ -134,6 +134,56 @@ class _MarkPainter extends CustomPainter {
   bool shouldRepaint(_MarkPainter old) => old.color != color;
 }
 
+/// The sponsor heart (Feather `heart` outline, 24-unit grid) used for the
+/// sponsor link, scaled to [size] and stroked in [color]. Same mark as the
+/// README badge and the landing page.
+class SponsorMark extends StatelessWidget {
+  const SponsorMark({super.key, this.size = 18, required this.color});
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(size: Size.square(size), painter: _HeartPainter(color));
+}
+
+class _HeartPainter extends CustomPainter {
+  _HeartPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 24.0;
+    canvas.save();
+    canvas.scale(s);
+    const r = Radius.circular(5.5);
+    final heart = Path()
+      ..moveTo(20.84, 4.61)
+      ..arcToPoint(const Offset(13.06, 4.61), radius: r, clockwise: false)
+      ..lineTo(12, 5.67)
+      ..lineTo(10.94, 4.61)
+      ..arcToPoint(const Offset(3.16, 12.39), radius: r, clockwise: false)
+      ..lineTo(4.22, 13.45)
+      ..lineTo(12, 21.23)
+      ..lineTo(19.78, 13.45)
+      ..lineTo(20.84, 12.39)
+      ..arcToPoint(const Offset(20.84, 4.61), radius: r, clockwise: false)
+      ..close();
+    canvas.drawPath(
+        heart,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = color);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_HeartPainter old) => old.color != color;
+}
+
 /// The full logo lockup — the Viewfinder mark beside the wordmark. Used in the
 /// settings sidebar header.
 class Lockup extends StatelessWidget {
