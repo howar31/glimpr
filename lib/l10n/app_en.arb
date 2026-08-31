@@ -310,6 +310,10 @@
   "@settingsFlowCopyToClipboardHint": {
     "description": "Settings > Workflow: copy-to-clipboard flow action row hint"
   },
+  "settingsFlowCopyFileHint": "Put the recording file on the clipboard (paste into a chat to attach it)",
+  "@settingsFlowCopyFileHint": {
+    "description": "Settings > Recording: copy-file flow action row hint"
+  },
   "settingsFlowSaveToFile": "Save to file",
   "@settingsFlowSaveToFile": {
     "description": "Settings > Workflow: save-to-file flow action row title"

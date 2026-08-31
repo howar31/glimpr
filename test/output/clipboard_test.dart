@@ -28,6 +28,24 @@ void main() {
         throwsA(isA<PlatformException>()));
   });
 
+  test('writeFile sends the path', () async {
+    String? sent;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'writeFile');
+      sent = (call.arguments as Map)['path'] as String;
+      return null;
+    });
+    await clipboardWriteFile('/tmp/rec.gif');
+    expect(sent, '/tmp/rec.gif');
+  });
+
+  test('writeFile propagates a native failure', () async {
+    messenger.setMockMethodCallHandler(channel,
+        (call) async => throw PlatformException(code: 'clipboard_write'));
+    expect(() => clipboardWriteFile('/tmp/rec.gif'),
+        throwsA(isA<PlatformException>()));
+  });
+
   test('readImage returns the PNG bytes; null stays null', () async {
     messenger.setMockMethodCallHandler(channel, (call) async {
       expect(call.method, 'readImage');

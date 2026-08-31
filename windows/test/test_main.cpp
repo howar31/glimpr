@@ -17,6 +17,7 @@
 #include "base64.h"
 #include "capture_key_rule.h"
 #include "clipboard_dib.h"
+#include "clipboard_hdrop.h"
 #include "drop_filter.h"
 #include "ed25519/ed25519.h"
 #include "hdr_util.h"
@@ -386,6 +387,25 @@ void TestOpaqueDib() {
   CHECK(!clipdib::AllOpaque(src.data(), w, h, stride));
 }
 
+// --- clipboard CF_HDROP payload ----------------------------------------------
+
+void TestDropFilesPayload() {
+  g_case = "hdrop";
+  const std::wstring path = L"D:\\Videos\\rec 01.gif";
+  const std::vector<uint8_t> p = clip::BuildDropFilesPayload(path);
+  CHECK(p.size() == sizeof(DROPFILES) + (path.size() + 2) * sizeof(wchar_t));
+  DROPFILES drop;
+  std::memcpy(&drop, p.data(), sizeof(DROPFILES));
+  CHECK(drop.pFiles == sizeof(DROPFILES));
+  CHECK(drop.fWide == TRUE);
+  const auto* chars =
+      reinterpret_cast<const wchar_t*>(p.data() + sizeof(DROPFILES));
+  CHECK(std::wstring(chars) == path);
+  // The file list is double-null-terminated (one path, then the list's end).
+  CHECK(chars[path.size()] == L'\0');
+  CHECK(chars[path.size() + 1] == L'\0');
+}
+
 // --- editor drop filter -------------------------------------------------------
 
 void TestDropFilter() {
@@ -476,7 +496,8 @@ int main() {
       {"ext-srgb", TestExtSrgb},         {"tonemap", TestToneMapLut},
       {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
-      {"drop-filter", TestDropFilter},     {"ed25519", TestEd25519Verify},
+      {"hdrop", TestDropFilesPayload},     {"drop-filter", TestDropFilter},
+      {"ed25519", TestEd25519Verify},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

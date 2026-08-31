@@ -76,6 +76,7 @@
   "settingsSectionSounds": "音效",
   "settingsFlowCopyToClipboard": "複製到剪貼簿",
   "settingsFlowCopyToClipboardHint": "將圖片放上剪貼簿",
+  "settingsFlowCopyFileHint": "將錄影檔案放上剪貼簿（貼到聊天軟體即成為附件）",
   "settingsFlowSaveToFile": "儲存為檔案",
   "settingsFlowSaveToFileHint": "將圖片寫入儲存資料夾",
   "settingsFlowCopyFilePath": "複製檔案路徑",

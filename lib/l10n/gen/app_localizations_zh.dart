@@ -255,6 +255,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFlowCopyToClipboardHint => '將圖片放上剪貼簿';
 
   @override
+  String get settingsFlowCopyFileHint => '將錄影檔案放上剪貼簿（貼到聊天軟體即成為附件）';
+
+  @override
   String get settingsFlowSaveToFile => '儲存為檔案';
 
   @override

@@ -62,6 +62,20 @@ void main() {
           {FlowAction.copyPath, FlowAction.save});
     });
 
+    test('checking copyFile unchecks copyPath and vice versa', () {
+      expect(toggleFlowAction({FlowAction.copyPath}, FlowAction.copyFile, true),
+          {FlowAction.copyFile});
+      expect(toggleFlowAction({FlowAction.copyFile}, FlowAction.copyPath, true),
+          {FlowAction.copyPath});
+    });
+
+    test('copy and copyFile are mutually exclusive too', () {
+      expect(toggleFlowAction({FlowAction.copy}, FlowAction.copyFile, true),
+          {FlowAction.copyFile});
+      expect(toggleFlowAction({FlowAction.copyFile}, FlowAction.copy, true),
+          {FlowAction.copy});
+    });
+
     test('unchecking save cascades copyPath + showInFinder off', () {
       expect(
           toggleFlowAction(

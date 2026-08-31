@@ -554,6 +554,12 @@ abstract class AppLocalizations {
   /// **'Put the image on the clipboard'**
   String get settingsFlowCopyToClipboardHint;
 
+  /// Settings > Recording: copy-file flow action row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Put the recording file on the clipboard (paste into a chat to attach it)'**
+  String get settingsFlowCopyFileHint;
+
   /// Settings > Workflow: save-to-file flow action row title
   ///
   /// In en, this message translates to:

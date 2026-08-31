@@ -263,6 +263,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Put the image on the clipboard';
 
   @override
+  String get settingsFlowCopyFileHint =>
+      'Put the recording file on the clipboard (paste into a chat to attach it)';
+
+  @override
   String get settingsFlowSaveToFile => 'Save to file';
 
   @override

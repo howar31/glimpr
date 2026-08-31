@@ -1794,6 +1794,12 @@ class _SettingsAppState extends State<SettingsApp>
         SectionLabel(_l.settingsSectionAfterRecording, icon: Icons.flag_outlined),
         GlassCard.rows([
           SettingRow(
+            title: _l.settingsFlowCopyToClipboard,
+            hint: _l.settingsFlowCopyFileHint,
+            trailing: _recordingFlowToggle(FlowAction.copyFile),
+          ),
+          SettingRow(
+            divider: true,
             title: _l.settingsFlowCopyFilePath,
             hint: _l.settingsFlowCopyFilePathHint,
             trailing: _recordingFlowToggle(FlowAction.copyPath),
@@ -1830,8 +1836,9 @@ class _SettingsAppState extends State<SettingsApp>
   Widget _recordingFlowToggle(FlowAction a) => GlassToggle(
         value: _afterRecording.contains(a),
         onChanged: (v) async {
-          final next = {..._afterRecording};
-          v ? next.add(a) : next.remove(a);
+          // toggleFlowAction keeps the clipboard legs (copyFile / copyPath)
+          // mutually exclusive; recording has no save leg to cascade.
+          final next = toggleFlowAction(_afterRecording, a, v);
           await _s.setAfterRecordingFlow(next);
           if (mounted) setState(() => _afterRecording = next);
         },

@@ -15,6 +15,7 @@
 #include "utils.h"
 
 #include "clipboard_dib.h"
+#include "clipboard_hdrop.h"
 #include "image_codec.h"
 #include "perf_log.h"
 
@@ -167,6 +168,33 @@ std::vector<uint8_t> ReadImageFromOpenClipboard() {
   return out;
 }
 
+// Put the file at [path] on the clipboard as a FILE reference -- the same
+// clipboard state as an Explorer file copy (CF_HDROP plus a COPY Preferred
+// DropEffect so an Explorer paste copies rather than moves). Pasting into a
+// chat app attaches the file; the recording's copy-to-clipboard flow leg
+// uses this (a video has no image clipboard format).
+bool WriteFileToClipboard(const std::wstring& path) {
+  const std::vector<uint8_t> payload = clip::BuildDropFilesPayload(path);
+  HGLOBAL drop = CopyToGlobal(payload.data(), payload.size());
+  if (!drop) return false;
+  if (!OpenClipboard(nullptr)) {
+    GlobalFree(drop);
+    return false;
+  }
+  EmptyClipboard();
+  const bool ok = SetClipboardData(CF_HDROP, drop) != nullptr;
+  if (!ok) GlobalFree(drop);  // ownership not transferred on failure
+  if (ok) {
+    const DWORD effect = DROPEFFECT_COPY;
+    if (HGLOBAL h = CopyToGlobal(&effect, sizeof(effect))) {
+      const UINT cf = RegisterClipboardFormatW(L"Preferred DropEffect");
+      if (!cf || !SetClipboardData(cf, h)) GlobalFree(h);
+    }
+  }
+  CloseClipboard();
+  return ok;
+}
+
 }  // namespace
 
 namespace clip {
@@ -299,6 +327,24 @@ void ClipboardChannel::HandleMethodCall(
       result->Success(EncodableValue());
     } else {
       result->Error("clipboard_failed", "could not write image to clipboard");
+    }
+    return;
+  }
+  if (call.method_name() == "writeFile") {
+    const auto* args = std::get_if<EncodableMap>(call.arguments());
+    const std::string* path = nullptr;
+    if (args) {
+      auto it = args->find(EncodableValue(std::string("path")));
+      if (it != args->end()) path = std::get_if<std::string>(&it->second);
+    }
+    if (!path || path->empty()) {
+      result->Error("bad_args", "writeFile expects a non-empty path");
+      return;
+    }
+    if (WriteFileToClipboard(Utf16FromUtf8(*path))) {
+      result->Success(EncodableValue());
+    } else {
+      result->Error("clipboard_failed", "could not write file to clipboard");
     }
     return;
   }

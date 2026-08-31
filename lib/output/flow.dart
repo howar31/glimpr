@@ -20,6 +20,7 @@ enum FlowAction {
   shareSheet, // macOS share menu (AirDrop / Messages / ...) for the file
   pin, // float the image as an always-on-top pin window
   openGifEditor, // open the finished recording in the GIF editor (gif only)
+  copyFile, // saved file -> clipboard as a FILE reference (recording flow)
 }
 
 /// Parse a comma-joined name list (the persisted form). Unknown names are
@@ -37,18 +38,28 @@ Set<FlowAction> parseFlow(String? names) {
 String flowToString(Set<FlowAction> s) =>
     [for (final a in FlowAction.values) if (s.contains(a)) a.name].join(',');
 
+/// The actions that write the system clipboard — at most ONE can be checked
+/// (the last write would silently win otherwise), so checking any of them
+/// unchecks the rest in [toggleFlowAction].
+const _kClipboardLegs = <FlowAction>{
+  FlowAction.copy,
+  FlowAction.copyPath,
+  FlowAction.copyFile,
+};
+
 /// One Settings toggle transition over a completion flow, enforcing the
-/// invariants the toggles promise: copy and copyPath are mutually exclusive
-/// (both write the clipboard), and copyPath / showInFinder need the save leg,
-/// so unchecking save also unchecks them — otherwise they would linger checked
-/// behind their disabled rows, a hidden always-failing state.
+/// invariants the toggles promise: the clipboard-writing legs (copy / copyPath
+/// / copyFile) are mutually exclusive, and copyPath / showInFinder need the
+/// save leg, so unchecking save also unchecks them — otherwise they would
+/// linger checked behind their disabled rows, a hidden always-failing state.
 Set<FlowAction> toggleFlowAction(
     Set<FlowAction> flow, FlowAction action, bool on) {
   final next = {...flow};
   if (on) {
     next.add(action);
-    if (action == FlowAction.copy) next.remove(FlowAction.copyPath);
-    if (action == FlowAction.copyPath) next.remove(FlowAction.copy);
+    if (_kClipboardLegs.contains(action)) {
+      next.removeAll(_kClipboardLegs.difference({action}));
+    }
   } else {
     next.remove(action);
     if (action == FlowAction.save) {
@@ -76,6 +87,7 @@ Set<FlowAction> normalizeFlow(Set<FlowAction> s, {required bool forCapture}) {
 /// (the recording IS the file); copy-image / pin / openEditor are not offered.
 /// openGifEditor applies to GIF-format takes only (the runner skips others).
 const kRecordingFlowActions = <FlowAction>{
+  FlowAction.copyFile,
   FlowAction.copyPath,
   FlowAction.showInFinder,
   FlowAction.shareSheet,

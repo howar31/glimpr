@@ -196,6 +196,24 @@ void main() {
     expect(find.text('GIF'), findsOneWidget);
   });
 
+  testWidgets('Recording pane: the clipboard flow toggles are exclusive',
+      (tester) async {
+    mockMethodChannel(
+      const MethodChannel('glimpr/record'),
+      handler: (call) => call.method == 'isAvailable' ? true : null,
+    );
+    final s = await _pump(tester);
+    await tester.tap(find.text('Recording'));
+    await tester.pumpAndSettle();
+    await tester.tap(_toggleInRow('Copy to clipboard'));
+    await tester.pumpAndSettle();
+    expect(await s.getAfterRecordingFlow(), {FlowAction.copyFile});
+    // Checking the path leg swaps the exclusive pair, never stacks it.
+    await tester.tap(_toggleInRow('Copy file path'));
+    await tester.pumpAndSettle();
+    expect(await s.getAfterRecordingFlow(), {FlowAction.copyPath});
+  });
+
   // ---- Output pane -------------------------------------------------------
 
   testWidgets('Output pane: staged filename + subfolder persist on Apply',

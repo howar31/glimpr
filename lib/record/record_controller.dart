@@ -11,6 +11,7 @@ import '../capture/direct_capture.dart'
 import '../capture/captured_display.dart' show FocusedWindowInfo;
 import '../capture/last_region.dart';
 import '../settings/app_locale.dart';
+import '../output/clipboard.dart';
 import '../output/flow.dart';
 import '../output/output_naming.dart';
 import '../output/sounds.dart';
@@ -39,6 +40,7 @@ class RecordController {
     LastRegionStore? regionStore,
     void Function(String message)? showError,
     Future<void> Function(String text)? copyTextFn,
+    Future<void> Function(String path)? copyFileFn,
     Future<void> Function(String path)? revealFn,
     Future<void> Function(String path)? shareFn,
     Future<void> Function(String path)? openGifEditorFn,
@@ -55,6 +57,7 @@ class RecordController {
         _showError = showError ?? ((m) => CaptureBridge().showError(m)),
         _copyText =
             copyTextFn ?? ((t) => Clipboard.setData(ClipboardData(text: t))),
+        _copyFile = copyFileFn ?? clipboardWriteFile,
         _reveal = revealFn ?? revealInFileManager,
         _share = shareFn ?? CaptureBridge.shareSheet,
         _openGifEditor = openGifEditorFn ?? openInGifEditor,
@@ -83,6 +86,7 @@ class RecordController {
   final LastRegionStore _regionStore;
   final void Function(String) _showError;
   final Future<void> Function(String) _copyText;
+  final Future<void> Function(String) _copyFile;
   final Future<void> Function(String) _reveal;
   final Future<void> Function(String) _share;
   final Future<void> Function(String) _openGifEditor;
@@ -340,7 +344,14 @@ class RecordController {
     // marks a finished recording, honouring the shared Sounds setting.
     if ((await _settings.loadCapture()).completionSound) _complete();
     final flow = (await _settings.loadRecording()).flow;
-    if (flow.contains(FlowAction.copyPath)) {
+    // copyFile and copyPath both write the clipboard; the Settings toggles
+    // keep them exclusive, and the file wins over the path when stale prefs
+    // hold both (mirrors normalizeFlow's copy-over-copyPath rule).
+    if (flow.contains(FlowAction.copyFile)) {
+      try {
+        await _copyFile(path);
+      } catch (_) {}
+    } else if (flow.contains(FlowAction.copyPath)) {
       try {
         await _copyText(path);
       } catch (_) {}

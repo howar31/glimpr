@@ -120,6 +120,7 @@ void main() {
   late List<String> errors;
   late List<String> revealed;
   late List<String> copied;
+  late List<String> filesCopied;
   late List<String> shared;
   late List<String> gifEdits;
   late int liveSelects;
@@ -137,6 +138,7 @@ void main() {
     errors = [];
     revealed = [];
     copied = [];
+    filesCopied = [];
     shared = [];
     gifEdits = [];
     liveSelects = 0;
@@ -152,6 +154,7 @@ void main() {
       regionStore: LastRegionStore(store, key: 'record_last_region'),
       showError: errors.add,
       copyTextFn: (t) async => copied.add(t),
+      copyFileFn: (p) async => filesCopied.add(p),
       revealFn: (p) async => revealed.add(p),
       shareFn: (p) async => shared.add(p),
       openGifEditorFn: (p) async => gifEdits.add(p),
@@ -571,6 +574,33 @@ void main() {
       expect(gifEdits, isEmpty);
     });
 
+    test('copyFile flow action copies the finished file to the clipboard',
+        () async {
+      final rc = build();
+      await Settings(store).setAfterRecordingFlow({FlowAction.copyFile});
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.gif');
+      await Future<void>.delayed(Duration.zero);
+      expect(filesCopied, ['/tmp/rec.gif']);
+      expect(copied, isEmpty);
+    });
+
+    test('stale prefs holding copyFile AND copyPath copy only the file',
+        () async {
+      final rc = build();
+      // The settings setter does not enforce the toggle-level exclusivity, so
+      // a stale prefs write can hold both clipboard legs at once.
+      await Settings(store)
+          .setAfterRecordingFlow({FlowAction.copyFile, FlowAction.copyPath});
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.mp4');
+      await Future<void>.delayed(Duration.zero);
+      expect(filesCopied, ['/tmp/rec.mp4']);
+      expect(copied, isEmpty);
+    });
+
     test('default flow is NONE: silent save', () async {
       final rc = build();
       await rc.toggle(kRecordModeDisplay);
@@ -612,6 +642,13 @@ void main() {
       });
       expect(await s.getAfterRecordingFlow(),
           {FlowAction.copyPath, FlowAction.shareSheet});
+    });
+
+    test('setAfterRecordingFlow keeps copyFile (it is a recording leg)',
+        () async {
+      final s = Settings(FakeStore());
+      await s.setAfterRecordingFlow({FlowAction.copyFile});
+      expect(await s.getAfterRecordingFlow(), {FlowAction.copyFile});
     });
 
     test('loadRecording round-trips and clamps fps', () async {

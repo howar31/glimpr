@@ -434,6 +434,22 @@ enum ClipboardChannel {
             }
           }
         }
+      case "writeFile":
+        // Put the file at `path` on the pasteboard as a FILE reference (the
+        // same pasteboard state as a Finder copy): pasting into a chat app
+        // attaches the file. The recording's copy-to-clipboard flow leg uses
+        // this (a video has no image pasteboard type).
+        guard let a = call.arguments as? [String: Any],
+              let path = a["path"] as? String
+        else {
+          result(FlutterError(code: "bad_args", message: "no path", details: nil))
+          return
+        }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        result(pb.writeObjects([URL(fileURLWithPath: path) as NSURL])
+          ? nil
+          : FlutterError(code: "clipboard_write", message: "write failed", details: nil))
       case "readImage":
         // NSPasteboard reads on the platform (main) thread.
         result(Self.readImage().map { FlutterStandardTypedData(bytes: $0) })
