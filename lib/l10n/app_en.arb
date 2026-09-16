@@ -2060,6 +2060,14 @@
   "@gifEditorDeleteFrames": {
     "description": "GIF Editor timeline toolbar: delete selected frames tooltip"
   },
+  "gifEditorDeleteBefore": "Delete all before",
+  "@gifEditorDeleteBefore": {
+    "description": "Frame-ops row tooltip: delete every frame before the first selected frame."
+  },
+  "gifEditorDeleteAfter": "Delete all after",
+  "@gifEditorDeleteAfter": {
+    "description": "Frame-ops row tooltip: delete every frame after the last selected frame."
+  },
   "gifEditorMoveLeft": "Move left",
   "@gifEditorMoveLeft": {
     "description": "GIF Editor timeline toolbar: move selected frames one slot left"

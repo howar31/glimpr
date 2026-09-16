@@ -292,6 +292,33 @@ void main() {
     expect(c.doc!.frames[1].delayMs, 150);
   });
 
+  testWidgets('delete-before / delete-after buttons trim around the selection',
+      (tester) async {
+    mockMethodChannel(_channel);
+    final c = await preloadedN(tester, [0, 1, 2, 3, 4], [100, 150, 200, 250, 300]);
+    await pumpSurface(tester, c);
+    // Both buttons exist, with their tooltips, and are inert without a
+    // selection (the preloaded document opens with none).
+    expect(find.byKey(const Key('gif-op-delete-before')), findsOneWidget);
+    expect(find.byKey(const Key('gif-op-delete-after')), findsOneWidget);
+    expect(find.byTooltip(_en.gifEditorDeleteBefore), findsOneWidget);
+    expect(find.byTooltip(_en.gifEditorDeleteAfter), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gif-op-delete-before')));
+    await tester.tap(find.byKey(const Key('gif-op-delete-after')));
+    await tester.pump();
+    expect(c.doc!.frameCount, 5);
+    // Select frame 2: everything before it goes, then everything after.
+    await tester.tap(find.byKey(const Key('gif-frame-2')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('gif-op-delete-before')));
+    await tester.pump();
+    expect([for (final f in c.doc!.frames) f.delayMs], [200, 250, 300]);
+    expect(c.selection, {0});
+    await tester.tap(find.byKey(const Key('gif-op-delete-after')));
+    await tester.pump();
+    expect([for (final f in c.doc!.frames) f.delayMs], [200]);
+  });
+
   testWidgets('delay panel applies the chosen mode', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1], [100, 150]);

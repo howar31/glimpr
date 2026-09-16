@@ -583,13 +583,75 @@ class GifEditorController extends ChangeNotifier {
       for (var i = 0; i < doc.frameCount; i++)
         if (!_selection.contains(i)) doc.frames[i],
     ];
-    _doc = GifDocument(frames: kept, loopCount: doc.loopCount);
     final landing = first.clamp(0, kept.length - 1);
+    _commitFrames(kept, selection: {landing}, anchor: landing, current: landing);
+  }
+
+  /// Delete every frame BEFORE the first selected one; the selection and
+  /// everything after it stay. No-op without a selection or when the first
+  /// selected frame already leads the document.
+  void deleteBefore() {
+    final doc = _doc;
+    if (doc == null || _selection.isEmpty || _transforming) return;
+    final first = _selection.reduce((a, b) => a < b ? a : b);
+    if (first <= 0) return;
+    _dropRange(0, first);
+  }
+
+  /// Delete every frame AFTER the last selected one; the selection and
+  /// everything before it stay. No-op without a selection or when the last
+  /// selected frame already ends the document.
+  void deleteAfter() {
+    final doc = _doc;
+    if (doc == null || _selection.isEmpty || _transforming) return;
+    final last = _selection.reduce((a, b) => a > b ? a : b);
+    if (last >= doc.frameCount - 1) return;
+    _dropRange(last + 1, doc.frameCount);
+  }
+
+  /// Remove the contiguous frames [start, end). The selection never overlaps
+  /// the range (callers derive the range from it) and is re-indexed; a
+  /// playhead inside the range lands on the nearest kept frame, one outside
+  /// it follows its frame.
+  void _dropRange(int start, int end) {
+    final doc = _doc!;
+    pause();
+    _pushUndo();
+    final removed = end - start;
+    final kept = <GifFrame>[
+      ...doc.frames.sublist(0, start),
+      ...doc.frames.sublist(end),
+    ];
+    int shift(int i) => i >= end
+        ? i - removed
+        : i >= start
+            ? (start == 0 ? 0 : start - 1)
+            : i;
+    final anchor = _selAnchor;
+    _commitFrames(
+      kept,
+      selection: {for (final i in _selection) shift(i)},
+      anchor: anchor == null ? null : shift(anchor),
+      current: shift(_current),
+    );
+  }
+
+  /// Install [kept] as the document with the given selection state; every
+  /// index is clamped to the new range.
+  void _commitFrames(
+    List<GifFrame> kept, {
+    required Set<int> selection,
+    required int? anchor,
+    required int current,
+  }) {
+    final doc = _doc!;
+    _doc = GifDocument(frames: kept, loopCount: doc.loopCount);
+    final last = kept.length - 1;
     _selection
       ..clear()
-      ..add(landing);
-    _selAnchor = landing;
-    _current = landing;
+      ..addAll({for (final i in selection) i.clamp(0, last)});
+    _selAnchor = anchor?.clamp(0, last);
+    _current = current.clamp(0, last);
     notifyListeners();
   }
 

@@ -639,6 +639,11 @@ class _GifEditorSurfaceState extends State<GifEditorSurface> {
     final many = doc.frameCount >= 2 && !busy;
     final deletable =
         sel.isNotEmpty && sel.length < doc.frameCount && !busy;
+    // Trim around the selection: only when that side has frames to drop.
+    final hasBefore =
+        hasSel && sel.reduce((a, b) => a < b ? a : b) > 0;
+    final hasAfter =
+        hasSel && sel.reduce((a, b) => a > b ? a : b) < doc.frameCount - 1;
     Widget divider() => Container(
           width: 1,
           height: 18,
@@ -724,11 +729,26 @@ class _GifEditorSurfaceState extends State<GifEditorSurface> {
           ),
           divider(),
           _OpButton(
+            key: const Key('gif-op-delete-before'),
+            icon: Icons.delete_sweep_outlined,
+            flipX: true, // sweep points at the frames before the selection
+            tooltip: _l.gifEditorDeleteBefore,
+            enabled: hasBefore,
+            onTap: _c.deleteBefore,
+          ),
+          _OpButton(
             key: const Key('gif-op-delete'),
             icon: Icons.delete_outline_rounded,
             tooltip: _l.gifEditorDeleteFrames,
             enabled: deletable,
             onTap: _c.deleteSelected,
+          ),
+          _OpButton(
+            key: const Key('gif-op-delete-after'),
+            icon: Icons.delete_sweep_outlined,
+            tooltip: _l.gifEditorDeleteAfter,
+            enabled: hasAfter,
+            onTap: _c.deleteAfter,
           ),
           _OpButton(
             key: const Key('gif-op-left'),
@@ -1688,6 +1708,7 @@ class _OpButton extends StatefulWidget {
     required this.onTap,
     this.enabled = true,
     this.active = false,
+    this.flipX = false,
   });
 
   final IconData icon;
@@ -1695,6 +1716,9 @@ class _OpButton extends StatefulWidget {
   final VoidCallback onTap;
   final bool enabled;
   final bool active;
+  /// Mirror the glyph horizontally (a directional icon reused for its
+  /// opposite direction).
+  final bool flipX;
 
   @override
   State<_OpButton> createState() => _OpButtonState();
@@ -1739,7 +1763,10 @@ class _OpButtonState extends State<_OpButton> {
                   ? Border.all(color: GlimprTokens.accent)
                   : null,
             ),
-            child: Icon(widget.icon, size: 16, color: color),
+            child: Transform.flip(
+              flipX: widget.flipX,
+              child: Icon(widget.icon, size: 16, color: color),
+            ),
           ),
         ),
       ),

@@ -527,6 +527,8 @@
   "gifEditorUndo": "復原",
   "gifEditorRedo": "重做",
   "gifEditorDeleteFrames": "刪除",
+  "gifEditorDeleteBefore": "刪除之前全部",
+  "gifEditorDeleteAfter": "刪除之後全部",
   "gifEditorMoveLeft": "左移",
   "gifEditorMoveRight": "右移",
   "gifEditorReverse": "反轉",

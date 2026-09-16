@@ -1660,6 +1660,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorDeleteFrames => '刪除';
 
   @override
+  String get gifEditorDeleteBefore => '刪除之前全部';
+
+  @override
+  String get gifEditorDeleteAfter => '刪除之後全部';
+
+  @override
   String get gifEditorMoveLeft => '左移';
 
   @override

@@ -3260,6 +3260,18 @@ abstract class AppLocalizations {
   /// **'Delete'**
   String get gifEditorDeleteFrames;
 
+  /// Frame-ops row tooltip: delete every frame before the first selected frame.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all before'**
+  String get gifEditorDeleteBefore;
+
+  /// Frame-ops row tooltip: delete every frame after the last selected frame.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all after'**
+  String get gifEditorDeleteAfter;
+
   /// GIF Editor timeline toolbar: move selected frames one slot left
   ///
   /// In en, this message translates to:

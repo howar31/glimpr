@@ -1720,6 +1720,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorDeleteFrames => 'Delete';
 
   @override
+  String get gifEditorDeleteBefore => 'Delete all before';
+
+  @override
+  String get gifEditorDeleteAfter => 'Delete all after';
+
+  @override
   String get gifEditorMoveLeft => 'Move left';
 
   @override

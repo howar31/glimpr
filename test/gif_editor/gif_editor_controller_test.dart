@@ -129,6 +129,89 @@ void main() {
     });
   });
 
+  group('deleteBefore / deleteAfter', () {
+    test('deleteBefore drops every frame before the first selected one',
+        () async {
+      await openN([0, 1, 2, 3, 4], [100, 150, 200, 250, 300]);
+      c.select(2);
+      c.select(3, toggle: true);
+      c.deleteBefore();
+      expect(c.doc!.frameCount, 3);
+      expect([for (final f in c.doc!.frames) f.delayMs], [200, 250, 300]);
+      // The selection survives, re-indexed to the shifted positions.
+      expect(c.selection, {0, 1});
+      // The playhead sat in the deleted range: it lands on the first kept.
+      expect(c.current, 0);
+    });
+
+    test('deleteAfter drops every frame after the last selected one',
+        () async {
+      await openN([0, 1, 2, 3, 4], [100, 150, 200, 250, 300]);
+      c.select(1);
+      c.select(2, toggle: true);
+      c.seek(4);
+      c.deleteAfter();
+      expect(c.doc!.frameCount, 3);
+      expect([for (final f in c.doc!.frames) f.delayMs], [100, 150, 200]);
+      expect(c.selection, {1, 2});
+      // The playhead sat in the deleted range: it lands on the last kept.
+      expect(c.current, 2);
+    });
+
+    test('deleteBefore re-indexes a playhead inside the kept range',
+        () async {
+      await openN([0, 1, 2, 3], [100, 150, 200, 250]);
+      c.select(2);
+      c.seek(3);
+      c.deleteBefore();
+      expect(c.doc!.frameCount, 2);
+      expect(c.selection, {0});
+      expect(c.current, 1); // was frame 3, now frame 1
+    });
+
+    test('nothing on that side is a no-op without an undo entry', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.select(0);
+      c.deleteBefore();
+      expect(c.doc!.frameCount, 3);
+      expect(c.canUndo, isFalse);
+      c.select(2);
+      c.deleteAfter();
+      expect(c.doc!.frameCount, 3);
+      expect(c.canUndo, isFalse);
+    });
+
+    test('no selection is a no-op', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.deleteBefore();
+      c.deleteAfter();
+      expect(c.doc!.frameCount, 3);
+      expect(c.canUndo, isFalse);
+    });
+
+    test('undo restores frames, selection and playhead', () async {
+      await openN([0, 1, 2, 3], [100, 150, 200, 250]);
+      c.select(1);
+      c.seek(0);
+      c.deleteBefore();
+      expect(c.doc!.frameCount, 3);
+      c.undo();
+      expect(c.doc!.frameCount, 4);
+      expect([for (final f in c.doc!.frames) f.delayMs], [100, 150, 200, 250]);
+      expect(c.selection, {1});
+      expect(c.current, 0);
+      expect(c.canRedo, isTrue);
+    });
+
+    test('mutating while playing pauses playback', () async {
+      await openN([0, 1, 2], [100, 100, 100]);
+      c.select(1);
+      c.togglePlay();
+      c.deleteAfter();
+      expect(c.playing, isFalse);
+    });
+  });
+
   group('deleteSelected + undo/redo', () {
     test('removes the selected frames and collapses the selection',
         () async {
