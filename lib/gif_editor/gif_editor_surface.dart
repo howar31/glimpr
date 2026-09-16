@@ -47,6 +47,7 @@ class GifEditorSurface extends StatefulWidget {
     required this.editorBindings,
     required this.loupe,
     required this.hud,
+    this.onExported,
   });
 
   /// The document controller; owned (created + disposed) by the host.
@@ -68,6 +69,9 @@ class GifEditorSurface extends StatefulWidget {
   final Map<String, HotkeyBinding?> editorBindings;
   final LoupeConfig loupe;
   final HudConfig hud;
+
+  /// A GIF was written to [path] (the host lists it in recents).
+  final void Function(String path)? onExported;
 
   @override
   State<GifEditorSurface> createState() => _GifEditorSurfaceState();
@@ -371,6 +375,7 @@ class _GifEditorSurfaceState extends State<GifEditorSurface> {
             setState(() => _exportProgress = done / total),
       );
       _c.markClean(); // exported = nothing left to lose on close
+      widget.onExported?.call(out);
       widget.onToast(_l.gifEditorExportDone);
     } catch (_) {
       widget.onToast(_l.gifEditorExportFailed);

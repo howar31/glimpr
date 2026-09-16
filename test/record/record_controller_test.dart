@@ -123,6 +123,7 @@ void main() {
   late List<String> filesCopied;
   late List<String> shared;
   late List<String> gifEdits;
+  late List<String> recentAdds;
   late int liveSelects;
   late int completes;
   late int recordHotkeys;
@@ -141,6 +142,7 @@ void main() {
     filesCopied = [];
     shared = [];
     gifEdits = [];
+    recentAdds = [];
     liveSelects = 0;
     completes = 0;
     recordHotkeys = 0;
@@ -158,6 +160,7 @@ void main() {
       revealFn: (p) async => revealed.add(p),
       shareFn: (p) async => shared.add(p),
       openEditorFn: (p) async => gifEdits.add(p),
+      recordRecentFn: (p) async => recentAdds.add(p),
       now: () => DateTime(2026, 6, 12, 10, 30),
     );
   }
@@ -572,6 +575,25 @@ void main() {
       bridge.finished('/tmp/rec.mp4');
       await Future<void>.delayed(Duration.zero);
       expect(gifEdits, isEmpty);
+    });
+
+    test('a finished gif take joins the recent images (any flow)', () async {
+      final rc = build();
+      await Settings(store).setAfterRecordingFlow(<FlowAction>{});
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.GIF');
+      await Future<void>.delayed(Duration.zero);
+      expect(recentAdds, ['/tmp/rec.GIF']);
+    });
+
+    test('a finished video take is not a recent image', () async {
+      final rc = build();
+      await rc.toggle(kRecordModeDisplay);
+      bridge.started(1, Rect.zero);
+      bridge.finished('/tmp/rec.mp4');
+      await Future<void>.delayed(Duration.zero);
+      expect(recentAdds, isEmpty);
     });
 
     test('copyFile flow action copies the finished file to the clipboard',

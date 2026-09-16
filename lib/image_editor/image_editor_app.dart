@@ -911,6 +911,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                                 editorBindings: _bindings,
                                 loupe: _loupe,
                                 hud: _hud,
+                                // An exported GIF is a saved file like any
+                                // editor save: list it in recents.
+                                onExported: (path) =>
+                                    unawaited(_recordRecent(path)),
                               )
                             : (image == null ||
                                     bytes == null ||

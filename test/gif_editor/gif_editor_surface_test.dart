@@ -35,9 +35,12 @@ AppLocalizations get _en => lookupAppLocalizations(const Locale('en'));
 /// Mounts the surface the way ImageEditorApp does (theme scope + l10n, a
 /// window wide enough for the annotate toolbar pill); host toasts land in
 /// the returned list.
+final List<String> exported = [];
+
 Future<List<String>> pumpSurface(
     WidgetTester tester, GifEditorController c) async {
   final toasts = <String>[];
+  exported.clear();
   tester.view.physicalSize = const Size(1280, 800);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -53,6 +56,7 @@ Future<List<String>> pumpSurface(
           controller: c,
           channel: _channel,
           onToast: toasts.add,
+          onExported: exported.add,
           sourceName: 'in',
           toolStyles: <ToolKind, DrawStyle>{},
           editorBindings: {...effectiveDefaultBindings()},
@@ -120,6 +124,7 @@ void main() {
       await tester.pump();
     }
     expect(toasts, contains(_en.gifEditorExportDone));
+    expect(exported, [outPath]); // the host lists the written file in recents
     // The tray processing pulse bracketed the export.
     final processing =
         calls.where((call) => call.method == 'setProcessing').toList();

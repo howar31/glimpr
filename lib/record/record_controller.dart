@@ -14,6 +14,7 @@ import '../settings/app_locale.dart';
 import '../output/clipboard.dart';
 import '../output/flow.dart';
 import '../output/output_naming.dart';
+import '../overlay/export.dart' show recordRecentCapture;
 import '../output/sounds.dart';
 import '../settings/settings.dart';
 import 'record_bridge.dart';
@@ -44,6 +45,7 @@ class RecordController {
     Future<void> Function(String path)? revealFn,
     Future<void> Function(String path)? shareFn,
     Future<void> Function(String path)? openEditorFn,
+    Future<void> Function(String path)? recordRecentFn,
     Future<void> Function()? beginLiveSelect,
     Future<void> Function()? recordSelectHotkey,
     void Function()? complete,
@@ -61,6 +63,7 @@ class RecordController {
         _reveal = revealFn ?? revealInFileManager,
         _share = shareFn ?? CaptureBridge.shareSheet,
         _openEditor = openEditorFn ?? openInImageEditor,
+        _recordRecent = recordRecentFn ?? recordRecentCapture,
         _beginLiveSelect = beginLiveSelect ??
             (() => CaptureBridge().beginCapture(liveSelect: true)),
         _recordSelectHotkey = recordSelectHotkey ??
@@ -90,6 +93,7 @@ class RecordController {
   final Future<void> Function(String) _reveal;
   final Future<void> Function(String) _share;
   final Future<void> Function(String) _openEditor;
+  final Future<void> Function(String) _recordRecent;
   final Future<void> Function() _beginLiveSelect;
   final Future<void> Function() _recordSelectHotkey;
   final void Function() _complete;
@@ -343,6 +347,13 @@ class RecordController {
     // No shutter at recording start (owner design); the COMPLETION sound
     // marks a finished recording, honouring the shared Sounds setting.
     if ((await _settings.loadCapture()).completionSound) _complete();
+    // A GIF take is an image the editor can open: list it in the shared
+    // recents like any saved capture (video takes are not editor documents).
+    if (path.toLowerCase().endsWith('.gif')) {
+      try {
+        await _recordRecent(path);
+      } catch (_) {}
+    }
     final flow = (await _settings.loadRecording()).flow;
     // copyFile and copyPath both write the clipboard; the Settings toggles
     // keep them exclusive, and the file wins over the path when stale prefs
