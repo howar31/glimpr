@@ -52,8 +52,9 @@ Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
 Open any GIF — or a GIF recording you just finished — in the image editor,
 which switches to a frame timeline for it:
 
-- **Timeline** – select, delete, reorder, reverse, yoyo; remove duplicate
-  frames; reduce frame rate; frame clipboard; full undo / redo.
+- **Timeline** – select, delete, trim everything before or after a selection,
+  reorder, reverse, yoyo; remove duplicate frames; reduce frame rate; frame
+  clipboard; full undo / redo.
 - **Timing** – set, adjust or scale frame delays; insert a title frame.
 - **Canvas** – crop, resize, flip, rotate, border.
 - **Annotate** – burn the image editor's tools (shapes, text, blur,
