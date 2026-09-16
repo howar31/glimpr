@@ -2566,7 +2566,7 @@ class _SettingsAppState extends State<SettingsApp>
       ]),
       _sectionNote(t, _l.settingsShortcutsCaptureNote),
       const SizedBox(height: 24),
-      // Editor-open globals (Image Editor + GIF Editor), owner grouping.
+      // Editor-open globals (Image Editor), owner grouping.
       SectionLabel(_l.settingsSectionEditors, icon: Icons.edit_outlined),
       GlassCard.rows([
         for (final a in kGlobalActions)

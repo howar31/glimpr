@@ -21,8 +21,12 @@ class ShortcutStore {
     } catch (_) {
       return {}; // corrupt -> treat as all-default
     }
+    final known = effectiveDefaultBindings();
     final out = <String, HotkeyBinding?>{};
     for (final entry in decoded.entries) {
+      // Keys from removed actions (older builds) are ignored so they never
+      // reach hotkey registration or the Shortcuts pane.
+      if (!known.containsKey(entry.key)) continue;
       final v = entry.value;
       out[entry.key] =
           v == null ? null : HotkeyBinding.fromJson(v as Map<String, dynamic>);

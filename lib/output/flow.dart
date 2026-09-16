@@ -19,7 +19,7 @@ enum FlowAction {
   showInFinder, // reveal the saved file in Finder (needs save)
   shareSheet, // macOS share menu (AirDrop / Messages / ...) for the file
   pin, // float the image as an always-on-top pin window
-  openGifEditor, // open the finished recording in the GIF editor (gif only)
+  openGifEditor, // open the finished gif recording in the Image Editor (gif only)
   copyFile, // saved file -> clipboard as a FILE reference (recording flow)
 }
 
@@ -294,12 +294,12 @@ Future<void> revealInFileManager(String path) async {
   }
 }
 
-/// Open a saved .gif in the standalone GIF editor (reveal + load). Used by
-/// the after-recording flow; the native side relays to the GIF editor engine
-/// on both platforms.
-Future<void> openInGifEditor(String path) async {
+/// Open a saved .gif in the Image Editor (reveal + load; the editor mounts
+/// its GIF surface for .gif paths). Used by the after-recording flow; the
+/// native side reveals the editor window on both platforms.
+Future<void> openInImageEditor(String path) async {
   try {
-    await kRoleChannel.invokeMethod('openGifEditor', {'path': path});
+    await kRoleChannel.invokeMethod('openImageEditorPath', {'path': path});
   } catch (_) {}
 }
 

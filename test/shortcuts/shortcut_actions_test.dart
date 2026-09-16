@@ -46,8 +46,6 @@ void main() {
       kCaptureLastRegionKey,
       kOpenEditorKey,
       kOpenEditorClipboardKey,
-      kOpenGifEditorKey,
-      kOpenGifEditorClipboardKey,
       kPinAreaKey,
       kPinClipboardKey,
       kRecordRegionKey,
@@ -57,20 +55,11 @@ void main() {
     ]);
   });
 
-  test('gif editor defaults are the image-editor pair plus shift', () {
-    final mac = defaultBindingsFor(false);
-    expect(mac[kOpenGifEditorKey]!.physicalKey, PhysicalKeyboardKey.digit9);
-    expect(mac[kOpenGifEditorKey]!.modifiers,
-        {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift});
-    expect(mac[kOpenGifEditorClipboardKey]!.physicalKey,
-        PhysicalKeyboardKey.digit0);
-    expect(mac[kOpenGifEditorClipboardKey]!.modifiers,
-        {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift});
-    // Available on Windows too (unlike nothing: the pair is not excluded).
-    expect(isGlobalActionAvailable(kOpenGifEditorKey, isWindows: true), isTrue);
-    expect(
-        isGlobalActionAvailable(kOpenGifEditorClipboardKey, isWindows: true),
-        isTrue);
+  test('the GIF editor actions no longer exist', () {
+    expect(kGlobalActions.map((a) => a.actionKey),
+        isNot(contains('global.openGifEditor')));
+    expect(kEditorOpenActionKeys, {kOpenEditorKey, kOpenEditorClipboardKey});
+    expect(kDefaultBindings.containsKey('global.openGifEditor'), isFalse);
   });
 
   test('isOpenSettingsChord matches Cmd+comma only', () {

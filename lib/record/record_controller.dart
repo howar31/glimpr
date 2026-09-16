@@ -43,7 +43,7 @@ class RecordController {
     Future<void> Function(String path)? copyFileFn,
     Future<void> Function(String path)? revealFn,
     Future<void> Function(String path)? shareFn,
-    Future<void> Function(String path)? openGifEditorFn,
+    Future<void> Function(String path)? openEditorFn,
     Future<void> Function()? beginLiveSelect,
     Future<void> Function()? recordSelectHotkey,
     void Function()? complete,
@@ -60,7 +60,7 @@ class RecordController {
         _copyFile = copyFileFn ?? clipboardWriteFile,
         _reveal = revealFn ?? revealInFileManager,
         _share = shareFn ?? CaptureBridge.shareSheet,
-        _openGifEditor = openGifEditorFn ?? openInGifEditor,
+        _openEditor = openEditorFn ?? openInImageEditor,
         _beginLiveSelect = beginLiveSelect ??
             (() => CaptureBridge().beginCapture(liveSelect: true)),
         _recordSelectHotkey = recordSelectHotkey ??
@@ -89,7 +89,7 @@ class RecordController {
   final Future<void> Function(String) _copyFile;
   final Future<void> Function(String) _reveal;
   final Future<void> Function(String) _share;
-  final Future<void> Function(String) _openGifEditor;
+  final Future<void> Function(String) _openEditor;
   final Future<void> Function() _beginLiveSelect;
   final Future<void> Function() _recordSelectHotkey;
   final void Function() _complete;
@@ -368,12 +368,12 @@ class RecordController {
         await _share(path);
       } catch (_) {}
     }
-    // GIF-format recordings only: mp4/HEVC takes have no GIF editor to go to,
+    // GIF-format recordings only: mp4/HEVC takes cannot open in the editor,
     // so the action silently skips them.
     if (flow.contains(FlowAction.openGifEditor) &&
         path.toLowerCase().endsWith('.gif')) {
       try {
-        await _openGifEditor(path);
+        await _openEditor(path);
       } catch (_) {}
     }
   }

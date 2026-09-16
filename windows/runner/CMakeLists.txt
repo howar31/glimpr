@@ -16,7 +16,6 @@ add_executable(${BINARY_NAME} WIN32
   "editor_window.cpp"
   "element_snap.cpp"
   "encode_channel.cpp"
-  "gif_editor_window.cpp"
   "flutter_window.cpp"
   "hdr_compose.cpp"
   "hdr_convert_gpu.cpp"

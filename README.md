@@ -30,8 +30,8 @@ Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
 - **Record** – screen recording (H.264 / HEVC including HDR10, GIF) in
   region, window, display, and last-region modes; system audio and
   microphone; pause / resume; auto-stop.
-- **GIF Editor** – edit any GIF frame by frame and re-encode it smaller;
-  see [GIF Editor](#gif-editor) below.
+- **GIF editing** – open any GIF in the image editor to edit it frame by
+  frame and re-encode it smaller; see [GIF editing](#gif-editing) below.
 - **Pin** – float any screenshot as an always-on-top pin with drag and zoom.
 - **Flows** – configurable after-capture and after-edit actions: save, copy,
   open editor, pin, share; filename templates and date subfolders.
@@ -41,16 +41,16 @@ Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
   machine. The only network request is the update check, and it can be turned
   off.
 
-## GIF Editor
+## GIF editing
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/gif-editor-mac.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/media/gif-editor-mac-light.png">
-  <img alt="Glimpr GIF editor" src="docs/media/gif-editor-mac.png">
+  <img alt="Glimpr GIF editing" src="docs/media/gif-editor-mac.png">
 </picture>
 
-Open any GIF — or a GIF recording you just finished — and edit it frame by
-frame:
+Open any GIF — or a GIF recording you just finished — in the image editor,
+which switches to a frame timeline for it:
 
 - **Timeline** – select, delete, reorder, reverse, yoyo; remove duplicate
   frames; reduce frame rate; frame clipboard; full undo / redo.
@@ -64,10 +64,10 @@ frame:
   optimization (frame diff) and loop control, re-encoded by Glimpr's own
   encoder.
 
-Get there from the tray menu, a global hotkey (`⌘⌥⇧9` /
-`Ctrl+Alt+Win+Shift+9`), by opening or dropping any `.gif` on an editor
-window, or straight from a finished recording via the after-recording flow
-action (Settings > Recording).
+Get there by opening or dropping any `.gif` on the image editor (tray menu or
+`⌘⌥9` / `Ctrl+Alt+Win+9`), from a GIF in the editor's recent files, or
+straight from a finished recording via the after-recording flow action
+(Settings > Recording).
 
 ## Install
 

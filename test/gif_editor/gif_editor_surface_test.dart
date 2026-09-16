@@ -1,91 +1,78 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/gestures.dart';
+import 'package:glimpr/editor/draw_style.dart';
+import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/editor/editor_core.dart';
+import 'package:glimpr/editor/hud_config.dart';
+import 'package:glimpr/editor/loupe_config.dart';
 import 'package:glimpr/gif_editor/encode/gif_writer.dart';
 import 'package:glimpr/gif_editor/frame_store.dart';
-import 'package:glimpr/gif_editor/gif_editor_app.dart';
 import 'package:glimpr/gif_editor/gif_editor_controller.dart';
+import 'package:glimpr/gif_editor/gif_editor_surface.dart';
 import 'package:glimpr/gif_editor/gif_import.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
 import 'package:glimpr/overlay/toolbar.dart';
 import 'package:glimpr/platform_gate.dart';
+import 'package:glimpr/shortcuts/shortcut_actions.dart';
+import 'package:glimpr/theme/glimpr_theme.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/gif_fixture.dart';
 import '../support/mock_channels.dart';
 
-const _channel = MethodChannel('glimpr/gifEditor');
+// The GIF surface is hosted by the Image Editor window and talks to native
+// over the host's channel.
+const _channel = MethodChannel('glimpr/imageEditor');
 
 AppLocalizations get _en => lookupAppLocalizations(const Locale('en'));
+
+/// Mounts the surface the way ImageEditorApp does (theme scope + l10n, a
+/// window wide enough for the annotate toolbar pill); host toasts land in
+/// the returned list.
+Future<List<String>> pumpSurface(
+    WidgetTester tester, GifEditorController c) async {
+  final toasts = <String>[];
+  tester.view.physicalSize = const Size(1280, 800);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(MaterialApp(
+    debugShowCheckedModeBanner: false,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: GlimprTheme(
+      tokens: GlimprTokens.forBrightness(Brightness.dark),
+      child: Scaffold(
+        body: GifEditorSurface(
+          controller: c,
+          channel: _channel,
+          onToast: toasts.add,
+          sourceName: 'in',
+          toolStyles: <ToolKind, DrawStyle>{},
+          editorBindings: {...effectiveDefaultBindings()},
+          loupe: const LoupeConfig(),
+          hud: const HudConfig(marchingAnts: false),
+        ),
+      ),
+    ),
+  ));
+  await tester.pump();
+  return toasts;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // These tests exercise the macOS (channel) picker branch on BOTH suite
-  // hosts; the Windows branch goes through the file_selector plugin, which
-  // has no implementation in the test environment.
+  // Keyboard chords are platform-shaped (meta on macOS); pin the platform so
+  // the expectations hold when the suite runs on the Windows box too.
   setUp(() => debugPlatformOverride = TargetPlatform.macOS);
   tearDown(() => debugPlatformOverride = null);
-
-  testWidgets('landing shows the open card', (tester) async {
-    mockMethodChannel(_channel);
-    await tester.pumpWidget(const GifEditorApp());
-    await tester.pump();
-    expect(find.text(_en.gifEditorOpenGif), findsOneWidget);
-    expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
-  });
-
-  testWidgets('cancelled open panel keeps the landing', (tester) async {
-    final calls = mockMethodChannel(_channel); // every call answers null
-    await tester.pumpWidget(const GifEditorApp());
-    await tester.pump();
-    await tester.tap(find.text(_en.gifEditorOpenGifButton));
-    await tester.pump();
-    expect(calls.map((c) => c.method), contains('openPanel'));
-    expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
-  });
-
-  testWidgets('opening a GIF leaves the landing and shows the editor',
-      (tester) async {
-    // Async IO awaited directly in the test body parks under the fake zone
-    // (nothing drains it) — the setup must run inside runAsync.
-    final dir = (await tester
-        .runAsync(() => Directory.systemTemp.createTemp('gifed_app')))!;
-    final gifPath = '${dir.path}/in.gif';
-    File(gifPath).writeAsBytesSync(twoFrameGifFixture());
-    addTearDown(() => dir.deleteSync(recursive: true));
-
-    mockMethodChannel(_channel, handler: (call) {
-      if (call.method == 'openPanel') return gifPath;
-      return null;
-    });
-    await tester.pumpWidget(const GifEditorApp());
-    await tester.pump();
-    await tester.tap(find.text(_en.gifEditorOpenGifButton));
-    await tester.pump();
-    // The open flow does real IO + engine decode; interleave real-async
-    // turns with pumps until the editor mounts (the suite's pumpUntil
-    // idiom — a single runAsync delay is not enough because the chain
-    // needs frames pumped between its real-async segments).
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (find
-            .byKey(const Key('gif-editor-canvas'))
-            .evaluate()
-            .isEmpty &&
-        DateTime.now().isBefore(deadline)) {
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 5)));
-      await tester.pump();
-    }
-    expect(find.text(_en.gifEditorOpenGifButton), findsNothing);
-    expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);
-  }, timeout: const Timeout(Duration(seconds: 60)));
 
   Future<GifEditorController> preloaded(WidgetTester tester) async {
     final c = GifEditorController();
@@ -99,8 +86,7 @@ void main() {
   testWidgets('filmstrip tiles, stats and tap-to-seek', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     expect(find.byKey(const Key('gif-frame-0')), findsOneWidget);
     expect(find.byKey(const Key('gif-frame-1')), findsOneWidget);
     expect(
@@ -122,19 +108,18 @@ void main() {
       return null;
     });
     final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    final toasts = await pumpSurface(tester, c);
     await tester.tap(find.text(_en.gifEditorExportButton));
     await tester.pump();
-    // Encode runs on a real isolate; drain until the success toast shows.
+    // Encode runs on a real isolate; drain until the success toast fires.
     final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (find.text(_en.gifEditorExportDone).evaluate().isEmpty &&
+    while (!toasts.contains(_en.gifEditorExportDone) &&
         DateTime.now().isBefore(deadline)) {
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 5)));
       await tester.pump();
     }
-    expect(find.text(_en.gifEditorExportDone), findsOneWidget);
+    expect(toasts, contains(_en.gifEditorExportDone));
     // The tray processing pulse bracketed the export.
     final processing =
         calls.where((call) => call.method == 'setProcessing').toList();
@@ -151,22 +136,20 @@ void main() {
   testWidgets('cancelled save panel exports nothing', (tester) async {
     final calls = mockMethodChannel(_channel); // savePanel answers null
     final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    final toasts = await pumpSurface(tester, c);
     await tester.tap(find.text(_en.gifEditorExportButton));
     await tester.pump();
     expect(calls.map((call) => call.method), contains('savePanel'));
     expect(calls.map((call) => call.method),
         isNot(contains('setProcessing')));
-    expect(find.text(_en.gifEditorExportDone), findsNothing);
+    expect(toasts, isEmpty);
   });
 
   testWidgets('play toggle advances frames on their own delays',
       (tester) async {
     mockMethodChannel(_channel);
     final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-play-toggle')));
     await tester.pump();
     expect(c.playing, isTrue);
@@ -181,39 +164,11 @@ void main() {
     expect(c.playing, isFalse);
   });
 
-  testWidgets('home returns to the landing', (tester) async {
-    mockMethodChannel(_channel);
-    final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
-    expect(find.byKey(const Key('gif-home')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('gif-home')));
-    // The title bar's double-tap recognizer holds the arena; the single tap
-    // fires only after the double-tap window lapses.
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(c.doc, isNull);
-    expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
-    expect(find.byKey(const Key('gif-home')), findsNothing);
-  });
-
-  testWidgets('cmd-O opens the file picker from anywhere', (tester) async {
-    final calls = mockMethodChannel(_channel);
-    final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-    await tester.pump();
-    expect(calls.map((call) => call.method), contains('openPanel'));
-  });
-
   testWidgets('export options popover opens, edits state and dismisses',
       (tester) async {
     mockMethodChannel(_channel);
     final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     expect(find.byKey(const Key('gif-options-popover')), findsNothing);
     await tester.tap(find.byKey(const Key('gif-export-options')));
     await tester.pump();
@@ -257,8 +212,7 @@ void main() {
       return null;
     });
     final c = await preloaded(tester);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    final toasts = await pumpSurface(tester, c);
     // Choose a finite loop of 4 (fixture is loop-forever).
     await tester.tap(find.byKey(const Key('gif-export-options')));
     await tester.pump();
@@ -271,13 +225,13 @@ void main() {
     await tester.tap(find.text(_en.gifEditorExportButton));
     await tester.pump();
     final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (find.text(_en.gifEditorExportDone).evaluate().isEmpty &&
+    while (!toasts.contains(_en.gifEditorExportDone) &&
         DateTime.now().isBefore(deadline)) {
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 5)));
       await tester.pump();
     }
-    expect(find.text(_en.gifEditorExportDone), findsOneWidget);
+    expect(toasts, contains(_en.gifEditorExportDone));
     final reread = await tester.runAsync(() async => importGif(
         Uint8List.fromList(File(outPath).readAsBytesSync()),
         FrameStore(await Directory.systemTemp.createTemp('reread_opt'))));
@@ -298,8 +252,7 @@ void main() {
     mockMethodChannel(_channel);
     final c =
         await preloadedN(tester, [0, 1, 2, 3], [100, 100, 100, 100]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-frame-1')));
     await tester.pump();
     expect(c.selection, {1});
@@ -322,8 +275,7 @@ void main() {
   testWidgets('toolbar delete and undo round-trip', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1, 2], [100, 150, 200]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-frame-1')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('gif-op-delete')));
@@ -338,8 +290,7 @@ void main() {
   testWidgets('delay panel applies the chosen mode', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1], [100, 150]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-delay')));
     await tester.pump();
     expect(find.byKey(const Key('gif-delay-panel')), findsOneWidget);
@@ -356,8 +307,7 @@ void main() {
     mockMethodChannel(_channel);
     final c =
         await preloadedN(tester, [0, 1, 2, 3], [100, 100, 100, 100]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-reduce')));
     await tester.pump();
     expect(find.byKey(const Key('gif-reduce-panel')), findsOneWidget);
@@ -371,8 +321,7 @@ void main() {
       (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1, 2], [100, 100, 100]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
@@ -425,8 +374,7 @@ void main() {
       (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedSized(tester, 100, 50);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-crop')));
     await tester.pump();
     final overlay = find.byKey(const Key('gif-crop-overlay'));
@@ -459,8 +407,7 @@ void main() {
   testWidgets('resize panel: aspect-locked fields apply', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedSized(tester, 100, 50);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-resize')));
     await tester.pump();
     expect(find.byKey(const Key('gif-resize-panel')), findsOneWidget);
@@ -490,8 +437,7 @@ void main() {
   testWidgets('rotate button swaps document dimensions', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedSized(tester, 100, 50);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-rotate-right')));
     await tester.pump();
     await pumpUntilDone(tester, () => c.doc!.frames.first.width == 50);
@@ -514,23 +460,11 @@ void main() {
       });
     });
 
-    // The shared editor toolbar pill is deliberately not scrollable (image
-    // editor precedent), so the annotate surface needs a window wide enough
-    // to host it — same constraint as the Image Editor window.
-    Future<void> sizeView(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-    }
-
     testWidgets('opens EditorCore with the toolbar and cancels clean',
         (tester) async {
-      await sizeView(tester);
       mockMethodChannel(_channel);
       final c = await preloadedSized(tester, 100, 50);
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
+      await pumpSurface(tester, c);
       await tester.tap(find.byKey(const Key('gif-op-annotate')));
       await tester.pump();
       // The base image loads through the store (real async).
@@ -555,14 +489,12 @@ void main() {
 
     testWidgets('drawing a rectangle and applying bakes the frames',
         (tester) async {
-      await sizeView(tester);
       mockMethodChannel(_channel);
       final c = await preloadedSized(tester, 100, 50);
       final before = await tester.runAsync(() async => File(
               c.store!.pathFor(c.doc!.frames.first.key))
           .readAsBytes());
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
+      await pumpSurface(tester, c);
       await tester.tap(find.byKey(const Key('gif-op-annotate')));
       await tester.pump();
       final deadline = DateTime.now().add(const Duration(seconds: 10));
@@ -610,8 +542,7 @@ void main() {
       (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1], [100, 150]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-title')));
     await tester.pump();
     await pumpUntilDone(tester, () => c.doc!.frameCount == 3);
@@ -624,8 +555,7 @@ void main() {
       (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1], [100, 150]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-title')));
     await tester.pump();
     await pumpUntilDone(tester, () => c.doc!.frameCount == 3);
@@ -676,8 +606,7 @@ void main() {
     final c = await preloadedSized(tester, 20, 10);
     final before = (await tester.runAsync(() async =>
         File(c.store!.pathFor(c.doc!.frames.first.key)).readAsBytes()))!;
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     // A single frame keeps the button disabled; add a second via title.
     await tester.tap(find.byKey(const Key('gif-op-title')));
     await tester.pump();
@@ -703,8 +632,7 @@ void main() {
   testWidgets('border panel applies width and color', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedSized(tester, 20, 10);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.tap(find.byKey(const Key('gif-op-border')));
     await tester.pump();
     expect(find.byKey(const Key('gif-border-panel')), findsOneWidget);
@@ -725,8 +653,7 @@ void main() {
   testWidgets('transition panel inserts generated frames', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1], [100, 150]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     c.clearSelection();
     await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('gif-op-transition')));
@@ -748,8 +675,7 @@ void main() {
   testWidgets('smooth loop appends the default fade run', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1], [100, 150]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     c.clearSelection();
     await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('gif-op-smooth-loop')));
@@ -772,8 +698,7 @@ void main() {
       c.clearSelection();
       c.seek(0);
     });
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester
         .ensureVisible(find.byKey(const Key('gif-op-cinemagraph')));
     await tester.pump();
@@ -807,31 +732,10 @@ void main() {
     expect(find.byKey(const Key('gif-crop-overlay')), findsNothing);
   }, timeout: const Timeout(Duration(seconds: 60)));
 
-  testWidgets('native loadPath push opens the dropped file', (tester) async {
-    final dir = (await tester
-        .runAsync(() => Directory.systemTemp.createTemp('gifed_drop')))!;
-    addTearDown(() => dir.deleteSync(recursive: true));
-    final gifPath = '${dir.path}/dropped.gif';
-    File(gifPath).writeAsBytesSync(twoFrameGifFixture());
-    mockMethodChannel(_channel);
-    await tester.pumpWidget(const GifEditorApp());
-    await tester.pump();
-    await pushFromNative(_channel, 'loadPath', gifPath);
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (find.byKey(const Key('gif-editor-canvas')).evaluate().isEmpty &&
-        DateTime.now().isBefore(deadline)) {
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 5)));
-      await tester.pump();
-    }
-    expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);
-  }, timeout: const Timeout(Duration(seconds: 60)));
-
   testWidgets('arrow keys step frames, home and end jump', (tester) async {
     mockMethodChannel(_channel);
     final c = await preloadedN(tester, [0, 1, 2], [100, 100, 100]);
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(c.current, 1);
@@ -846,112 +750,25 @@ void main() {
     expect(c.current, 0);
   });
 
-  group('close parity with the Image Editor', () {
-    testWidgets('clean document: requestClose hides and resets to landing',
-        (tester) async {
-      final calls = mockMethodChannel(_channel);
-      final c = await preloadedN(tester, [0, 1], [100, 150]);
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
-      await pushFromNative(_channel, 'requestClose', null);
-      await tester.pump();
-      await tester.pump();
-      expect(find.text(_en.editorDiscardTitle), findsNothing);
-      expect(calls.map((call) => call.method), contains('hideEditor'));
-      expect(c.doc, isNull); // unloaded -> landing on next reveal
-      expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
+  testWidgets('export marks the document clean', (tester) async {
+    final dir = (await tester
+        .runAsync(() => Directory.systemTemp.createTemp('gifed_clean')))!;
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final outPath = '${dir.path}/out.gif';
+    mockMethodChannel(_channel, handler: (call) {
+      if (call.method == 'savePanel') return outPath;
+      return null;
     });
-
-    testWidgets('dirty document: confirm discards, cancel keeps',
-        (tester) async {
-      final calls = mockMethodChannel(_channel);
-      final c = await preloadedN(tester, [0, 1], [100, 150]);
-      c.overrideDelay(300); // dirty
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
-      // Cancel first: document survives, window stays.
-      await pushFromNative(_channel, 'requestClose', null);
-      await tester.pump();
-      expect(find.text(_en.editorDiscardTitle), findsOneWidget);
-      await tester.tap(find.text(_en.confirmCancel));
-      await tester.pump();
-      await tester.pump();
-      expect(c.doc, isNotNull);
-      expect(calls.map((call) => call.method),
-          isNot(contains('hideEditor')));
-      // Confirm second: hides and unloads.
-      await pushFromNative(_channel, 'requestClose', null);
-      await tester.pump();
-      await tester.tap(find.text(_en.confirmDiscard));
-      await tester.pump();
-      await tester.pump();
-      expect(calls.map((call) => call.method), contains('hideEditor'));
-      expect(c.doc, isNull);
-    });
-
-    testWidgets('export marks clean so close no longer confirms',
-        (tester) async {
-      final dir = (await tester
-          .runAsync(() => Directory.systemTemp.createTemp('gifed_clean')))!;
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final outPath = '${dir.path}/out.gif';
-      final calls = mockMethodChannel(_channel, handler: (call) {
-        if (call.method == 'savePanel') return outPath;
-        return null;
-      });
-      final c = await preloadedN(tester, [0, 1], [100, 150]);
-      c.overrideDelay(300); // dirty
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
-      await tester.tap(find.text(_en.gifEditorExportButton));
-      await tester.pump();
-      await pumpUntilDone(tester,
-          () => find.text(_en.gifEditorExportDone).evaluate().isNotEmpty);
-      expect(c.dirty, isFalse);
-      await pushFromNative(_channel, 'requestClose', null);
-      await tester.pump();
-      await tester.pump();
-      expect(find.text(_en.editorDiscardTitle), findsNothing);
-      expect(calls.map((call) => call.method), contains('hideEditor'));
-    }, timeout: const Timeout(Duration(seconds: 60)));
-
-    testWidgets('home confirms on a dirty document', (tester) async {
-      mockMethodChannel(_channel);
-      final c = await preloadedN(tester, [0, 1], [100, 150]);
-      c.overrideDelay(300);
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('gif-home')));
-      await tester.pump(const Duration(milliseconds: 400)); // double-tap arena
-      expect(find.text(_en.editorDiscardTitle), findsOneWidget);
-      await tester.tap(find.text(_en.confirmDiscard));
-      await tester.pump();
-      await tester.pump();
-      expect(c.doc, isNull);
-      expect(find.text(_en.gifEditorOpenGifButton), findsOneWidget);
-    });
-
-    testWidgets('loadPath onto a dirty document confirms first',
-        (tester) async {
-      final dir = (await tester
-          .runAsync(() => Directory.systemTemp.createTemp('gifed_replace')))!;
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final gifPath = '${dir.path}/other.gif';
-      File(gifPath).writeAsBytesSync(twoFrameGifFixture());
-      mockMethodChannel(_channel);
-      final c = await preloadedN(tester, [0, 1, 2], [100, 100, 100]);
-      c.overrideDelay(300);
-      await tester.pumpWidget(GifEditorApp(controller: c));
-      await tester.pump();
-      await pushFromNative(_channel, 'loadPath', gifPath);
-      await tester.pump();
-      expect(find.text(_en.editorDiscardTitle), findsOneWidget);
-      await tester.tap(find.text(_en.confirmDiscard));
-      await tester.pump();
-      await pumpUntilDone(tester, () => c.doc?.frameCount == 2);
-      expect(c.doc!.frameCount, 2); // the dropped file replaced the doc
-    }, timeout: const Timeout(Duration(seconds: 60)));
-  });
+    final c = await preloadedN(tester, [0, 1], [100, 150]);
+    c.overrideDelay(300); // dirty
+    final toasts = await pumpSurface(tester, c);
+    expect(c.dirty, isTrue);
+    await tester.tap(find.text(_en.gifEditorExportButton));
+    await tester.pump();
+    await pumpUntilDone(
+        tester, () => toasts.contains(_en.gifEditorExportDone));
+    expect(c.dirty, isFalse);
+  }, timeout: const Timeout(Duration(seconds: 60)));
 
   testWidgets('plain vertical wheel scrolls the filmstrip', (tester) async {
     mockMethodChannel(_channel);
@@ -966,8 +783,7 @@ void main() {
       await c.openBytes(encodeGifFrames(
           frames: frames, width: 1, height: 1, loopCount: 0));
     });
-    await tester.pumpWidget(GifEditorApp(controller: c));
-    await tester.pump();
+    await pumpSurface(tester, c);
     expect(c.doc, isNotNull,
         reason: 'the 30-frame document should have opened');
     expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);

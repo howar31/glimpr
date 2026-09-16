@@ -1988,30 +1988,6 @@ abstract class AppLocalizations {
   /// **'Open the Image Editor and load the clipboard image'**
   String get actionOpenEditorClipboardHint;
 
-  /// Global action label: open the GIF editor
-  ///
-  /// In en, this message translates to:
-  /// **'Open GIF Editor'**
-  String get actionOpenGifEditor;
-
-  /// Global action hint: open the GIF editor
-  ///
-  /// In en, this message translates to:
-  /// **'Open the GIF Editor'**
-  String get actionOpenGifEditorHint;
-
-  /// Global action label: open the GIF editor with the copied file
-  ///
-  /// In en, this message translates to:
-  /// **'Open GIF Editor with Clipboard'**
-  String get actionOpenGifEditorClipboard;
-
-  /// Global action hint: open the GIF editor with the copied file
-  ///
-  /// In en, this message translates to:
-  /// **'Open the GIF Editor and load the copied GIF file'**
-  String get actionOpenGifEditorClipboardHint;
-
   /// Global action label: pin capture
   ///
   /// In en, this message translates to:
@@ -2693,7 +2669,7 @@ abstract class AppLocalizations {
   /// Image Editor landing card: subtitle copy below the headline
   ///
   /// In en, this message translates to:
-  /// **'Annotate, crop, and re-export any image in the same toolkit you use to screenshot.'**
+  /// **'Annotate, crop and re-export any image, or edit a GIF frame by frame, in the same toolkit you use to screenshot.'**
   String get editorOpenImageSubtitle;
 
   /// Image Editor: Open button label (landing card and open bar)
@@ -3170,30 +3146,6 @@ abstract class AppLocalizations {
   /// **'None'**
   String get keyCapNone;
 
-  /// GIF Editor: window title bar and native window title
-  ///
-  /// In en, this message translates to:
-  /// **'GIF Editor'**
-  String get gifEditorTitleBar;
-
-  /// GIF Editor landing card: headline copy
-  ///
-  /// In en, this message translates to:
-  /// **'Open a GIF to edit'**
-  String get gifEditorOpenGif;
-
-  /// GIF Editor landing card: subtitle copy below the headline
-  ///
-  /// In en, this message translates to:
-  /// **'Trim frames, adjust timing, and export a new GIF.'**
-  String get gifEditorOpenGifSubtitle;
-
-  /// GIF Editor: Open button label on the landing card
-  ///
-  /// In en, this message translates to:
-  /// **'Open GIF…'**
-  String get gifEditorOpenGifButton;
-
   /// GIF Editor: primary export action label
   ///
   /// In en, this message translates to:
@@ -3217,12 +3169,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} frames'**
   String gifEditorStatsFrames(int count);
-
-  /// GIF Editor: progress label while decoding an opened GIF
-  ///
-  /// In en, this message translates to:
-  /// **'Opening GIF…'**
-  String get gifEditorImporting;
 
   /// GIF Editor: error toast when a file fails to decode
   ///
@@ -3482,16 +3428,10 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get gifEditorCancel;
 
-  /// GIF Editor: toast when clipboard-open finds no copied .gif file
-  ///
-  /// In en, this message translates to:
-  /// **'No GIF file on the clipboard'**
-  String get gifEditorClipboardEmpty;
-
   /// Settings > Recording > after-recording flow: open the finished recording in the GIF editor
   ///
   /// In en, this message translates to:
-  /// **'Open in GIF Editor'**
+  /// **'Open in Image Editor'**
   String get settingsFlowOpenGifEditor;
 
   /// Settings > Recording: hint under the open-in-GIF-editor toggle
@@ -3602,11 +3542,11 @@ abstract class AppLocalizations {
   /// **'Cinemagraph'**
   String get gifEditorCinemagraph;
 
-  /// Tray menu: reveal the GIF Editor window
+  /// Image Editor: small badge marking a GIF document (title bar chip and recent tile)
   ///
   /// In en, this message translates to:
-  /// **'Open GIF Editor'**
-  String get trayOpenGifEditor;
+  /// **'GIF'**
+  String get editorGifBadge;
 }
 
 class _AppLocalizationsDelegate

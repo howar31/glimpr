@@ -239,9 +239,9 @@ bool FlutterWindow::OnCreate() {
         } else if (m == "openImageEditorClipboard") {
           if (editor_window_) editor_window_->LoadClipboard();
           result->Success();
-        } else if (m == "openGifEditor") {
-          // Reveal and (when a path rides along) load: the global hotkey,
-          // the after-recording flow, and .gif routing all land here.
+        } else if (m == "openImageEditorPath") {
+          // After-recording flow: reveal the editor and load a path (a .gif
+          // mounts the GIF surface inside the Image Editor).
           std::string path;
           if (const auto* a = std::get_if<EncodableMap>(call.arguments())) {
             auto it = a->find(EncodableValue(std::string("path")));
@@ -251,16 +251,9 @@ bool FlutterWindow::OnCreate() {
               }
             }
           }
-          if (gif_editor_window_) {
-            if (path.empty()) {
-              gif_editor_window_->RevealEditor();
-            } else {
-              gif_editor_window_->OpenWithPath(path);  // reveals itself
-            }
+          if (editor_window_ && !path.empty()) {
+            editor_window_->OpenWithPath(path);  // reveals itself
           }
-          result->Success();
-        } else if (m == "openGifEditorClipboard") {
-          if (gif_editor_window_) gif_editor_window_->LoadClipboard();
           result->Success();
         } else if (m == "setTrayLabels") {
           // The control engine's Dart pushes the localized tray-menu labels
@@ -437,8 +430,6 @@ bool FlutterWindow::OnCreate() {
   // The standalone Image Editor (its own engine + window). Warm-built on the
   // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).
   editor_window_ = std::make_unique<EditorWindow>(project_, GetHandle());
-  // The standalone GIF Editor (same lifecycle; revealed from the tray).
-  gif_editor_window_ = std::make_unique<GifEditorWindow>(project_, GetHandle());
   // The capture flow's open-in-editor leg + recents relay reach the editor from
   // both the direct-capture (control) and overlay engines.
   capture_channel_->SetEditorWindow(editor_window_.get());
@@ -450,10 +441,6 @@ bool FlutterWindow::OnCreate() {
   capture_channel_->SetPinManager(pin_manager_.get());
   overlay_manager_->SetPinManager(pin_manager_.get());
   editor_window_->SetPinManager(pin_manager_.get());
-  // .gif files ingested by the image editor route to the GIF editor.
-  editor_window_->SetOpenGifRelay([this](const std::string& path) {
-    if (gif_editor_window_) gif_editor_window_->OpenWithPath(path);
-  });
 
   // System tray (the menu-bar analogue). Live items fire through the same Dart
   // dispatcher as the hotkeys; Settings / About / Quit are native callbacks.
@@ -480,9 +467,6 @@ bool FlutterWindow::OnCreate() {
               RevealControlWindow();
             }
             role_channel_->InvokeMethod("trayCheckUpdates", nullptr);
-          },
-          [this]() {
-            if (gif_editor_window_) gif_editor_window_->RevealEditor();
           },
       });
   // The warm editor engine pushes its recent-images list to the tray "Open
@@ -520,10 +504,6 @@ bool FlutterWindow::OnCreate() {
   editor_window_->SetProcessingCallback(
       [this](bool active, const std::string& label) {
         if (tray_icon_) tray_icon_->SetProcessing(active, label);  // editor
-      });
-  gif_editor_window_->SetProcessingCallback(
-      [this](bool active, const std::string& label) {
-        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // gif editor
       });
 
   // A second instance posts this to reveal the running one's Settings.
@@ -629,7 +609,6 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     perf::Mark("warmupBegin");
     if (overlay_manager_) overlay_manager_->WarmUp();
     if (editor_window_) editor_window_->WarmUp();  // instant first editor open
-    if (gif_editor_window_) gif_editor_window_->WarmUp();
     perf::Mark("warmupEnd");
     return 0;
   }

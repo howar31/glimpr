@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:glimpr/image_editor/thumb_cache.dart';
 
+import '../support/gif_fixture.dart';
+
 /// Encode a [w]x[h] solid-color image to PNG bytes (codec-only, no raster).
 Future<Uint8List> _pngBytes(int w, int h) async {
   final pixels = Uint8List(w * h * 4);
@@ -92,6 +94,15 @@ void main() {
       try {
         await tmp.delete(recursive: true);
       } catch (_) {}
+    });
+
+    test('generates a sidecar for a GIF (first frame)', () async {
+      final src = File(p.join(tmp.path, 'anim.gif'));
+      await src.writeAsBytes(twoFrameGifFixture());
+      final out = await cache.obtain(src.path);
+      expect(out, isNotNull);
+      expect(await out!.exists(), isTrue);
+      expect(await out.length(), greaterThan(0));
     });
 
     test('generates a downscaled sidecar and serves it on the next lookup',

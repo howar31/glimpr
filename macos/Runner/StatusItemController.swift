@@ -25,7 +25,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let keyHint: (String) -> (String, UInt)?
   private let onSettings: () -> Void
   private let onOpenImage: () -> Void
-  private let onOpenGifEditor: () -> Void
   private let onOpenSaveFolder: () -> Void
   private let onOpenRecent: (String) -> Void
   private let onClearRecent: () -> Void
@@ -67,7 +66,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
        keyHint: @escaping (String) -> (String, UInt)?,
        onSettings: @escaping () -> Void,
        onOpenImage: @escaping () -> Void,
-       onOpenGifEditor: @escaping () -> Void,
        onOpenSaveFolder: @escaping () -> Void,
        onOpenRecent: @escaping (String) -> Void,
        onClearRecent: @escaping () -> Void) {
@@ -77,7 +75,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     self.keyHint = keyHint
     self.onSettings = onSettings
     self.onOpenImage = onOpenImage
-    self.onOpenGifEditor = onOpenGifEditor
     self.onOpenSaveFolder = onOpenSaveFolder
     self.onOpenRecent = onOpenRecent
     self.onClearRecent = onClearRecent
@@ -149,17 +146,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.addItem(menuItem(
       title: L.s("Open Save Folder", "開啟儲存資料夾"),
       action: #selector(openSaveFolder), key: ""))
-    // GIF editor group, separated from the image/output cluster above.
-    menu.addItem(.separator())
-    // Reveals the warm GIF Editor window (hinted with the global binding).
-    let openGif = menuItem(
-      title: L.s("Open GIF Editor", "開啟 GIF 編輯器"),
-      action: #selector(openGifEditor), key: "")
-    hintedItems.append((openGif, "global.openGifEditor"))
-    menu.addItem(openGif)
-    menu.addItem(globalItem(
-      L.s("Open GIF Editor with Clipboard", "以剪貼簿開啟 GIF 編輯器"),
-      "global.openGifEditorClipboard"))
     menu.addItem(.separator())
     let update = menuItem(
       title: L.s("Check for updates", "檢查更新"),
@@ -475,7 +461,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   }
 
   @objc private func openImage() { onOpenImage() }
-  @objc private func openGifEditor() { onOpenGifEditor() }
   @objc private func openSaveFolder() { onOpenSaveFolder() }
   @objc private func openRecent(_ sender: NSMenuItem) {
     if let path = sender.representedObject as? String { onOpenRecent(path) }

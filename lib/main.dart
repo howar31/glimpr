@@ -7,7 +7,6 @@ import 'package:glimpr_pro/glimpr_pro.dart';
 import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'channels.dart';
-import 'gif_editor/gif_editor_app.dart';
 import 'image_editor/image_editor_app.dart';
 import 'output/clipboard.dart';
 import 'output/deliver.dart' show effectiveSaveDir;
@@ -44,10 +43,6 @@ Future<void> main() async {
   }
   if (role == 'image-editor') {
     runApp(const ImageEditorApp());
-    return;
-  }
-  if (role == 'gif-editor') {
-    runApp(const GifEditorApp());
     return;
   }
   // Control engine only: register the global capture hotkey (default ⌘⌥1) via
@@ -96,10 +91,6 @@ Future<void> main() async {
         control.invokeMethod('openImageEditor');
       case kOpenEditorClipboardKey:
         control.invokeMethod('openImageEditorClipboard');
-      case kOpenGifEditorKey:
-        control.invokeMethod('openGifEditor');
-      case kOpenGifEditorClipboardKey:
-        control.invokeMethod('openGifEditorClipboard');
       case kPinAreaKey:
         // Capture a region straight to a floating pin (the overlay session
         // runs {pin} only, ignoring the configured after-capture flow).
@@ -167,8 +158,6 @@ Future<void> main() async {
       'recordLast': globalActionLabel(l, kRecordLastRegionKey),
       'openEditor': globalActionLabel(l, kOpenEditorKey),
       'openEditorClipboard': globalActionLabel(l, kOpenEditorClipboardKey),
-      'gifEditor': l.trayOpenGifEditor,
-      'gifEditorClipboard': globalActionLabel(l, kOpenGifEditorClipboardKey),
       'openRecent': l.trayOpenRecent,
       'clearRecent': l.trayClearRecent,
       'openSaveFolder': l.trayOpenSaveFolder,

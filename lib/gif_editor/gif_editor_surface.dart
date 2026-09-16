@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -12,19 +11,13 @@ import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
 import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
-import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
 import '../image_editor/checkerboard.dart';
 import '../image_editor/image_editor_host.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../overlay/toolbar.dart';
 import '../platform_gate.dart';
-import '../settings/app_locale.dart';
-import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
-import '../shortcuts/shortcut_actions.dart';
-import '../shortcuts/shortcut_store.dart';
-import '../theme/confirm_dialog.dart';
 import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import 'export_service.dart';
@@ -33,88 +26,85 @@ import 'gif_document.dart';
 import 'gif_editor_controller.dart';
 import 'motion.dart';
 
-/// Standalone GIF Editor window (the third editor surface, next to the
-/// Settings window and the Image Editor). Same Aurora chrome recipe as the
-/// Image Editor: native vibrancy behind a transparent scaffold on macOS with
-/// a 44px Flutter title bar; opaque winBase + OS caption on Windows.
+/// The GIF timeline editing surface: preview (with crop / cinemagraph /
+/// annotate modes), playback controls and stats, the frame-ops row, the
+/// filmstrip, the timeline panels and the export options. Hosted by the
+/// Image Editor window, which owns the shell around it (title bar, landing,
+/// recents, toast, discard confirm, close) and mounts this widget only while
+/// [controller] holds a document.
 ///
-/// S1 scope: landing card -> open a GIF -> frame timeline with playback and
-/// stats -> pass-through GIF export. Frame editing operations arrive in
-/// later slices; the editing MODEL here is a frame sequence, deliberately
-/// separate from the Image Editor's single-canvas annotation model.
-class GifEditorApp extends StatefulWidget {
-  const GifEditorApp({super.key, this.controller});
+/// The editing MODEL here is a frame sequence, deliberately separate from
+/// the single-canvas annotation model; the annotate mode reuses EditorCore
+/// over one frame at a time and bakes the drawables into the frames.
+class GifEditorSurface extends StatefulWidget {
+  const GifEditorSurface({
+    super.key,
+    required this.controller,
+    required this.channel,
+    required this.onToast,
+    required this.sourceName,
+    required this.toolStyles,
+    required this.editorBindings,
+    required this.loupe,
+    required this.hud,
+  });
 
-  /// Test seam: widget tests inject a preloaded controller so the heavy
-  /// open path (real IO + engine decode) can run under runAsync first.
-  final GifEditorController? controller;
+  /// The document controller; owned (created + disposed) by the host.
+  final GifEditorController controller;
+
+  /// The host window's native channel (glimpr/imageEditor): savePanel,
+  /// setProcessing, perfMark, openSettings.
+  final MethodChannel channel;
+
+  /// Host toast pill (export done / failed).
+  final void Function(String message) onToast;
+
+  /// Basename of the opened file; seeds the export save panel's suggestion.
+  final String sourceName;
+
+  /// Shared editor context for the annotate mode (the host loads and
+  /// hot-reloads these; [toolStyles] is mutated in place by EditorCore).
+  final Map<ToolKind, DrawStyle> toolStyles;
+  final Map<String, HotkeyBinding?> editorBindings;
+  final LoupeConfig loupe;
+  final HudConfig hud;
 
   @override
-  State<GifEditorApp> createState() => _GifEditorAppState();
+  State<GifEditorSurface> createState() => _GifEditorSurfaceState();
 }
 
-class _GifEditorAppState extends State<GifEditorApp>
-    with WidgetsBindingObserver {
-  // Resolved from a context inside the MaterialApp's Localizations scope
-  // (same field pattern as the Image Editor).
+class _GifEditorSurfaceState extends State<GifEditorSurface> {
+  // Resolved per build from the host's Localizations scope.
   late AppLocalizations _l;
 
-  static const _channel = MethodChannel('glimpr/gifEditor');
-
-  late final GifEditorController _c;
-  late final bool _ownsController;
+  GifEditorController get _c => widget.controller;
   final ScrollController _strip = ScrollController();
+  // The timeline's keyboard scope. The host's landing holds an autofocus
+  // node of its own, so focus is claimed explicitly once this mounts.
+  final FocusNode _focus = FocusNode(debugLabel: 'gif-editor-surface');
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _ownsController = widget.controller == null;
-    _c = widget.controller ?? GifEditorController();
     _c.addListener(_onControllerChanged);
-    // Native pushes: a file dropped on the window, the clipboard-open
-    // hotkey, and the close gesture (red button / Cmd-W) routed through
-    // Dart for the dirty confirm.
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'loadPath') {
-        final path = call.arguments as String?;
-        if (path != null && path.isNotEmpty && !_c.opening) {
-          unawaited(_openFromPath(path));
-        }
-      } else if (call.method == 'loadClipboard') {
-        unawaited(_openFromClipboard());
-      } else if (call.method == 'requestClose') {
-        unawaited(_requestClose());
-      }
-      return null;
-    });
-    // Handlers are attached: native may flush a queued open now.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _channel.invokeMethod('editorReady').catchError((_) {});
+      if (mounted) _focus.requestFocus();
     });
   }
 
-  /// Clipboard-open (global hotkey): a .gif FILE copied to the clipboard
-  /// (Finder / Explorer copy) opens as the document; anything else toasts.
-  Future<void> _openFromClipboard() async {
-    if (_c.opening) return;
-    String? path;
-    try {
-      path = await const MethodChannel('glimpr/clipboard')
-          .invokeMethod<String>('readFilePath');
-    } catch (_) {}
-    if (path == null || !path.toLowerCase().endsWith('.gif')) {
-      _toast(_l.gifEditorClipboardEmpty);
-      return;
+  @override
+  void didUpdateWidget(GifEditorSurface old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
     }
-    await _openFromPath(path);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _c.removeListener(_onControllerChanged);
-    if (_ownsController) _c.dispose();
+    _focus.dispose();
     _strip.dispose();
     _loopField.dispose();
     _delayField.dispose();
@@ -125,8 +115,6 @@ class _GifEditorAppState extends State<GifEditorApp>
     _transDelay.dispose();
     _annotate?.dispose();
     _annotateActive.dispose();
-    _toastTimer?.cancel();
-    _toastClearTimer?.cancel();
     super.dispose();
   }
 
@@ -147,16 +135,12 @@ class _GifEditorAppState extends State<GifEditorApp>
   int _wasCurrent = -1;
 
   void _perfMark(String label) {
-    _channel
+    widget.channel
         .invokeMethod('perfMark', {'label': label})
         .catchError((_) {});
   }
 
-  @override
-  void didChangePlatformBrightness() => setState(() {});
 
-  // Basename of the opened file; seeds the export save panel's suggestion.
-  String _sourceName = 'animation';
   bool _exporting = false;
   double _exportProgress = 0;
 
@@ -229,51 +213,17 @@ class _GifEditorAppState extends State<GifEditorApp>
       ValueNotifier((id: ImageEditorHost.kImageEditorHostId,
           cursor: Offset.zero));
 
-  // Shared editor context (styles / bindings / loupe / hud), loaded once
-  // like the Image Editor does; failures fall back to defaults so tests
-  // without a settings platform still build.
-  final Map<ToolKind, DrawStyle> _toolStyles = {};
-  Map<String, HotkeyBinding?> _editorBindings = {
-    ...effectiveDefaultBindings()
-  };
-  LoupeConfig _loupe = const LoupeConfig();
-  HudConfig _hud = const HudConfig();
-  bool _editorPrefsLoaded = false;
-
-  void _loadEditorPrefsOnce() {
-    if (_editorPrefsLoaded) return;
-    _editorPrefsLoaded = true;
-    try {
-      ToolStyleStore(Settings.instance.store).load().then((styles) {
-        if (mounted) setState(() => _toolStyles.addAll(styles));
-      }).catchError((_) {});
-    } catch (_) {}
-    try {
-      ShortcutStore(Settings.instance.store).all().then((b) {
-        if (mounted) setState(() => _editorBindings = b);
-      }).catchError((_) {});
-    } catch (_) {}
-    try {
-      Settings.instance.loadLoupe().then((l) {
-        if (mounted) setState(() => _loupe = l);
-      }).catchError((_) {});
-      Settings.instance.loadHud().then((h) {
-        if (mounted) setState(() => _hud = h);
-      }).catchError((_) {});
-    } catch (_) {}
-  }
 
   void _toggleAnnotateMode() {
     if (_annotateMode) {
       setState(_closePanels);
       return;
     }
-    _loadEditorPrefsOnce();
     _c.pause();
     setState(() {
       _closePanels();
       _annotateMode = true;
-      _annotate = EditorController(toolStyles: _toolStyles)
+      _annotate = EditorController(toolStyles: widget.toolStyles)
         ..selectTool(ToolKind.rectangle);
     });
     unawaited(_loadAnnotateImage());
@@ -380,44 +330,13 @@ class _GifEditorAppState extends State<GifEditorApp>
     }
   }
 
-  /// File picker; macOS uses the native NSOpenPanel (openPanel channel
-  /// method), Windows the cross-platform file_selector dialog (the runner
-  /// hosts no dialogs — same split as the Image Editor).
-  Future<void> _openPanel() async {
-    if (_c.opening) return;
-    String? path;
-    if (platformIsWindows) {
-      const group = XTypeGroup(label: 'GIF', extensions: ['gif']);
-      path = (await openFile(acceptedTypeGroups: [group]))?.path;
-    } else {
-      path = await _channel.invokeMethod<String>('openPanel');
-    }
-    if (path == null || path.isEmpty || !mounted) return;
-    await _openFromPath(path);
-  }
-
-  /// Open [path] as the document (picker and drag-drop route). Replacing a
-  /// document with unexported edits asks first (the Image Editor behavior).
-  Future<void> _openFromPath(String path) async {
-    if (!await _confirmDiscardIfDirty()) return;
-    try {
-      final bytes = await File(path).readAsBytes();
-      await _c.openBytes(bytes);
-      final base = path.split(Platform.pathSeparator).last;
-      final dot = base.lastIndexOf('.');
-      _sourceName = dot > 0 ? base.substring(0, dot) : base;
-    } catch (_) {
-      if (mounted) _toast(_l.gifEditorOpenFailed);
-    }
-  }
-
   Future<void> _export() async {
     final doc = _c.doc;
     final store = _c.store;
     if (doc == null || store == null || _exporting || _c.transforming) {
       return;
     }
-    final suggested = '$_sourceName-edited.gif';
+    final suggested = '$widget.sourceName-edited.gif';
     String? out;
     if (platformIsWindows) {
       const group = XTypeGroup(label: 'GIF', extensions: ['gif']);
@@ -425,8 +344,8 @@ class _GifEditorAppState extends State<GifEditorApp>
               suggestedName: suggested, acceptedTypeGroups: [group]))
           ?.path;
     } else {
-      out = await _channel
-          .invokeMethod<String>('savePanel', {'suggestedName': suggested});
+      out = await widget.channel
+          .invokeMethod<String>('savePanel', {'suggestedName': suggested, 'extension': 'gif'});
     }
     if (out == null || out.isEmpty || !mounted) return;
     _c.pause();
@@ -435,7 +354,7 @@ class _GifEditorAppState extends State<GifEditorApp>
       _exportProgress = 0;
     });
     // Tray processing pulse, parallel to the Image Editor's Done flow.
-    unawaited(_channel.invokeMethod('setProcessing',
+    unawaited(widget.channel.invokeMethod('setProcessing',
         {'active': true, 'label': _l.gifEditorExportButton}));
     try {
       await exportGif(
@@ -452,349 +371,128 @@ class _GifEditorAppState extends State<GifEditorApp>
             setState(() => _exportProgress = done / total),
       );
       _c.markClean(); // exported = nothing left to lose on close
-      _toast(_l.gifEditorExportDone);
+      widget.onToast(_l.gifEditorExportDone);
     } catch (_) {
-      _toast(_l.gifEditorExportFailed);
+      widget.onToast(_l.gifEditorExportFailed);
     } finally {
       setState(() => _exporting = false);
       unawaited(
-          _channel.invokeMethod('setProcessing', {'active': false}));
+          widget.channel.invokeMethod('setProcessing', {'active': false}));
     }
-  }
-
-  // Top-centred toast pill, same idiom as the Image Editor's.
-  String? _toastMsg;
-  bool _toastVisible = false;
-  Timer? _toastTimer;
-  Timer? _toastClearTimer;
-
-  void _toast(String msg) {
-    _toastTimer?.cancel();
-    _toastClearTimer?.cancel();
-    setState(() {
-      _toastMsg = msg;
-      _toastVisible = true;
-    });
-    _toastTimer = Timer(const Duration(milliseconds: 2600), () {
-      if (!mounted) return;
-      setState(() => _toastVisible = false);
-      _toastClearTimer = Timer(const Duration(milliseconds: 240), () {
-        if (mounted) setState(() => _toastMsg = null);
-      });
-    });
-  }
-
-  // Discard-confirm plumbing (the Image Editor recipe): dialogs need a
-  // Navigator, so the MaterialApp carries a key; _confirming/_closePending
-  // keep repeated close gestures from stacking dialogs.
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  bool _confirming = false;
-  bool _closePending = false;
-
-  /// True when there is nothing to lose; otherwise prompts. Used before
-  /// unloading (close / Home) or replacing (open / drop) the document.
-  Future<bool> _confirmDiscardIfDirty() async {
-    if (_c.doc == null || !_c.dirty) return true;
-    final ctx = _navigatorKey.currentContext;
-    if (ctx == null || _confirming) return false;
-    _confirming = true;
-    try {
-      return await showDiscardConfirm(
-        ctx,
-        title: _l.editorDiscardTitle,
-        message: _l.gifEditorDiscardMessage,
-      );
-    } finally {
-      _confirming = false;
-    }
-  }
-
-  /// A close gesture (red button / Cmd-W / Ctrl-W), routed here by native as
-  /// requestClose: confirm if dirty, then hide the window (engine stays
-  /// warm) and unload back to the landing — the Image Editor behavior.
-  Future<void> _requestClose() async {
-    if (_closePending) return;
-    _closePending = true;
-    try {
-      if (!await _confirmDiscardIfDirty()) return;
-      try {
-        await _channel.invokeMethod('hideEditor');
-      } catch (_) {}
-      _c.close();
-    } finally {
-      _closePending = false;
-    }
-  }
-
-  /// Back to the landing: drop the current document (dirty-confirmed; the
-  /// frame store is disposed by the controller).
-  Future<void> _goHome() async {
-    if (await _confirmDiscardIfDirty()) _c.close();
-  }
-
-  // Windows only: push the localized title to the OS caption (no Flutter
-  // title bar there; the runner C++ is ASCII-only and owns no l10n strings).
-  String? _sentWindowTitle;
-
-  void _syncWindowTitle() {
-    if (!platformIsWindows) return;
-    final title = _l.gifEditorTitleBar;
-    if (title == _sentWindowTitle) return;
-    _sentWindowTitle = title;
-    try {
-      _channel.invokeMethod('setWindowTitle', title);
-    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
-    final brightness =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    final tokens = GlimprTokens.forBrightness(brightness);
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      navigatorKey: _navigatorKey,
-      locale: appLocaleOverride,
-      localeListResolutionCallback: resolveAppLocale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: ThemeData(
-        brightness: brightness,
-        scaffoldBackgroundColor: Colors.transparent,
-        fontFamily: GlimprType.sans,
-        tooltipTheme: glimprTooltipTheme(brightness),
-      ),
-      home: GlimprTheme(
-        tokens: tokens,
-        child: CallbackShortcuts(
-          bindings: {
-            if (platformIsWindows)
-              const SingleActivator(LogicalKeyboardKey.keyW, control: true):
-                  () => unawaited(_requestClose()),
-            // Open a (new) GIF from anywhere; a dirty document confirms
-            // before being replaced (inside _openFromPath).
-            SingleActivator(LogicalKeyboardKey.keyO,
-                meta: !platformIsWindows,
-                control: platformIsWindows): () => unawaited(_openPanel()),
-            const SingleActivator(LogicalKeyboardKey.space): () {
-              // Not while annotating: EditorCore owns the keyboard there.
-              if (_c.doc != null && !_annotateMode) _c.togglePlay();
-            },
-            // Timeline editing (all no-ops on the landing).
-            SingleActivator(LogicalKeyboardKey.keyZ,
-                meta: !platformIsWindows,
-                control: platformIsWindows): _c.undo,
-            SingleActivator(LogicalKeyboardKey.keyZ,
-                shift: true,
-                meta: !platformIsWindows,
-                control: platformIsWindows): _c.redo,
-            SingleActivator(LogicalKeyboardKey.keyA,
-                meta: !platformIsWindows,
-                control: platformIsWindows): _c.selectAll,
-            SingleActivator(LogicalKeyboardKey.keyX,
-                meta: !platformIsWindows,
-                control: platformIsWindows): _c.cutSelected,
-            SingleActivator(LogicalKeyboardKey.keyC,
-                meta: !platformIsWindows,
-                control: platformIsWindows): _c.copySelected,
-            SingleActivator(LogicalKeyboardKey.keyV,
-                meta: !platformIsWindows,
-                control: platformIsWindows): _c.pasteFrames,
-            const SingleActivator(LogicalKeyboardKey.delete):
-                _c.deleteSelected,
-            const SingleActivator(LogicalKeyboardKey.backspace):
-                _c.deleteSelected,
-            // Frame navigation (not while annotating: EditorCore owns
-            // arrows for nudging there).
-            const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-              if (_c.doc != null && !_annotateMode) {
-                _c.pause();
-                _c.seek(_c.current - 1);
-              }
-            },
-            const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-              if (_c.doc != null && !_annotateMode) {
-                _c.pause();
-                _c.seek(_c.current + 1);
-              }
-            },
-            const SingleActivator(LogicalKeyboardKey.home): () {
-              if (_c.doc != null && !_annotateMode) {
-                _c.pause();
-                _c.seek(0);
-              }
-            },
-            const SingleActivator(LogicalKeyboardKey.end): () {
-              if (_c.doc != null && !_annotateMode) {
-                _c.pause();
-                _c.seek(_c.doc!.frameCount - 1);
-              }
-            },
-            // Rect modes commit on Enter; Escape backs out of any panel.
-            const SingleActivator(LogicalKeyboardKey.enter): () {
-              if (_cropMode) _applyCrop();
-              if (_cinemagraphMode) _applyCinemagraph();
-            },
-            const SingleActivator(LogicalKeyboardKey.escape): () {
-              if (_cropMode ||
-                  _cinemagraphMode ||
-                  _optionsOpen ||
-                  _panel != _TimelinePanel.none) {
-                setState(_closePanels);
-              }
-            },
-          },
-          child: Focus(
-            // Shortcuts need a focused subtree; the canvas has no focusable
-            // field of its own yet.
-            autofocus: true,
-            child: Scaffold(
-            // Windows paints the opaque themed base (winBase rule); macOS
-            // stays pure native vibrancy.
-            backgroundColor:
-                platformIsWindows ? tokens.winBase : Colors.transparent,
-            body: Builder(
-              builder: (ctx) {
-                _l = AppLocalizations.of(ctx);
-                _syncWindowTitle();
-                return Stack(
-                  children: [
-                    Column(
-                      children: [
-                        // The Flutter title bar is macOS-only (frameless
-                        // .fullSizeContentView chrome); Windows keeps the
-                        // standard OS caption.
-                        if (!platformIsWindows) _titleBar(tokens),
-                        Expanded(
-                          child: _c.doc == null
-                              ? _landing(tokens)
-                              : _editor(tokens),
-                        ),
-                      ],
-                    ),
-                    // Windows: a floating glass Home button at the canvas
-                    // top-left while a GIF is loaded (the OS caption has no
-                    // Flutter title bar to host one).
-                    if (platformIsWindows && _c.doc != null)
-                      Positioned(
-                        top: 12,
-                        left: 12,
-                        child: _FloatingHomeButton(
-                            key: const Key('gif-home'), onTap: () => unawaited(_goHome())),
-                      ),
-                    // Anchored panels (export options / delay / reduce)
-                    // share one outside-tap barrier.
-                    if ((_optionsOpen || _panel != _TimelinePanel.none) &&
-                        _c.doc != null) ...[
-                      Positioned.fill(
-                        child: GestureDetector(
-                          key: const Key('gif-options-barrier'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(_closePanels),
-                        ),
-                      ),
-                      if (_optionsOpen) _optionsPopover(tokens),
-                      if (_panel == _TimelinePanel.delay)
-                        _delayPanel(tokens),
-                      if (_panel == _TimelinePanel.reduce)
-                        _reducePanel(tokens),
-                      if (_panel == _TimelinePanel.resize)
-                        _resizePanel(tokens),
-                      if (_panel == _TimelinePanel.border)
-                        _borderPanel(tokens),
-                      if (_panel == _TimelinePanel.transition)
-                        _transitionPanel(tokens),
-                    ],
-                    _toastLayer(tokens),
-                  ],
-                );
-              },
-            ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _titleBar(GlimprTokens t) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onDoubleTap: () => _channel.invokeMethod('titleBarDoubleClick'),
-      child: Container(
-        // Content centres against the native traffic lights (Image Editor
-        // recipe: 32px puts the row centre at 16px).
-        height: 32,
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: t.divider)),
-        ),
-        child: Row(
+    _l = AppLocalizations.of(context);
+    final t = GlimprTheme.of(context);
+    if (_c.doc == null) return const SizedBox.shrink();
+    return CallbackShortcuts(
+      bindings: _shortcuts(),
+      child: Focus(
+        // Shortcuts need a focused subtree; the canvas has no focusable
+        // field of its own.
+        focusNode: _focus,
+        autofocus: true,
+        child: Stack(
           children: [
-            const SizedBox(width: 78), // clear the traffic-light buttons
-            // Back to the landing (open another GIF) — same top-left home
-            // idiom as the Image Editor; landing has nowhere to go back to.
-            if (_c.doc != null) ...[
-              _TitleBarHome(key: const Key('gif-home'), onTap: () => unawaited(_goHome())),
-              const SizedBox(width: 6),
+            Positioned.fill(child: _body(t)),
+            // Anchored panels (export options / delay / reduce / resize /
+            // border / transition) share one outside-tap barrier.
+            if (_optionsOpen || _panel != _TimelinePanel.none) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  key: const Key('gif-options-barrier'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(_closePanels),
+                ),
+              ),
+              if (_optionsOpen) _optionsPopover(t),
+              if (_panel == _TimelinePanel.delay) _delayPanel(t),
+              if (_panel == _TimelinePanel.reduce) _reducePanel(t),
+              if (_panel == _TimelinePanel.resize) _resizePanel(t),
+              if (_panel == _TimelinePanel.border) _borderPanel(t),
+              if (_panel == _TimelinePanel.transition) _transitionPanel(t),
             ],
-            const GlimprMark(size: 18),
-            const SizedBox(width: 9),
-            Text(
-              _l.gifEditorTitleBar,
-              style:
-                  GlimprType.sansStyle(13, 600, t.fg2, letterSpacing: -0.1),
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _landing(GlimprTokens t) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: GlassCard.padded(
-          pad: 36,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const GlimprMark(size: 56),
-              const SizedBox(height: 22),
-              Text(
-                _l.gifEditorOpenGif,
-                textAlign: TextAlign.center,
-                style:
-                    GlimprType.sansStyle(18, 700, t.fg1, letterSpacing: -0.3),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _l.gifEditorOpenGifSubtitle,
-                textAlign: TextAlign.center,
-                style: GlimprType.sansStyle(13, 400, t.fg3, height: 1.45),
-              ),
-              const SizedBox(height: 24),
-              _c.opening
-                  ? Text(
-                      _l.gifEditorImporting,
-                      style: GlimprType.sansStyle(12.5, 500, t.fg3),
-                    )
-                  : AccentButton(
-                      _l.gifEditorOpenGifButton,
-                      icon: Icons.gif_box_outlined,
-                      onTap: _openPanel,
-                    ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  /// Timeline keyboard map. The host owns window-level chords (close, open).
+  Map<ShortcutActivator, VoidCallback> _shortcuts() => {
+      const SingleActivator(LogicalKeyboardKey.space): () {
+        // Not while annotating: EditorCore owns the keyboard there.
+        if (_c.doc != null && !_annotateMode) _c.togglePlay();
+      },
+      // Timeline editing (all no-ops on the landing).
+      SingleActivator(LogicalKeyboardKey.keyZ,
+          meta: !platformIsWindows,
+          control: platformIsWindows): _c.undo,
+      SingleActivator(LogicalKeyboardKey.keyZ,
+          shift: true,
+          meta: !platformIsWindows,
+          control: platformIsWindows): _c.redo,
+      SingleActivator(LogicalKeyboardKey.keyA,
+          meta: !platformIsWindows,
+          control: platformIsWindows): _c.selectAll,
+      SingleActivator(LogicalKeyboardKey.keyX,
+          meta: !platformIsWindows,
+          control: platformIsWindows): _c.cutSelected,
+      SingleActivator(LogicalKeyboardKey.keyC,
+          meta: !platformIsWindows,
+          control: platformIsWindows): _c.copySelected,
+      SingleActivator(LogicalKeyboardKey.keyV,
+          meta: !platformIsWindows,
+          control: platformIsWindows): _c.pasteFrames,
+      const SingleActivator(LogicalKeyboardKey.delete):
+          _c.deleteSelected,
+      const SingleActivator(LogicalKeyboardKey.backspace):
+          _c.deleteSelected,
+      // Frame navigation (not while annotating: EditorCore owns
+      // arrows for nudging there).
+      const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
+        if (_c.doc != null && !_annotateMode) {
+          _c.pause();
+          _c.seek(_c.current - 1);
+        }
+      },
+      const SingleActivator(LogicalKeyboardKey.arrowRight): () {
+        if (_c.doc != null && !_annotateMode) {
+          _c.pause();
+          _c.seek(_c.current + 1);
+        }
+      },
+      const SingleActivator(LogicalKeyboardKey.home): () {
+        if (_c.doc != null && !_annotateMode) {
+          _c.pause();
+          _c.seek(0);
+        }
+      },
+      const SingleActivator(LogicalKeyboardKey.end): () {
+        if (_c.doc != null && !_annotateMode) {
+          _c.pause();
+          _c.seek(_c.doc!.frameCount - 1);
+        }
+      },
+      // Rect modes commit on Enter; Escape backs out of any panel.
+      const SingleActivator(LogicalKeyboardKey.enter): () {
+        if (_cropMode) _applyCrop();
+        if (_cinemagraphMode) _applyCinemagraph();
+      },
+      const SingleActivator(LogicalKeyboardKey.escape): () {
+        if (_cropMode ||
+            _cinemagraphMode ||
+            _optionsOpen ||
+            _panel != _TimelinePanel.none) {
+          setState(_closePanels);
+        }
+      },
+      };
 
   /// Loaded state: preview canvas over a checkerboard, a controls/stats row,
   /// and the frame filmstrip along the bottom.
-  Widget _editor(GlimprTokens t) {
+  Widget _body(GlimprTokens t) {
     final doc = _c.doc!;
     final store = _c.store!;
     final frame = doc.frames[_c.current];
@@ -849,7 +547,7 @@ class _GifEditorAppState extends State<GifEditorApp>
       onComplete: () async => _applyAnnotate(),
       activeSignal: _annotateActive,
       onClose: () => setState(_closePanels),
-      onOpenSettings: () => _channel.invokeMethod('openSettings'),
+      onOpenSettings: () => widget.channel.invokeMethod('openSettings'),
     );
     final sel = _c.selection;
     final target = sel.isEmpty
@@ -861,9 +559,9 @@ class _GifEditorAppState extends State<GifEditorApp>
           child: EditorCore(
             key: ValueKey(img), // fresh core per rebased frame
             controller: annotate,
-            editorBindings: _editorBindings,
-            loupe: _loupe,
-            hud: _hud,
+            editorBindings: widget.editorBindings,
+            loupe: widget.loupe,
+            hud: widget.hud,
             host: host,
             viewportController: _annotateViewport,
           ),
@@ -875,7 +573,7 @@ class _GifEditorAppState extends State<GifEditorApp>
           child: Center(
             child: EditorToolbar(
               controller: annotate,
-              editorBindings: _editorBindings,
+              editorBindings: widget.editorBindings,
               showDragHandle: false,
               onMove: (_) {},
               onPtEditingDone: annotate.requestFocus,
@@ -1967,54 +1665,6 @@ class _GifEditorAppState extends State<GifEditorApp>
       ),
     );
   }
-
-  Widget _toastLayer(GlimprTokens t) {
-    return Positioned(
-      top: 32 + 12,
-      left: 24,
-      right: 24,
-      child: IgnorePointer(
-        child: AnimatedSlide(
-          offset: _toastVisible ? Offset.zero : const Offset(0, -0.4),
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          child: AnimatedOpacity(
-            opacity: _toastVisible ? 1 : 0,
-            duration: const Duration(milliseconds: 220),
-            child: Center(
-              child: _toastMsg == null
-                  ? const SizedBox.shrink()
-                  : Container(
-                      constraints: const BoxConstraints(maxWidth: 560),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 9),
-                      decoration: BoxDecoration(
-                        color: t.hudBg,
-                        borderRadius:
-                            BorderRadius.circular(GlimprTokens.radiusBar),
-                        border: Border.all(color: t.hudBorder),
-                        boxShadow: [
-                          BoxShadow(
-                            color: t.isDark
-                                ? const Color(0x66000000)
-                                : const Color(0x2E0F172A),
-                            blurRadius: 16,
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        _toastMsg!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GlimprType.sansStyle(13.5, 600, t.fg1),
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Which timeline panel is open above the ops row.
@@ -2470,110 +2120,6 @@ class _FramePreviewState extends State<_FramePreview> {
       filterQuality: FilterQuality.medium,
       // Repaint hint only; RawImage compares images by identity anyway.
       key: ValueKey(_shownKey),
-    );
-  }
-}
-
-/// Title-bar back-to-landing affordance (macOS only; the Image Editor idiom).
-class _TitleBarHome extends StatefulWidget {
-  const _TitleBarHome({super.key, required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_TitleBarHome> createState() => _TitleBarHomeState();
-}
-
-class _TitleBarHomeState extends State<_TitleBarHome> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = GlimprTheme.of(context);
-    final l = AppLocalizations.of(context);
-    final color = _hover ? t.fg1 : t.fg2;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Tooltip(
-          message: l.editorGalleryHome,
-          waitDuration: const Duration(milliseconds: 400),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-            decoration: BoxDecoration(
-              color: _hover ? t.navHoverBg : Colors.transparent,
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.chevron_left, size: 16, color: color),
-                Icon(Icons.home_outlined, size: 15, color: color),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Floating glass Home over the canvas (Windows; no Flutter title bar there).
-class _FloatingHomeButton extends StatefulWidget {
-  const _FloatingHomeButton({super.key, required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_FloatingHomeButton> createState() => _FloatingHomeButtonState();
-}
-
-class _FloatingHomeButtonState extends State<_FloatingHomeButton> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = GlimprTheme.of(context);
-    final l = AppLocalizations.of(context);
-    final color = _hover ? t.fg1 : t.fg2;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Tooltip(
-          message: l.editorGalleryHome,
-          waitDuration: const Duration(milliseconds: 400),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-            decoration: BoxDecoration(
-              color: t.hudBg,
-              borderRadius: BorderRadius.circular(GlimprTokens.radiusBar),
-              border: Border.all(color: t.hudBorder),
-              boxShadow: [
-                BoxShadow(
-                  color: t.isDark
-                      ? const Color(0x66000000)
-                      : const Color(0x2E0F172A),
-                  blurRadius: 16,
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.home_outlined, size: 15, color: color),
-                const SizedBox(width: 6),
-                Text(l.editorGalleryHome,
-                    style: GlimprType.sansStyle(12, 600, color)),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

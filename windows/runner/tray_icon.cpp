@@ -29,8 +29,6 @@ enum TrayCommand : UINT {
   kCmdRecordLast,
   kCmdOpenEditor,
   kCmdOpenEditorClipboard,
-  kCmdOpenGifEditor,
-  kCmdOpenGifEditorClipboard,
   kCmdClearRecent,
   kCmdOpenSaveFolder,
   kCmdCheckUpdates,
@@ -55,8 +53,6 @@ constexpr char kActRecordDisplay[] = "global.recordDisplay";
 constexpr char kActRecordLast[] = "global.recordLastRegion";
 constexpr char kActOpenEditor[] = "global.openEditor";
 constexpr char kActOpenEditorClipboard[] = "global.openEditorClipboard";
-constexpr char kActOpenGifEditor[] = "global.openGifEditor";
-constexpr char kActOpenGifEditorClipboard[] = "global.openGifEditorClipboard";
 constexpr char kActOpenSaveFolder[] = "menu.openSaveFolder";
 
 std::wstring Basename(const std::string& path) {
@@ -300,13 +296,6 @@ void TrayIcon::ShowMenu() {
   }
   AppendItem(menu, kCmdOpenSaveFolder, L("openSaveFolder", "Open Save Folder"),
              "", true);
-  // GIF editor group, separated from the image/output cluster above.
-  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  AppendItem(menu, kCmdOpenGifEditor, L("gifEditor", "Open GIF Editor"),
-             hotkeys_->AcceleratorLabel(kActOpenGifEditor), true);
-  AppendItem(menu, kCmdOpenGifEditorClipboard,
-             L("gifEditorClipboard", "Open GIF Editor with Clipboard"),
-             hotkeys_->AcceleratorLabel(kActOpenGifEditorClipboard), true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Dart pushes an "Update available: vX.Y.Z" label when the update check
   // finds a newer release (SetUpdateStatus); idle falls back to the pushed
@@ -355,12 +344,6 @@ void TrayIcon::OnCommand(UINT command_id) {
     case kCmdOpenEditor: hotkeys_->FireAction(kActOpenEditor); break;
     case kCmdOpenEditorClipboard:
       hotkeys_->FireAction(kActOpenEditorClipboard);
-      break;
-    case kCmdOpenGifEditor:
-      if (cb_.on_open_gif_editor) cb_.on_open_gif_editor();
-      break;
-    case kCmdOpenGifEditorClipboard:
-      hotkeys_->FireAction(kActOpenGifEditorClipboard);
       break;
     case kCmdClearRecent: if (cb_.on_clear_recent) cb_.on_clear_recent(); break;
     case kCmdOpenSaveFolder: hotkeys_->FireAction(kActOpenSaveFolder); break;

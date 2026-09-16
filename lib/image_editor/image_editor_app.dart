@@ -17,6 +17,8 @@ import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
 import '../editor/tool_style_store.dart';
 import '../editor/viewport.dart';
+import '../gif_editor/gif_editor_controller.dart';
+import '../gif_editor/gif_editor_surface.dart';
 import '../overlay/toolbar.dart';
 import '../output/clipboard.dart';
 import '../output/deliver.dart';
@@ -75,6 +77,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   bool _dirty = false;
   bool _closePending = false;
   bool _confirming = false;
+  // GIF documents: created on the first .gif load, lives with this State.
+  // A GIF and a static image never coexist; loading one closes the other.
+  GifEditorController? _gif;
+  GifEditorController get _gifController =>
+      _gif ??= (GifEditorController()..addListener(_onGifChanged));
+  bool get _gifLoaded => _gif?.doc != null;
+  void _onGifChanged() {
+    if (mounted) setState(() {});
+  }
+  // Unsaved work in either document kind.
+  bool get _anyDirty => _dirty || (_gif?.dirty ?? false);
   // Windows: the localized OS-caption title last pushed to native (the editor
   // has no Flutter title bar there, so the caption must follow app_language).
   String? _sentWindowTitle;
@@ -261,12 +274,28 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Read, decode, and show [path] in the editor.
   Future<void> _loadPath(String path, {bool confirmed = false}) async {
     // Every file ingest (Open panel, drag-drop, Open With, recents) funnels
-    // here: .gif belongs to the GIF editor, so forward and leave this window
-    // untouched (no dirty confirm — nothing here is replaced).
+    // here: a .gif opens as a frame-timeline document (the GIF surface),
+    // anything else as a static image on the EditorCore canvas.
     if (path.toLowerCase().endsWith('.gif')) {
+      if (!confirmed && !await _confirmDiscardIfDirty()) return;
+      _perfMark('editorOpenBegin kind=gif');
+      late final Uint8List bytes;
       try {
-        await _channel.invokeMethod('openGifEditor', path);
-      } catch (_) {}
+        bytes = await File(path).readAsBytes();
+      } catch (e) {
+        _toast(_l.editorToastCannotReadFile('$e'));
+        return;
+      }
+      _unloadImage(); // a static image gives way to the GIF document
+      try {
+        await _gifController.openBytes(bytes);
+      } catch (_) {
+        if (mounted) _toast(_l.gifEditorOpenFailed);
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _sourceName = p.basenameWithoutExtension(path));
+      await _recordRecent(path);
       return;
     }
     // Replacing the current image: confirm if dirty — unless the caller already
@@ -297,6 +326,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       img.dispose();
       return;
     }
+    _gif?.close(); // a GIF document gives way to the static image
     _setLoadedImage(bytes, img, p.basenameWithoutExtension(path));
     await _recordRecent(path);
   }
@@ -499,6 +529,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       return; // clipboard channel unavailable (e.g. tests)
     }
     if (bytes == null) {
+      // No image bitmap: a copied .gif FILE (Finder / Explorer copy) opens as
+      // a GIF document instead; anything else toasts.
+      String? filePath;
+      try {
+        filePath = await const MethodChannel('glimpr/clipboard')
+            .invokeMethod<String>('readFilePath');
+      } catch (_) {}
+      if (filePath != null && filePath.toLowerCase().endsWith('.gif')) {
+        await _loadPath(filePath, confirmed: true);
+        return;
+      }
       _toast(_l.editorToastNoImageInClipboard);
       return;
     }
@@ -516,6 +557,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       img.dispose();
       return;
     }
+    _gif?.close();
     _setLoadedImage(bytes, img, 'pasted');
   }
 
@@ -697,7 +739,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       return await showDiscardConfirm(
         ctx,
         title: _l.editorDiscardTitle,
-        message: _l.editorDiscardMessage,
+        message:
+            _gifLoaded ? _l.gifEditorDiscardMessage : _l.editorDiscardMessage,
       );
     } finally {
       _confirming = false;
@@ -707,7 +750,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// True when there is nothing to lose; otherwise prompts. Used before replacing
   /// or unloading the current image (close, Open, and later paste / drag-drop).
   Future<bool> _confirmDiscardIfDirty() async {
-    if (!_dirty || _image == null) return true;
+    if (!_anyDirty) return true;
     return _confirmDiscard();
   }
 
@@ -737,6 +780,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   void _unloadImage() {
     if (!mounted) return;
     setState(() {
+      _gif?.close();
       _image?.dispose();
       _image = null;
       _bytes = null;
@@ -784,6 +828,8 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     _image?.dispose();
     _controller?.style.removeListener(_schedulePersist);
     _controller?.dispose();
+    _gif?.removeListener(_onGifChanged);
+    _gif?.dispose();
     _active.dispose();
     super.dispose();
   }
@@ -824,6 +870,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             if (platformIsWindows)
               const SingleActivator(LogicalKeyboardKey.keyW, control: true):
                   () => _requestClose(),
+            // Open a (new) file from anywhere; a dirty document confirms
+            // before the picker appears (inside _openPanel).
+            SingleActivator(LogicalKeyboardKey.keyO,
+                meta: !platformIsWindows,
+                control: platformIsWindows): () => _openPanel(),
           },
           child: Scaffold(
           // Windows paints the opaque themed base (no native glass behind the
@@ -850,16 +901,28 @@ class _ImageEditorAppState extends State<ImageEditorApp>
                       // becomes a floating button over the canvas (below).
                       if (!platformIsWindows) _titleBar(tokens),
                       Expanded(
-                        child:
-                            (image == null || bytes == null || controller == null)
-                            ? _landing(tokens)
-                            : _editor(tokens, image, controller),
+                        child: _gifLoaded
+                            ? GifEditorSurface(
+                                controller: _gif!,
+                                channel: _channel,
+                                onToast: _toast,
+                                sourceName: _sourceName,
+                                toolStyles: _toolStyles,
+                                editorBindings: _bindings,
+                                loupe: _loupe,
+                                hud: _hud,
+                              )
+                            : (image == null ||
+                                    bytes == null ||
+                                    controller == null)
+                                ? _landing(tokens)
+                                : _editor(tokens, image, controller),
                       ),
                     ],
                   ),
                   // Windows: a floating glass Home button at the canvas top-left
                   // while editing (the landing/gallery is itself "home").
-                  if (platformIsWindows && image != null)
+                  if (platformIsWindows && (image != null || _gifLoaded))
                     Positioned(
                       top: 12,
                       left: 12,
@@ -965,7 +1028,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
             // Back to the gallery landing — navigation lives top-left next to
             // the window controls (macOS back idiom), NOT in the bottom action
             // pill. Editor state only; the landing has nowhere to go back to.
-            if (_image != null) ...[
+            if (_image != null || _gifLoaded) ...[
               _TitleBarHome(onTap: _backToLanding),
               const SizedBox(width: 6),
             ],
@@ -977,6 +1040,24 @@ class _ImageEditorAppState extends State<ImageEditorApp>
               _l.editorTitleBar,
               style: GlimprType.sansStyle(13, 600, t.fg2, letterSpacing: -0.1),
             ),
+            // A GIF document is marked in the title (the window name stays).
+            if (_gifLoaded) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: t.insetBg,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: t.cardBorder),
+                ),
+                child: Text(
+                  _l.editorGifBadge,
+                  style: GlimprType.sansStyle(9.5, 700, t.fg3,
+                      letterSpacing: 0.4),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1790,27 +1871,54 @@ class _RecentTileState extends State<_RecentTile> {
         border: Border.all(color: t.cardBorder),
       ),
       clipBehavior: Clip.antiAlias,
-      child: FutureBuilder<File?>(
-        future: _thumb,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            // Inset backdrop only while the cache resolves — no glyph flash.
-            return const SizedBox.expand();
-          }
-          final file = snap.data ?? File(widget.path);
-          return Image.file(
-            file,
-            fit: BoxFit.cover,
-            // Top edge, not centre: window title bars / page headers are the
-            // most recognisable slice of a tall screenshot.
-            alignment: Alignment.topCenter,
-            // Bounds the fallback's direct full-source decode; a no-op for
-            // sidecar files (their width never exceeds the cache's box).
-            cacheWidth: 620,
-            errorBuilder: (_, _, _) =>
-                Icon(Icons.image_outlined, size: 18, color: t.fg3),
-          );
-        },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FutureBuilder<File?>(
+            future: _thumb,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                // Inset backdrop only while the cache resolves — no glyph
+                // flash.
+                return const SizedBox.expand();
+              }
+              final file = snap.data ?? File(widget.path);
+              return Image.file(
+                file,
+                fit: BoxFit.cover,
+                // Top edge, not centre: window title bars / page headers are
+                // the most recognisable slice of a tall screenshot.
+                alignment: Alignment.topCenter,
+                // Bounds the fallback's direct full-source decode; a no-op
+                // for sidecar files (their width never exceeds the cache's
+                // box).
+                cacheWidth: 620,
+                errorBuilder: (_, _, _) =>
+                    Icon(Icons.image_outlined, size: 18, color: t.fg3),
+              );
+            },
+          ),
+          // GIFs open as a frame timeline; mark them in the gallery.
+          if (widget.path.toLowerCase().endsWith('.gif'))
+            Positioned(
+              right: 5,
+              bottom: 5,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: t.hudBg,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: t.hudBorder),
+                ),
+                child: Text(
+                  AppLocalizations.of(context).editorGifBadge,
+                  style: GlimprType.sansStyle(8.5, 700, t.fg2,
+                      letterSpacing: 0.4),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

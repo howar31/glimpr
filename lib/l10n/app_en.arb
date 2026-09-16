@@ -1152,22 +1152,6 @@
   "@actionOpenEditorClipboardHint": {
     "description": "Global action hint: open editor with clipboard"
   },
-  "actionOpenGifEditor": "Open GIF Editor",
-  "@actionOpenGifEditor": {
-    "description": "Global action label: open the GIF editor"
-  },
-  "actionOpenGifEditorHint": "Open the GIF Editor",
-  "@actionOpenGifEditorHint": {
-    "description": "Global action hint: open the GIF editor"
-  },
-  "actionOpenGifEditorClipboard": "Open GIF Editor with Clipboard",
-  "@actionOpenGifEditorClipboard": {
-    "description": "Global action label: open the GIF editor with the copied file"
-  },
-  "actionOpenGifEditorClipboardHint": "Open the GIF Editor and load the copied GIF file",
-  "@actionOpenGifEditorClipboardHint": {
-    "description": "Global action hint: open the GIF editor with the copied file"
-  },
   "actionPinCapture": "Pin Screenshot",
   "@actionPinCapture": {
     "description": "Global action label: pin capture"
@@ -1630,7 +1614,7 @@
   "@editorOpenImage": {
     "description": "Image Editor landing card: headline copy"
   },
-  "editorOpenImageSubtitle": "Annotate, crop, and re-export any image in the same toolkit you use to screenshot.",
+  "editorOpenImageSubtitle": "Annotate, crop and re-export any image, or edit a GIF frame by frame, in the same toolkit you use to screenshot.",
   "@editorOpenImageSubtitle": {
     "description": "Image Editor landing card: subtitle copy below the headline"
   },
@@ -1999,22 +1983,6 @@
   "@keyCapNone": {
     "description": "Key-cap chips: shown when a binding is unbound"
   },
-  "gifEditorTitleBar": "GIF Editor",
-  "@gifEditorTitleBar": {
-    "description": "GIF Editor: window title bar and native window title"
-  },
-  "gifEditorOpenGif": "Open a GIF to edit",
-  "@gifEditorOpenGif": {
-    "description": "GIF Editor landing card: headline copy"
-  },
-  "gifEditorOpenGifSubtitle": "Trim frames, adjust timing, and export a new GIF.",
-  "@gifEditorOpenGifSubtitle": {
-    "description": "GIF Editor landing card: subtitle copy below the headline"
-  },
-  "gifEditorOpenGifButton": "Open GIF…",
-  "@gifEditorOpenGifButton": {
-    "description": "GIF Editor: Open button label on the landing card"
-  },
   "gifEditorExportButton": "Export GIF",
   "@gifEditorExportButton": {
     "description": "GIF Editor: primary export action label"
@@ -2031,10 +1999,6 @@
   "@gifEditorStatsFrames": {
     "description": "GIF Editor stats: frame count",
     "placeholders": { "count": { "type": "int" } }
-  },
-  "gifEditorImporting": "Opening GIF…",
-  "@gifEditorImporting": {
-    "description": "GIF Editor: progress label while decoding an opened GIF"
   },
   "gifEditorOpenFailed": "Could not open this GIF",
   "@gifEditorOpenFailed": {
@@ -2212,11 +2176,7 @@
   "@gifEditorCancel": {
     "description": "GIF Editor crop confirm bar: cancel button"
   },
-  "gifEditorClipboardEmpty": "No GIF file on the clipboard",
-  "@gifEditorClipboardEmpty": {
-    "description": "GIF Editor: toast when clipboard-open finds no copied .gif file"
-  },
-  "settingsFlowOpenGifEditor": "Open in GIF Editor",
+  "settingsFlowOpenGifEditor": "Open in Image Editor",
   "@settingsFlowOpenGifEditor": {
     "description": "Settings > Recording > after-recording flow: open the finished recording in the GIF editor"
   },
@@ -2293,8 +2253,8 @@
   "@gifEditorCinemagraph": {
     "description": "GIF Editor toolbar: freeze everything outside a chosen region"
   },
-  "trayOpenGifEditor": "Open GIF Editor",
-  "@trayOpenGifEditor": {
-    "description": "Tray menu: reveal the GIF Editor window"
+  "editorGifBadge": "GIF",
+  "@editorGifBadge": {
+    "description": "Image Editor: small badge marking a GIF document (title bar chip and recent tile)"
   }
 }

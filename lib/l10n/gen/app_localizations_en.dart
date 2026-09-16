@@ -1047,19 +1047,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Open the Image Editor and load the clipboard image';
 
   @override
-  String get actionOpenGifEditor => 'Open GIF Editor';
-
-  @override
-  String get actionOpenGifEditorHint => 'Open the GIF Editor';
-
-  @override
-  String get actionOpenGifEditorClipboard => 'Open GIF Editor with Clipboard';
-
-  @override
-  String get actionOpenGifEditorClipboardHint =>
-      'Open the GIF Editor and load the copied GIF file';
-
-  @override
   String get actionPinCapture => 'Pin Screenshot';
 
   @override
@@ -1411,7 +1398,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorOpenImageSubtitle =>
-      'Annotate, crop, and re-export any image in the same toolkit you use to screenshot.';
+      'Annotate, crop and re-export any image, or edit a GIF frame by frame, in the same toolkit you use to screenshot.';
 
   @override
   String get editorOpenImageButton => 'Open Image…';
@@ -1674,19 +1661,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get keyCapNone => 'None';
 
   @override
-  String get gifEditorTitleBar => 'GIF Editor';
-
-  @override
-  String get gifEditorOpenGif => 'Open a GIF to edit';
-
-  @override
-  String get gifEditorOpenGifSubtitle =>
-      'Trim frames, adjust timing, and export a new GIF.';
-
-  @override
-  String get gifEditorOpenGifButton => 'Open GIF…';
-
-  @override
   String get gifEditorExportButton => 'Export GIF';
 
   @override
@@ -1699,9 +1673,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String gifEditorStatsFrames(int count) {
     return '$count frames';
   }
-
-  @override
-  String get gifEditorImporting => 'Opening GIF…';
 
   @override
   String get gifEditorOpenFailed => 'Could not open this GIF';
@@ -1835,10 +1806,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorCancel => 'Cancel';
 
   @override
-  String get gifEditorClipboardEmpty => 'No GIF file on the clipboard';
-
-  @override
-  String get settingsFlowOpenGifEditor => 'Open in GIF Editor';
+  String get settingsFlowOpenGifEditor => 'Open in Image Editor';
 
   @override
   String get settingsFlowOpenGifEditorHint =>
@@ -1899,5 +1867,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gifEditorCinemagraph => 'Cinemagraph';
 
   @override
-  String get trayOpenGifEditor => 'Open GIF Editor';
+  String get editorGifBadge => 'GIF';
 }

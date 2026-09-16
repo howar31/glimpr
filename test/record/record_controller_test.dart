@@ -157,7 +157,7 @@ void main() {
       copyFileFn: (p) async => filesCopied.add(p),
       revealFn: (p) async => revealed.add(p),
       shareFn: (p) async => shared.add(p),
-      openGifEditorFn: (p) async => gifEdits.add(p),
+      openEditorFn: (p) async => gifEdits.add(p),
       now: () => DateTime(2026, 6, 12, 10, 30),
     );
   }

@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/gif_editor/gif_editor_surface.dart';
 import 'package:glimpr/image_editor/checkerboard.dart';
 import 'package:glimpr/image_editor/image_editor_app.dart';
 import 'package:glimpr/image_editor/recent_images.dart';
@@ -12,6 +14,7 @@ import 'package:glimpr/settings/settings.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
+import '../support/gif_fixture.dart';
 import '../support/mock_channels.dart';
 
 // The standalone Image Editor SHELL: gallery landing / open card / recent tiles
@@ -102,23 +105,123 @@ void main() {
     expect(find.text('Recent'), findsNothing);
   });
 
-  testWidgets('a .gif ingested here forwards to the GIF editor',
+  /// Drives a real GIF decode: the open chain does IO + engine decode, so
+  /// interleave real-async turns with pumps until [finder] resolves.
+  Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (finder.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    expect(finder, findsOneWidget);
+  }
+
+  String writeGif(String name) {
+    final path = '${tmp.path}/$name';
+    File(path).writeAsBytesSync(twoFrameGifFixture());
+    return path;
+  }
+
+  testWidgets('a .gif loaded here mounts the GIF surface, not a relay',
       (tester) async {
-    // Route check only: the gif must NOT load into this editor, and the
-    // forward must ride the editor channel (native reveals the GIF window).
+    // macOS-shaped: the title-bar GIF chip / meta chord.
+    debugPlatformOverride = TargetPlatform.macOS;
     final calls = mockMethodChannel(channel);
-    final gifPath = '${tmp.path}/anim.GIF';
-    File(gifPath).writeAsBytesSync([0x47, 0x49, 0x46]); // content unread
+    final gifPath = writeGif('anim.gif');
     await pumpApp(tester);
-    await pushFromNative(channel, 'loadPath', gifPath);
+    unawaited(pushFromNative(channel, 'loadPath', gifPath));
+    await pumpUntilFound(tester, find.byType(GifEditorSurface));
+    expect(find.byKey(const Key('gif-editor-canvas')), findsOneWidget);
+    expect(calls.where((c) => c.method == 'openGifEditor'), isEmpty);
+    expect(find.text('Open an image to edit'), findsNothing);
+    // The title bar marks the document kind.
+    expect(find.text('GIF'), findsOneWidget);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('Home from a GIF returns to the landing', (tester) async {
+    // macOS-shaped: the title-bar GIF chip / meta chord.
+    debugPlatformOverride = TargetPlatform.macOS;
+    mockMethodChannel(channel);
+    final gifPath = writeGif('anim.gif');
+    await pumpApp(tester);
+    unawaited(pushFromNative(channel, 'loadPath', gifPath));
+    await pumpUntilFound(tester, find.byType(GifEditorSurface));
+    await tester.tap(find.byTooltip('Home'));
+    // The title bar's double-tap recognizer holds the arena; the single tap
+    // fires only after the double-tap window lapses.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.byType(GifEditorSurface), findsNothing);
+    // Temp-dir files are not recorded as recents, so the open card shows.
+    expect(find.text('Open Image…'), findsOneWidget);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('a dirty GIF confirms on requestClose; cancel keeps it',
+      (tester) async {
+    final calls = mockMethodChannel(channel);
+    final gifPath = writeGif('anim.gif');
+    await pumpApp(tester);
+    unawaited(pushFromNative(channel, 'loadPath', gifPath));
+    await pumpUntilFound(tester, find.byType(GifEditorSurface));
+    // Select frame 0 and delete it: the document is now dirty.
+    await tester.tap(find.byKey(const Key('gif-frame-0')));
     await tester.pump();
-    final forward =
-        calls.where((c) => c.method == 'openGifEditor').toList();
-    expect(forward, hasLength(1));
-    expect(forward.single.arguments, gifPath);
-    // Still on the landing: nothing was loaded or recorded here.
-    expect(find.text('Open an image to edit'), findsOneWidget);
-    expect(find.text('Recent'), findsNothing);
+    await tester.tap(find.byKey(const Key('gif-op-delete')));
+    await tester.pump();
+    unawaited(pushFromNative(channel, 'requestClose'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GifEditorSurface), findsOneWidget);
+    expect(calls.where((c) => c.method == 'hideEditor'), isEmpty);
+    // Confirming hides the window and drops the document.
+    unawaited(pushFromNative(channel, 'requestClose'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(calls.where((c) => c.method == 'hideEditor'), hasLength(1));
+    expect(find.byType(GifEditorSurface), findsNothing);
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('loadClipboard with no image but a copied .gif file loads it',
+      (tester) async {
+    mockMethodChannel(channel);
+    final gifPath = writeGif('clip.gif');
+    mockMethodChannel(const MethodChannel('glimpr/clipboard'),
+        handler: (call) {
+      if (call.method == 'readFilePath') return gifPath;
+      return null; // readImage: no bitmap on the clipboard
+    });
+    await pumpApp(tester);
+    unawaited(pushFromNative(channel, 'loadClipboard'));
+    await pumpUntilFound(tester, find.byType(GifEditorSurface));
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  testWidgets('a recent .gif tile carries the GIF badge', (tester) async {
+    mockMethodChannel(channel);
+    final store = RecentImagesStore(Settings.instance.store);
+    final gifPath = '${tmp.path}/anim.gif';
+    File(gifPath).writeAsBytesSync(const [0]); // existence only
+    await store.add(gifPath);
+    await store.add(path1);
+    await pumpApp(tester);
+    expect(find.text('anim.gif'), findsOneWidget);
+    expect(find.text('shot1.png'), findsOneWidget);
+    expect(find.text('GIF'), findsOneWidget); // one badge, on the gif tile only
+  });
+
+  testWidgets('cmd-O opens the file picker from the landing', (tester) async {
+    // macOS-shaped: the title-bar GIF chip / meta chord.
+    debugPlatformOverride = TargetPlatform.macOS;
+    final calls = mockMethodChannel(channel);
+    await pumpApp(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(calls.map((c) => c.method), contains('openPanel'));
   });
 
   testWidgets('seeded recents -> the gallery grid + open bar', (tester) async {

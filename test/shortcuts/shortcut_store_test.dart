@@ -58,4 +58,20 @@ void main() {
     final dupes = duplicateActionKeys({'editor.crop': c, 'editor.blur': c});
     expect(dupes, containsAll(['editor.crop', 'editor.blur']));
   });
+
+  test('stored overrides for unknown action keys are dropped', () async {
+    final store = FakeStore();
+    final s = ShortcutStore(store);
+    const custom = HotkeyBinding(
+      physicalKey: PhysicalKeyboardKey.digit9,
+      logicalKey: LogicalKeyboardKey.digit9,
+      modifiers: {HotkeyModifier.meta, HotkeyModifier.alt, HotkeyModifier.shift},
+    );
+    // A key from a removed feature, persisted by an older build.
+    await s.saveAll({'global.removedAction': custom, kCaptureAreaKey: custom});
+    final all = await s.all();
+    expect(all.containsKey('global.removedAction'), isFalse);
+    expect(all[kCaptureAreaKey], custom);
+    expect(await s.bindingForRaw('global.removedAction'), isNull);
+  });
 }

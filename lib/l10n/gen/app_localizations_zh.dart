@@ -1001,18 +1001,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionOpenEditorClipboardHint => '開啟圖片編輯器並載入剪貼簿圖片';
 
   @override
-  String get actionOpenGifEditor => '開啟 GIF 編輯器';
-
-  @override
-  String get actionOpenGifEditorHint => '開啟 GIF 編輯器';
-
-  @override
-  String get actionOpenGifEditorClipboard => '以剪貼簿開啟 GIF 編輯器';
-
-  @override
-  String get actionOpenGifEditorClipboardHint => '開啟 GIF 編輯器並載入剪貼簿複製的 GIF 檔案';
-
-  @override
   String get actionPinCapture => '釘選截圖';
 
   @override
@@ -1356,7 +1344,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorOpenImage => '開啟圖片以編輯';
 
   @override
-  String get editorOpenImageSubtitle => '以截圖時使用的同一套工具為任何圖片加上標註、裁切並重新輸出。';
+  String get editorOpenImageSubtitle =>
+      '以截圖時使用的同一套工具為任何圖片加上標註、裁切並重新輸出，或逐幀編輯 GIF。';
 
   @override
   String get editorOpenImageButton => '開啟圖片…';
@@ -1612,18 +1601,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get keyCapNone => '無';
 
   @override
-  String get gifEditorTitleBar => 'GIF 編輯器';
-
-  @override
-  String get gifEditorOpenGif => '開啟 GIF 以編輯';
-
-  @override
-  String get gifEditorOpenGifSubtitle => '修剪幀、調整時間，並輸出新的 GIF。';
-
-  @override
-  String get gifEditorOpenGifButton => '開啟 GIF…';
-
-  @override
   String get gifEditorExportButton => '輸出 GIF';
 
   @override
@@ -1636,9 +1613,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String gifEditorStatsFrames(int count) {
     return '$count 幀';
   }
-
-  @override
-  String get gifEditorImporting => '正在開啟 GIF…';
 
   @override
   String get gifEditorOpenFailed => '無法開啟這個 GIF';
@@ -1772,10 +1746,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorCancel => '取消';
 
   @override
-  String get gifEditorClipboardEmpty => '剪貼簿沒有 GIF 檔案';
-
-  @override
-  String get settingsFlowOpenGifEditor => '在 GIF 編輯器開啟';
+  String get settingsFlowOpenGifEditor => '在圖片編輯器開啟';
 
   @override
   String get settingsFlowOpenGifEditorHint => '僅限 GIF 錄影；其他格式會略過';
@@ -1834,5 +1805,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gifEditorCinemagraph => '局部動態';
 
   @override
-  String get trayOpenGifEditor => '開啟 GIF 編輯器';
+  String get editorGifBadge => 'GIF';
 }
