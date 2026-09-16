@@ -259,6 +259,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   });
 
+  testWidgets('tile right-click -> Copy on a .gif copies the FILE, not pixels',
+      (tester) async {
+    final clip = mockMethodChannel(const MethodChannel('glimpr/clipboard'));
+    final store = RecentImagesStore(Settings.instance.store);
+    final gifPath = '${tmp.path}/anim.gif';
+    File(gifPath).writeAsBytesSync(twoFrameGifFixture());
+    await store.add(gifPath);
+    await store.add(path1);
+    await pumpApp(tester);
+    await ignoringOverflow(() async {
+      await tester.tap(find.text('anim.gif'), buttons: kSecondaryButton);
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Copy Image'));
+      await tester.pump();
+      await tester.pump();
+    });
+    final writes = clip.where((c) => c.method == 'writeFile').toList();
+    expect(writes, hasLength(1));
+    expect((writes.single.arguments as Map)['path'], gifPath);
+    expect(clip.where((c) => c.method == 'writeImage'), isEmpty);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+  });
+
   testWidgets('tile right-click -> Remove drops it from the grid + store',
       (tester) async {
     await seedRecents();

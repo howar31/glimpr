@@ -286,14 +286,16 @@ class _ImageEditorAppState extends State<ImageEditorApp>
         _toast(_l.editorToastCannotReadFile('$e'));
         return;
       }
-      _unloadImage(); // a static image gives way to the GIF document
       try {
         await _gifController.openBytes(bytes);
       } catch (_) {
+        // Like a static image that fails to decode: the current document
+        // stays; only a toast reports the failure.
         if (mounted) _toast(_l.gifEditorOpenFailed);
         return;
       }
       if (!mounted) return;
+      _unloadStaticImage(); // the static image gives way to the GIF document
       setState(() => _sourceName = p.basenameWithoutExtension(path));
       await _recordRecent(path);
       return;
@@ -384,11 +386,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     openFolderInFileManager(effectiveSaveDir(_cap.saveDir).path);
   }
 
-  /// Copy a recent file's image to the clipboard (tile context menu). Same
-  /// pasteboard call as the delivery copy leg.
+  /// Copy a recent file to the clipboard (tile context menu). Stills go on
+  /// the pasteboard as image pixels (the delivery copy leg); a GIF goes as a
+  /// FILE reference so the animation survives the paste (a bitmap copy would
+  /// flatten it to its first frame).
   Future<void> _copyRecent(String path) async {
     try {
-      await clipboardWriteImage(await File(path).readAsBytes());
+      if (path.toLowerCase().endsWith('.gif')) {
+        await clipboardWriteFile(path);
+      } else {
+        await clipboardWriteImage(await File(path).readAsBytes());
+      }
       _toast(_l.editorToastCopiedToClipboard);
     } catch (_) {
       _toast(_l.editorToastCopyFailed);
@@ -776,11 +784,17 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     _unloadImage();
   }
 
-  /// Dispose + reset the loaded image; the editor falls back to the landing.
+  /// Dispose + reset both document kinds; the editor falls back to the landing.
   void _unloadImage() {
     if (!mounted) return;
+    _gif?.close();
+    _unloadStaticImage();
+  }
+
+  /// Dispose + reset the static image only (a GIF document, if any, stays).
+  void _unloadStaticImage() {
+    if (!mounted) return;
     setState(() {
-      _gif?.close();
       _image?.dispose();
       _image = null;
       _bytes = null;
