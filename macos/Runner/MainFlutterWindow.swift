@@ -356,11 +356,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       self?.revealSettings()
       self?.roleChannel?.invokeMethod("showAbout", arguments: nil)
     }
-    // Check for updates: with a known update the Dart side opens the release
-    // page directly (no window); otherwise reveal Settings first so the About
-    // row can show the check running and its result.
-    statusItem?.onCheckUpdates = { [weak self] available in
-      if !available { self?.revealSettings() }
+    // Check for updates: always reveal Settings first. Dart then lands on
+    // About and either runs the check there (the row is the feedback) or,
+    // with a known update, opens the What's-new page so the user reads what
+    // is coming before choosing to install from the About row.
+    statusItem?.onCheckUpdates = { [weak self] _ in
+      self?.revealSettings()
       self?.roleChannel?.invokeMethod("trayCheckUpdates", arguments: nil)
     }
     recordingChannel?.onRecordingPauseChange = { [weak self] paused in

@@ -104,28 +104,7 @@ void main() {
     expect(args['label'], 'Update available: v9.9.9');
   });
 
-  testWidgets(
-      'tray click with a known update on an UNSUPPORTED build opens the page',
-      (tester) async {
-    final calls = mockMethodChannel(kRoleChannel,
-        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
-    // Not installed (win portable / dev tree): self-update declines.
-    mockMethodChannel(kUpdateChannel,
-        handler: (c) => c.method == 'updateSupported' ? false : null);
-    final store = FakeStore();
-    final settings = Settings(store);
-    await store.setString('update_latest_tag', 'v9.9.9');
-    await store.setString('update_latest_url', 'https://example.test/rel');
-    await openAbout(tester, settings);
-    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
-    await tester.pump();
-    final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
-    expect(opened, hasLength(1));
-    expect((opened.single.arguments as Map)['url'], 'https://example.test/rel');
-  });
-
-  testWidgets(
-      'tray click with a known update on a SUPPORTED build starts the install',
+  testWidgets('tray click with a known update opens the What\'s new page',
       (tester) async {
     final calls = mockMethodChannel(kRoleChannel,
         handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
@@ -135,22 +114,49 @@ void main() {
     final settings = Settings(store);
     await store.setString('update_latest_tag', 'v9.9.9');
     await store.setString('update_latest_url', 'https://example.test/rel');
-    await openAbout(tester, settings);
-    await tester.runAsync(
-        () => pushFromNative(kRoleChannel, 'trayCheckUpdates', null));
-    await tester.pump();
-    // The install path was taken (supported probed); the asset fetch then
-    // fails in the test environment (network is blocked), so the flow falls
-    // back to the release page — nothing hangs, nothing is left mid-phase.
-    expect(updateCalls.where((c) => c.method == 'updateSupported'),
-        hasLength(1));
-    final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
-    expect(opened, hasLength(1));
-    // The failure notice replaces the tappable row (it clears itself on a
-    // real-zone timer that the fake clock cannot advance here).
-    expect(find.text('Download failed; the release page has been opened'),
-        findsOneWidget);
-    expect(find.text('Update available: v9.9.9'), findsNothing);
+    await store.setString(
+        UpdateChecker.releasesKey,
+        jsonEncode([
+          {
+            'tag': 'v9.9.9',
+            'url': 'https://example.test/rel',
+            'notes': '<!-- glimpr:notes lang=en -->\n- **Nine**: n\n<!-- /glimpr:notes -->'
+          },
+        ]));
+    await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
+    await tester.pumpAndSettle();
+    // Nothing installs or opens externally; the page is on top of About.
+    expect(updateCalls, isEmpty);
+    expect(calls.where((c) => c.method == 'openExternalUrl'), isEmpty);
+    expect(find.text('Nine'), findsOneWidget);
+    // A second click does not stack another copy.
+    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
+    await tester.pumpAndSettle();
+    expect(find.text('Nine'), findsOneWidget);
+    // Back lands on About with the tappable update row.
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    expect(find.text('Update available: v9.9.9'), findsOneWidget);
+  });
+
+  testWidgets('tray click with a known update but no notes lands on About',
+      (tester) async {
+    mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final updateCalls = mockMethodChannel(kUpdateChannel,
+        handler: (c) => c.method == 'updateSupported' ? true : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
+    await tester.pumpAndSettle();
+    expect(updateCalls, isEmpty);
+    expect(find.text('Update available: v9.9.9'), findsOneWidget);
   });
 
   testWidgets('tray click without a known update lands on About and checks',

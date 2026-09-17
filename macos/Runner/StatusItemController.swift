@@ -35,9 +35,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   // About Glimpr menu item → reveal Settings on the About pane (set by the host).
   var onAbout: (() -> Void)?
   // "Check for updates" menu item. Dart owns the state: the label follows the
-  // About row (idle wording vs "Update available: vX.Y.Z") via setUpdateStatus,
-  // and the click reports whether an update is already known so the host can
-  // skip revealing Settings when it will just open the release page.
+  // About row (idle wording vs "Update available: vX.Y.Z") via setUpdateStatus;
+  // the click reports whether an update is already known (the host currently
+  // reveals Settings either way and lets Dart pick the About / What's-new view).
   var onCheckUpdates: ((_ updateAvailable: Bool) -> Void)?
   private var updateItem: NSMenuItem?
   private var updateAvailable = false

@@ -377,15 +377,18 @@ class _SettingsAppState extends State<SettingsApp>
       setState(() => _section = _kAboutSection);
     }
     if (call.method == 'trayCheckUpdates' && mounted) {
-      final url = _updateUrl;
-      final tag = _updateAvailableTag;
-      if (tag != null && url != null) {
-        await _startInstall(tag, url);
+      // Native revealed the Settings window before this call; land on the
+      // About pane either way. With a known update, open the What's-new
+      // page on top (owner ruling 2026-09-17: read first, install from the
+      // About row); otherwise run the manual check there so the row itself
+      // is the feedback (checking -> up-to-date / new-version states).
+      setState(() => _section = _kAboutSection);
+      if (_updateAvailableTag != null) {
+        if (_notesSections.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _openWhatsNew());
+          WidgetsBinding.instance.ensureVisualUpdate();
+        }
       } else {
-        // Native revealed the Settings window before this call; land on the
-        // About pane and run the manual check there so the row itself is the
-        // feedback (checking -> up-to-date / new-version states).
-        setState(() => _section = _kAboutSection);
         await _checkForUpdates();
       }
     }
@@ -1283,6 +1286,8 @@ class _SettingsAppState extends State<SettingsApp>
     final sections = _notesSections;
     if (ctx == null || sections.isEmpty) return;
     final tokens = GlimprTheme.of(ctx);
+    // A repeat tray click must not stack a second copy.
+    Navigator.of(ctx).popUntil((r) => r.isFirst);
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => glimprLicenseSurface(
           tokens,

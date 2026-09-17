@@ -460,12 +460,11 @@ bool FlutterWindow::OnCreate() {
             if (editor_window_) editor_window_->ClearRecent();
           },
           [this]() {
-            // With a known update the Dart side opens the release page
-            // directly (no window); otherwise reveal Settings first so the
-            // About row can show the check running and its result.
-            if (!tray_icon_ || !tray_icon_->UpdateAvailable()) {
-              RevealControlWindow();
-            }
+            // Always reveal Settings first. Dart then lands on About and
+            // either runs the check there (the row is the feedback) or, with
+            // a known update, opens the What's-new page so the user reads
+            // what is coming before installing from the About row.
+            RevealControlWindow();
             role_channel_->InvokeMethod("trayCheckUpdates", nullptr);
           },
       });
