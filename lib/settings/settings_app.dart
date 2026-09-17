@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
 
 import 'licenses_page.dart';
+import 'whats_new_page.dart';
 import '../channels.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
@@ -40,6 +41,7 @@ import '../theme/glimpr_theme.dart';
 import 'login_item.dart';
 import 'settings.dart';
 import 'token_picker.dart';
+import '../update/release_notes.dart';
 import '../update/update_check.dart';
 import '../update/updater.dart';
 import 'dart:io' show Directory;
@@ -138,6 +140,12 @@ class _SettingsAppState extends State<SettingsApp>
   // opened) before the tappable "update available" row returns.
   bool _updateFailedNotice = false;
   Timer? _updateFailedTimer;
+  // "What's new" for the latest known release (the pending update, or the
+  // running version once up to date): parsed from the persisted notes body
+  // in the UI language; null hides the About entry.
+  String? _notesTag;
+  String? _notesUrl;
+  List<ReleaseNoteItem>? _notesItems;
   late final UpdateChecker _updateChecker = UpdateChecker(
     store: widget.settings.store,
     fetchLatest: defaultFetchLatest,
@@ -298,12 +306,28 @@ class _SettingsAppState extends State<SettingsApp>
     final url = await _s.store.getString('update_latest_url');
     if (tag == null || url == null) return;
     final version = await _appVersionFuture;
+    if (!mounted) return;
+    await _loadNotes(tag, url);
     if (!mounted || !UpdateChecker.isNewer(version, tag)) return;
     setState(() {
       _updateAvailableTag = tag;
       _updateUrl = url;
     });
     _pushTrayUpdateStatus();
+  }
+
+  // Parse the persisted notes for [tag] in the UI language (English
+  // fallback inside the parser). The body is what the checker stored on its
+  // last successful fetch, so it always describes [tag].
+  Future<void> _loadNotes(String tag, String url) async {
+    final body = await _s.store.getString('update_latest_notes') ?? '';
+    if (!mounted) return;
+    final items = parseReleaseNotes(body, _l.localeName);
+    setState(() {
+      _notesTag = tag;
+      _notesUrl = url;
+      _notesItems = items;
+    });
   }
 
   // One-click install of [tag] for supported (installed) builds; anything
@@ -1043,6 +1067,18 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 18),
+      // What's new: its own card, next to the version it describes (not one
+      // of the external links below). Hidden until a release carries notes.
+      if (_notesItems != null && _notesTag != null) ...[
+        GlassCard.rows([
+          _aboutLinkRow(t,
+              icon: Icons.auto_awesome,
+              label: _l.settingsAboutWhatsNew(_notesTag!),
+              external: false,
+              onTap: _openWhatsNew),
+        ]),
+        const SizedBox(height: 12),
+      ],
       GlassCard.rows([
         _aboutLinkRow(t,
             // The sponsor page routes donors itself; the heart is its mark.
@@ -1212,6 +1248,8 @@ class _SettingsAppState extends State<SettingsApp>
     });
     final r = await _updateChecker.checkNow();
     if (!mounted) return;
+    if (r != null) await _loadNotes(r.latestTag, r.url);
+    if (!mounted) return;
     setState(() {
       _updateChecking = false;
       if (r != null && r.isNewer) {
@@ -1229,6 +1267,23 @@ class _SettingsAppState extends State<SettingsApp>
   // licenses_page.dart). It reads the SAME auto-generated LicenseRegistry data
   // as Flutter's stock page, just rendered in our own chrome (flat menuBg
   // surface, traffic-light-safe header) — no elevation seams / vibrancy bands.
+  void _openWhatsNew() {
+    final ctx = _pageContext;
+    final items = _notesItems;
+    final tag = _notesTag;
+    if (ctx == null || items == null || tag == null) return;
+    final tokens = GlimprTheme.of(ctx);
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => glimprLicenseSurface(
+          tokens,
+          WhatsNewView(
+              version: tag,
+              items: items,
+              releaseUrl: _notesUrl ?? 'https://github.com/howar31/glimpr/releases',
+              onOpenUrl: _openUrl)),
+    ));
+  }
+
   void _openLicenses() {
     final ctx = _pageContext;
     if (ctx == null) return;

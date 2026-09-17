@@ -44,6 +44,17 @@
   "@settingsAboutWebsite": {
     "description": "About pane: link to the official website"
   },
+  "settingsAboutWhatsNew": "What's new in {version}",
+  "@settingsAboutWhatsNew": {
+    "description": "About pane row + page title: the release notes of the latest release (the pending update, or the running version when up to date)",
+    "placeholders": {
+      "version": { "type": "String" }
+    }
+  },
+  "settingsAboutWhatsNewOnGithub": "View the full notes on GitHub",
+  "@settingsAboutWhatsNewOnGithub": {
+    "description": "What's-new page: link to the release page"
+  },
   "settingsAboutLicenses": "Licenses & acknowledgements",
   "@settingsAboutLicenses": {
     "description": "About pane: opens the in-app open-source license page"

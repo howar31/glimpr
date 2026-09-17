@@ -35,7 +35,7 @@ void main() {
         store: store,
         fetchLatest: () async {
           fetchCalls++;
-          return latest;
+          return latest == null ? null : (latest.$1, latest.$2, '');
         },
         currentVersion: () async => '1.0.0 (1)',
         now: () => now,
@@ -59,6 +59,18 @@ void main() {
           'https://example.test/rel');
       expect(await store.getInt('update_last_check_ms'),
           now.millisecondsSinceEpoch);
+    });
+
+    test('persists the notes body alongside the tag', () async {
+      final c = UpdateChecker(
+        store: store,
+        fetchLatest: () async => ('v1.2.0', 'u', '## What\'s new\n- **A**: b'),
+        currentVersion: () async => '1.0.0 (1)',
+        now: () => now,
+      );
+      final r = await c.maybeCheck();
+      expect(r!.notes, contains('**A**'));
+      expect(await store.getString('update_latest_notes'), r.notes);
     });
 
     test('throttles within 6h, checks again after', () async {
@@ -120,7 +132,7 @@ void main() {
         store: store,
         fetchLatest: () async {
           fetchCalls++;
-          return ('v9.9.9', 'u');
+          return ('v9.9.9', 'u', '');
         },
         currentVersion: () async => '1.0.0 (1)',
         now: () => now,

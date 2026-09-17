@@ -198,4 +198,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(await store.getBool('update_check_enabled'), isFalse);
   });
+
+  const notesBody = """
+Lead.
+
+## What's new
+<!-- glimpr:notes lang=en -->
+- **Download progress**: percent and MB while it downloads.
+<!-- /glimpr:notes -->
+<details><summary>Chinese</summary>
+<!-- glimpr:notes lang=zh -->
+- **下載進度**：顯示百分比。
+<!-- /glimpr:notes -->
+</details>
+""";
+
+  testWidgets('persisted notes add a What\'s new card that opens the page',
+      (tester) async {
+    final calls = mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '9.9.9 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await store.setString('update_latest_notes', notesBody);
+    await openAbout(tester, settings);
+    // Up to date (same version): the card still describes the running release.
+    expect(find.text("What's new in v9.9.9"), findsOneWidget);
+    expect(find.text('Update available: v9.9.9'), findsNothing);
+    await tester.tap(find.text("What's new in v9.9.9"));
+    await tester.pumpAndSettle();
+    expect(find.text('Download progress'), findsOneWidget);
+    expect(find.text('percent and MB while it downloads.'), findsOneWidget);
+    await tester.tap(find.text('View the full notes on GitHub'));
+    await tester.pump();
+    final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
+    expect(opened, hasLength(1));
+    expect((opened.single.arguments as Map)['url'], 'https://example.test/rel');
+  });
+
+  testWidgets('no persisted notes: no What\'s new card', (tester) async {
+    mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await openAbout(tester, settings);
+    expect(find.textContaining("What's new"), findsNothing);
+  });
 }

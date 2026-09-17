@@ -42,6 +42,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAboutWebsite => 'Website';
 
   @override
+  String settingsAboutWhatsNew(String version) {
+    return 'What\'s new in $version';
+  }
+
+  @override
+  String get settingsAboutWhatsNewOnGithub => 'View the full notes on GitHub';
+
+  @override
   String get settingsAboutLicenses => 'Licenses & acknowledgements';
 
   @override

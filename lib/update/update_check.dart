@@ -9,10 +9,17 @@ import '../settings/settings_store.dart';
 /// download/install lives in updater.dart.
 class UpdateCheckResult {
   const UpdateCheckResult(
-      {required this.latestTag, required this.url, required this.isNewer});
+      {required this.latestTag,
+      required this.url,
+      required this.isNewer,
+      this.notes = ''});
   final String latestTag;
   final String url;
   final bool isNewer;
+
+  /// The release's raw notes body (markdown); '' when absent. Parsed by
+  /// release_notes.dart for the About page's "What's new".
+  final String notes;
 }
 
 class UpdateChecker {
@@ -25,9 +32,10 @@ class UpdateChecker {
 
   final SettingsStore store;
 
-  /// Returns (tagName, htmlUrl) of the latest stable release, or null on any
-  /// failure (network, non-200, malformed body). Injected for tests.
-  final Future<(String, String)?> Function() fetchLatest;
+  /// Returns (tagName, htmlUrl, notesBody) of the latest stable release, or
+  /// null on any failure (network, non-200, malformed body). Injected for
+  /// tests.
+  final Future<(String, String, String)?> Function() fetchLatest;
 
   /// The running version string as the role channel reports it: "x.y.z (b)".
   final Future<String> Function() currentVersion;
@@ -38,6 +46,7 @@ class UpdateChecker {
   static const _kLastCheckMs = 'update_last_check_ms';
   static const _kLatestTag = 'update_latest_tag';
   static const _kLatestUrl = 'update_latest_url';
+  static const _kLatestNotes = 'update_latest_notes';
   /// Minimum gap between automatic checks. Shared by the launch check and
   /// the resident poll, so a relaunch inside the window stays silent.
   static const throttle = Duration(hours: 6);
@@ -65,13 +74,15 @@ class UpdateChecker {
     await store.setInt(_kLastCheckMs, nowMs);
     final latest = await fetchLatest();
     if (latest == null) return null;
-    final (tag, url) = latest;
+    final (tag, url, notes) = latest;
     await store.setString(_kLatestTag, tag);
     await store.setString(_kLatestUrl, url);
+    await store.setString(_kLatestNotes, notes);
     return UpdateCheckResult(
         latestTag: tag,
         url: url,
-        isNewer: isNewer(await currentVersion(), tag));
+        isNewer: isNewer(await currentVersion(), tag),
+        notes: notes);
   }
 
   /// Pure semver-triple compare; any parse failure means "not newer".
@@ -121,7 +132,7 @@ Timer startUpdatePolling(UpdateChecker checker,
 
 /// Production fetcher: GitHub latest-release endpoint (excludes drafts and
 /// prereleases). One short-lived connection; null on any failure.
-Future<(String, String)?> defaultFetchLatest() async {
+Future<(String, String, String)?> defaultFetchLatest() async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
     final req = await client.getUrl(Uri.parse(
@@ -134,8 +145,9 @@ Future<(String, String)?> defaultFetchLatest() async {
     final json = jsonDecode(body);
     final tag = json['tag_name'];
     final url = json['html_url'];
+    final notes = json['body'];
     if (tag is! String || url is! String || tag.isEmpty) return null;
-    return (tag, url);
+    return (tag, url, notes is String ? notes : '');
   } catch (_) {
     return null;
   } finally {

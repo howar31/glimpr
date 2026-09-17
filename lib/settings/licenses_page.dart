@@ -60,7 +60,7 @@ class _LicensesViewState extends State<LicensesView> {
     final l = AppLocalizations.of(context);
     return Column(
       children: [
-        _LicenseHeader(title: l.settingsAboutLicenses),
+        GlimprSubpageHeader(title: l.settingsAboutLicenses),
         Expanded(
           child: FutureBuilder<List<_LicensePackage>>(
             future: _future,
@@ -148,7 +148,7 @@ class _LicenseDetailView extends StatelessWidget {
     }
     return Column(
       children: [
-        _LicenseHeader(title: package.name),
+        GlimprSubpageHeader(title: package.name),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(28, 8, 28, 36),
@@ -177,9 +177,10 @@ class _LicenseDetailView extends StatelessWidget {
 }
 
 /// Back chevron + centered title, inset below the traffic-light zone. Shared by
-/// the master + detail views; the back chevron pops the current route.
-class _LicenseHeader extends StatelessWidget {
-  const _LicenseHeader({required this.title});
+/// the license master + detail views and the What's-new page; the back chevron
+/// pops the current route.
+class GlimprSubpageHeader extends StatelessWidget {
+  const GlimprSubpageHeader({super.key, required this.title});
   final String title;
 
   @override

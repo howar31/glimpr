@@ -164,6 +164,18 @@ abstract class AppLocalizations {
   /// **'Website'**
   String get settingsAboutWebsite;
 
+  /// About pane row + page title: the release notes of the latest release (the pending update, or the running version when up to date)
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s new in {version}'**
+  String settingsAboutWhatsNew(String version);
+
+  /// What's-new page: link to the release page
+  ///
+  /// In en, this message translates to:
+  /// **'View the full notes on GitHub'**
+  String get settingsAboutWhatsNewOnGithub;
+
   /// About pane: opens the in-app open-source license page
   ///
   /// In en, this message translates to:
