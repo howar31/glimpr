@@ -51,9 +51,17 @@
       "version": { "type": "String" }
     }
   },
-  "settingsAboutWhatsNewOnGithub": "View the full notes on GitHub",
-  "@settingsAboutWhatsNewOnGithub": {
-    "description": "What's-new page: link to the release page"
+  "settingsAboutWhatsNewRange": "What's new from {from} to {to}",
+  "@settingsAboutWhatsNewRange": {
+    "description": "About pane row + page title when several releases are newer than the running version; from = oldest pending, to = latest",
+    "placeholders": {
+      "from": { "type": "String" },
+      "to": { "type": "String" }
+    }
+  },
+  "settingsAboutWhatsNewAllOnGithub": "View all releases on GitHub",
+  "@settingsAboutWhatsNewAllOnGithub": {
+    "description": "What's-new page: link to the releases list"
   },
   "settingsAboutLicenses": "Licenses & acknowledgements",
   "@settingsAboutLicenses": {

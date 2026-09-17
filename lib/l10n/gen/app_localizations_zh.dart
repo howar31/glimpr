@@ -47,7 +47,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsAboutWhatsNewOnGithub => '在 GitHub 查看完整說明';
+  String settingsAboutWhatsNewRange(String from, String to) {
+    return '$from 到 $to 的新功能';
+  }
+
+  @override
+  String get settingsAboutWhatsNewAllOnGithub => '在 GitHub 查看所有版本';
 
   @override
   String get settingsAboutLicenses => '授權與第三方致謝';

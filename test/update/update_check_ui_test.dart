@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/channels.dart';
 import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
+import 'package:glimpr/update/update_check.dart';
 import 'package:glimpr/update/updater.dart';
 
 import '../support/fake_store.dart';
@@ -221,7 +224,13 @@ Lead.
     final settings = Settings(store);
     await store.setString('update_latest_tag', 'v9.9.9');
     await store.setString('update_latest_url', 'https://example.test/rel');
-    await store.setString('update_latest_notes', notesBody);
+    await store.setString(
+        UpdateChecker.releasesKey,
+        jsonEncode([
+          {'tag': 'v9.9.9', 'url': 'https://example.test/rel', 'notes': notesBody},
+          // Older than the running version: never listed.
+          {'tag': 'v9.9.8', 'url': 'u8', 'notes': notesBody},
+        ]));
     await openAbout(tester, settings);
     // Up to date (same version): the card still describes the running release.
     expect(find.text("What's new in v9.9.9"), findsOneWidget);
@@ -230,11 +239,60 @@ Lead.
     await tester.pumpAndSettle();
     expect(find.text('Download progress'), findsOneWidget);
     expect(find.text('percent and MB while it downloads.'), findsOneWidget);
-    await tester.tap(find.text('View the full notes on GitHub'));
+    // One section: no version heading inside the page.
+    expect(find.text('v9.9.9'), findsNothing);
+    await tester.tap(find.text('View all releases on GitHub'));
     await tester.pump();
     final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
     expect(opened, hasLength(1));
-    expect((opened.single.arguments as Map)['url'], 'https://example.test/rel');
+    expect((opened.single.arguments as Map)['url'],
+        'https://github.com/howar31/glimpr/releases');
+  });
+
+  testWidgets('several pending releases list as sections, newest first',
+      (tester) async {
+    mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v1.2.0');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    await store.setString(
+        UpdateChecker.releasesKey,
+        jsonEncode([
+          {
+            'tag': 'v1.2.0',
+            'url': 'u2',
+            'notes': '<!-- glimpr:notes lang=en -->\n- **Two**: b\n<!-- /glimpr:notes -->'
+          },
+          // No tagged block: dropped, not shown as an empty section.
+          {'tag': 'v1.1.5', 'url': 'u15', 'notes': '- **Untagged**: x'},
+          {
+            'tag': 'v1.1.0',
+            'url': 'u1',
+            'notes': '<!-- glimpr:notes lang=en -->\n- **One**: a\n<!-- /glimpr:notes -->'
+          },
+          // The running version itself: not pending.
+          {
+            'tag': 'v1.0.0',
+            'url': 'u0',
+            'notes': '<!-- glimpr:notes lang=en -->\n- **Zero**: z\n<!-- /glimpr:notes -->'
+          },
+        ]));
+    await openAbout(tester, settings);
+    expect(find.text("What's new from v1.1.0 to v1.2.0"), findsOneWidget);
+    await tester.tap(find.text("What's new from v1.1.0 to v1.2.0"));
+    await tester.pumpAndSettle();
+    expect(find.text('v1.2.0'), findsOneWidget);
+    expect(find.text('v1.1.0'), findsOneWidget);
+    expect(find.text('Two'), findsOneWidget);
+    expect(find.text('One'), findsOneWidget);
+    expect(find.text('Untagged'), findsNothing);
+    expect(find.text('Zero'), findsNothing);
+    // Newest first.
+    final two = tester.getTopLeft(find.text('Two'));
+    final one = tester.getTopLeft(find.text('One'));
+    expect(two.dy, lessThan(one.dy));
   });
 
   testWidgets('no persisted notes: no What\'s new card', (tester) async {

@@ -5,47 +5,57 @@ import '../theme/glimpr_theme.dart';
 import '../update/release_notes.dart';
 import 'licenses_page.dart' show GlimprSubpageHeader;
 
-/// "What's new in vX.Y.Z": the release's bullet list in the settings chrome,
-/// with a link to the full notes on GitHub at the end. The items come from
-/// the persisted latest-release body (release_notes.dart); the page is only
-/// reachable when that parse produced something.
+/// "What's new": one section per release (newest first) in the settings
+/// chrome, with a link to the releases page at the end. The sections come
+/// from the persisted release list (release_notes.dart); the page is only
+/// reachable when at least one parsed. A single section shows no version
+/// heading (the page title already names it).
 class WhatsNewView extends StatelessWidget {
   const WhatsNewView({
     super.key,
-    required this.version,
-    required this.items,
-    required this.releaseUrl,
+    required this.title,
+    required this.sections,
+    required this.allReleasesUrl,
     required this.onOpenUrl,
   });
 
-  /// The release tag as shown ("v1.9.0").
-  final String version;
-  final List<ReleaseNoteItem> items;
-  final String releaseUrl;
+  final String title;
+  final List<ReleaseNoteSection> sections;
+  final String allReleasesUrl;
   final void Function(String url) onOpenUrl;
 
   @override
   Widget build(BuildContext context) {
     final t = GlimprTheme.of(context);
     final l = AppLocalizations.of(context);
+    final showHeadings = sections.length > 1;
     return Column(
       children: [
-        GlimprSubpageHeader(title: l.settingsAboutWhatsNew(version)),
+        GlimprSubpageHeader(title: title),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(28, 10, 28, 36),
             children: [
-              for (final item in items) _item(t, item),
+              for (var s = 0; s < sections.length; s++) ...[
+                if (showHeadings)
+                  Padding(
+                    padding: EdgeInsets.only(top: s == 0 ? 0 : 14, bottom: 10),
+                    child: Text(sections[s].tag,
+                        style: GlimprType.sansStyle(12.5, 700, t.fg3,
+                            letterSpacing: 0.3)),
+                  ),
+                for (final item in sections[s].items) _item(t, item),
+              ],
               const SizedBox(height: 10),
               MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => onOpenUrl(releaseUrl),
+                  onTap: () => onOpenUrl(allReleasesUrl),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(l.settingsAboutWhatsNewOnGithub,
+                      Text(l.settingsAboutWhatsNewAllOnGithub,
                           style: GlimprType.sansStyle(12.5, 600, t.accentFg)),
                       const SizedBox(width: 3),
                       Icon(Icons.north_east, size: 13, color: t.accentFg),

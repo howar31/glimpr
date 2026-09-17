@@ -140,15 +140,14 @@ class _SettingsAppState extends State<SettingsApp>
   // opened) before the tappable "update available" row returns.
   bool _updateFailedNotice = false;
   Timer? _updateFailedTimer;
-  // "What's new" for the latest known release (the pending update, or the
-  // running version once up to date): parsed from the persisted notes body
-  // in the UI language; null hides the About entry.
-  String? _notesTag;
-  String? _notesUrl;
-  List<ReleaseNoteItem>? _notesItems;
+  // "What's new": one section per release newer than the running version
+  // (the pending updates, newest first), or the latest release alone once
+  // up to date. Parsed from the persisted release list in the UI language;
+  // empty hides the About entry.
+  List<ReleaseNoteSection> _notesSections = const [];
   late final UpdateChecker _updateChecker = UpdateChecker(
     store: widget.settings.store,
-    fetchLatest: defaultFetchLatest,
+    fetchReleases: defaultFetchReleases,
     currentVersion: _loadAppVersion,
   );
   // Installed-build self-update; unsupported builds (win portable, dev tree)
@@ -307,7 +306,7 @@ class _SettingsAppState extends State<SettingsApp>
     if (tag == null || url == null) return;
     final version = await _appVersionFuture;
     if (!mounted) return;
-    await _loadNotes(tag, url);
+    await _loadNotes(version);
     if (!mounted || !UpdateChecker.isNewer(version, tag)) return;
     setState(() {
       _updateAvailableTag = tag;
@@ -316,18 +315,23 @@ class _SettingsAppState extends State<SettingsApp>
     _pushTrayUpdateStatus();
   }
 
-  // Parse the persisted notes for [tag] in the UI language (English
-  // fallback inside the parser). The body is what the checker stored on its
-  // last successful fetch, so it always describes [tag].
-  Future<void> _loadNotes(String tag, String url) async {
-    final body = await _s.store.getString('update_latest_notes') ?? '';
+  // Build the What's-new sections from the persisted release list: every
+  // release newer than [version] (newest first), else the latest one; each
+  // parsed in the UI language (English fallback inside the parser).
+  // Releases without a tagged block drop out silently.
+  Future<void> _loadNotes(String version) async {
+    final releases = ReleaseInfo.listFromJson(
+        await _s.store.getString(UpdateChecker.releasesKey));
     if (!mounted) return;
-    final items = parseReleaseNotes(body, _l.localeName);
-    setState(() {
-      _notesTag = tag;
-      _notesUrl = url;
-      _notesItems = items;
-    });
+    var wanted =
+        releases.where((r) => UpdateChecker.isNewer(version, r.tag)).toList();
+    if (wanted.isEmpty && releases.isNotEmpty) wanted = [releases.first];
+    final sections = <ReleaseNoteSection>[];
+    for (final r in wanted) {
+      final items = parseReleaseNotes(r.notes, _l.localeName);
+      if (items != null) sections.add(ReleaseNoteSection(r.tag, items));
+    }
+    setState(() => _notesSections = sections);
   }
 
   // One-click install of [tag] for supported (installed) builds; anything
@@ -1069,11 +1073,11 @@ class _SettingsAppState extends State<SettingsApp>
       const SizedBox(height: 18),
       // What's new: its own card, next to the version it describes (not one
       // of the external links below). Hidden until a release carries notes.
-      if (_notesItems != null && _notesTag != null) ...[
+      if (_notesSections.isNotEmpty) ...[
         GlassCard.rows([
           _aboutLinkRow(t,
               icon: Icons.auto_awesome,
-              label: _l.settingsAboutWhatsNew(_notesTag!),
+              label: _whatsNewTitle,
               external: false,
               onTap: _openWhatsNew),
         ]),
@@ -1248,7 +1252,7 @@ class _SettingsAppState extends State<SettingsApp>
     });
     final r = await _updateChecker.checkNow();
     if (!mounted) return;
-    if (r != null) await _loadNotes(r.latestTag, r.url);
+    if (r != null) await _loadNotes(await _appVersionFuture);
     if (!mounted) return;
     setState(() {
       _updateChecking = false;
@@ -1267,19 +1271,25 @@ class _SettingsAppState extends State<SettingsApp>
   // licenses_page.dart). It reads the SAME auto-generated LicenseRegistry data
   // as Flutter's stock page, just rendered in our own chrome (flat menuBg
   // surface, traffic-light-safe header) — no elevation seams / vibrancy bands.
+  // "What's new in v1.9.1" for one release; "What's new from v1.9.0 to
+  // v1.9.1" when several updates are pending (sections are newest first).
+  String get _whatsNewTitle => _notesSections.length == 1
+      ? _l.settingsAboutWhatsNew(_notesSections.single.tag)
+      : _l.settingsAboutWhatsNewRange(
+          _notesSections.last.tag, _notesSections.first.tag);
+
   void _openWhatsNew() {
     final ctx = _pageContext;
-    final items = _notesItems;
-    final tag = _notesTag;
-    if (ctx == null || items == null || tag == null) return;
+    final sections = _notesSections;
+    if (ctx == null || sections.isEmpty) return;
     final tokens = GlimprTheme.of(ctx);
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => glimprLicenseSurface(
           tokens,
           WhatsNewView(
-              version: tag,
-              items: items,
-              releaseUrl: _notesUrl ?? 'https://github.com/howar31/glimpr/releases',
+              title: _whatsNewTitle,
+              sections: sections,
+              allReleasesUrl: 'https://github.com/howar31/glimpr/releases',
               onOpenUrl: _openUrl)),
     ));
   }

@@ -12,30 +12,67 @@ class UpdateCheckResult {
       {required this.latestTag,
       required this.url,
       required this.isNewer,
-      this.notes = ''});
+      this.releases = const []});
   final String latestTag;
   final String url;
   final bool isNewer;
 
-  /// The release's raw notes body (markdown); '' when absent. Parsed by
-  /// release_notes.dart for the About page's "What's new".
-  final String notes;
+  /// The newest stable releases, newest first (the first is [latestTag]).
+  /// Their notes bodies feed the About page's "What's new".
+  final List<ReleaseInfo> releases;
 }
+
+/// One stable release as the check saw it. [notes] is the raw markdown
+/// body ('' when absent); release_notes.dart extracts the tagged bullets.
+class ReleaseInfo {
+  const ReleaseInfo({required this.tag, required this.url, this.notes = ''});
+  final String tag;
+  final String url;
+  final String notes;
+
+  Map<String, String> toJson() => {'tag': tag, 'url': url, 'notes': notes};
+
+  static ReleaseInfo? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final tag = j['tag'];
+    final url = j['url'];
+    final notes = j['notes'];
+    if (tag is! String || url is! String || tag.isEmpty) return null;
+    return ReleaseInfo(tag: tag, url: url, notes: notes is String ? notes : '');
+  }
+
+  /// The persisted list (see [UpdateChecker.releasesKey]) back to objects;
+  /// empty on malformed input.
+  static List<ReleaseInfo> listFromJson(String? s) {
+    if (s == null || s.isEmpty) return const [];
+    try {
+      final j = jsonDecode(s);
+      if (j is! List) return const [];
+      return [for (final e in j) ?fromJson(e)];
+    } catch (_) {
+      return const [];
+    }
+  }
+}
+
+/// How many stable releases the check keeps (one API page; the About page
+/// lists the ones newer than the running version, GitHub has the rest).
+const kReleaseHistory = 10;
 
 class UpdateChecker {
   UpdateChecker({
     required this.store,
-    required this.fetchLatest,
+    required this.fetchReleases,
     required this.currentVersion,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
   final SettingsStore store;
 
-  /// Returns (tagName, htmlUrl, notesBody) of the latest stable release, or
-  /// null on any failure (network, non-200, malformed body). Injected for
-  /// tests.
-  final Future<(String, String, String)?> Function() fetchLatest;
+  /// The newest stable releases, newest first, at most [kReleaseHistory];
+  /// null on any failure (network, non-200, malformed body), empty when the
+  /// repo has no stable release. Injected for tests.
+  final Future<List<ReleaseInfo>?> Function() fetchReleases;
 
   /// The running version string as the role channel reports it: "x.y.z (b)".
   final Future<String> Function() currentVersion;
@@ -46,7 +83,10 @@ class UpdateChecker {
   static const _kLastCheckMs = 'update_last_check_ms';
   static const _kLatestTag = 'update_latest_tag';
   static const _kLatestUrl = 'update_latest_url';
-  static const _kLatestNotes = 'update_latest_notes';
+
+  /// Settings key holding the JSON list of [ReleaseInfo] from the last
+  /// successful check (newest first).
+  static const releasesKey = 'update_releases';
   /// Minimum gap between automatic checks. Shared by the launch check and
   /// the resident poll, so a relaunch inside the window stays silent.
   static const throttle = Duration(hours: 6);
@@ -72,17 +112,18 @@ class UpdateChecker {
     // Stamp the attempt first so a failing endpoint is not hammered on
     // every launch.
     await store.setInt(_kLastCheckMs, nowMs);
-    final latest = await fetchLatest();
-    if (latest == null) return null;
-    final (tag, url, notes) = latest;
-    await store.setString(_kLatestTag, tag);
-    await store.setString(_kLatestUrl, url);
-    await store.setString(_kLatestNotes, notes);
+    final releases = await fetchReleases();
+    if (releases == null || releases.isEmpty) return null;
+    final latest = releases.first;
+    await store.setString(_kLatestTag, latest.tag);
+    await store.setString(_kLatestUrl, latest.url);
+    await store.setString(
+        releasesKey, jsonEncode([for (final r in releases) r.toJson()]));
     return UpdateCheckResult(
-        latestTag: tag,
-        url: url,
-        isNewer: isNewer(await currentVersion(), tag),
-        notes: notes);
+        latestTag: latest.tag,
+        url: latest.url,
+        isNewer: isNewer(await currentVersion(), latest.tag),
+        releases: releases);
   }
 
   /// Pure semver-triple compare; any parse failure means "not newer".
@@ -130,27 +171,49 @@ Timer startUpdatePolling(UpdateChecker checker,
   return Timer.periodic(interval, (_) => unawaited(tick()));
 }
 
-/// Production fetcher: GitHub latest-release endpoint (excludes drafts and
-/// prereleases). One short-lived connection; null on any failure.
-Future<(String, String, String)?> defaultFetchLatest() async {
+/// Production fetcher: the GitHub releases list, newest first. Drafts never
+/// reach an unauthenticated caller; prereleases (rc) are dropped here, so
+/// the first entry is what `releases/latest` would return. One short-lived
+/// connection; null on any failure.
+Future<List<ReleaseInfo>?> defaultFetchReleases() async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
+    // A few extra rows so rc entries in the window do not eat the quota.
     final req = await client.getUrl(Uri.parse(
-        'https://api.github.com/repos/howar31/glimpr/releases/latest'));
+        'https://api.github.com/repos/howar31/glimpr/releases?per_page=${kReleaseHistory + 5}'));
     req.headers.set(HttpHeaders.userAgentHeader, 'Glimpr');
     req.headers.set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
     final res = await req.close().timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return null;
     final body = await res.transform(utf8.decoder).join();
-    final json = jsonDecode(body);
-    final tag = json['tag_name'];
-    final url = json['html_url'];
-    final notes = json['body'];
-    if (tag is! String || url is! String || tag.isEmpty) return null;
-    return (tag, url, notes is String ? notes : '');
+    return parseReleaseList(body);
   } catch (_) {
     return null;
   } finally {
     client.close(force: true);
+  }
+}
+
+/// Pure JSON -> stable releases, newest first, capped at [kReleaseHistory];
+/// null on malformed input (unit-tested).
+List<ReleaseInfo>? parseReleaseList(String body) {
+  try {
+    final json = jsonDecode(body);
+    if (json is! List) return null;
+    final out = <ReleaseInfo>[];
+    for (final r in json) {
+      if (r is! Map) continue;
+      if (r['draft'] == true || r['prerelease'] == true) continue;
+      final tag = r['tag_name'];
+      final url = r['html_url'];
+      final notes = r['body'];
+      if (tag is! String || url is! String || tag.isEmpty) continue;
+      out.add(ReleaseInfo(
+          tag: tag, url: url, notes: notes is String ? notes : ''));
+      if (out.length == kReleaseHistory) break;
+    }
+    return out;
+  } catch (_) {
+    return null;
   }
 }

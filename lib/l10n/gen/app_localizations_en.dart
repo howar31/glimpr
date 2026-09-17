@@ -47,7 +47,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsAboutWhatsNewOnGithub => 'View the full notes on GitHub';
+  String settingsAboutWhatsNewRange(String from, String to) {
+    return 'What\'s new from $from to $to';
+  }
+
+  @override
+  String get settingsAboutWhatsNewAllOnGithub => 'View all releases on GitHub';
 
   @override
   String get settingsAboutLicenses => 'Licenses & acknowledgements';

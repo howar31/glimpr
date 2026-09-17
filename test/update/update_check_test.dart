@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/update/update_check.dart';
 
@@ -33,9 +35,11 @@ void main() {
       fetchCalls = 0;
       return UpdateChecker(
         store: store,
-        fetchLatest: () async {
+        fetchReleases: () async {
           fetchCalls++;
-          return latest == null ? null : (latest.$1, latest.$2, '');
+          return latest == null
+              ? null
+              : [ReleaseInfo(tag: latest.$1, url: latest.$2)];
         },
         currentVersion: () async => '1.0.0 (1)',
         now: () => now,
@@ -61,16 +65,34 @@ void main() {
           now.millisecondsSinceEpoch);
     });
 
-    test('persists the notes body alongside the tag', () async {
+    test('persists the release list with notes, newest first', () async {
       final c = UpdateChecker(
         store: store,
-        fetchLatest: () async => ('v1.2.0', 'u', '## What\'s new\n- **A**: b'),
+        fetchReleases: () async => const [
+          ReleaseInfo(tag: 'v1.2.0', url: 'u2', notes: '- **A**: b'),
+          ReleaseInfo(tag: 'v1.1.0', url: 'u1', notes: '- **C**: d'),
+        ],
         currentVersion: () async => '1.0.0 (1)',
         now: () => now,
       );
       final r = await c.maybeCheck();
-      expect(r!.notes, contains('**A**'));
-      expect(await store.getString('update_latest_notes'), r.notes);
+      expect(r!.latestTag, 'v1.2.0');
+      expect(r.releases, hasLength(2));
+      final stored = ReleaseInfo.listFromJson(
+          await store.getString(UpdateChecker.releasesKey));
+      expect(stored.map((e) => e.tag), ['v1.2.0', 'v1.1.0']);
+      expect(stored.first.notes, '- **A**: b');
+      expect(stored.last.url, 'u1');
+    });
+
+    test('an empty release list counts as a failed check', () async {
+      final c = UpdateChecker(
+        store: store,
+        fetchReleases: () async => const [],
+        currentVersion: () async => '1.0.0 (1)',
+        now: () => now,
+      );
+      expect(await c.maybeCheck(), isNull);
     });
 
     test('throttles within 6h, checks again after', () async {
@@ -130,9 +152,9 @@ void main() {
       var now = DateTime.utc(2026, 7, 9, 12);
       final checker = UpdateChecker(
         store: store,
-        fetchLatest: () async {
+        fetchReleases: () async {
           fetchCalls++;
-          return ('v9.9.9', 'u', '');
+          return const [ReleaseInfo(tag: 'v9.9.9', url: 'u')];
         },
         currentVersion: () async => '1.0.0 (1)',
         now: () => now,
@@ -152,6 +174,36 @@ void main() {
       expect(fetchCalls, 2);
       expect(hits, ['v9.9.9', 'v9.9.9']);
       timer.cancel();
+    });
+  });
+
+  group('parseReleaseList', () {
+    test('keeps stable releases newest first, drops rc/draft, caps at 10',
+        () {
+      final rows = <Map<String, Object?>>[
+        {'tag_name': 'v2.0.0-rc.1', 'html_url': 'rc', 'prerelease': true, 'body': 'x'},
+        {'tag_name': 'v1.9.1', 'html_url': 'u91', 'body': 'n91'},
+        {'tag_name': 'v1.9.0', 'html_url': 'u90', 'draft': true},
+        for (var i = 11; i >= 0; i--)
+          {'tag_name': 'v1.$i.5', 'html_url': 'u$i', 'body': null},
+      ];
+      final list = parseReleaseList(jsonEncode(rows))!;
+      expect(list, hasLength(10));
+      expect(list.first.tag, 'v1.9.1');
+      expect(list.first.notes, 'n91');
+      expect(list[1].tag, 'v1.11.5');
+      expect(list[1].notes, '');
+      expect(list.map((r) => r.tag), isNot(contains('v2.0.0-rc.1')));
+      expect(list.map((r) => r.tag), isNot(contains('v1.9.0')));
+    });
+
+    test('malformed input is null; a bad persisted list is empty', () {
+      expect(parseReleaseList('{}'), isNull);
+      expect(parseReleaseList('not json'), isNull);
+      expect(ReleaseInfo.listFromJson(null), isEmpty);
+      expect(ReleaseInfo.listFromJson('nope'), isEmpty);
+      expect(ReleaseInfo.listFromJson('[{"tag":"v1","url":"u"},{"x":1}]'),
+          hasLength(1));
     });
   });
 }

@@ -21,6 +21,13 @@ class ReleaseNoteItem {
   final String detail;
 }
 
+/// One release's parsed bullets, for the What's-new page.
+class ReleaseNoteSection {
+  const ReleaseNoteSection(this.tag, this.items);
+  final String tag;
+  final List<ReleaseNoteItem> items;
+}
+
 final _blockStart = RegExp(r'<!--\s*glimpr:notes\s+lang=([A-Za-z-]+)\s*-->');
 final _blockEnd = RegExp(r'<!--\s*/glimpr:notes\s*-->');
 // `- **Lead**: detail` or `- **Lead**` or `- plain text`.

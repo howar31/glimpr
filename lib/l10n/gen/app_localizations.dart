@@ -170,11 +170,17 @@ abstract class AppLocalizations {
   /// **'What\'s new in {version}'**
   String settingsAboutWhatsNew(String version);
 
-  /// What's-new page: link to the release page
+  /// About pane row + page title when several releases are newer than the running version; from = oldest pending, to = latest
   ///
   /// In en, this message translates to:
-  /// **'View the full notes on GitHub'**
-  String get settingsAboutWhatsNewOnGithub;
+  /// **'What\'s new from {from} to {to}'**
+  String settingsAboutWhatsNewRange(String from, String to);
+
+  /// What's-new page: link to the releases list
+  ///
+  /// In en, this message translates to:
+  /// **'View all releases on GitHub'**
+  String get settingsAboutWhatsNewAllOnGithub;
 
   /// About pane: opens the in-app open-source license page
   ///

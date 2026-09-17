@@ -64,7 +64,7 @@ Future<void> main() async {
   startUpdatePolling(
     UpdateChecker(
       store: Settings.instance.store,
-      fetchLatest: defaultFetchLatest,
+      fetchReleases: defaultFetchReleases,
       currentVersion: () async =>
           await kRoleChannel.invokeMethod<String>('appVersion') ?? '',
     ),
