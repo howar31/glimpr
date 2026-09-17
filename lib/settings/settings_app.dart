@@ -1334,7 +1334,7 @@ class _SettingsAppState extends State<SettingsApp>
               options: const [
                 ('system', 'System'),
                 ('en', 'English'),
-                ('zh', '繁體中文'),
+                ('zh', '正體中文'),
               ],
               onChanged: _setAppLanguage,
             ),

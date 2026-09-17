@@ -7,7 +7,7 @@
 [![Downloads](https://img.shields.io/github/downloads/howar31/glimpr/total?style=flat-square)](https://github.com/howar31/glimpr/releases)
 [![Sponsor](https://img.shields.io/badge/%E8%B4%8A%E5%8A%A9-donate.howar31.com-b4532c?style=flat-square&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTIwLjg0IDQuNjFhNS41IDUuNSAwIDAgMC03Ljc4IDBMMTIgNS42N2wtMS4wNi0xLjA2YTUuNSA1LjUgMCAwIDAtNy43OCA3Ljc4bDEuMDYgMS4wNkwxMiAyMS4yM2w3Ljc4LTcuNzggMS4wNi0xLjA2YTUuNSA1LjUgMCAwIDAgMC03Ljc4eiIvPjwvc3ZnPg==)](https://donate.howar31.com/)
 
-[English](README.md) | 繁體中文
+[English](README.md) | 正體中文
 
 macOS 與 Windows 上快速、原生的螢幕截圖、標註與螢幕錄影工具。官方網站：[glimpr.howar31.com](https://glimpr.howar31.com)
 
@@ -25,7 +25,7 @@ macOS 與 Windows 上快速、原生的螢幕截圖、標註與螢幕錄影工�
 - **GIF 編輯**：在圖片編輯器開啟任何 GIF，逐幀編輯並重新編碼成更小的檔案，詳見下方 [GIF 編輯](#gif-編輯)。
 - **釘選**：把任何截圖以最上層浮動視窗釘在畫面上，可拖曳與縮放。
 - **完成流程**：可自訂截圖後與編輯後的動作（儲存、複製、開啟圖片編輯器、釘選、分享）；檔名範本與日期子資料夾。
-- 可重新綁定的全域快捷鍵（含 PrintScreen 與不需修飾鍵的單鍵）、淺色與深色主題、英文與繁體中文介面。
+- 可重新綁定的全域快捷鍵（含 PrintScreen 與不需修飾鍵的單鍵）、淺色與深色主題、英文與正體中文介面。
 - **隱私優先**：無遙測、無帳號；截圖內容不會離開你的電腦。唯一的網路連線是檢查更新，且可以關閉。
 
 ## GIF 編輯

@@ -11,7 +11,7 @@ Lead sentence stays on GitHub.
 - A plain bullet with `code` and **bold** inside.
 <!-- /glimpr:notes -->
 
-<details><summary>繁體中文</summary>
+<details><summary>正體中文</summary>
 <!-- glimpr:notes lang=zh -->
 - **下載進度**：更新下載時顯示百分比與 MB。
 - **停滯的下載會失敗**，不再永遠卡住。

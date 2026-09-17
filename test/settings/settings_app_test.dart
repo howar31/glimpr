@@ -69,7 +69,7 @@ void main() {
     await tester.pumpAndSettle();
     // General is the default pane.
     expect(find.text('Language'), findsOneWidget);
-    await tester.tap(find.text('繁體中文'));
+    await tester.tap(find.text('正體中文'));
     await tester.pumpAndSettle();
     expect(await settings.getAppLanguage(), 'zh');
     // Changing from the launch value shows the restart hint.

@@ -7,7 +7,7 @@
 [![Downloads](https://img.shields.io/github/downloads/howar31/glimpr/total?style=flat-square)](https://github.com/howar31/glimpr/releases)
 [![Sponsor](https://img.shields.io/badge/Sponsor-donate.howar31.com-b4532c?style=flat-square&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTIwLjg0IDQuNjFhNS41IDUuNSAwIDAgMC03Ljc4IDBMMTIgNS42N2wtMS4wNi0xLjA2YTUuNSA1LjUgMCAwIDAtNy43OCA3Ljc4bDEuMDYgMS4wNkwxMiAyMS4yM2w3Ljc4LTcuNzggMS4wNi0xLjA2YTUuNSA1LjUgMCAwIDAgMC03Ljc4eiIvPjwvc3ZnPg==)](https://donate.howar31.com/)
 
-English | [繁體中文](README.zh-Hant.md)
+English | [正體中文](README.zh-Hant.md)
 
 Fast, native screenshot, annotation, and screen-recording tool for macOS and
 Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
