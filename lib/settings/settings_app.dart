@@ -1,4 +1,5 @@
 import '../platform_gate.dart';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -133,6 +134,10 @@ class _SettingsAppState extends State<SettingsApp>
   String? _updateUrl;
   bool _updateChecking = false;
   bool _updateJustCheckedClean = false;
+  // A failed self-update shows a short notice (the release page already
+  // opened) before the tappable "update available" row returns.
+  bool _updateFailedNotice = false;
+  Timer? _updateFailedTimer;
   late final UpdateChecker _updateChecker = UpdateChecker(
     store: widget.settings.store,
     fetchLatest: defaultFetchLatest,
@@ -279,6 +284,7 @@ class _SettingsAppState extends State<SettingsApp>
     _roleChannel.setMethodCallHandler(_onRoleCall);
     // Repaint the About status line as the self-update progresses.
     _updater.phase.addListener(_onUpdaterPhase);
+    _updater.progress.addListener(_onUpdaterPhase);
     _load();
     _seedUpdateBadge();
   }
@@ -314,7 +320,13 @@ class _SettingsAppState extends State<SettingsApp>
       return;
     }
     final handed = await _updater.installTag(tag);
-    if (!handed && mounted) _openUrl(url);
+    if (handed || !mounted) return;
+    _openUrl(url);
+    setState(() => _updateFailedNotice = true);
+    _updateFailedTimer?.cancel();
+    _updateFailedTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _updateFailedNotice = false);
+    });
   }
 
   // Mirror the About row's update state onto the tray / menu-bar item: native
@@ -399,6 +411,8 @@ class _SettingsAppState extends State<SettingsApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _updater.phase.removeListener(_onUpdaterPhase);
+    _updater.progress.removeListener(_onUpdaterPhase);
+    _updateFailedTimer?.cancel();
     _filenameController.dispose();
     _filenameFocus.dispose();
     _subfolderController.dispose();
@@ -1069,14 +1083,29 @@ class _SettingsAppState extends State<SettingsApp>
   Widget? _updateStatusLine(GlimprTokens t) {
     switch (_updater.phase.value) {
       case UpdatePhase.downloading:
-        return Text(_l.settingsAboutUpdateDownloading,
-            style: GlimprType.sansStyle(12, 500, t.fg4));
+        return _updateDownloadLine(t);
       case UpdatePhase.installing:
-        return Text(_l.settingsAboutUpdateInstalling,
-            style: GlimprType.sansStyle(12, 600, t.accentFg));
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 11,
+              height: 11,
+              child: CircularProgressIndicator(
+                  strokeWidth: 1.5, color: t.accentFg),
+            ),
+            const SizedBox(width: 6),
+            Text(_l.settingsAboutUpdateInstalling,
+                style: GlimprType.sansStyle(12, 600, t.accentFg)),
+          ],
+        );
       case UpdatePhase.idle:
       case UpdatePhase.failed:
         break;
+    }
+    if (_updateFailedNotice) {
+      return Text(_l.settingsAboutUpdateFailed,
+          style: GlimprType.sansStyle(12, 500, t.fg4));
     }
     final tag = _updateAvailableTag;
     if (tag != null) {
@@ -1108,6 +1137,43 @@ class _SettingsAppState extends State<SettingsApp>
     }
     return null;
   }
+
+  // Download progress: the caption line with percent + MB once the total is
+  // known, a thin bar underneath (determinate when the total is known, else
+  // indeterminate). Fits the fixed 22px status slot: no layout jump.
+  Widget _updateDownloadLine(GlimprTokens t) {
+    final p = _updater.progress.value;
+    final fraction = p?.fraction;
+    final total = p?.total;
+    final label = total == null
+        ? _l.settingsAboutUpdateDownloading
+        : _l.settingsAboutUpdateDownloadProgress(
+            (fraction! * 100).floor(), _mb(p!.received), _mb(total));
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(label,
+            style: GlimprType.sansStyle(12, 500, t.fg4, height: 1.15)),
+        const SizedBox(height: 3),
+        SizedBox(
+          width: 180,
+          height: 3,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(1.5),
+            child: LinearProgressIndicator(
+              value: fraction,
+              minHeight: 3,
+              color: t.accentFg,
+              backgroundColor: t.track,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
 
   // A full-width tappable About row: SettingRow's icon tile + label, with a
   // trailing affordance (↗ = opens an external URL, › = an in-app page).

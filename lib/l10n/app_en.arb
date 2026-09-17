@@ -75,6 +75,19 @@
   "@settingsAboutUpdateInstalling": {
     "description": "About pane: status while the self-update installs; the app restarts on its own"
   },
+  "settingsAboutUpdateDownloadProgress": "Downloading the update… {percent}% ({received} / {total} MB)",
+  "@settingsAboutUpdateDownloadProgress": {
+    "description": "About pane: download status once the size is known; sizes are pre-formatted with one decimal",
+    "placeholders": {
+      "percent": { "type": "int" },
+      "received": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "settingsAboutUpdateFailed": "Download failed; the release page has been opened",
+  "@settingsAboutUpdateFailed": {
+    "description": "About pane: transient status after a self-update could not download or apply; the browser fallback already opened"
+  },
   "settingsSectionUpdates": "Updates",
   "@settingsSectionUpdates": {
     "description": "Advanced pane: updates section label"

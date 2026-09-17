@@ -206,6 +206,22 @@ abstract class AppLocalizations {
   /// **'Installing, the app will restart…'**
   String get settingsAboutUpdateInstalling;
 
+  /// About pane: download status once the size is known; sizes are pre-formatted with one decimal
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the update… {percent}% ({received} / {total} MB)'**
+  String settingsAboutUpdateDownloadProgress(
+    int percent,
+    String received,
+    String total,
+  );
+
+  /// About pane: transient status after a self-update could not download or apply; the browser fallback already opened
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed; the release page has been opened'**
+  String get settingsAboutUpdateFailed;
+
   /// Advanced pane: updates section label
   ///
   /// In en, this message translates to:

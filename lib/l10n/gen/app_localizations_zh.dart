@@ -65,6 +65,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutUpdateInstalling => '安裝中，即將重新啟動…';
 
   @override
+  String settingsAboutUpdateDownloadProgress(
+    int percent,
+    String received,
+    String total,
+  ) {
+    return '正在下載更新… $percent%（$received / $total MB）';
+  }
+
+  @override
+  String get settingsAboutUpdateFailed => '下載失敗，已開啟下載頁面';
+
+  @override
   String get settingsSectionUpdates => '更新';
 
   @override

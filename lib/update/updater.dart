@@ -16,6 +16,24 @@ import '../platform_gate.dart';
 /// `releases/latest`, which excludes them.
 enum UpdatePhase { idle, downloading, installing, failed }
 
+/// Bytes received so far and the expected total (null when the server sent
+/// no Content-Length; the UI then shows an indeterminate bar).
+class DownloadProgress {
+  const DownloadProgress(this.received, this.total);
+  final int received;
+  final int? total;
+
+  /// 0..1 when the total is known, else null.
+  double? get fraction {
+    final t = total;
+    if (t == null || t <= 0) return null;
+    return (received / t).clamp(0.0, 1.0);
+  }
+}
+
+/// Progress sink for one download; [total] is null when unknown.
+typedef ProgressSink = void Function(int received, int? total);
+
 /// name -> browser_download_url for one release tag.
 typedef ReleaseAssets = Map<String, String>;
 
@@ -24,6 +42,12 @@ const kUpdateChannel = MethodChannel('glimpr/update');
 // Mount/verify/swap (mac) or verify/spawn (win) runs seconds; a hung native
 // side must not wedge the flow in "installing" forever.
 const _kApplyTimeout = Duration(minutes: 2);
+
+// A download that stops delivering bytes for this long is dead (captive
+// portal, dropped connection): fail it so the flow falls back to the release
+// page instead of sitting in "downloading" forever. Measured between chunks,
+// so a slow-but-moving link never trips it.
+const kDownloadStallTimeout = Duration(seconds: 30);
 
 /// Asset names carry the release version since v1.1.1
 /// (Glimpr-Setup-1.1.1.exe), so resolution matches by prefix + suffix
@@ -47,8 +71,10 @@ class UpdaterService {
   /// Release assets for [tag], or null when the listing is unavailable.
   final Future<ReleaseAssets?> Function(String tag) fetchAssets;
 
-  /// Fetch [url] into [toPath]; throws on any failure.
-  final Future<void> Function(String url, String toPath) download;
+  /// Fetch [url] into [toPath], reporting bytes through [onProgress]; throws
+  /// on any failure (including a stalled transfer).
+  final Future<void> Function(
+      String url, String toPath, ProgressSink onProgress) download;
 
   /// A fresh writable staging directory per install attempt.
   final Future<Directory> Function() stageDir;
@@ -56,6 +82,16 @@ class UpdaterService {
   final MethodChannel channel;
 
   final ValueNotifier<UpdatePhase> phase = ValueNotifier(UpdatePhase.idle);
+
+  /// Byte progress of the main asset while [phase] is downloading; null
+  /// outside that phase. The tiny .sig companion is not tracked.
+  final ValueNotifier<DownloadProgress?> progress = ValueNotifier(null);
+
+  void _report(int received, int? total) {
+    progress.value = DownloadProgress(received, total);
+  }
+
+  static void _ignoreProgress(int received, int? total) {}
 
   /// Whether THIS running copy can self-update (native check: install
   /// location + writability). False on any error so callers fall back to the
@@ -78,6 +114,7 @@ class UpdaterService {
   /// nothing was changed and the caller should open the release page instead.
   Future<bool> installTag(String tag) async {
     try {
+      progress.value = null;
       phase.value = UpdatePhase.downloading;
       final assets = await fetchAssets(tag);
       if (assets == null) throw StateError('release listing unavailable');
@@ -90,8 +127,9 @@ class UpdaterService {
         }
         final exePath = '${dir.path}${Platform.pathSeparator}${exe.key}';
         final sigPath = '$exePath.sig';
-        await download(exe.value, exePath);
-        await download(sigUrl, sigPath);
+        await download(exe.value, exePath, _report);
+        await download(sigUrl, sigPath, _ignoreProgress);
+        progress.value = null;
         phase.value = UpdatePhase.installing;
         // A declined apply (failed verification, not installed) changed
         // nothing on disk: fall back like any other failure.
@@ -103,7 +141,8 @@ class UpdaterService {
         final dmg = _findAsset(assets, '.dmg');
         if (dmg == null) throw StateError('dmg asset missing');
         final dmgPath = '${dir.path}${Platform.pathSeparator}${dmg.key}';
-        await download(dmg.value, dmgPath);
+        await download(dmg.value, dmgPath, _report);
+        progress.value = null;
         phase.value = UpdatePhase.installing;
         final applied = await channel
             .invokeMethod('applyStaged', {'path': dmgPath}).timeout(
@@ -112,6 +151,7 @@ class UpdaterService {
       }
       return true;
     } catch (_) {
+      progress.value = null;
       phase.value = UpdatePhase.failed;
       return false;
     }
@@ -158,18 +198,34 @@ ReleaseAssets? parseReleaseAssets(String body) {
   }
 }
 
-/// Production downloader: one streamed GET to [toPath]; throws on non-200.
-Future<void> defaultDownload(String url, String toPath) async {
+/// Production downloader: one streamed GET to [toPath]; throws on non-200,
+/// on a transport error, or when no bytes arrive for [stall]. Progress goes
+/// out per chunk with the Content-Length total (null when absent).
+Future<void> defaultDownload(String url, String toPath, ProgressSink onProgress,
+    {Duration stall = kDownloadStallTimeout}) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
   try {
     final req = await client.getUrl(Uri.parse(url));
     req.headers.set(HttpHeaders.userAgentHeader, 'Glimpr');
-    final res = await req.close();
+    final res = await req.close().timeout(stall);
     if (res.statusCode != 200) {
       throw HttpException('HTTP ${res.statusCode} for $url');
     }
+    final total = res.contentLength > 0 ? res.contentLength : null;
+    var received = 0;
+    onProgress(received, total);
     final sink = File(toPath).openWrite();
-    await res.pipe(sink);
+    try {
+      // Stream.timeout fires when the gap BETWEEN chunks exceeds [stall];
+      // it does not cap the whole transfer.
+      await for (final chunk in res.timeout(stall)) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress(received, total);
+      }
+    } finally {
+      await sink.close();
+    }
   } finally {
     client.close(force: true);
   }

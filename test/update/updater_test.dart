@@ -27,8 +27,10 @@ void main() {
   }) {
     return UpdaterService(
       fetchAssets: (tag) async => assets,
-      download: (url, toPath) async {
+      download: (url, toPath, onProgress) async {
         downloadedUrls?.add(url);
+        onProgress(0, 10);
+        onProgress(10, 10);
         await File(toPath).writeAsString('payload of $url');
       },
       stageDir: () async => stage.createTemp('s'),
@@ -106,7 +108,8 @@ void main() {
     final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = UpdaterService(
       fetchAssets: (tag) async => {'Glimpr-macOS.dmg': 'https://x/d.dmg'},
-      download: (url, toPath) async => throw const SocketException('offline'),
+      download: (url, toPath, _) async =>
+          throw const SocketException('offline'),
       stageDir: () async => stage.createTemp('s'),
     );
     expect(await s.installTag('v9.9.9'), isFalse);
@@ -140,5 +143,45 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_update, null);
     expect(await make().supported(), isFalse);
+  });
+
+  test('progress mirrors the main asset download and clears before apply',
+      () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final seen = <DownloadProgress?>[];
+    late UpdaterService s;
+    s = UpdaterService(
+      fetchAssets: (tag) async => {
+        'Glimpr-Setup-9.9.9.exe': 'https://x/setup.exe',
+        'Glimpr-Setup-9.9.9.exe.sig': 'https://x/setup.sig',
+      },
+      download: (url, toPath, onProgress) async {
+        if (url.endsWith('.exe')) {
+          onProgress(0, 100);
+          onProgress(40, 100);
+          onProgress(100, 100);
+        } else {
+          // The .sig companion must not disturb the reported progress.
+          onProgress(0, 64);
+          onProgress(64, 64);
+        }
+        await File(toPath).writeAsString('x');
+      },
+      stageDir: () async => stage.createTemp('s'),
+    );
+    s.progress.addListener(() => seen.add(s.progress.value));
+    expect(await s.installTag('v9.9.9'), isTrue);
+    final fractions = seen.map((p) => p?.fraction).toList();
+    expect(fractions, [0.0, 0.4, 1.0, null]);
+    expect(s.progress.value, isNull);
+  });
+
+  test('DownloadProgress.fraction is null without a total', () {
+    expect(const DownloadProgress(5, null).fraction, isNull);
+    expect(const DownloadProgress(5, 0).fraction, isNull);
+    expect(const DownloadProgress(5, 10).fraction, 0.5);
+    expect(const DownloadProgress(20, 10).fraction, 1.0);
   });
 }

@@ -66,6 +66,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Installing, the app will restart…';
 
   @override
+  String settingsAboutUpdateDownloadProgress(
+    int percent,
+    String received,
+    String total,
+  ) {
+    return 'Downloading the update… $percent% ($received / $total MB)';
+  }
+
+  @override
+  String get settingsAboutUpdateFailed =>
+      'Download failed; the release page has been opened';
+
+  @override
   String get settingsSectionUpdates => 'Updates';
 
   @override

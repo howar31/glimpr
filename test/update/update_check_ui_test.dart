@@ -143,6 +143,11 @@ void main() {
         hasLength(1));
     final opened = calls.where((c) => c.method == 'openExternalUrl').toList();
     expect(opened, hasLength(1));
+    // The failure notice replaces the tappable row (it clears itself on a
+    // real-zone timer that the fake clock cannot advance here).
+    expect(find.text('Download failed; the release page has been opened'),
+        findsOneWidget);
+    expect(find.text('Update available: v9.9.9'), findsNothing);
   });
 
   testWidgets('tray click without a known update lands on About and checks',
