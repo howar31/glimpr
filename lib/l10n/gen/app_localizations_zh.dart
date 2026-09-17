@@ -83,7 +83,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsUpdateCheckTitle => '自動檢查更新';
 
   @override
-  String get settingsUpdateCheckBody => '每天向 GitHub 查詢一次是否有新版本，不會傳送其他資料。';
+  String get settingsUpdateCheckBody => '每六小時向 GitHub 查詢一次是否有新版本，不會傳送其他資料。';
 
   @override
   String settingsLicenseCount(int count) {

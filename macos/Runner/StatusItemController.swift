@@ -47,6 +47,42 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   func setUpdateStatus(label: String, available: Bool) {
     updateAvailable = available
     updateItem?.title = label
+    // Idle only: an in-flight recording breath / processing pulse owns the
+    // button image and restores the (now badged or plain) idle mark itself.
+    if !isRecordingState, recordingTimer == nil, processingTimer == nil {
+      item.button?.image = normalImage
+    }
+  }
+
+  /// The template mark with an update badge: a circle knocked out of the
+  /// bottom-right corner (a clear ring keeps the arrow legible against the
+  /// mark at 18pt) holding a small up arrow. Stays a template image so macOS
+  /// tints it like the plain mark. Mirrored by Windows MakeBadgedIcon.
+  private static func makeBadgedMark(_ mark: NSImage?) -> NSImage? {
+    guard let mark else { return nil }
+    let size = mark.size
+    let img = NSImage(size: size, flipped: false) { rect in
+      mark.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+      let c = NSPoint(x: size.width - 3.5, y: 3.5) // badge centre, y up
+      NSColor.black.set()
+      NSGraphicsContext.current?.compositingOperation = .destinationOut
+      NSBezierPath(ovalIn: NSRect(x: c.x - 4, y: c.y - 4, width: 8, height: 8))
+        .fill()
+      NSGraphicsContext.current?.compositingOperation = .sourceOver
+      let arrow = NSBezierPath()
+      arrow.move(to: NSPoint(x: c.x, y: c.y + 2.75)) // tip
+      arrow.line(to: NSPoint(x: c.x + 2.75, y: c.y))
+      arrow.line(to: NSPoint(x: c.x + 1, y: c.y))
+      arrow.line(to: NSPoint(x: c.x + 1, y: c.y - 2.75))
+      arrow.line(to: NSPoint(x: c.x - 1, y: c.y - 2.75))
+      arrow.line(to: NSPoint(x: c.x - 1, y: c.y))
+      arrow.line(to: NSPoint(x: c.x - 2.75, y: c.y))
+      arrow.close()
+      arrow.fill()
+      return true
+    }
+    img.isTemplate = true
+    return img
   }
   // Screen recording (macOS 15+): native stop/abort while a recording runs.
   var onRecordStop: (() -> Void)?
@@ -57,8 +93,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private var recordPausedState = false
   private var recordStartItems: [NSMenuItem] = []
   private var recordControlItems: [NSMenuItem] = []
-  private let normalImage: NSImage?
+  // The plain template mark; `normalImage` is what the button shows when
+  // idle (this, or the badged variant while an update is known).
+  private let baseMark: NSImage?
   private var isRecordingState = false
+
+  /// Idle mark: badged with the update arrow while a newer release is known.
+  /// Recording / processing states draw over it and restore it when they end.
+  private var normalImage: NSImage? { updateAvailable ? badgedMark : baseMark }
+  private lazy var badgedMark: NSImage? = Self.makeBadgedMark(baseMark)
 
   init(onAction: @escaping (String) -> Void,
        onMenuOpen: @escaping () -> Void,
@@ -85,7 +128,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     let mark = NSImage(named: "StatusBarIcon")
       ?? NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: kAppName)
     mark?.isTemplate = true
-    normalImage = mark
+    baseMark = mark
     super.init()
     item.button?.image = mark
     item.button?.toolTip = kAppName
@@ -318,7 +361,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// the appearance is re-read every frame so a bar-tint change mid-recording
   /// keeps the correct idle endpoint.
   private func recordingIcon(mix: Double) -> NSImage {
-    let size = normalImage?.size ?? NSSize(width: 18, height: 18)
+    let size = baseMark?.size ?? NSSize(width: 18, height: 18)
     let dark = item.button?.effectiveAppearance
       .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     let idle: (r: CGFloat, g: CGFloat, b: CGFloat) =
@@ -331,7 +374,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       green: idle.g + (red.g - idle.g) * t,
       blue: idle.b + (red.b - idle.b) * t,
       alpha: 1)
-    let mark = normalImage
+    let mark = baseMark
     let img = NSImage(size: size, flipped: false) { rect in
       if let mark, let tinted = mark.copy() as? NSImage {
         tinted.lockFocus()
@@ -430,8 +473,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// The brand mark filled with the logo gradient at [intensity] opacity (the
   /// pulse modulates intensity). Geometry never changes.
   private func processingIcon(intensity: Double) -> NSImage {
-    let size = normalImage?.size ?? NSSize(width: 18, height: 18)
-    let mark = normalImage
+    let size = baseMark?.size ?? NSSize(width: 18, height: 18)
+    let mark = baseMark
     let grad = NSGradient(colorsAndLocations:
       (NSColor(srgbRed: 0x22 / 255.0, green: 0xD3 / 255.0,
                blue: 0xEE / 255.0, alpha: 1), 0.0),

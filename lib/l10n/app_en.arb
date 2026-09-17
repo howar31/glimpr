@@ -96,7 +96,7 @@
   "@settingsUpdateCheckTitle": {
     "description": "Advanced pane: auto update-check toggle title"
   },
-  "settingsUpdateCheckBody": "Once a day, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.",
+  "settingsUpdateCheckBody": "Every six hours, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.",
   "@settingsUpdateCheckBody": {
     "description": "Advanced pane: auto update-check toggle explanation"
   },

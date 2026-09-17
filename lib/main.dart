@@ -56,24 +56,23 @@ Future<void> main() async {
   // handlers up front; record actions no-op when the module is unavailable.
   final record = RecordController();
   final recordAvailable = await RecordBridge().isAvailable();
-  // Launch-time update check (silent, 24h-throttled, Settings-toggleable).
-  // Fire-and-forget: never blocks boot; failures are silent by design. A hit
-  // flips the tray item to its "update available" label right away (the
-  // Settings UI seeds itself from the persisted keys separately).
-  unawaited(() async {
-    final r = await UpdateChecker(
+  // Automatic update check: at launch and then polled while resident
+  // (silent, throttled inside UpdateChecker, Settings-toggleable). Never
+  // blocks boot; failures are silent by design. A hit flips the tray item to
+  // its "update available" label right away (the Settings UI seeds itself
+  // from the persisted keys separately).
+  startUpdatePolling(
+    UpdateChecker(
       store: Settings.instance.store,
       fetchLatest: defaultFetchLatest,
       currentVersion: () async =>
           await kRoleChannel.invokeMethod<String>('appVersion') ?? '',
-    ).maybeCheckOnLaunch();
-    if (r != null && r.isNewer) {
-      unawaited(kRoleChannel.invokeMethod('setUpdateStatus', {
-        'available': true,
-        'label': appL10n.settingsAboutUpdateAvailable(r.latestTag),
-      }).catchError((_) {}));
-    }
-  }());
+    ),
+    (r) => unawaited(kRoleChannel.invokeMethod('setUpdateStatus', {
+      'available': true,
+      'label': appL10n.settingsAboutUpdateAvailable(r.latestTag),
+    }).catchError((_) {})),
+  );
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
   const control = kRoleChannel;

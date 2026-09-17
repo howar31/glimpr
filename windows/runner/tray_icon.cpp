@@ -195,7 +195,7 @@ void TrayIcon::OnThemeChanged() {
   // While recording OR processing, the animation tick repaints from the
   // (now-invalidated) cache each frame, so leave the running animation alone.
   if (recording_ || ease_out_ || processing_) return;
-  HICON next = LoadThemeIcon();
+  HICON next = IdleIcon();
   if (!next) return;
   NOTIFYICONDATAW nid = {};
   nid.cbSize = sizeof(nid);
@@ -367,7 +367,98 @@ void TrayIcon::SetLabels(std::map<std::string, std::string> labels) {
 
 void TrayIcon::SetUpdateStatus(const std::string& label_utf8, bool available) {
   update_label_ = label_utf8;
+  const bool was = update_available_;
   update_available_ = available;
+  // Idle only: a running breath / pulse owns the icon and restores the (now
+  // badged or plain) idle mark itself when it ends.
+  if (added_ && was != available && !recording_ && !ease_out_ && !processing_) {
+    ApplyIcon(IdleIcon());
+  }
+}
+
+HICON TrayIcon::IdleIcon() const {
+  if (update_available_) {
+    if (HICON badged = MakeBadgedIcon()) return badged;
+  }
+  return LoadThemeIcon();
+}
+
+// The theme mark with an update badge: a circle knocked out of the bottom-right
+// corner (a clear ring keeps the arrow legible against the mark) holding a
+// small up arrow in the mark's own tint. Mirrors macOS makeBadgedMark; the
+// geometry is authored on the 18px mac grid and scaled to the small-icon size.
+// Builds a fresh AND mask because the badge changes the mark's shape.
+HICON TrayIcon::MakeBadgedIcon() const {
+  if (!EnsureMarkPixels()) return nullptr;
+  const int w = mark_w_, h = mark_h_;
+  std::vector<uint8_t> px = mark_px_;
+  // The mark's tint = its most opaque pixel (premultiplied == straight at 255).
+  uint8_t tb = 255, tg = 255, tr = 255, best = 0;
+  for (size_t i = 0; i < px.size(); i += 4) {
+    if (px[i + 3] > best) {
+      best = px[i + 3];
+      tb = px[i + 0];
+      tg = px[i + 1];
+      tr = px[i + 2];
+    }
+  }
+  const double s = w / 18.0;
+  const double cx = w - 3.5 * s, cy = h - 3.5 * s;  // badge centre, y down
+  const double hole_r = 4.0 * s, arm = 2.75 * s, stem = 1.0 * s;
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      const double dx = (x + 0.5) - cx;
+      const double up = cy - (y + 0.5);  // y up, like the mac path
+      if (dx * dx + up * up > hole_r * hole_r) continue;
+      const size_t i = (static_cast<size_t>(y) * w + x) * 4;
+      const bool head = up >= 0 && up <= arm &&
+                        std::fabs(dx) <= arm * (1.0 - up / arm);
+      const bool shaft = up < 0 && up >= -arm && std::fabs(dx) <= stem;
+      if (head || shaft) {
+        px[i + 0] = tb;
+        px[i + 1] = tg;
+        px[i + 2] = tr;
+        px[i + 3] = 255;
+      } else {  // the clear ring
+        px[i + 0] = px[i + 1] = px[i + 2] = px[i + 3] = 0;
+      }
+    }
+  }
+  BITMAPINFO bi = {};
+  bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bi.bmiHeader.biWidth = w;
+  bi.bmiHeader.biHeight = -h;  // top-down
+  bi.bmiHeader.biPlanes = 1;
+  bi.bmiHeader.biBitCount = 32;
+  bi.bmiHeader.biCompression = BI_RGB;
+  // 1bpp AND mask, rows WORD-aligned, MSB first; 1 = transparent.
+  const int stride = ((w + 15) / 16) * 2;
+  std::vector<uint8_t> mask(static_cast<size_t>(stride) * h, 0);
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      if (px[(static_cast<size_t>(y) * w + x) * 4 + 3] == 0) {
+        mask[static_cast<size_t>(y) * stride + x / 8] |=
+            static_cast<uint8_t>(0x80 >> (x % 8));
+      }
+    }
+  }
+  HICON out = nullptr;
+  void* bits = nullptr;
+  HDC dc = GetDC(nullptr);
+  HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  HBITMAP hmask = CreateBitmap(w, h, 1, 1, mask.data());
+  if (color && bits && hmask) {
+    std::memcpy(bits, px.data(), px.size());
+    ICONINFO ni = {};
+    ni.fIcon = TRUE;
+    ni.hbmColor = color;
+    ni.hbmMask = hmask;
+    out = CreateIconIndirect(&ni);
+  }
+  if (hmask) DeleteObject(hmask);
+  if (color) DeleteObject(color);
+  ReleaseDC(nullptr, dc);
+  return out;
 }
 
 // static
@@ -447,7 +538,7 @@ void TrayIcon::OnRecordTick() {
         KillTimer(nullptr, record_timer_);
         record_timer_ = 0;
       }
-      ApplyIcon(LoadThemeIcon());
+      ApplyIcon(IdleIcon());
       return;
     }
     mix = 1.0 - t;
@@ -505,7 +596,7 @@ void TrayIcon::SetRecordingState(bool active, bool graceful) {
       KillTimer(nullptr, record_timer_);
       record_timer_ = 0;
     }
-    ApplyIcon(LoadThemeIcon());
+    ApplyIcon(IdleIcon());
     return;
   }
   // Graceful finish: ease the red back out over ~0.45s (handled in the tick).
@@ -610,7 +701,7 @@ void TrayIcon::OnProcTick() {
       KillTimer(nullptr, proc_timer_);
       proc_timer_ = 0;
     }
-    ApplyIcon(LoadThemeIcon());
+    ApplyIcon(IdleIcon());
     SetTip(GLIMPR_APP_NAME_W);  // drop the "Processing ..." hover tooltip
     return;
   }

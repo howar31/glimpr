@@ -237,7 +237,7 @@ abstract class AppLocalizations {
   /// Advanced pane: auto update-check toggle explanation
   ///
   /// In en, this message translates to:
-  /// **'Once a day, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.'**
+  /// **'Every six hours, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.'**
   String get settingsUpdateCheckBody;
 
   /// About > Licenses: number of licenses a package has

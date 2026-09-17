@@ -50,7 +50,7 @@ void main() {
 
     test('first launch checks and persists the newer release', () async {
       final c = make(latest: ('v1.2.0', 'https://example.test/rel'));
-      final r = await c.maybeCheckOnLaunch();
+      final r = await c.maybeCheck();
       expect(r!.isNewer, isTrue);
       expect(r.latestTag, 'v1.2.0');
       expect(fetchCalls, 1);
@@ -61,35 +61,36 @@ void main() {
           now.millisecondsSinceEpoch);
     });
 
-    test('throttles within 24h, checks again after', () async {
+    test('throttles within 6h, checks again after', () async {
       final c = make(latest: ('v1.0.0', 'u'));
-      await c.maybeCheckOnLaunch();
+      await c.maybeCheck();
       expect(fetchCalls, 1);
-      now = now.add(const Duration(hours: 23));
-      expect(await c.maybeCheckOnLaunch(), isNull);
+      now = now.add(const Duration(hours: 5));
+      expect(await c.maybeCheck(), isNull);
       expect(fetchCalls, 1); // throttled
       now = now.add(const Duration(hours: 2));
-      await c.maybeCheckOnLaunch();
+      await c.maybeCheck();
       expect(fetchCalls, 2);
+      expect(UpdateChecker.throttle, const Duration(hours: 6));
     });
 
     test('disabled: no fetch, returns null', () async {
       await store.setBool('update_check_enabled', false);
       final c = make(latest: ('v9.9.9', 'u'));
-      expect(await c.maybeCheckOnLaunch(), isNull);
+      expect(await c.maybeCheck(), isNull);
       expect(fetchCalls, 0);
     });
 
     test('fetch failure returns null but still stamps the attempt', () async {
       final c = make(latest: null);
-      expect(await c.maybeCheckOnLaunch(), isNull);
+      expect(await c.maybeCheck(), isNull);
       expect(await store.getInt('update_last_check_ms'),
           now.millisecondsSinceEpoch);
     });
 
     test('checkNow bypasses the throttle', () async {
       final c = make(latest: ('v1.0.1', 'u'));
-      await c.maybeCheckOnLaunch();
+      await c.maybeCheck();
       final r = await c.checkNow();
       expect(r!.isNewer, isTrue);
       expect(fetchCalls, 2);
@@ -102,6 +103,43 @@ void main() {
       final r = await c.checkNow();
       expect(r!.isNewer, isFalse);
       expect(await store.getString('update_latest_tag'), 'v1.0.0');
+    });
+  });
+
+  group('startUpdatePolling', () {
+    // testWidgets for its fake zone: Timer.periodic follows tester.pump, and
+    // the injected `now` is advanced alongside it, so six hours pass in no
+    // real time.
+    testWidgets('checks at once, then only when the throttle has elapsed',
+        (tester) async {
+      final store = FakeStore();
+      var fetchCalls = 0;
+      final hits = <String>[];
+      var now = DateTime.utc(2026, 7, 9, 12);
+      final checker = UpdateChecker(
+        store: store,
+        fetchLatest: () async {
+          fetchCalls++;
+          return ('v9.9.9', 'u');
+        },
+        currentVersion: () async => '1.0.0 (1)',
+        now: () => now,
+      );
+      final timer = startUpdatePolling(checker, (r) => hits.add(r.latestTag),
+          interval: const Duration(minutes: 15));
+      await tester.pump();
+      expect(fetchCalls, 1);
+      expect(hits, ['v9.9.9']);
+      // Ticks inside the throttle window stay silent.
+      now = now.add(const Duration(hours: 5, minutes: 50));
+      await tester.pump(const Duration(hours: 5, minutes: 50));
+      expect(fetchCalls, 1);
+      // The first tick past the window checks again.
+      now = now.add(const Duration(minutes: 20));
+      await tester.pump(const Duration(minutes: 20));
+      expect(fetchCalls, 2);
+      expect(hits, ['v9.9.9', 'v9.9.9']);
+      timer.cancel();
     });
   });
 }

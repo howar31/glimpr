@@ -86,7 +86,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsUpdateCheckBody =>
-      'Once a day, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.';
+      'Every six hours, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.';
 
   @override
   String settingsLicenseCount(int count) {

@@ -101,6 +101,10 @@ class TrayIcon {
   void OnProcTick();                        // one processing-pulse frame
   HICON MakeTintedIcon(double mix) const;   // the base mark blended toward red
   HICON MakeProcessingIcon(double intensity) const;  // mark filled w/ logo gradient
+  HICON MakeBadgedIcon() const;             // mark + update badge (up arrow)
+  // What the tray shows when idle: the plain theme mark, or the badged one
+  // while an update is known. Every state animation restores THIS on exit.
+  HICON IdleIcon() const;
   // The theme mark's decoded BGRA pixels + mask, cached so the 20 Hz animation
   // ticks only tint (the resource load + GetDIBits ran per frame before).
   // Invalidated on OnThemeChanged; rebuilt lazily by the next tick.

@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import '../settings/settings_store.dart';
 
 /// Release metadata from the GitHub "latest release" endpoint, compared
-/// against the running app version. Check-and-notify only: v1 never
-/// downloads or installs anything.
+/// against the running app version. The check itself only notifies; the
+/// download/install lives in updater.dart.
 class UpdateCheckResult {
   const UpdateCheckResult(
       {required this.latestTag, required this.url, required this.isNewer});
@@ -37,18 +38,20 @@ class UpdateChecker {
   static const _kLastCheckMs = 'update_last_check_ms';
   static const _kLatestTag = 'update_latest_tag';
   static const _kLatestUrl = 'update_latest_url';
-  static const _throttle = Duration(hours: 24);
+  /// Minimum gap between automatic checks. Shared by the launch check and
+  /// the resident poll, so a relaunch inside the window stays silent.
+  static const throttle = Duration(hours: 6);
 
   Future<bool> enabled() async => (await store.getBool(_kEnabled)) ?? true;
   Future<void> setEnabled(bool v) => store.setBool(_kEnabled, v);
 
-  /// Launch-time check: silent, throttled to once per 24h, null when
-  /// disabled/throttled/failed.
-  Future<UpdateCheckResult?> maybeCheckOnLaunch() async {
+  /// Automatic check (launch + resident poll): silent, throttled to once
+  /// per [throttle], null when disabled/throttled/failed.
+  Future<UpdateCheckResult?> maybeCheck() async {
     if (!await enabled()) return null;
     final last = await store.getInt(_kLastCheckMs) ?? 0;
     final nowMs = _now().millisecondsSinceEpoch;
-    if (nowMs - last < _throttle.inMilliseconds) return null;
+    if (nowMs - last < throttle.inMilliseconds) return null;
     return _check(nowMs);
   }
 
@@ -97,6 +100,23 @@ class UpdateChecker {
     }
     return nums;
   }
+}
+
+/// Resident poll: runs [checker.maybeCheck] now and then every [interval],
+/// calling [onNewer] for each hit. A short interval with the long throttle
+/// (rather than one timer per throttle period) is deliberate: Dart timers do
+/// not run while the machine sleeps, so a long timer wakes late; a short one
+/// catches up within [interval] of waking. Returns the timer for disposal.
+Timer startUpdatePolling(UpdateChecker checker,
+    void Function(UpdateCheckResult r) onNewer,
+    {Duration interval = const Duration(minutes: 15)}) {
+  Future<void> tick() async {
+    final r = await checker.maybeCheck();
+    if (r != null && r.isNewer) onNewer(r);
+  }
+
+  unawaited(tick());
+  return Timer.periodic(interval, (_) => unawaited(tick()));
 }
 
 /// Production fetcher: GitHub latest-release endpoint (excludes drafts and
