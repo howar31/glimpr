@@ -431,6 +431,7 @@
   "editorOpenImageSubtitle": "以截圖時使用的同一套工具為任何圖片加上標註、裁切並重新輸出，或逐幀編輯 GIF。",
   "editorOpenImageButton": "開啟圖片…",
   "editorOpenImageHint": "或將圖片拖曳至此 · 以 ⌘V 貼上",
+  "editorOpenImageHintWin": "或將圖片拖曳至此 · 以 Ctrl+V 貼上",
   "editorGalleryRecent": "最近",
   "editorGalleryMoreTooltip": "在 Finder 中開啟儲存資料夾",
   "editorGalleryMoreTooltipWin": "在檔案總管中開啟儲存資料夾",

@@ -1407,6 +1407,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorOpenImageHint => 'or drag an image here · paste with ⌘V';
 
   @override
+  String get editorOpenImageHintWin =>
+      'or drag an image here · paste with Ctrl+V';
+
+  @override
   String get editorGalleryRecent => 'Recent';
 
   @override

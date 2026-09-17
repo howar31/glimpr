@@ -1626,6 +1626,10 @@
   "@editorOpenImageHint": {
     "description": "Image Editor: drag/paste hint below the Open button"
   },
+  "editorOpenImageHintWin": "or drag an image here · paste with Ctrl+V",
+  "@editorOpenImageHintWin": {
+    "description": "Image Editor: drag/paste hint below the Open button (Windows: Ctrl is the command key)"
+  },
   "editorGalleryRecent": "Recent",
   "@editorGalleryRecent": {
     "description": "Image Editor gallery landing: section label above the recents grid"

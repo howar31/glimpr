@@ -1354,6 +1354,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorOpenImageHint => '或將圖片拖曳至此 · 以 ⌘V 貼上';
 
   @override
+  String get editorOpenImageHintWin => '或將圖片拖曳至此 · 以 Ctrl+V 貼上';
+
+  @override
   String get editorGalleryRecent => '最近';
 
   @override

@@ -2684,6 +2684,12 @@ abstract class AppLocalizations {
   /// **'or drag an image here · paste with ⌘V'**
   String get editorOpenImageHint;
 
+  /// Image Editor: drag/paste hint below the Open button (Windows: Ctrl is the command key)
+  ///
+  /// In en, this message translates to:
+  /// **'or drag an image here · paste with Ctrl+V'**
+  String get editorOpenImageHintWin;
+
   /// Image Editor gallery landing: section label above the recents grid
   ///
   /// In en, this message translates to:

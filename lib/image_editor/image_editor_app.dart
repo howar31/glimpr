@@ -1085,6 +1085,11 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Landing state: an Aurora card prompting the user to open an image. Paste /
   /// drag-drop / Open Recent are later blocks — only the static hint + the Open
   /// button are wired now.
+  /// The landing's drag/paste hint names the platform command key (Ctrl on
+  /// Windows, the same split as the Open shortcut and the landing key handler).
+  String get _pasteHint =>
+      platformIsWindows ? _l.editorOpenImageHintWin : _l.editorOpenImageHint;
+
   Widget _landing(GlimprTokens t) {
     // Landing-only ⌘V loads the clipboard image as the base (when loaded,
     // EditorCore owns ⌘V for paste-as-annotation). Autofocus so the shortcut is
@@ -1204,7 +1209,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           ),
           const SizedBox(width: 14),
           Text(
-            _l.editorOpenImageHint,
+            _pasteHint,
             style: GlimprType.sansStyle(11.5, 500, t.fg4),
           ),
         ],
@@ -1246,7 +1251,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
           ),
           const SizedBox(height: 12),
           Text(
-            _l.editorOpenImageHint,
+            _pasteHint,
             textAlign: TextAlign.center,
             style: GlimprType.sansStyle(11.5, 500, t.fg4),
           ),

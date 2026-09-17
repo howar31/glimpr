@@ -315,6 +315,20 @@ void main() {
     expect(find.text('Image Editor'), findsOneWidget);
   });
 
+  testWidgets('landing paste hint says ⌘V on macOS', (tester) async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    await pumpApp(tester);
+    expect(find.textContaining('⌘V'), findsOneWidget);
+    expect(find.textContaining('Ctrl+V'), findsNothing);
+  });
+
+  testWidgets('landing paste hint says Ctrl+V on Windows', (tester) async {
+    debugPlatformOverride = TargetPlatform.windows;
+    await pumpApp(tester);
+    expect(find.textContaining('Ctrl+V'), findsOneWidget);
+    expect(find.textContaining('⌘V'), findsNothing);
+  });
+
   testWidgets('Windows omits the Flutter title bar (uses the OS caption)',
       (tester) async {
     debugPlatformOverride = TargetPlatform.windows;
