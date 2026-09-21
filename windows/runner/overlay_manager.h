@@ -26,16 +26,33 @@
 // completes the pending MethodResults (FlutterWindow routes it here).
 #define WM_GLIMPR_ELSNAP (WM_APP + 4)
 
+// The overlay host process's way out to the main process. Everything the
+// overlay needs from the resident side (editor, pins, Settings, record
+// control, tray) is a one-way message; nothing waits for a reply.
+class OverlayHostLink {
+ public:
+  virtual ~OverlayHostLink() = default;
+  // Proxy a main-process-bound glimpr/capture method with its arguments.
+  virtual void Call(const std::string& method,
+                    const flutter::EncodableValue& args) = 0;
+  // The capture session fully drained: tell the main process and exit.
+  virtual void EndSession() = 0;
+  virtual DWORD main_pid() const = 0;
+};
+
 // Owns the per-display overlay windows + their Flutter engines and drives the
 // capture-then-show / dismiss lifecycle, the single-authority cursor poll, the
 // drawing lock, and the cross-engine broadcast. The Windows analogue of the
 // macOS OverlayManager (OverlayKit.swift) + the capture-orchestration half of
 // CaptureController. Engine lifecycle = LAZY create on first capture, then
 // resident-warm (hidden between captures) -- NO macOS warm-at-launch hack.
-// One instance, owned by FlutterWindow.
+// One instance, owned by the overlay host process (overlay_host.cpp), which
+// exits after every capture session -- see TeardownUnits.
 class OverlayManager {
  public:
-  OverlayManager(const flutter::DartProject& project, HWND control_hwnd);
+  // [marshal_hwnd] receives WM_GLIMPR_ELSNAP (the host's message window).
+  OverlayManager(const flutter::DartProject& project, HWND marshal_hwnd,
+                 OverlayHostLink* link);
   ~OverlayManager();
 
   OverlayManager(const OverlayManager&) = delete;
@@ -55,29 +72,6 @@ class OverlayManager {
   // reused); a capture during the delay just lazy-creates them itself, and the
   // two never race (both run on the UI thread).
   void WarmUp();
-
-  // The standalone editor the overlay flow's open-in-editor leg reveals, and the
-  // target of the recents-changed relay (set once by FlutterWindow).
-  void SetEditorWindow(class EditorWindow* editor) { editor_window_ = editor; }
-
-  // The shared pin manager the overlay flow's pin leg uses (set by FlutterWindow).
-  void SetPinManager(class PinManager* pins) { pin_manager_ = pins; }
-
-  // Relay a record-select confirm/cancel from an overlay engine to the control
-  // engine's record channel (set once by FlutterWindow). The picker confirm/
-  // cancel reaches the control RecordController via this hop.
-  void SetRecordRelay(std::function<void(flutter::EncodableValue)> relay) {
-    record_relay_ = std::move(relay);
-  }
-
-  // Relay the capture-export "processing" pulse from an overlay engine's
-  // glimpr/capture setProcessing to the control engine's tray (set once by
-  // FlutterWindow). The overlay engine owns the capture lifecycle, like macOS.
-  // The label (localized, UTF-8) is the tray's hover tooltip while pulsing.
-  void SetProcessingRelay(
-      std::function<void(bool, const std::string&)> relay) {
-    processing_relay_ = std::move(relay);
-  }
 
   // A record hotkey pressed while a record-select picker is in flight: relay
   // onRecordSelectHotkey to EVERY overlay engine so each resurfaces / cancels its
@@ -145,18 +139,17 @@ class OverlayManager {
   void SetActiveDisplay(int64_t display_id, POINT global);
   static void CALLBACK TimerProc(HWND, UINT, UINT_PTR, DWORD);
 
-  // Destroy + re-warm the per-display overlay engines shortly after a dismiss.
-  // ROOT CAUSE (confirmed by rebuild-bisection on Windows): a resident overlay
-  // engine that has RENDERED a captured frame leaves other apps' WinUI3 content
-  // islands (e.g. File Explorer's tab / address bar --
-  // Microsoft.UI.Content.DesktopChildSiteBridge) unable to receive mouse/pointer
-  // input until THIS process's engine is torn down (legacy USER32 children +
-  // keyboard use other delivery paths, so they keep working -- which is why every
-  // queryable input state read clean). Destroying the engine repairs them; a
-  // fresh engine that has NOT yet rendered a capture does not re-break them, so we
-  // re-warm immediately to keep the next capture instant. Deferred via a one-shot
-  // timer so we never destroy an engine from inside its own channel handler (the
-  // dismissOverlay call that triggers it).
+  // End the session shortly after a dismiss by exiting this process (the main
+  // process then starts a fresh warm host). Two reasons, both engine-lifetime:
+  // (1) a resident overlay engine that has RENDERED a captured frame leaves
+  // other apps' WinUI3 content islands (e.g. File Explorer's tab / address bar
+  // -- Microsoft.UI.Content.DesktopChildSiteBridge) unable to receive
+  // mouse/pointer input until the engine is gone (legacy USER32 children +
+  // keyboard use other delivery paths, so they keep working -- which is why
+  // every queryable input state read clean); (2) destroying such an engine
+  // in-process never returns its GPU memory (flutter/flutter#193080), so only a
+  // process exit gives it back. Deferred via a one-shot timer so the exit never
+  // happens inside the dismissOverlay channel handler that triggers it.
   void TeardownUnits();
   static void CALLBACK TeardownProc(HWND, UINT, UINT_PTR, DWORD);
 
@@ -184,12 +177,8 @@ class OverlayManager {
       std::unique_ptr<flutter::MethodResult<EncodableValue>> result);
 
   flutter::DartProject project_;
-  HWND control_hwnd_ = nullptr;
-  class EditorWindow* editor_window_ = nullptr;  // not owned
-  class PinManager* pin_manager_ = nullptr;      // not owned
-  std::function<void(flutter::EncodableValue)> record_relay_;  // -> control record channel
-  // Capture-export pulse (+ tooltip label) -> control tray.
-  std::function<void(bool, const std::string&)> processing_relay_;
+  HWND marshal_hwnd_ = nullptr;
+  OverlayHostLink* link_ = nullptr;  // not owned; outlives this
   std::map<int64_t, Unit> units_;
 
   // Freeze-retained HDR base per display (HDR monitor + the hdr_screenshot
@@ -238,10 +227,10 @@ class OverlayManager {
   int pending_shows_ = 0;
   UINT_PTR present_watchdog_ = 0;  // one-shot stuck-present release (see above)
 
-  UINT_PTR teardown_timer_ = 0;  // one-shot post-dismiss engine teardown + re-warm
+  UINT_PTR teardown_timer_ = 0;  // one-shot post-dismiss session end
   // An annotated export runs async on an overlay engine AFTER the overlay hides;
   // a large capture's compose+encode+save+copy can outlast the 250ms teardown.
-  // Destroying the engine mid-export aborts the save/clipboard, so the export
+  // Exiting mid-export aborts the save/clipboard, so the export
   // holds this flag and the teardown defers until it clears (bounded so a wedged
   // export can never leave the WinUI3-island repair permanently undone).
   bool export_busy_ = false;

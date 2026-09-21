@@ -7,6 +7,7 @@
 #include "app_identity.h"
 #include "crash_dump.h"
 #include "flutter_window.h"
+#include "overlay_host.h"
 #include "perf_log.h"
 #include "record_worker.h"
 #include "utils.h"
@@ -35,11 +36,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     int argc = 0;
     LPWSTR *argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
     bool is_worker = false;
+    bool is_overlay_host = false;
     for (int i = 1; argv && i < argc; ++i) {
       if (::wcscmp(argv[i], L"--record-worker") == 0) is_worker = true;
+      if (::wcscmp(argv[i], L"--overlay-host") == 0) is_overlay_host = true;
     }
     if (argv) ::LocalFree(argv);
     if (is_worker) return RecordWorkerMain();
+    // Overlay host: a child the running instance spawns to own the per-display
+    // overlay engines for one capture session (see overlay_host.h). Same
+    // reasons to branch here as the worker above.
+    if (is_overlay_host) return OverlayHostMain();
   }
 
   // Debug-gated perf marks (inert unless the shared debugHooks prefs key is

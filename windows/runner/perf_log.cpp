@@ -10,6 +10,7 @@ namespace {
 
 bool g_enabled = false;
 HANDLE g_file = INVALID_HANDLE_VALUE;
+void (*g_sink)(const std::string&) = nullptr;  // overlay host: forward
 LARGE_INTEGER g_qpc_freq{};
 LARGE_INTEGER g_qpc_origin{};
 CRITICAL_SECTION g_lock;
@@ -78,10 +79,19 @@ void Init() {
   Mark("launchBegin");
 }
 
+void InitForward(void (*sink)(const std::string& label)) {
+  g_sink = sink;
+  g_enabled = sink != nullptr && ReadGate();
+}
+
 bool Enabled() { return g_enabled; }
 
 void Mark(const std::string& label) {
   if (!g_enabled) return;
+  if (g_sink) {
+    g_sink(label);
+    return;
+  }
   LARGE_INTEGER now{};
   QueryPerformanceCounter(&now);
   const double ms = (now.QuadPart - g_qpc_origin.QuadPart) * 1000.0 /

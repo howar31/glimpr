@@ -11,7 +11,7 @@
 #include "sound_channel.h"
 #include "editor_window.h"
 #include "hotkey_host.h"
-#include "overlay_manager.h"
+#include "overlay_host_client.h"
 #include "pin_window.h"
 #include "record_channel.h"
 #include "tray_icon.h"
@@ -32,6 +32,9 @@ class FlutterWindow : public Win32Window {
   void RevealControlWindow();
   // Quit the resident app (tray "Quit"): remove the tray icon, force-exit.
   void Quit();
+
+  // The overlay host's pinImage call: pin the file at args[path].
+  void PinFromOverlay(const flutter::EncodableMap& args);
 
   // Broadcast message a second instance posts to reveal the running one's
   // Settings (RegisterWindowMessageW("GlimprRevealSettings")).
@@ -81,9 +84,9 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<HotkeyHost> hotkey_host_;
   std::unique_ptr<TrayIcon> tray_icon_;
 
-  // The per-display freeze-overlay engines + windows (lazy-created on first
-  // capture). The macOS OverlayManager analogue.
-  std::unique_ptr<OverlayManager> overlay_manager_;
+  // The per-display freeze-overlay engines + windows live in a child process
+  // that serves one capture session and is then replaced (overlay_host.h).
+  std::unique_ptr<OverlayHostClient> overlay_host_;
 
   // The standalone Image Editor engine + window (warm-built shortly after launch;
   // revealed on demand). The macOS warm editor window analogue.

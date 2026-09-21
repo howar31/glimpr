@@ -24,6 +24,9 @@ namespace elsnap {
 
 namespace {
 
+// 0 = none: the query then only recognises this process's own windows.
+DWORD g_main_pid = 0;
+
 using flutter::EncodableMap;
 using flutter::EncodableValue;
 
@@ -144,7 +147,7 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
   // Our own window (Settings / editor / pin) on top: null -> Dart whole-window
   // snaps it (element-level snap inside our own windows is impossible, the
   // topmost overlay shadows our own tree -- the mac ruling carried over).
-  if (pid == GetCurrentProcessId()) return std::nullopt;
+  if (pid == GetCurrentProcessId() || pid == g_main_pid) return std::nullopt;
 
   // Descend the HWND layer first: the SMALLEST visible descendant window
   // containing the point (ShareX's control-detection granularity is exactly
@@ -349,6 +352,8 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
 }
 
 }  // namespace
+
+void SetMainProcessId(unsigned long pid) { g_main_pid = pid; }
 
 struct Host::Impl {
   std::thread worker;

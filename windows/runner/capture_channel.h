@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-class OverlayManager;
+class OverlayHostClient;
 class EditorWindow;
 class PinManager;
 
@@ -25,7 +25,7 @@ class PinManager;
 
 // Hosts the "glimpr/capture" method channel: native direct screen capture
 // (display / window / region) returning encoded image bytes to Dart, plus the
-// interactive freeze-overlay trigger (beginCapture -> OverlayManager). Mirrors
+// interactive freeze-overlay trigger (beginCapture -> the overlay host). Mirrors
 // the macOS CaptureChannel + CaptureController; in-runner, not a pub plugin.
 class CaptureChannel {
  public:
@@ -35,9 +35,9 @@ class CaptureChannel {
   CaptureChannel(const CaptureChannel&) = delete;
   CaptureChannel& operator=(const CaptureChannel&) = delete;
 
-  // The control engine drives the freeze overlay through this manager (set once
-  // by FlutterWindow after the OverlayManager is constructed).
-  void SetOverlayManager(OverlayManager* manager) { overlay_manager_ = manager; }
+  // The control engine drives the freeze overlay through the overlay host
+  // process (set once by FlutterWindow).
+  void SetOverlayHost(OverlayHostClient* host) { overlay_host_ = host; }
 
   // The standalone editor the direct-capture flow's open-in-editor leg reveals,
   // and the target of the recents-changed relay (set once by FlutterWindow).
@@ -58,7 +58,7 @@ class CaptureChannel {
   // The direct-capture "processing" pulse: glimpr/capture setProcessing routes
   // here -> the control engine's tray (set once by FlutterWindow). Mirrors macOS
   // onCaptureProcessingChange. The interactive overlay path relays separately
-  // (OverlayManager::SetProcessingRelay), but both land on the same tray.
+  // (the overlay host's setProcessing call), but both land on the same tray.
   // The label (localized, UTF-8) is the tray's hover tooltip while pulsing.
   void SetProcessingCallback(std::function<void(bool, const std::string&)> cb) {
     proc_cb_ = std::move(cb);
@@ -84,7 +84,7 @@ class CaptureChannel {
       const flutter::EncodableMap& map);
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
-  OverlayManager* overlay_manager_ = nullptr;  // not owned
+  OverlayHostClient* overlay_host_ = nullptr;  // not owned
   EditorWindow* editor_window_ = nullptr;      // not owned
   PinManager* pin_manager_ = nullptr;          // not owned
   HWND control_hwnd_ = nullptr;                // async completion target

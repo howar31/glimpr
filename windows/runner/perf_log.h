@@ -15,6 +15,11 @@ namespace perf {
 // sides (mirrors macOS `defaults write com.howar31.glimpr debugHooks`).
 void Init();
 
+// The overlay host child: same gate, but marks go to [sink] (which forwards
+// them to the main process) instead of a file, so both processes share ONE
+// log and ONE time origin. The log file allows a single writer.
+void InitForward(void (*sink)(const std::string& label));
+
 // True when the debugHooks gate was on at launch.
 bool Enabled();
 

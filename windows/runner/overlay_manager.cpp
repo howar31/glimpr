@@ -18,12 +18,10 @@
 #include "cursor_image.h"
 #include "dpi_util.h"
 #include "utils.h"
-#include "editor_window.h"
 #include "hdr_compose.h"
 #include "hdr_util.h"
 #include "image_codec.h"
 #include "perf_log.h"
-#include "pin_window.h"
 #include "wgc_capturer.h"
 #include "win_reveal.h"
 #include "window_enum.h"
@@ -93,8 +91,8 @@ std::unique_ptr<EncodableValue> Args(EncodableMap m) {
 OverlayManager* OverlayManager::instance_ = nullptr;
 
 OverlayManager::OverlayManager(const flutter::DartProject& project,
-                               HWND control_hwnd)
-    : project_(project), control_hwnd_(control_hwnd) {
+                               HWND marshal_hwnd, OverlayHostLink* link)
+    : project_(project), marshal_hwnd_(marshal_hwnd), link_(link) {
   instance_ = this;
 }
 
@@ -588,19 +586,22 @@ void OverlayManager::TeardownUnits() {
   // engine; destroying it now would abort the save + clipboard (the bug where a
   // big region saved nothing and left a stale clipboard). Defer, bounded to
   // ~10s so a wedged export still eventually re-warms (repairs WinUI3 islands).
-  if (export_busy_ && teardown_defer_count_ < 40) {
+  // Also wait out a feedback cue still playing (the completion chime follows
+  // the export) so exiting does not cut it off. Same bound.
+  if ((export_busy_ || !SoundChannel::IsIdle()) && teardown_defer_count_ < 40) {
     ++teardown_defer_count_;
     teardown_timer_ = SetTimer(nullptr, 0, 250, &OverlayManager::TeardownProc);
     return;
   }
   teardown_defer_count_ = 0;
-  perf::Mark("teardownBegin");
+  perf::Mark("sessionEnd");
   hdr_bases_.clear();  // the annotated export consumed (or forfeited) them
-  units_.clear();  // ~Unit -> ~OverlayWindow destroys each Flutter engine + window;
-                   // releasing the engine is what repairs the other apps' islands.
-  WarmUp();        // recreate warm engines so the NEXT capture stays instant (a
-                   // fresh engine that has not capture-rendered does not re-break).
-  perf::Mark("teardownEnd");
+  // Ends this process. Destroying an engine that has rendered never returns its
+  // GPU memory while the process lives (flutter/flutter#193080), so the session
+  // ends by exiting instead: the OS reclaims everything, the rendered engines
+  // are gone (which is what repairs the other apps' islands), and the main
+  // process starts a fresh warm host for the next capture.
+  link_->EndSession();
 }
 
 // static
@@ -934,39 +935,26 @@ void OverlayManager::HandleOverlayCapture(
   }
   if (method == "openInEditor") {
     // The overlay flow's open-in-editor leg: reveal the editor + load the file.
-    if (const auto* path = Find(args, "path")) {
-      if (const auto* p = std::get_if<std::string>(path)) {
-        if (editor_window_) editor_window_->OpenWithPath(*p);
-      }
-    }
+    // The editor lives in the main process, which must be allowed to take the
+    // foreground from this (currently foreground) process.
+    AllowSetForegroundWindow(link_->main_pid());
+    link_->Call(method, call.arguments() ? *call.arguments() : EncodableValue());
     result->Success();
     return;
   }
   if (method == "recentChanged") {
     // An overlay capture saved a file into the shared recent store -> tell the
     // editor engine to reload + re-push its list to the tray submenu.
-    if (editor_window_) editor_window_->RefreshRecent();
+    link_->Call(method, EncodableValue());
     result->Success();
     return;
   }
   if (method == "pinImage") {
     // The overlay flow's pin leg: float [path] in place over the captured region
     // (x/y/w/h global logical) when present, else centered.
-    std::string path = GetString(args, "path");
-    if (!path.empty() && pin_manager_) {
-      std::optional<RECT> place;
-      if (Find(args, "w") && Find(args, "h")) {
-        const double x = GetDouble(args, "x", 0.0);
-        const double y = GetDouble(args, "y", 0.0);
-        const double w = GetDouble(args, "w", 0.0);
-        const double h = GetDouble(args, "h", 0.0);
-        place = RECT{static_cast<LONG>(std::lround(x)),
-                     static_cast<LONG>(std::lround(y)),
-                     static_cast<LONG>(std::lround(x + w)),
-                     static_cast<LONG>(std::lround(y + h))};
-      }
-      pin_manager_->Pin(path, place);
-    }
+    // The pin windows are resident, so they live in the main process; the
+    // image travels as the file path.
+    link_->Call(method, call.arguments() ? *call.arguments() : EncodableValue());
     result->Success();
     return;
   }
@@ -976,10 +964,8 @@ void OverlayManager::HandleOverlayCapture(
     // the tray / second-instance use so the control window's RevealControlWindow
     // (show + ForceRedraw + foreground) is the single reveal path.
     DismissAll();
-    if (control_hwnd_) {
-      static UINT reveal = RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
-      PostMessage(control_hwnd_, reveal, 0, 0);
-    }
+    AllowSetForegroundWindow(link_->main_pid());
+    link_->Call(method, EncodableValue());
     result->Success();
     return;
   }
@@ -1035,7 +1021,7 @@ void OverlayManager::HandleOverlayCapture(
     // WM_GLIMPR_ELSNAP. See element_snap.h for the topmost-overlay gotcha
     // this path exists to dodge.
     const auto id = GetInt64(args, "displayId");
-    if (!id || !control_hwnd_) {
+    if (!id || !marshal_hwnd_) {
       result->Success();
       return;
     }
@@ -1053,18 +1039,15 @@ void OverlayManager::HandleOverlayCapture(
                                                         std::move(*out))
                                                   : EncodableValue());
           }
-          PostMessage(control_hwnd_, WM_GLIMPR_ELSNAP, 0, 0);
+          PostMessage(marshal_hwnd_, WM_GLIMPR_ELSNAP, 0, 0);
         });
     return;
   }
   if (method == "recordSelection") {
     // Relay the record-select confirm/cancel to the control engine's record
-    // channel (-> Dart onRecordSelection -> RecordController). Same UI thread,
-    // so the cross-engine hop is a direct call.
-    if (record_relay_) {
-      const auto* a = std::get_if<EncodableMap>(call.arguments());
-      record_relay_(a ? EncodableValue(*a) : EncodableValue());
-    }
+    // channel (-> Dart onRecordSelection -> RecordController), which lives in
+    // the main process.
+    link_->Call(method, call.arguments() ? *call.arguments() : EncodableValue());
     result->Success();
     return;
   }
@@ -1080,10 +1063,7 @@ void OverlayManager::HandleOverlayCapture(
     // tray to drive the logo-gradient processing pulse (mirrors macOS, where the
     // overlay engine forwards setProcessing to the status item). The optional
     // label becomes the tray's hover tooltip while pulsing.
-    if (processing_relay_) {
-      processing_relay_(GetBool(args, "active", false),
-                        GetString(args, "label"));
-    }
+    link_->Call(method, call.arguments() ? *call.arguments() : EncodableValue());
     result->Success();
     return;
   }

@@ -4,6 +4,7 @@
 #include <shellapi.h>
 #include <wincred.h>
 
+#include <cmath>
 #include <cstdio>
 #include <map>
 #include <optional>
@@ -227,6 +228,7 @@ bool FlutterWindow::OnCreate() {
         } else if (m == "relaunch") {
           RelaunchApp();
           if (tray_icon_) tray_icon_->Remove();
+          if (overlay_host_) overlay_host_->Shutdown();
           result->Success();
           // Force-exit: PostQuitMessage relies on a clean message-loop teardown,
           // but tearing down the overlay + editor Flutter engines on the way out
@@ -389,6 +391,9 @@ bool FlutterWindow::OnCreate() {
             // waits on our death before running the installer, and force-exit
             // is still required: a clean engine teardown can hang (same
             // rationale as the relaunch handler).
+            // The installer replaces the exe the overlay host also maps: end
+            // the host now, on this thread, not from the exit thread below.
+            if (overlay_host_) overlay_host_->Shutdown();
             CreateThread(
                 nullptr, 0,
                 [](LPVOID) -> DWORD {
@@ -413,19 +418,34 @@ bool FlutterWindow::OnCreate() {
   // Global hotkeys (Win32 RegisterHotKey, fired via WM_HOTKEY to this window).
   hotkey_host_ = std::make_unique<HotkeyHost>(messenger, GetHandle());
 
-  // The freeze-overlay manager owns the per-display engines (lazy). The control
-  // window's HWND is passed so its own window is excluded from window-snap and
-  // the overlay's openSettings can raise it.
-  overlay_manager_ = std::make_unique<OverlayManager>(project_, GetHandle());
-  capture_channel_->SetOverlayManager(overlay_manager_.get());
+  // The freeze overlay runs in a child process (overlay_host.h). Everything it
+  // needs from this resident side arrives as a one-way call; the targets are
+  // created below and looked up when a call lands.
+  OverlayHostClient::Callbacks overlay_calls;
+  overlay_calls.open_in_editor = [this](const std::string& path) {
+    if (editor_window_) editor_window_->OpenWithPath(path);
+  };
+  overlay_calls.recent_changed = [this]() {
+    if (editor_window_) editor_window_->RefreshRecent();
+  };
+  overlay_calls.pin_image = [this](const flutter::EncodableMap& args) {
+    PinFromOverlay(args);
+  };
+  overlay_calls.open_settings = [this]() { RevealControlWindow(); };
+  // The record-select picker lives on an overlay engine; its confirm/cancel
+  // relays to the control engine's record channel (-> Dart RecordController).
+  overlay_calls.record_selection = [this](flutter::EncodableValue args) {
+    if (record_channel_) record_channel_->RelaySelection(std::move(args));
+  };
+  overlay_calls.set_processing = [this](bool active, const std::string& label) {
+    if (tray_icon_) tray_icon_->SetProcessing(active, label);  // overlay
+  };
+  overlay_host_ = std::make_unique<OverlayHostClient>(GetHandle(),
+                                                      std::move(overlay_calls));
+  capture_channel_->SetOverlayHost(overlay_host_.get());
   // Async direct-capture completions marshal back through this window
   // (WM_GLIMPR_CAPTURE in MessageHandler).
   capture_channel_->SetControlHwnd(GetHandle());
-  // The record-select picker lives on an overlay engine; its confirm/cancel
-  // relays to the control engine's record channel (-> Dart RecordController).
-  overlay_manager_->SetRecordRelay([this](flutter::EncodableValue args) {
-    if (record_channel_) record_channel_->RelaySelection(std::move(args));
-  });
 
   // The standalone Image Editor (its own engine + window). Warm-built on the
   // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).
@@ -433,13 +453,11 @@ bool FlutterWindow::OnCreate() {
   // The capture flow's open-in-editor leg + recents relay reach the editor from
   // both the direct-capture (control) and overlay engines.
   capture_channel_->SetEditorWindow(editor_window_.get());
-  overlay_manager_->SetEditorWindow(editor_window_.get());
 
   // The shared pin manager: the pin flow leg reaches it from the control, overlay
   // and editor engines.
   pin_manager_ = std::make_unique<PinManager>();
   capture_channel_->SetPinManager(pin_manager_.get());
-  overlay_manager_->SetPinManager(pin_manager_.get());
   editor_window_->SetPinManager(pin_manager_.get());
 
   // System tray (the menu-bar analogue). Live items fire through the same Dart
@@ -496,10 +514,6 @@ bool FlutterWindow::OnCreate() {
       [this](bool active, const std::string& label) {
         if (tray_icon_) tray_icon_->SetProcessing(active, label);  // direct
       });
-  overlay_manager_->SetProcessingRelay(
-      [this](bool active, const std::string& label) {
-        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // overlay
-      });
   editor_window_->SetProcessingCallback(
       [this](bool active, const std::string& label) {
         if (tray_icon_) tray_icon_->SetProcessing(active, label);  // editor
@@ -545,8 +559,47 @@ void FlutterWindow::RevealControlWindow() {
   SetForegroundWindow(hwnd);
 }
 
+void FlutterWindow::PinFromOverlay(const flutter::EncodableMap& args) {
+  // The overlay flow's pin leg: float the image at [path] in place over the
+  // captured region (x/y/w/h global logical) when present, else centered.
+  auto number = [&args](const char* key, double* out) {
+    auto it = args.find(flutter::EncodableValue(std::string(key)));
+    if (it == args.end()) return false;
+    if (const auto* d = std::get_if<double>(&it->second)) {
+      *out = *d;
+      return true;
+    }
+    if (const auto* i = std::get_if<int32_t>(&it->second)) {
+      *out = *i;
+      return true;
+    }
+    if (const auto* l = std::get_if<int64_t>(&it->second)) {
+      *out = static_cast<double>(*l);
+      return true;
+    }
+    return false;
+  };
+  auto path_it = args.find(flutter::EncodableValue(std::string("path")));
+  if (path_it == args.end() || !pin_manager_) return;
+  const auto* path = std::get_if<std::string>(&path_it->second);
+  if (!path || path->empty()) return;
+  std::optional<RECT> place;
+  double x = 0, y = 0, w = 0, h = 0;
+  if (number("w", &w) && number("h", &h)) {
+    number("x", &x);
+    number("y", &y);
+    place = RECT{static_cast<LONG>(std::lround(x)),
+                 static_cast<LONG>(std::lround(y)),
+                 static_cast<LONG>(std::lround(x + w)),
+                 static_cast<LONG>(std::lround(y + h))};
+  }
+  pin_manager_->Pin(*path, place);
+}
+
 void FlutterWindow::Quit() {
   if (tray_icon_) tray_icon_->Remove();
+  // The overlay host's windows are not ours: end it before we go.
+  if (overlay_host_) overlay_host_->Shutdown();
   // Force-exit instead of PostQuitMessage: the clean message-loop teardown
   // destroys the editor + per-display overlay Flutter engines before the main
   // HWND, so the still-visible windows linger for seconds after the tray icon
@@ -597,16 +650,15 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     capture_channel_->OnAsyncDone();
     return 0;
   }
-  if (message == WM_GLIMPR_ELSNAP && overlay_manager_) {
-    // The element-snap UIA worker finished a query: complete its method
-    // result on the platform thread.
-    overlay_manager_->OnElementSnapDone();
+  if (message == WM_GLIMPR_OVERLAY_HOST && overlay_host_) {
+    // The overlay host's reader thread queued a line (or its exit).
+    overlay_host_->OnHostMessage();
     return 0;
   }
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
     KillTimer(GetHandle(), kWarmupTimerId);  // one-shot
     perf::Mark("warmupBegin");
-    if (overlay_manager_) overlay_manager_->WarmUp();
+    if (overlay_host_) overlay_host_->WarmUp();
     if (editor_window_) editor_window_->WarmUp();  // instant first editor open
     perf::Mark("warmupEnd");
     return 0;

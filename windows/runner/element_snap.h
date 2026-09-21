@@ -27,6 +27,11 @@ namespace elsnap {
 // client per query costs milliseconds). Queries are serialized FIFO; every
 // request gets a reply (the Dart caller awaits it). Replies are invoked ON THE
 // WORKER thread -- the caller marshals back to the platform thread.
+// The overlay host runs in its own process, but the Settings / editor / pin
+// windows belong to the main one: both count as "our own window" for the
+// own-window rule in the query. Set once at host start-up, before any query.
+void SetMainProcessId(unsigned long pid);
+
 class Host {
  public:
   using Reply = std::function<void(std::optional<flutter::EncodableMap>)>;

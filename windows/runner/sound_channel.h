@@ -18,6 +18,10 @@ class SoundChannel {
   explicit SoundChannel(flutter::BinaryMessenger* messenger);
   ~SoundChannel();
 
+  // True when no cue is still playing in this process (the overlay host waits
+  // for this before it exits, so the completion chime is never cut off).
+  static bool IsIdle();
+
   SoundChannel(const SoundChannel&) = delete;
   SoundChannel& operator=(const SoundChannel&) = delete;
 

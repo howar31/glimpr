@@ -23,7 +23,7 @@
 #include "decoration.h"
 #include "editor_window.h"
 #include "image_codec.h"
-#include "overlay_manager.h"
+#include "overlay_host_client.h"
 #include "perf_log.h"
 #include "pin_window.h"
 #include "utils.h"
@@ -138,9 +138,9 @@ void CaptureChannel::HandleMethodCall(
     const EncodableMap empty;
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     const EncodableMap& map = args ? *args : empty;
-    if (overlay_manager_) {
-      overlay_manager_->BeginCapture(GetBool(map, "pinOnly", false),
-                                     GetBool(map, "liveSelect", false));
+    if (overlay_host_) {
+      overlay_host_->BeginCapture(GetBool(map, "pinOnly", false),
+                                  GetBool(map, "liveSelect", false));
     }
     result->Success();
     return;
@@ -148,7 +148,7 @@ void CaptureChannel::HandleMethodCall(
   if (call.method_name() == "recordSelectHotkey") {
     // A record hotkey while the record-select picker is up: relay to the overlay
     // engines so the picker resurfaces / cancels (mirrors macOS).
-    if (overlay_manager_) overlay_manager_->RelayRecordSelectHotkey();
+    if (overlay_host_) overlay_host_->RelayRecordSelectHotkey();
     result->Success();
     return;
   }

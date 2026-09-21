@@ -21,6 +21,7 @@
 #include "drop_filter.h"
 #include "ed25519/ed25519.h"
 #include "hdr_util.h"
+#include "overlay_ipc.h"
 #include "pixel_swizzle.h"
 #include "record_args.h"
 #include "record_clock.h"
@@ -479,6 +480,51 @@ void TestEd25519Verify() {
   CHECK(ed25519_verify(sig1.data(), msg2, 1, pk1.data()) == 0);
 }
 
+void TestOverlayIpc() {
+  // CALL round-trip with binary + UTF-8 + newline bytes in the payload.
+  std::string payload("a\0b\n", 4);
+  payload += "\xe4\xb8\xad\xe6\x96\x87";
+  const std::string line = oipc::Format("CALL", "pinImage", payload);
+  CHECK(line.find('\n') == std::string::npos);
+  CHECK(line.rfind("CALL pinImage ", 0) == 0);
+  oipc::Message m = oipc::Parse(line + "\r\n");  // pipe CRLF tolerance
+  CHECK(m.ok && m.verb == "CALL" && m.method == "pinImage");
+  CHECK(m.payload == payload);
+
+  // Bare verbs and payload-less calls.
+  CHECK(oipc::Format("READY") == "READY");
+  m = oipc::Parse("READY");
+  CHECK(m.ok && m.verb == "READY" && m.method.empty());
+  m = oipc::Parse("BYE");
+  CHECK(m.ok && m.verb == "BYE");
+  m = oipc::Parse("CALL openSettings");
+  CHECK(m.ok && m.method == "openSettings" && m.payload.empty());
+
+  // Malformed lines never parse as ok.
+  CHECK(!oipc::Parse("").ok);
+  CHECK(!oipc::Parse("CALL").ok);
+  CHECK(!oipc::Parse("PERF").ok);
+  CHECK(!oipc::Parse("CALL pin-Image AAAA").ok);
+  CHECK(!oipc::Parse("CALL pinImage not*base64").ok);
+  CHECK(!oipc::Parse("CALL pinImage AAA").ok);  // length not a multiple of 4
+  CHECK(!oipc::Parse("12 34").ok);
+
+  // BEGIN flags, all four combinations.
+  for (int p = 0; p < 2; ++p) {
+    for (int l = 0; l < 2; ++l) {
+      bool pin = !p, live = !l;
+      const oipc::Message b = oipc::Parse(oipc::FormatBegin(p != 0, l != 0));
+      CHECK(oipc::ParseBegin(b, &pin, &live));
+      CHECK(pin == (p != 0) && live == (l != 0));
+    }
+  }
+  bool pin = false, live = false;
+  CHECK(!oipc::ParseBegin(oipc::Parse("BEGIN"), &pin, &live));
+  CHECK(!oipc::ParseBegin(oipc::Parse("BEGIN 1"), &pin, &live));
+  CHECK(!oipc::ParseBegin(oipc::Parse("BEGIN 2 0"), &pin, &live));
+  CHECK(!oipc::ParseBegin(oipc::Parse("READY"), &pin, &live));
+}
+
 }  // namespace
 
 int main() {
@@ -497,7 +543,7 @@ int main() {
       {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
       {"hdrop", TestDropFilesPayload},     {"drop-filter", TestDropFilter},
-      {"ed25519", TestEd25519Verify},
+      {"ed25519", TestEd25519Verify},     {"overlay-ipc", TestOverlayIpc},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

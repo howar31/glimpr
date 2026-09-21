@@ -117,6 +117,18 @@ SoundChannel::SoundChannel(flutter::BinaryMessenger* messenger) {
 
 SoundChannel::~SoundChannel() = default;
 
+// static
+bool SoundChannel::IsIdle() {
+  Engine& e = Eng();
+  if (!e.ok) return true;
+  for (const ActiveVoice& av : e.actives) {
+    XAUDIO2_VOICE_STATE st{};
+    av.voice->GetState(&st, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+    if (st.BuffersQueued != 0) return false;
+  }
+  return true;
+}
+
 void SoundChannel::HandleMethodCall(
     const flutter::MethodCall<EncodableValue>& call,
     std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
