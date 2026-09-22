@@ -23,6 +23,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Crash containment stays with InstallCrashHandler below; if injector
   // crashes recur, the plan is a HWND_MESSAGE-only hub window, not the policy.
 
+  // Run at the normal priority class no matter who started us. Some launchers
+  // (Task Scheduler among them) start their children BelowNormal, and Windows
+  // hands that class down through every relaunch, self-update and child we
+  // spawn, so a resident overlay would stay starved under load until the next
+  // reboot. Set once, here, for every role of this exe (main, record worker,
+  // overlay host); never re-applied, so a deliberate later change sticks.
+  ::SetPriorityClass(::GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+
   // Best-effort crash capture (minidump next to the exe) for both this process
   // and the record worker below.
   InstallCrashHandler();
