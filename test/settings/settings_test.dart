@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:glimpr/editor/crop_confirm_mode.dart';
 import 'package:glimpr/editor/loupe_config.dart';
+import 'package:glimpr/overlay/selection_guides.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/settings/settings.dart';
@@ -8,6 +10,45 @@ import 'package:glimpr/settings/settings.dart';
 import '../support/fake_store.dart';
 
 void main() {
+  test('guide settings round-trip and default to none / off / off', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getGuideLines(), GuideLines.none);
+    expect(await s.getGuideCenter(), isFalse);
+    expect(await s.getGuideShown(), isFalse);
+    final h0 = await s.loadHud();
+    expect(h0.guideLines, GuideLines.none);
+    expect(h0.guideCenter, isFalse);
+    expect(h0.guideShown, isFalse);
+    await s.setGuideLines(GuideLines.diagonals);
+    await s.setGuideCenter(true);
+    await s.setGuideShown(true);
+    final h1 = await s.loadHud();
+    expect(h1.guideLines, GuideLines.diagonals);
+    expect(h1.guideCenter, isTrue);
+    expect(h1.guideShown, isTrue);
+  });
+
+  test('crop confirm modes round-trip; overlay defaults release, editor adjust',
+      () async {
+    final s = Settings(FakeStore());
+    expect(await s.getCropConfirmOverlay(), CropConfirmMode.release);
+    expect(await s.getCropConfirmEditor(), CropConfirmMode.adjust);
+    await s.setCropConfirmOverlay(CropConfirmMode.adjust);
+    await s.setCropConfirmEditor(CropConfirmMode.release);
+    final c = await s.loadCapture();
+    expect(c.cropConfirmOverlay, CropConfirmMode.adjust);
+    expect(c.cropConfirmEditor, CropConfirmMode.release);
+  });
+
+  test('an unknown stored crop confirm name falls back to the default', () {
+    expect(cropConfirmModeFrom('bogus', CropConfirmMode.adjust),
+        CropConfirmMode.adjust);
+    expect(cropConfirmModeFrom(null, CropConfirmMode.release),
+        CropConfirmMode.release);
+    expect(cropConfirmModeFrom('adjust', CropConfirmMode.release),
+        CropConfirmMode.adjust);
+  });
+
   test('save directory round-trips and clears', () async {
     final s = Settings(FakeStore());
     expect(await s.getSaveDirectory(), isNull);

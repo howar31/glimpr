@@ -864,6 +864,65 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCmdToggleLoupeHint => '本次顯示或隱藏像素放大鏡';
 
   @override
+  String get settingsSectionSelection => '選取';
+
+  @override
+  String get settingsCropConfirm => '選取確認方式';
+
+  @override
+  String get settingsCropConfirmOverlayHint =>
+      '放開即確認：放開滑鼠立即截取或開始錄影。調整後確認：放開後仍可拖曳把手與移動，按 ✔ 或 Enter 才確認。';
+
+  @override
+  String get settingsCropConfirmEditorHint =>
+      '放開即確認：放開滑鼠立即裁切。調整後確認：放開後仍可拖曳把手與移動，按 ✔ 或 Enter 才確認。';
+
+  @override
+  String get settingsCropConfirmRelease => '放開即確認';
+
+  @override
+  String get settingsCropConfirmAdjust => '調整後確認';
+
+  @override
+  String get settingsSectionEditorCrop => '裁切';
+
+  @override
+  String get settingsSectionGuides => '構圖輔助線';
+
+  @override
+  String get settingsGuideLines => '線條';
+
+  @override
+  String get settingsGuideLinesHint => '拖曳選取時在框內顯示的線條：三分法九宮格或對角線。很小的框不顯示。';
+
+  @override
+  String get settingsGuideLinesNone => '無';
+
+  @override
+  String get settingsGuideLinesGrid => '九宮格';
+
+  @override
+  String get settingsGuideLinesDiagonals => '對角線';
+
+  @override
+  String get settingsGuideCenter => '中心標記';
+
+  @override
+  String get settingsGuideCenterHint => '在選取框正中央畫一個極小的十字。';
+
+  @override
+  String get settingsGuideShown => '預設顯示輔助線';
+
+  @override
+  String get settingsGuideShownHint => '每次擷取或開啟編輯器時先顯示輔助線。可從工具列或快捷即時切換。';
+
+  @override
+  String get settingsCmdToggleGuides => '切換輔助線';
+
+  @override
+  String get settingsCmdToggleGuidesHint => '本次顯示或隱藏構圖輔助線';
+
+  @override
   String get settingsReservedCancelExit => '取消／離開';
 
   @override
@@ -1168,6 +1227,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get toolbarLoupeHidden => '像素放大鏡：隱藏';
+
+  @override
+  String get toolbarGuidesShown => '構圖輔助線：顯示';
+
+  @override
+  String get toolbarGuidesHidden => '構圖輔助線：隱藏';
+
+  @override
+  String get toolbarGuidesUnconfigured => '構圖輔助線：到設定中開啟';
 
   @override
   String get toolbarMousePointerShown => '滑鼠指標：顯示';

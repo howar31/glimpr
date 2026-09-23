@@ -1,5 +1,6 @@
 import 'dart:ui' show Color, Image, Offset, Size;
 import 'package:flutter/foundation.dart';
+import '../overlay/selection_guides.dart';
 import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
@@ -52,6 +53,12 @@ bool loupeApplies(ToolKind tool, {required bool eyedropper}) =>
     kLoupeTools.contains(tool) || eyedropper;
 bool crosshairApplies(ToolKind tool, {required bool eyedropper}) =>
     kCrosshairTools.contains(tool) || eyedropper;
+
+/// The composition guides apply only to the region tool, and only when the
+/// configured combination draws something (else the toggle is inert).
+bool guidesApply(ToolKind tool,
+        {required GuideLines lines, required bool center}) =>
+    tool == ToolKind.crop && guidesConfigured(lines, center);
 
 /// How holding Shift constrains a drag for [tool] (null = Shift is a no-op):
 /// box / region tools square the drag, the ellipse becomes a circle, the
@@ -169,6 +176,19 @@ class EditorController {
   void toggleLoupe() {
     hudUserToggled = true;
     loupeOn.value = !loupeOn.value;
+  }
+
+  /// Composition guides inside the crop selection. [guidesOn] is the per-session
+  /// visibility (seeded from HudConfig.guideShown, flipped by the toolbar / G);
+  /// [guideLines] / [guideCenter] are CONFIG mirrors the host re-seeds on every
+  /// settings reload (never user-toggled in session).
+  final guidesOn = ValueNotifier<bool>(false);
+  final guideLines = ValueNotifier<GuideLines>(GuideLines.none);
+  final guideCenter = ValueNotifier<bool>(false);
+
+  void toggleGuides() {
+    hudUserToggled = true;
+    guidesOn.value = !guidesOn.value;
   }
 
   /// True while THIS core is painting its region scrim (active + in crop + a
@@ -554,5 +574,8 @@ class EditorController {
     hdrExport.dispose();
     crosshairOn.dispose();
     loupeOn.dispose();
+    guidesOn.dispose();
+    guideLines.dispose();
+    guideCenter.dispose();
   }
 }

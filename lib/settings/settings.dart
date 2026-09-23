@@ -1,8 +1,10 @@
 import 'dart:io';
 import '../capture/capture_kind.dart';
 import '../platform_gate.dart';
+import '../editor/crop_confirm_mode.dart';
 import '../editor/hud_config.dart';
 import '../editor/loupe_config.dart';
+import '../overlay/selection_guides.dart';
 import '../output/filename.dart';
 import '../output/flow.dart';
 import '../shortcuts/hotkey_binding.dart';
@@ -35,6 +37,8 @@ class CaptureSettings {
     this.captureCursor = false,
     this.snapElementMode = false,
     this.hdrScreenshot = false,
+    this.cropConfirmOverlay = CropConfirmMode.release,
+    this.cropConfirmEditor = CropConfirmMode.adjust,
   });
 
   final Directory? saveDir;
@@ -66,6 +70,10 @@ class CaptureSettings {
   // window/display/last-region captures also save an HDR file (HEIC on macOS 26+,
   // JPEG XR on Windows) beside the standard image. Default off.
   final bool hdrScreenshot;
+  // When a crop / region drag confirms, per surface: the capture overlay
+  // (screenshot + record-select share it) and the Image Editor.
+  final CropConfirmMode cropConfirmOverlay;
+  final CropConfirmMode cropConfirmEditor;
 
   static const defaults = CaptureSettings();
 
@@ -159,6 +167,11 @@ class Settings {
   static const _hudCrosshairKey = 'hud_crosshair';
   static const _hudLoupeKey = 'hud_loupe';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
+  static const _guideLinesKey = 'guide_lines';
+  static const _guideCenterKey = 'guide_center';
+  static const _guideShownKey = 'guide_shown';
+  static const _cropConfirmOverlayKey = 'crop_confirm_overlay';
+  static const _cropConfirmEditorKey = 'crop_confirm_editor';
   static const _captureLayerCapKey = 'capture_layer_cap';
   static const _appLanguageKey = 'app_language';
 
@@ -537,12 +550,43 @@ class Settings {
   Future<void> setHudMarchingAnts(bool v) =>
       store.setBool(_hudMarchingAntsKey, v);
 
+  // Composition guides (lines style + center mark + shown-by-default) --------
+  Future<GuideLines> getGuideLines() async {
+    final n = await store.getString(_guideLinesKey);
+    return GuideLines.values.where((g) => g.name == n).firstOrNull ??
+        GuideLines.none;
+  }
+  Future<void> setGuideLines(GuideLines v) =>
+      store.setString(_guideLinesKey, v.name);
+
+  Future<bool> getGuideCenter() async =>
+      (await store.getBool(_guideCenterKey)) ?? false;
+  Future<void> setGuideCenter(bool v) => store.setBool(_guideCenterKey, v);
+
+  Future<bool> getGuideShown() async =>
+      (await store.getBool(_guideShownKey)) ?? false;
+  Future<void> setGuideShown(bool v) => store.setBool(_guideShownKey, v);
+
+  // Crop confirm mode, per surface ------------------------------------------
+  Future<CropConfirmMode> getCropConfirmOverlay() async => cropConfirmModeFrom(
+      await store.getString(_cropConfirmOverlayKey), CropConfirmMode.release);
+  Future<void> setCropConfirmOverlay(CropConfirmMode v) =>
+      store.setString(_cropConfirmOverlayKey, v.name);
+
+  Future<CropConfirmMode> getCropConfirmEditor() async => cropConfirmModeFrom(
+      await store.getString(_cropConfirmEditorKey), CropConfirmMode.adjust);
+  Future<void> setCropConfirmEditor(CropConfirmMode v) =>
+      store.setString(_cropConfirmEditorKey, v.name);
+
   /// One-shot HUD options snapshot, read by the overlay (per capture) and the
   /// image editor (per open); hot-reloaded alongside the loupe.
   Future<HudConfig> loadHud() async => HudConfig(
     crosshair: await getHudCrosshair(),
     loupe: await getHudLoupe(),
     marchingAnts: await getHudMarchingAnts(),
+    guideLines: await getGuideLines(),
+    guideCenter: await getGuideCenter(),
+    guideShown: await getGuideShown(),
   );
 
   /// One-shot snapshot of every capture-time setting (prefetched per capture).
@@ -565,6 +609,8 @@ class Settings {
     captureCursor: await getCaptureCursor(),
     snapElementMode: await getSnapElementMode(),
     hdrScreenshot: await getHdrScreenshot(),
+    cropConfirmOverlay: await getCropConfirmOverlay(),
+    cropConfirmEditor: await getCropConfirmEditor(),
   );
 
   /// One-shot snapshot of every HOT-RELOADABLE config setting (see [AppConfig]).

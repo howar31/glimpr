@@ -36,6 +36,18 @@ void main() {
     timeStamp: Duration.zero,
   );
 
+  test('bare G dispatches the guides toggle by default', () {
+    expect(kDefaultBindings[kEditorToggleGuidesKey]?.logicalKey,
+        LogicalKeyboardKey.keyG);
+    final keyG = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.keyG,
+      logicalKey: LogicalKeyboardKey.keyG,
+      timeStamp: Duration.zero,
+    );
+    expect(pickEditorAction(keyG, const {}, kDefaultBindings),
+        kEditorToggleGuidesKey);
+  });
+
   test('bare C selects crop under default bindings', () {
     expect(
       pickEditorAction(keyC, {}, kDefaultBindings),

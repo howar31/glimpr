@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/editor/tool_meta.dart';
 import 'package:glimpr/l10n/gen/app_localizations.dart';
+import 'package:glimpr/overlay/selection_guides.dart';
 import 'package:glimpr/overlay/style_popovers.dart';
 import 'package:glimpr/overlay/toolbar.dart';
 import 'package:glimpr/shortcuts/hotkey_binding.dart';
@@ -122,8 +123,8 @@ void main() {
     final c = await _pumpToolbar(tester, kDefaultBindings);
 
     expect(kEditorToolMeta.length, 15);
-    // 15 tool buttons + 2 HUD toggles (crosshair / loupe).
-    expect(find.byType(IconButton), findsNWidgets(17));
+    // 15 tool buttons + 3 HUD toggles (crosshair / loupe / guides).
+    expect(find.byType(IconButton), findsNWidgets(18));
 
     for (final (kind, _) in kEditorToolMeta) {
       c.selectTool(kind);
@@ -136,9 +137,9 @@ void main() {
       (tester) async {
     await _pumpToolbar(tester, kDefaultBindings);
 
-    // Default tool is Crop => no options row => 15 tool badges + 2 HUD-toggle
-    // badges (crosshair X / loupe Q), all default-bound.
-    expect(find.byType(Text), findsNWidgets(17));
+    // Default tool is Crop => no options row => 15 tool badges + 3 HUD-toggle
+    // badges (crosshair X / loupe Q / guides G), all default-bound.
+    expect(find.byType(Text), findsNWidgets(18));
     // Crop's default is bare 'C'; Rectangle's is bare '1'. Both are
     // host-platform-stable (no modifier glyphs).
     expect(find.text('C'), findsOneWidget);
@@ -161,8 +162,8 @@ void main() {
 
     expect(find.text('Y'), findsOneWidget); // the rebound label shows
     expect(find.text('C'), findsNothing); // the old label is gone
-    // 15 tool badges + 2 HUD-toggle badges (crosshair X / loupe Q).
-    expect(find.byType(Text), findsNWidgets(17));
+    // 15 tool badges + 3 HUD-toggle badges (crosshair X / loupe Q / guides G).
+    expect(find.byType(Text), findsNWidgets(18));
   });
 
   testWidgets('an unbound tool shows no badge (button still builds)',
@@ -175,15 +176,15 @@ void main() {
     };
     await _pumpToolbar(tester, bindings);
 
-    expect(find.byType(IconButton), findsNWidgets(17)); // 15 tools + 2 HUD toggles
+    expect(find.byType(IconButton), findsNWidgets(18)); // 15 tools + 3 HUD toggles
     expect(find.text('C'), findsNothing); // crop's badge is suppressed
-    expect(find.byType(Text), findsNWidgets(16)); // 14 tool + 2 HUD-toggle badges
+    expect(find.byType(Text), findsNWidgets(17)); // 14 tool + 3 HUD-toggle badges
   });
 
   testWidgets('empty bindings => no badges at all', (tester) async {
     await _pumpToolbar(tester, const {});
 
-    expect(find.byType(IconButton), findsNWidgets(17)); // 15 tools + 2 HUD toggles
+    expect(find.byType(IconButton), findsNWidgets(18)); // 15 tools + 3 HUD toggles
     expect(find.byType(Text), findsNothing);
   });
 
@@ -401,9 +402,11 @@ void main() {
     expect(find.byIcon(Icons.mouse), findsOneWidget);
     expect(find.byIcon(Icons.volume_up), findsOneWidget);
     expect(find.byIcon(Icons.mic), findsOneWidget);
-    // HUD toggles do not show in record mode.
+    // Crosshair / loupe toggles do not show in record mode; the composition
+    // guides toggle does (guides apply to the record region too).
     expect(find.byIcon(Icons.gps_fixed), findsNothing);
     expect(find.byIcon(Icons.search), findsNothing);
+    expect(find.byIcon(Icons.grid_3x3), findsOneWidget);
     // The option row hosts the per-take codec + frame-rate pickers.
     expect(find.byKey(const ValueKey('record-format-picker')), findsOneWidget);
     expect(find.byKey(const ValueKey('record-fps-picker')), findsOneWidget);
@@ -421,6 +424,34 @@ void main() {
     await tester.tap(find.byIcon(Icons.mouse));
     await tester.pump();
     expect(o.showCursor.value, isFalse);
+  });
+
+  testWidgets('guides toggle: inert until a style is configured, then flips '
+      'guidesOn; region tool only', (tester) async {
+    final c = await _pumpToolbar(tester, kDefaultBindings);
+    final btn = find.widgetWithIcon(IconButton, Icons.grid_3x3);
+    expect(btn, findsOneWidget);
+    expect(tester.widget<IconButton>(btn).onPressed, isNull); // none + off
+    // Unconfigured: the tooltip points at Settings instead of shown / hidden.
+    expect(tester.widget<IconButton>(btn).tooltip,
+        'Composition guides: turn on in Settings');
+
+    c.guideLines.value = GuideLines.grid;
+    await tester.pump();
+    expect(tester.widget<IconButton>(btn).onPressed, isNotNull);
+    expect(tester.widget<IconButton>(btn).tooltip,
+        'Composition guides: hidden');
+    expect(c.guidesOn.value, isFalse);
+    // The guides button is the LAST in the row, past the 800px test viewport
+    // of the horizontal scroller: scroll it into view before tapping.
+    await tester.ensureVisible(btn);
+    await tester.tap(btn);
+    await tester.pump();
+    expect(c.guidesOn.value, isTrue);
+
+    c.selectTool(ToolKind.rectangle); // guides apply to the region tool only
+    await tester.pump();
+    expect(tester.widget<IconButton>(btn).onPressed, isNull);
   });
 
   testWidgets('record mode: GIF greys out the audio override toggles',

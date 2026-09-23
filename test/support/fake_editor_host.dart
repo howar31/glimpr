@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/capture/captured_display.dart' show SnapWindow;
 import 'package:glimpr/capture/element_snap.dart';
+import 'package:glimpr/editor/crop_confirm_mode.dart';
 import 'package:glimpr/editor/editor_controller.dart';
 import 'package:glimpr/editor/editor_core.dart';
 import 'package:glimpr/editor/editor_host.dart';
@@ -52,9 +53,11 @@ class FakeEditorHost extends EditorHost {
     this.viewportInteractive = false,
     this.cropTrims = false,
     this.liveSelect = false,
+    CropConfirmMode? cropConfirm,
     ValueNotifier<({int id, Offset cursor})>? activeSignal,
     RecordingCursorController? cursor,
-  })  : cursor = cursor ?? RecordingCursorController(),
+  })  : cropConfirmOverride = cropConfirm,
+        cursor = cursor ?? RecordingCursorController(),
         activeSignalNotifier = activeSignal ??
             ValueNotifier((
               // Default signal agrees with startsActive: our id when active,
@@ -94,6 +97,12 @@ class FakeEditorHost extends EditorHost {
   final bool liveSelect;
   @override
   final RecordingCursorController cursor;
+
+  /// Per-surface confirm mode; null = the host default (adjust when trimming,
+  /// release otherwise), matching the real hosts.
+  final CropConfirmMode? cropConfirmOverride;
+  @override
+  CropConfirmMode get cropConfirm => cropConfirmOverride ?? super.cropConfirm;
 
   /// Poke `.value` to drive the cross-display active handoff in a test.
   final ValueNotifier<({int id, Offset cursor})> activeSignalNotifier;

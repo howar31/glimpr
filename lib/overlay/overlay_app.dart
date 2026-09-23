@@ -397,9 +397,14 @@ class _OverlayAppState extends State<OverlayApp> {
   /// flipped a toggle this session (don't clobber an in-session override). The
   /// transient toggle resets naturally when a new controller is created.
   void _seedHudToggles(EditorController? ed, HudConfig h) {
-    if (ed == null || ed.hudUserToggled) return;
+    if (ed == null) return;
+    // Guide CONFIG always follows settings (never user-toggled in session).
+    ed.guideLines.value = h.guideLines;
+    ed.guideCenter.value = h.guideCenter;
+    if (ed.hudUserToggled) return;
     ed.crosshairOn.value = h.crosshair;
     ed.loupeOn.value = h.loupe;
+    ed.guidesOn.value = h.guideShown;
   }
 
   /// Loads the persisted per-tool styles, or null when the store is unavailable
@@ -1400,6 +1405,7 @@ class _OverlayAppState extends State<OverlayApp> {
                       onCancel: _onCancelRequested,
                       activeSignal: _activeSignal,
                       rightClickExits: _capture.rightClickExits,
+                      cropConfirm: _capture.cropConfirmOverlay,
                       editorBindings: _editorBindings,
                       loupe: _loupe,
                       hud: _hud,
@@ -1445,6 +1451,8 @@ class _OverlayAppState extends State<OverlayApp> {
                     onCancel: _onRecordSelectCancel,
                     activeSignal: _activeSignal,
                     rightClickExits: _capture.rightClickExits,
+                    // Record-select follows the overlay's confirm setting.
+                    cropConfirm: _capture.cropConfirmOverlay,
                     editorBindings: _editorBindings,
                     loupe: _loupe,
                     hud: _hud,

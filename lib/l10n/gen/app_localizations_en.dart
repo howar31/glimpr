@@ -906,6 +906,69 @@ class AppLocalizationsEn extends AppLocalizations {
       'Show or hide the pixel loupe for the current session';
 
   @override
+  String get settingsSectionSelection => 'Selection';
+
+  @override
+  String get settingsCropConfirm => 'Confirm selection';
+
+  @override
+  String get settingsCropConfirmOverlayHint =>
+      'Release to confirm captures or starts recording the moment you let go. Adjust, then confirm keeps the box editable (handles, move) until you press the check or Enter.';
+
+  @override
+  String get settingsCropConfirmEditorHint =>
+      'Release to confirm trims the moment you let go. Adjust, then confirm keeps the box editable (handles, move) until you press the check or Enter.';
+
+  @override
+  String get settingsCropConfirmRelease => 'Release to confirm';
+
+  @override
+  String get settingsCropConfirmAdjust => 'Adjust, then confirm';
+
+  @override
+  String get settingsSectionEditorCrop => 'Crop';
+
+  @override
+  String get settingsSectionGuides => 'Composition guides';
+
+  @override
+  String get settingsGuideLines => 'Lines';
+
+  @override
+  String get settingsGuideLinesHint =>
+      'Lines drawn inside the selection box while you drag: a rule-of-thirds grid or corner diagonals. Hidden on very small boxes.';
+
+  @override
+  String get settingsGuideLinesNone => 'None';
+
+  @override
+  String get settingsGuideLinesGrid => 'Grid';
+
+  @override
+  String get settingsGuideLinesDiagonals => 'Diagonals';
+
+  @override
+  String get settingsGuideCenter => 'Center mark';
+
+  @override
+  String get settingsGuideCenterHint =>
+      'A tiny cross at the exact center of the selection box.';
+
+  @override
+  String get settingsGuideShown => 'Show guides by default';
+
+  @override
+  String get settingsGuideShownHint =>
+      'Start every capture and editor session with the guides visible. Toggle them live from the toolbar or a shortcut.';
+
+  @override
+  String get settingsCmdToggleGuides => 'Toggle guides';
+
+  @override
+  String get settingsCmdToggleGuidesHint =>
+      'Show or hide the composition guides for the current session';
+
+  @override
   String get settingsReservedCancelExit => 'Cancel / Exit';
 
   @override
@@ -1221,6 +1284,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolbarLoupeHidden => 'Pixel loupe: hidden';
+
+  @override
+  String get toolbarGuidesShown => 'Composition guides: shown';
+
+  @override
+  String get toolbarGuidesHidden => 'Composition guides: hidden';
+
+  @override
+  String get toolbarGuidesUnconfigured =>
+      'Composition guides: turn on in Settings';
 
   @override
   String get toolbarMousePointerShown => 'Mouse pointer: shown';

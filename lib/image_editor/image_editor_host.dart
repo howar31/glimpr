@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Offset, Rect, Size, VoidCallback;
 import '../capture/captured_display.dart' show SnapWindow;
 import '../capture/element_snap.dart';
+import '../editor/crop_confirm_mode.dart';
 import '../editor/editor_host.dart';
 import '../editor/loupe_config.dart' show LoupeInfoMode;
 import '../settings/settings.dart';
@@ -21,6 +22,8 @@ class ImageEditorHost implements EditorHost {
   final Future<void> Function() onComplete;
   final VoidCallback? onClose;
   final VoidCallback? onOpenSettings;
+  // The editor's crop confirm setting; null = the editor default (adjust).
+  final CropConfirmMode? cropConfirmMode;
   @override
   final ValueListenable<({int id, Offset cursor})> activeSignal;
 
@@ -30,6 +33,7 @@ class ImageEditorHost implements EditorHost {
     required this.activeSignal,
     this.onClose,
     this.onOpenSettings,
+    this.cropConfirmMode,
   });
 
   static const int kImageEditorHostId = 0;
@@ -67,6 +71,8 @@ class ImageEditorHost implements EditorHost {
   bool get viewportInteractive => true;
   @override
   bool get cropTrims => true;
+  @override
+  CropConfirmMode get cropConfirm => cropConfirmMode ?? CropConfirmMode.adjust;
   @override
   bool get liveSelect => false;
   @override

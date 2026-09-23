@@ -91,6 +91,8 @@ const kEditorCopyHslKey = 'editor.copyColorHsl';
 // Rebindable; defaults to bare X (crosshair) / Q (loupe). Unbind to disable.
 const kEditorToggleCrosshairKey = 'editor.toggleCrosshair';
 const kEditorToggleLoupeKey = 'editor.toggleLoupe';
+// Composition guides toggle (crop selection): bare G. Rebindable.
+const kEditorToggleGuidesKey = 'editor.toggleGuides';
 
 /// Maps each editor tool to its action key.
 const kEditorToolActionKey = <ToolKind, String>{
@@ -180,6 +182,7 @@ final Map<String, HotkeyBinding> kDefaultBindings = {
   kEditorToggleCrosshairKey:
       _b(PhysicalKeyboardKey.keyX, LogicalKeyboardKey.keyX),
   kEditorToggleLoupeKey: _b(PhysicalKeyboardKey.keyQ, LogicalKeyboardKey.keyQ),
+  kEditorToggleGuidesKey: _b(PhysicalKeyboardKey.keyG, LogicalKeyboardKey.keyG),
   kEditorBringToFrontKey: _b(
       PhysicalKeyboardKey.bracketRight, LogicalKeyboardKey.bracketRight,
       {HotkeyModifier.meta}),
@@ -512,6 +515,7 @@ String? pickEditorAction(
     kEditorCopyHslKey,
     kEditorToggleCrosshairKey,
     kEditorToggleLoupeKey,
+    kEditorToggleGuidesKey,
   ];
   for (final k in commands) {
     final b = bindings[k];

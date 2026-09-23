@@ -1710,6 +1710,120 @@ abstract class AppLocalizations {
   /// **'Show or hide the pixel loupe for the current session'**
   String get settingsCmdToggleLoupeHint;
 
+  /// Settings > Selection & HUD: Selection section label
+  ///
+  /// In en, this message translates to:
+  /// **'Selection'**
+  String get settingsSectionSelection;
+
+  /// Settings > Selection & HUD / Image Editor: crop confirm mode row title
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm selection'**
+  String get settingsCropConfirm;
+
+  /// Settings > Selection & HUD: crop confirm mode row hint (overlay)
+  ///
+  /// In en, this message translates to:
+  /// **'Release to confirm captures or starts recording the moment you let go. Adjust, then confirm keeps the box editable (handles, move) until you press the check or Enter.'**
+  String get settingsCropConfirmOverlayHint;
+
+  /// Settings > Image Editor: crop confirm mode row hint (editor)
+  ///
+  /// In en, this message translates to:
+  /// **'Release to confirm trims the moment you let go. Adjust, then confirm keeps the box editable (handles, move) until you press the check or Enter.'**
+  String get settingsCropConfirmEditorHint;
+
+  /// Settings: crop confirm mode option, confirm on mouse release
+  ///
+  /// In en, this message translates to:
+  /// **'Release to confirm'**
+  String get settingsCropConfirmRelease;
+
+  /// Settings: crop confirm mode option, editable pending selection
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust, then confirm'**
+  String get settingsCropConfirmAdjust;
+
+  /// Settings > Image Editor: Crop section label
+  ///
+  /// In en, this message translates to:
+  /// **'Crop'**
+  String get settingsSectionEditorCrop;
+
+  /// Settings > Selection & HUD: composition guides section label
+  ///
+  /// In en, this message translates to:
+  /// **'Composition guides'**
+  String get settingsSectionGuides;
+
+  /// Settings > Selection & HUD > Composition guides: lines style row title
+  ///
+  /// In en, this message translates to:
+  /// **'Lines'**
+  String get settingsGuideLines;
+
+  /// Settings > Selection & HUD > Composition guides: lines style row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Lines drawn inside the selection box while you drag: a rule-of-thirds grid or corner diagonals. Hidden on very small boxes.'**
+  String get settingsGuideLinesHint;
+
+  /// Settings: guide lines option, no lines
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get settingsGuideLinesNone;
+
+  /// Settings: guide lines option, rule-of-thirds grid
+  ///
+  /// In en, this message translates to:
+  /// **'Grid'**
+  String get settingsGuideLinesGrid;
+
+  /// Settings: guide lines option, corner diagonals
+  ///
+  /// In en, this message translates to:
+  /// **'Diagonals'**
+  String get settingsGuideLinesDiagonals;
+
+  /// Settings > Selection & HUD > Overlay HUD: center mark row title
+  ///
+  /// In en, this message translates to:
+  /// **'Center mark'**
+  String get settingsGuideCenter;
+
+  /// Settings > Selection & HUD > Overlay HUD: center mark row hint
+  ///
+  /// In en, this message translates to:
+  /// **'A tiny cross at the exact center of the selection box.'**
+  String get settingsGuideCenterHint;
+
+  /// Settings > Selection & HUD > Overlay HUD: guides shown-by-default row title
+  ///
+  /// In en, this message translates to:
+  /// **'Show guides by default'**
+  String get settingsGuideShown;
+
+  /// Settings > Selection & HUD > Overlay HUD: guides shown-by-default row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Start every capture and editor session with the guides visible. Toggle them live from the toolbar or a shortcut.'**
+  String get settingsGuideShownHint;
+
+  /// Settings > Shortcuts > Commands: toggle guides row title
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle guides'**
+  String get settingsCmdToggleGuides;
+
+  /// Settings > Shortcuts > Commands: toggle guides row hint
+  ///
+  /// In en, this message translates to:
+  /// **'Show or hide the composition guides for the current session'**
+  String get settingsCmdToggleGuidesHint;
+
   /// Settings > Shortcuts > Reserved: Cancel/Exit row title
   ///
   /// In en, this message translates to:
@@ -2309,6 +2423,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pixel loupe: hidden'**
   String get toolbarLoupeHidden;
+
+  /// Toolbar: composition-guides toggle tooltip when on
+  ///
+  /// In en, this message translates to:
+  /// **'Composition guides: shown'**
+  String get toolbarGuidesShown;
+
+  /// Toolbar: composition-guides toggle tooltip when off
+  ///
+  /// In en, this message translates to:
+  /// **'Composition guides: hidden'**
+  String get toolbarGuidesHidden;
+
+  /// Toolbar: composition-guides toggle tooltip while no lines / center mark is configured (button greyed)
+  ///
+  /// In en, this message translates to:
+  /// **'Composition guides: turn on in Settings'**
+  String get toolbarGuidesUnconfigured;
 
   /// Toolbar: cursor-toggle tooltip when the captured cursor layer is visible
   ///

@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart' show Offset, Rect, Size, VoidCallback;
 import '../capture/capture_bridge.dart';
 import '../capture/captured_display.dart';
 import '../capture/element_snap.dart';
+import '../editor/crop_confirm_mode.dart';
 import '../editor/editor_host.dart';
 import '../editor/loupe_config.dart' show LoupeInfoMode;
 import '../settings/settings.dart';
@@ -28,6 +29,7 @@ class OverlayEditorHost implements EditorHost {
   final ui.Image frozen;
   final ValueListenable<({int id, Offset cursor})> _activeSignal;
   final bool _rightClickExits;
+  final CropConfirmMode? _cropConfirm;
   final Future<void> Function(Rect? selectionLogical, SnapWindow? window) _onExport;
   final VoidCallback _onCancel;
   final EditorCursorController _cursor;
@@ -50,13 +52,14 @@ class OverlayEditorHost implements EditorHost {
     required this._rightClickExits,
     required this._onExport,
     required this._onCancel,
+    this._cropConfirm,
     EditorCursorController? cursor,
     this.cursorImage,
     this.cursorTopLeft,
     this.liveSelect = false,
     this.liveLoupeSample,
     this.elementSnapAt,
-  }) : _cursor = cursor ?? OverlayCursorController();
+  })  : _cursor = cursor ?? OverlayCursorController();
 
   @override
   Size get size => Size(display.width, display.height);
@@ -88,6 +91,8 @@ class OverlayEditorHost implements EditorHost {
   bool get viewportInteractive => false;
   @override
   bool get cropTrims => false;
+  @override
+  CropConfirmMode get cropConfirm => _cropConfirm ?? CropConfirmMode.release;
   @override
   Future<void> onExport(Rect? selectionLogical, SnapWindow? window) =>
       _onExport(selectionLogical, window);

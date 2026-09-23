@@ -130,13 +130,15 @@ void main() {
     final settings = Settings(FakeStore());
     await _openShortcuts(tester, settings);
 
-    // Record a bare 'G' on the global capture row. ShareX-parity: bare keys
-    // are allowed on both tiers, so this dirties the draft and enables Apply.
+    // Record a bare 'J' on the global capture row (a key no default binds;
+    // bare G is the editor's guides toggle and would raise a conflict row).
+    // ShareX-parity: bare keys are allowed on both tiers, so this dirties the
+    // draft and enables Apply.
     await tester.tap(_globalRecorder);
     await tester.pump();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyJ);
     await tester.pump();
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyJ);
     await tester.pumpAndSettle();
 
     await _scrollToFooter(tester);

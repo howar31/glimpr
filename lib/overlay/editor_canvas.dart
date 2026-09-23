@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../capture/captured_display.dart';
 import '../capture/element_snap.dart';
+import '../editor/crop_confirm_mode.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_core.dart';
 import '../editor/hud_config.dart';
@@ -23,6 +24,9 @@ class EditorCanvas extends StatelessWidget {
   final VoidCallback onCancel;
   final ValueListenable<({int id, Offset cursor})> activeSignal;
   final bool rightClickExits;
+  // The overlay's crop confirm setting (screenshot + record-select share it);
+  // null = release (the original overlay behaviour).
+  final CropConfirmMode? cropConfirm;
   final Map<String, HotkeyBinding?> editorBindings;
   final LoupeConfig loupe;
   final HudConfig hud;
@@ -65,6 +69,7 @@ class EditorCanvas extends StatelessWidget {
     this.loupe = const LoupeConfig(),
     this.hud = const HudConfig(),
     this.rightClickExits = true,
+    this.cropConfirm,
     this.cursorImage,
     this.cursorTopLeft,
     this.pinMode = false,
@@ -97,6 +102,7 @@ class EditorCanvas extends StatelessWidget {
         frozen: frozenImage,
         activeSignal: activeSignal,
         rightClickExits: rightClickExits,
+        cropConfirm: cropConfirm,
         onExport: onExport,
         onCancel: onCancel,
         cursorImage: cursorImage,

@@ -10,12 +10,14 @@ import 'package:simple_icons/simple_icons.dart';
 import 'licenses_page.dart';
 import 'whats_new_page.dart';
 import '../channels.dart';
+import '../editor/crop_confirm_mode.dart';
 import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
+import '../overlay/selection_guides.dart';
 import '../capture/capture_bridge.dart';
 import '../capture/direct_capture.dart'
     show
@@ -194,6 +196,11 @@ class _SettingsAppState extends State<SettingsApp>
   bool _hudCrosshair = true;
   bool _hudLoupe = true;
   bool _hudMarchingAnts = true;
+  GuideLines _guideLines = GuideLines.none;
+  bool _guideCenter = false;
+  bool _guideShown = false;
+  CropConfirmMode _cropConfirmOverlay = CropConfirmMode.release;
+  CropConfirmMode _cropConfirmEditor = CropConfirmMode.adjust;
   final _filenameController = TextEditingController();
   final _filenameFocus = FocusNode();
   String _subfolderPattern = defaultSubfolderPattern;
@@ -484,6 +491,11 @@ class _SettingsAppState extends State<SettingsApp>
     final hudCrosshair = await _s.getHudCrosshair();
     final hudLoupe = await _s.getHudLoupe();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
+    final guideLines = await _s.getGuideLines();
+    final guideCenter = await _s.getGuideCenter();
+    final guideShown = await _s.getGuideShown();
+    final cropConfirmOverlay = await _s.getCropConfirmOverlay();
+    final cropConfirmEditor = await _s.getCropConfirmEditor();
     final layerCap = await _s.getCaptureLayerCap();
     final snapElementMode = await _s.getSnapElementMode();
     final hdrScreenshot = await _s.getHdrScreenshot();
@@ -522,6 +534,11 @@ class _SettingsAppState extends State<SettingsApp>
       _hudCrosshair = hudCrosshair;
       _hudLoupe = hudLoupe;
       _hudMarchingAnts = hudMarchingAnts;
+      _guideLines = guideLines;
+      _guideCenter = guideCenter;
+      _guideShown = guideShown;
+      _cropConfirmOverlay = cropConfirmOverlay;
+      _cropConfirmEditor = cropConfirmEditor;
       _captureLayerCap = layerCap;
       _snapElementMode = snapElementMode;
       _hdrScreenshot = hdrScreenshot;
@@ -1642,6 +1659,25 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ]),
       const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionSelection, icon: Icons.crop),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsCropConfirm,
+          hint: _l.settingsCropConfirmOverlayHint,
+          trailing: Segmented<CropConfirmMode>(
+            value: _cropConfirmOverlay,
+            options: [
+              (CropConfirmMode.release, _l.settingsCropConfirmRelease),
+              (CropConfirmMode.adjust, _l.settingsCropConfirmAdjust),
+            ],
+            onChanged: (v) async {
+              await _s.setCropConfirmOverlay(v);
+              if (mounted) setState(() => _cropConfirmOverlay = v);
+            },
+          ),
+        ),
+      ]),
+      const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionOverlayHUD, icon: Icons.grid_goldenratio),
       GlassCard.rows([
         SettingRow(
@@ -1688,6 +1724,52 @@ class _SettingsAppState extends State<SettingsApp>
             onChanged: (v) async {
               await _s.setRightClickExits(v);
               if (mounted) setState(() => _rightClickExits = v);
+            },
+          ),
+        ),
+      ]),
+      const SizedBox(height: 15),
+      // Composition guides: their own section (owner: easier to find than
+      // rows mixed into the HUD card), "shown by default" first.
+      SectionLabel(_l.settingsSectionGuides, icon: Icons.grid_3x3),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsGuideShown,
+          hint: _l.settingsGuideShownHint,
+          trailing: GlassToggle(
+            value: _guideShown,
+            onChanged: (v) async {
+              await _s.setGuideShown(v);
+              if (mounted) setState(() => _guideShown = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsGuideLines,
+          hint: _l.settingsGuideLinesHint,
+          trailing: Segmented<GuideLines>(
+            value: _guideLines,
+            options: [
+              (GuideLines.none, _l.settingsGuideLinesNone),
+              (GuideLines.grid, _l.settingsGuideLinesGrid),
+              (GuideLines.diagonals, _l.settingsGuideLinesDiagonals),
+            ],
+            onChanged: (v) async {
+              await _s.setGuideLines(v);
+              if (mounted) setState(() => _guideLines = v);
+            },
+          ),
+        ),
+        SettingRow(
+          divider: true,
+          title: _l.settingsGuideCenter,
+          hint: _l.settingsGuideCenterHint,
+          trailing: GlassToggle(
+            value: _guideCenter,
+            onChanged: (v) async {
+              await _s.setGuideCenter(v);
+              if (mounted) setState(() => _guideCenter = v);
             },
           ),
         ),
@@ -2009,6 +2091,25 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 15),
+      SectionLabel(_l.settingsSectionEditorCrop, icon: Icons.crop),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsCropConfirm,
+          hint: _l.settingsCropConfirmEditorHint,
+          trailing: Segmented<CropConfirmMode>(
+            value: _cropConfirmEditor,
+            options: [
+              (CropConfirmMode.release, _l.settingsCropConfirmRelease),
+              (CropConfirmMode.adjust, _l.settingsCropConfirmAdjust),
+            ],
+            onChanged: (v) async {
+              await _s.setCropConfirmEditor(v);
+              if (mounted) setState(() => _cropConfirmEditor = v);
+            },
+          ),
+        ),
+      ]),
       const SizedBox(height: 15),
       SectionLabel(_l.settingsSectionRecentHistory, icon: Icons.history),
       GlassCard.padded(
@@ -2810,6 +2911,11 @@ class _SettingsAppState extends State<SettingsApp>
             kEditorToggleLoupeKey,
             _l.settingsCmdToggleLoupe,
             _l.settingsCmdToggleLoupeHint,
+          ),
+          (
+            kEditorToggleGuidesKey,
+            _l.settingsCmdToggleGuides,
+            _l.settingsCmdToggleGuidesHint,
           ),
         ])
           SettingRow(

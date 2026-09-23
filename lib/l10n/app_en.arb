@@ -970,6 +970,82 @@
   "@settingsCmdToggleLoupeHint": {
     "description": "Settings > Shortcuts > Commands: toggle loupe row hint"
   },
+  "settingsSectionSelection": "Selection",
+  "@settingsSectionSelection": {
+    "description": "Settings > Selection & HUD: Selection section label"
+  },
+  "settingsCropConfirm": "Confirm selection",
+  "@settingsCropConfirm": {
+    "description": "Settings > Selection & HUD / Image Editor: crop confirm mode row title"
+  },
+  "settingsCropConfirmOverlayHint": "Release to confirm captures or starts recording the moment you let go. Adjust, then confirm keeps the box editable (handles, move) until you press the check or Enter.",
+  "@settingsCropConfirmOverlayHint": {
+    "description": "Settings > Selection & HUD: crop confirm mode row hint (overlay)"
+  },
+  "settingsCropConfirmEditorHint": "Release to confirm trims the moment you let go. Adjust, then confirm keeps the box editable (handles, move) until you press the check or Enter.",
+  "@settingsCropConfirmEditorHint": {
+    "description": "Settings > Image Editor: crop confirm mode row hint (editor)"
+  },
+  "settingsCropConfirmRelease": "Release to confirm",
+  "@settingsCropConfirmRelease": {
+    "description": "Settings: crop confirm mode option, confirm on mouse release"
+  },
+  "settingsCropConfirmAdjust": "Adjust, then confirm",
+  "@settingsCropConfirmAdjust": {
+    "description": "Settings: crop confirm mode option, editable pending selection"
+  },
+  "settingsSectionEditorCrop": "Crop",
+  "@settingsSectionEditorCrop": {
+    "description": "Settings > Image Editor: Crop section label"
+  },
+  "settingsSectionGuides": "Composition guides",
+  "@settingsSectionGuides": {
+    "description": "Settings > Selection & HUD: composition guides section label"
+  },
+  "settingsGuideLines": "Lines",
+  "@settingsGuideLines": {
+    "description": "Settings > Selection & HUD > Composition guides: lines style row title"
+  },
+  "settingsGuideLinesHint": "Lines drawn inside the selection box while you drag: a rule-of-thirds grid or corner diagonals. Hidden on very small boxes.",
+  "@settingsGuideLinesHint": {
+    "description": "Settings > Selection & HUD > Composition guides: lines style row hint"
+  },
+  "settingsGuideLinesNone": "None",
+  "@settingsGuideLinesNone": {
+    "description": "Settings: guide lines option, no lines"
+  },
+  "settingsGuideLinesGrid": "Grid",
+  "@settingsGuideLinesGrid": {
+    "description": "Settings: guide lines option, rule-of-thirds grid"
+  },
+  "settingsGuideLinesDiagonals": "Diagonals",
+  "@settingsGuideLinesDiagonals": {
+    "description": "Settings: guide lines option, corner diagonals"
+  },
+  "settingsGuideCenter": "Center mark",
+  "@settingsGuideCenter": {
+    "description": "Settings > Selection & HUD > Overlay HUD: center mark row title"
+  },
+  "settingsGuideCenterHint": "A tiny cross at the exact center of the selection box.",
+  "@settingsGuideCenterHint": {
+    "description": "Settings > Selection & HUD > Overlay HUD: center mark row hint"
+  },
+  "settingsGuideShown": "Show guides by default",
+  "@settingsGuideShown": {
+    "description": "Settings > Selection & HUD > Overlay HUD: guides shown-by-default row title"
+  },
+  "settingsGuideShownHint": "Start every capture and editor session with the guides visible. Toggle them live from the toolbar or a shortcut.",
+  "@settingsGuideShownHint": {
+    "description": "Settings > Selection & HUD > Overlay HUD: guides shown-by-default row hint"
+  },
+  "settingsCmdToggleGuides": "Toggle guides",
+  "@settingsCmdToggleGuides": {
+    "description": "Settings > Shortcuts > Commands: toggle guides row title"
+  },
+  "settingsCmdToggleGuidesHint": "Show or hide the composition guides for the current session",
+  "@settingsCmdToggleGuidesHint": {
+    "description": "Settings > Shortcuts > Commands: toggle guides row hint"
+  },
   "settingsReservedCancelExit": "Cancel / Exit",
   "@settingsReservedCancelExit": {
     "description": "Settings > Shortcuts > Reserved: Cancel/Exit row title"
@@ -1372,6 +1448,18 @@
   "toolbarLoupeHidden": "Pixel loupe: hidden",
   "@toolbarLoupeHidden": {
     "description": "Toolbar: pixel-loupe toggle tooltip when off"
+  },
+  "toolbarGuidesShown": "Composition guides: shown",
+  "@toolbarGuidesShown": {
+    "description": "Toolbar: composition-guides toggle tooltip when on"
+  },
+  "toolbarGuidesHidden": "Composition guides: hidden",
+  "@toolbarGuidesHidden": {
+    "description": "Toolbar: composition-guides toggle tooltip when off"
+  },
+  "toolbarGuidesUnconfigured": "Composition guides: turn on in Settings",
+  "@toolbarGuidesUnconfigured": {
+    "description": "Toolbar: composition-guides toggle tooltip while no lines / center mark is configured (button greyed)"
   },
   "@toolbarPinCaption": {
     "description": "Toolbar: caption below the bar when pin mode is active"

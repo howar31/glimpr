@@ -615,9 +615,14 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// override). Resets naturally when a new image opens (new controller).
   void _seedHudToggles(HudConfig h) {
     final ed = _controller;
-    if (ed == null || ed.hudUserToggled) return;
+    if (ed == null) return;
+    // Guide CONFIG always follows settings (never user-toggled in session).
+    ed.guideLines.value = h.guideLines;
+    ed.guideCenter.value = h.guideCenter;
+    if (ed.hudUserToggled) return;
     ed.crosshairOn.value = h.crosshair;
     ed.loupeOn.value = h.loupe;
+    ed.guidesOn.value = h.guideShown;
   }
 
   /// Done: run the user-configured after-editor flow (Settings), then CLOSE the
@@ -1298,6 +1303,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
       onComplete: _done,
       activeSignal: _active,
       onOpenSettings: _openSettings,
+      cropConfirmMode: _cap.cropConfirmEditor,
     );
     return Stack(
       fit: StackFit.expand,

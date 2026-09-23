@@ -1,7 +1,9 @@
+import 'dart:ui' show PointMode;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/glimpr_theme.dart';
 import 'hud_lines.dart';
+import 'selection_guides.dart';
 
 /// The scrim path: the whole canvas MINUS the (clamped) selection rectangle.
 /// `null` selection -> the full canvas (everything dimmed).
@@ -71,4 +73,69 @@ class SelectionBorderPainter extends CustomPainter {
   @override
   bool shouldRepaint(SelectionBorderPainter old) =>
       old.selection != selection || old.march != march;
+}
+
+/// Composition guides inside the crop selection: rule-of-thirds grid / corner
+/// diagonals (see [guideSegments]) and/or the center mark ([guideCenterMark]).
+/// STATIC (no marching phase; repaints only when the rect or options change)
+/// so it never competes with the animated border. The LINES are two-tone
+/// dashes (white + black gap-fill, like the border) so they read on any
+/// background without an advanced blend; the tiny center plus is SOLID with
+/// the reticle's inverting blend (its readback area is a few px, negligible).
+class SelectionGuidesPainter extends CustomPainter {
+  final Rect rect;
+  final GuideLines lines;
+  final bool center;
+
+  const SelectionGuidesPainter({
+    required this.rect,
+    required this.lines,
+    required this.center,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final segs = guideSegments(rect, lines: lines);
+    if (segs.isNotEmpty) {
+      final lit = <double>[];
+      final ink = <double>[];
+      for (final (a, b) in segs) {
+        // +0.5 centres the 1px stroke on the pixel row/column (crisp line).
+        final a2 = Offset(a.dx + 0.5, a.dy + 0.5);
+        final b2 = Offset(b.dx + 0.5, b.dy + 0.5);
+        addDashedLinePoints(lit, a2, b2, dash: kGuideDash, gap: kGuideDash);
+        addDashedLinePoints(ink, a2, b2,
+            dash: kGuideDash, gap: kGuideDash, phase: kGuideDash);
+      }
+      _raw(canvas, lit, kHudLineColor);
+      _raw(canvas, ink, kHudInk);
+    }
+    final mark = guideCenterMark(rect, center: center);
+    if (mark.isNotEmpty) {
+      final p = hudReticlePaint(); // solid + inverting, like the reticle
+      for (final (a, b) in mark) {
+        canvas.drawLine(
+          Offset(a.dx + 0.5, a.dy + 0.5),
+          Offset(b.dx + 0.5, b.dy + 0.5),
+          p,
+        );
+      }
+    }
+  }
+
+  static void _raw(Canvas canvas, List<double> pts, Color color) {
+    if (pts.isEmpty) return;
+    canvas.drawRawPoints(
+      PointMode.lines,
+      Float32List.fromList(pts),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = kHudLineWidth,
+    );
+  }
+
+  @override
+  bool shouldRepaint(SelectionGuidesPainter old) =>
+      old.rect != rect || old.lines != lines || old.center != center;
 }

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Offset, Rect, Size;
 import '../capture/captured_display.dart' show SnapWindow;
 import '../capture/element_snap.dart';
+import 'crop_confirm_mode.dart';
 import 'loupe_config.dart' show LoupeInfoMode;
 
 /// Native cursor control EditorCore needs. The overlay implements this with the
@@ -95,6 +96,12 @@ abstract class EditorHost {
   /// of committing an export-region (capture overlay). When true, a crop drag
   /// leaves a pending selection that Enter / on-canvas ✔ confirms.
   bool get cropTrims;
+
+  /// WHEN a crop drag confirms: on release, or after an adjustable pending
+  /// selection (handles / move / ✔✖ / Enter / Esc). Per-surface user setting;
+  /// the default mirrors each host's original behaviour.
+  CropConfirmMode get cropConfirm =>
+      cropTrims ? CropConfirmMode.adjust : CropConfirmMode.release;
 
   /// Live-select (recording) mode: the base image is a transparent stub over
   /// the LIVE screen, the loupe samples live pixels via [liveLoupeSample],

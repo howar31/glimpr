@@ -21,6 +21,7 @@ import '../overlay/toolbar.dart';
 import '../overlay/window_snap.dart';
 import '../theme/glimpr_theme.dart';
 import 'color_info.dart';
+import 'crop_confirm_mode.dart';
 import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
@@ -274,6 +275,24 @@ class _EditorCoreState extends State<EditorCore> {
 
   EditorController get c => widget.controller;
   bool get _inCrop => c.phase.value == EditorPhase.crop;
+
+  /// Adjust-then-confirm crop mode (host setting): a released drag stays as an
+  /// editable pending selection until ✔ / Enter (or Esc / ✖ clears it).
+  bool get _cropAdjust => widget.host.cropConfirm == CropConfirmMode.adjust;
+
+  /// Commit the current crop rect the way this host wants: a destructive trim
+  /// (image editor) or an export-region (overlay / record-select). In adjust
+  /// mode the naming window is the one under the rect's CENTER: an Enter
+  /// confirm can happen with the cursor anywhere.
+  void _confirmCrop() {
+    final r = _crop.rect.value;
+    if (r == null) return;
+    if (widget.host.cropTrims) {
+      _confirmTrim();
+      return;
+    }
+    widget.host.onExport(r, topmostWindowAt(_windows, r.center));
+  }
 
   /// Whether this host drives a zoom/pan viewport (image editor) vs. identity
   /// 1:1 (capture overlay). When false EVERY viewport seam degenerates to the
@@ -581,6 +600,16 @@ class _EditorCoreState extends State<EditorCore> {
       crosshairApplies(c.tool.value, eyedropper: _eyedropper);
   bool get _loupeApplies => loupeApplies(c.tool.value, eyedropper: _eyedropper);
 
+  /// Composition guides apply to the region tool only, and only when Settings
+  /// configured a style (lines and/or center mark) — else the toggle is inert.
+  bool get _guidesApply => guidesApply(c.tool.value,
+      lines: c.guideLines.value, center: c.guideCenter.value);
+
+  void _toggleGuides() {
+    if (!_guidesApply) return;
+    c.toggleGuides();
+  }
+
   /// Effective on/off (persistent default, overridden per session by the toolbar /
   /// hotkey — EditorController.crosshairOn / loupeOn).
   bool get _effCrosshair => c.crosshairOn.value;
@@ -752,6 +781,9 @@ class _EditorCoreState extends State<EditorCore> {
     c.showCursor.addListener(_rebuild);
     c.crosshairOn.addListener(_rebuild);
     c.loupeOn.addListener(_rebuild);
+    c.guidesOn.addListener(_rebuild);
+    c.guideLines.addListener(_rebuild);
+    c.guideCenter.addListener(_rebuild);
     c.refocus.addListener(_onRefocusRequested);
     c.stampPick.addListener(_onStampPick);
     c.tool.addListener(_onToolMaybeStamp);
@@ -789,6 +821,9 @@ class _EditorCoreState extends State<EditorCore> {
     c.showCursor.removeListener(_rebuild);
     c.crosshairOn.removeListener(_rebuild);
     c.loupeOn.removeListener(_rebuild);
+    c.guidesOn.removeListener(_rebuild);
+    c.guideLines.removeListener(_rebuild);
+    c.guideCenter.removeListener(_rebuild);
     c.refocus.removeListener(_onRefocusRequested);
     c.stampPick.removeListener(_onStampPick);
     c.tool.removeListener(_onToolMaybeStamp);
@@ -1221,9 +1256,9 @@ class _EditorCoreState extends State<EditorCore> {
       // A gesture in progress -> cancel just that gesture (like a right-click),
       // staying in capture rather than exiting.
       if (_cancelActiveGesture()) return KeyEventResult.handled;
-      // Editor trim crop: a pending (drag-released, awaiting-confirm) selection
-      // -> clear it.
-      if (_inCrop && widget.host.cropTrims && _crop.rect.value != null) {
+      // Adjust mode: a pending (drag-released, awaiting-confirm) selection ->
+      // clear it.
+      if (_inCrop && _cropAdjust && _crop.rect.value != null) {
         setState(() {
           _crop.clear();
           _cropping = false;
@@ -1343,6 +1378,10 @@ class _EditorCoreState extends State<EditorCore> {
       _toggleLoupe();
       return KeyEventResult.handled;
     }
+    if (action == kEditorToggleGuidesKey) {
+      _toggleGuides(); // no-op unless crop tool + a configured style
+      return KeyEventResult.handled;
+    }
     if (action == kEditorUndoKey) {
       c.undo();
       c.selectedIndex.value = null;
@@ -1369,13 +1408,18 @@ class _EditorCoreState extends State<EditorCore> {
       return KeyEventResult.handled;
     }
     if ((action == kEditorConfirmKey || numpadConfirm) && !_dragging) {
+      // Adjust mode: Enter confirms the pending selection (trim in the editor,
+      // export / record on the overlay). Not while a handle/move drag is live.
+      if (_cropAdjust &&
+          !_cropAdjusting &&
+          c.tool.value == ToolKind.crop &&
+          _crop.rect.value != null) {
+        _confirmCrop();
+        return KeyEventResult.handled;
+      }
       if (widget.host.cropTrims) {
-        // Image editor: Enter confirms a pending crop-trim; otherwise it does
-        // nothing (Complete is the explicit Save / Copy buttons, never Enter).
-        if (c.tool.value == ToolKind.crop && _crop.rect.value != null) {
-          _confirmTrim();
-          return KeyEventResult.handled;
-        }
+        // Image editor: Enter never Completes (Save / Copy are explicit
+        // buttons, never Enter).
         return KeyEventResult.ignored;
       }
       // Overlay: Confirm/Export is always a SCREENSHOT — never the tool's own
@@ -1676,9 +1720,16 @@ class _EditorCoreState extends State<EditorCore> {
     final style = c.style.value;
     switch (c.tool.value) {
       case ToolKind.crop:
-        // Editor: crop is drag-to-trim (then Enter/✔ confirms); a bare tap does
-        // nothing. Overlay: a tap captures the snapped element/window / whole
-        // display.
+        // Adjust mode with a pending selection: a tap OUTSIDE it clears the
+        // box (never a surprise export); inside it is a no-op (move / resize
+        // are drags).
+        final pending = _cropAdjust ? _crop.rect.value : null;
+        if (pending != null) {
+          if (!pending.contains(p)) setState(() => _crop.clear());
+          return;
+        }
+        // Editor: crop is drag-to-trim; a bare tap does nothing. Overlay: a tap
+        // captures the snapped element/window / whole display.
         if (widget.host.cropTrims) return;
         final s = _snapCommit(p);
         widget.host.onExport(s.rect, s.window); // null window -> whole display
@@ -2112,9 +2163,9 @@ class _EditorCoreState extends State<EditorCore> {
     // pan stream here — otherwise it freezes at the drag's start point.
     if (_interactive) setState(() => _setCursor(p, 'editStart'));
     if (c.tool.value == ToolKind.crop) {
-      // Editor: with a pending selection, a press on a corner resizes it and a
-      // press inside moves it; elsewhere starts a fresh selection.
-      final pending = widget.host.cropTrims ? _crop.rect.value : null;
+      // Adjust mode: with a pending selection, a press on a handle resizes it
+      // and a press inside moves it; elsewhere starts a fresh selection.
+      final pending = _cropAdjust ? _crop.rect.value : null;
       if (pending != null) {
         final tol = 16 / _viewport.scale; // ~16 screen px regardless of zoom
         final handles = _rectHandles(pending);
@@ -2427,20 +2478,24 @@ class _EditorCoreState extends State<EditorCore> {
       _cropMoveOrigin = null;
       final r = _crop.rect.value;
       final valid = r != null && r.width >= 2 && r.height >= 2;
-      if (widget.host.cropTrims) {
-        // Editor: leave a VALID selection pending (scrim + handles + ✔/✖ shown;
-        // Enter/✔ trims, Esc/✖ cancels); discard a too-small one. Rebuild so the
-        // pending-state HUD (handles + confirm buttons) appears.
+      if (_cropAdjust) {
+        // Leave a VALID selection pending (scrim + handles + ✔/✖ shown;
+        // Enter/✔ confirms, Esc/✖ clears); discard a too-small one. Rebuild so
+        // the pending-state HUD (handles + confirm buttons) appears.
         if (!valid) setState(() => _crop.clear());
         setState(() {});
         return;
       }
-      if (valid) {
-        // Overlay: the drag-release commits the export-region. Window under the
-        // cursor at the release point names the file.
-        widget.host.onExport(r, topmostWindowAt(_windows, _cursor));
-      } else {
+      if (!valid) {
         setState(() => _crop.clear());
+        return;
+      }
+      if (widget.host.cropTrims) {
+        _confirmTrim(); // release mode in the editor: trim at once
+      } else {
+        // Overlay release mode: the drag-release commits the export-region.
+        // Window under the cursor at the release point names the file.
+        widget.host.onExport(r, topmostWindowAt(_windows, _cursor));
       }
       return;
     }
@@ -3028,7 +3083,7 @@ class _EditorCoreState extends State<EditorCore> {
       child: FractionalTranslation(
         translation: const Offset(-1, 0),
         child: _CropConfirmBar(
-          onConfirm: _confirmTrim,
+          onConfirm: _confirmCrop,
           onCancel: () => setState(() {
             _crop.clear();
             _cropping = false;
@@ -3303,9 +3358,19 @@ class _EditorCoreState extends State<EditorCore> {
                                 march: _march,
                               ),
                             ),
-                            // Editor: corner handles on a pending selection so it
-                            // can be resized/moved before confirming the trim.
-                            if (widget.host.cropTrims && !_cropping)
+                            // Composition guides (static; own painter so the
+                            // marching border's per-frame redraw stays cheap).
+                            if (c.guidesOn.value && _guidesApply)
+                              CustomPaint(
+                                painter: SelectionGuidesPainter(
+                                  rect: rect,
+                                  lines: c.guideLines.value,
+                                  center: c.guideCenter.value,
+                                ),
+                              ),
+                            // Adjust mode: handles on a pending selection so it
+                            // can be resized/moved before confirming.
+                            if (_cropAdjust && !_cropping)
                               CustomPaint(
                                 painter: _CropHandlesPainter(rect),
                               ),
@@ -3416,6 +3481,18 @@ class _EditorCoreState extends State<EditorCore> {
                     key: const ValueKey('editor-gesture-layer'),
                     child: gestureLayer,
                   ),
+                // Overlay adjust mode: the ✔/✖ bar for a pending selection, ABOVE
+                // the gesture layer so it is tappable (canvas == screen, so the
+                // identity viewport places it). The editor builds its own in
+                // screen space below (see the return below).
+                if (!_interactive &&
+                    _active &&
+                    _cropAdjust &&
+                    c.tool.value == ToolKind.crop &&
+                    !_cropping &&
+                    !_cropAdjusting &&
+                    _crop.rect.value != null)
+                  _cropConfirmButtons(EditorViewport.identity),
                 // Inline multiline text editor (Enter commits, Shift+Enter newline).
                 if (_active &&
                     _editingText &&
@@ -3594,7 +3671,8 @@ class _EditorCoreState extends State<EditorCore> {
                 // On-canvas crop confirm/cancel — ABOVE the gesture layer so the
                 // ✔/✖ are tappable. Shown only for a pending (drag-released) trim
                 // selection (Enter/Esc do the same).
-                if (c.tool.value == ToolKind.crop &&
+                if (_cropAdjust &&
+                    c.tool.value == ToolKind.crop &&
                     !_cropping &&
                     !_cropAdjusting &&
                     _crop.rect.value != null)

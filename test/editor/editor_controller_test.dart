@@ -6,8 +6,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/editor/draw_style.dart';
 import 'package:glimpr/editor/drawable.dart';
 import 'package:glimpr/editor/editor_controller.dart';
+import 'package:glimpr/overlay/selection_guides.dart';
 
 void main() {
+  test('toggleGuides flips guidesOn and marks the HUD as user-toggled', () {
+    final c = EditorController();
+    addTearDown(c.dispose);
+    expect(c.guidesOn.value, isFalse);
+    expect(c.hudUserToggled, isFalse);
+    c.toggleGuides();
+    expect(c.guidesOn.value, isTrue);
+    expect(c.hudUserToggled, isTrue);
+  });
+
+  test('guidesApply: crop tool AND a non-empty configuration', () {
+    expect(guidesApply(ToolKind.crop, lines: GuideLines.grid, center: false),
+        isTrue);
+    expect(guidesApply(ToolKind.crop, lines: GuideLines.none, center: true),
+        isTrue);
+    expect(guidesApply(ToolKind.crop, lines: GuideLines.none, center: false),
+        isFalse);
+    expect(
+        guidesApply(ToolKind.rectangle, lines: GuideLines.grid, center: true),
+        isFalse);
+  });
+
   test('starts in crop phase with the Crop tool (crop is the default)', () {
     final c = EditorController();
     expect(c.phase.value, EditorPhase.crop);

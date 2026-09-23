@@ -12,6 +12,7 @@ import '../editor/tool_style_store.dart';
 import '../settings/settings.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_actions.dart';
+import 'selection_guides.dart';
 import '../theme/glimpr_theme.dart';
 import 'style_popovers.dart';
 
@@ -231,6 +232,27 @@ class EditorToolbar extends StatelessWidget {
                         on ? l10n.toolbarLoupeShown : l10n.toolbarLoupeHidden,
                   ),
                 ],
+                // Composition guides toggle: applies to the region tool on EVERY
+                // surface incl. the record-select picker; inert until Settings
+                // configures a style (lines and/or center mark).
+                _HudToggle(
+                  controller: controller,
+                  value: controller.guidesOn,
+                  applies: (tool, {required eyedropper}) => guidesApply(tool,
+                      lines: controller.guideLines.value,
+                      center: controller.guideCenter.value),
+                  also: [controller.guideLines, controller.guideCenter],
+                  onToggle: controller.toggleGuides,
+                  icon: Icons.grid_3x3,
+                  shortcut: editorBindings[kEditorToggleGuidesKey]?.label(),
+                  // Owner (2026-09-23): the greyed button stays as a pointer
+                  // to the feature, so while nothing is configured its tooltip
+                  // says WHERE to turn it on instead of shown / hidden.
+                  tooltip: (on) => !guidesConfigured(
+                          controller.guideLines.value, controller.guideCenter.value)
+                      ? l10n.toolbarGuidesUnconfigured
+                      : (on ? l10n.toolbarGuidesShown : l10n.toolbarGuidesHidden),
+                ),
                 // Trailing action widgets (e.g. Copy/Save in the image editor),
                 // separated from the tool buttons by a thin vertical divider so
                 // they read as part of the same glass bar.
@@ -620,6 +642,8 @@ class _HudToggle extends StatelessWidget {
   final IconData icon;
   final String? shortcut; // hotkey badge (from editorBindings); null = unbound
   final String Function(bool on) tooltip; // state-dependent (shown / hidden)
+  // Extra notifiers [applies] reads (e.g. the guides' configured style).
+  final List<Listenable> also;
   const _HudToggle({
     required this.controller,
     required this.value,
@@ -628,6 +652,7 @@ class _HudToggle extends StatelessWidget {
     required this.icon,
     required this.shortcut,
     required this.tooltip,
+    this.also = const [],
   });
 
   @override
@@ -635,7 +660,7 @@ class _HudToggle extends StatelessWidget {
     final p = _ToolbarTheme.of(context);
     return AnimatedBuilder(
       animation: Listenable.merge(
-          [value, controller.tool, controller.eyedropperActive]),
+          [value, controller.tool, controller.eyedropperActive, ...also]),
       builder: (context, _) {
         final on = value.value;
         final enabled = applies(controller.tool.value,
