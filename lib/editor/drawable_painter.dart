@@ -849,10 +849,14 @@ class DrawablePainter extends CustomPainter {
     return m.extractPath(a, b);
   }
 
+  // Element-wise (identity) compare: the host rebuilds the list every frame,
+  // but the drawables themselves are immutable and reused, so an unchanged
+  // layer must NOT re-rasterize (the settled layer under a live drag).
   @override
   bool shouldRepaint(DrawablePainter old) =>
-      old.drawables != drawables ||
+      !listEquals(old.drawables, drawables) ||
       old.effectImage != effectImage ||
+      old.baseImage != baseImage ||
       old.spotlightImage != spotlightImage;
 }
 

@@ -31,6 +31,7 @@ import 'editor_controller.dart';
 import 'editor_host.dart';
 import 'hit_test.dart';
 import 'hud_config.dart';
+import 'live_layer.dart';
 import 'loupe_config.dart';
 import 'raster.dart';
 import 'spotlight.dart';
@@ -2536,26 +2537,39 @@ class _EditorCoreState extends State<EditorCore> {
 
   // ---- build -------------------------------------------------------------
 
+  /// Everything the annotation layer shows, in paint order: the document with
+  /// any in-place edit applied, then the live additions (the shape being drawn,
+  /// a new text being typed).
   List<Drawable> _effectiveDrawables() {
-    var list = [...c.document.value.drawables];
+    final (:settled, :live) = _layerLists();
+    return [...settled, ...live];
+  }
+
+  /// The annotation content split into the SETTLED layer (document + in-place
+  /// edits: a moved/resized shape, a re-edited text) and the LIVE layer (a new
+  /// shape mid-drag, a new text being typed), so a draw drag re-rasterizes only
+  /// the live layer. See [partitionLiveLayer] for what must stay settled.
+  ({List<Drawable> settled, List<Drawable> live}) _layerLists() {
+    final list = [...c.document.value.drawables];
     final i = _editIndex;
     final prev = _editPreview;
     if (i != null && prev != null && i < list.length) list[i] = prev;
-    if (_preview != null) list.add(_preview!);
+    final live = <Drawable>[];
+    if (_preview != null) live.add(_preview!);
     // While editing, the TextField text is transparent (caret only) and WE paint
     // the live text via the painter — so what's shown is always the final
     // rendering (zero shift on commit). New text appends; a re-edit replaces in
     // place.
     if (_editingText && _textPos != null && _textCtl != null) {
-      final live = TextDrawable(_textPos!, _textCtl!.text, c.style.value);
+      final liveText = TextDrawable(_textPos!, _textCtl!.text, c.style.value);
       final t = _editTextIndex;
       if (t != null && t < list.length) {
-        list[t] = live;
+        list[t] = liveText;
       } else {
-        list = [...list, live];
+        live.add(liveText);
       }
     }
-    return list;
+    return partitionLiveLayer(list, live);
   }
 
   /// Returns the toolbar's measuring key, and (once) schedules the exact
@@ -2623,19 +2637,30 @@ class _EditorCoreState extends State<EditorCore> {
   /// dragged past the edge is hidden + clipped on export) and left unwrapped for
   /// the overlay (full-screen, structurally identical).
   Widget _annotationLayer() {
-    final layer = CustomPaint(
-      painter: DrawablePainter(
-        // Annotations always paint (so an inactive display still shows its
-        // drawings); the selection highlight is a SEPARATE animated layer
-        // (see [_selectionHighlight]) so marching ants don't re-rasterize this.
-        drawables: _effectiveDrawables(),
-        effectImage: _lookupEffect,
-        // The magnify tool samples the base image directly.
-        baseImage: _canvasImage,
-        baseScale: widget.host.pixelScale,
-        spotlightImage: _spotlightLayerImage(),
-      ),
-      size: _canvasSize,
+    // Annotations always paint (so an inactive display still shows its
+    // drawings); the selection highlight is a SEPARATE animated layer (see
+    // [_selectionHighlight]) so marching ants don't re-rasterize this.
+    final (:settled, :live) = _layerLists();
+    final spotlightImage = _spotlightLayerImage();
+    Widget paintLayer(List<Drawable> drawables) => RepaintBoundary(
+          child: CustomPaint(
+            painter: DrawablePainter(
+              drawables: drawables,
+              effectImage: _lookupEffect,
+              // The magnify tool samples the base image directly.
+              baseImage: _canvasImage,
+              baseScale: widget.host.pixelScale,
+              spotlightImage: spotlightImage,
+            ),
+            size: _canvasSize,
+          ),
+        );
+    // Two raster layers: the settled content (repaints only when the document
+    // or an in-place edit changes) under the live layer (the shape mid-drag),
+    // so a draw drag never re-rasterizes every committed annotation.
+    final layer = Stack(
+      fit: StackFit.expand,
+      children: [paintLayer(settled), paintLayer(live)],
     );
     return _interactive ? ClipRect(child: layer) : layer;
   }
