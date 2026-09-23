@@ -53,8 +53,8 @@ void main() {
       expect(find.text(textureLabel(l10n, tex)), findsOneWidget);
     }
     expect(find.byIcon(Icons.check), findsOneWidget);
-    await t.tap(find.text(textureLabel(l10n, HighlighterTexture.frayed)));
-    expect(picked, HighlighterTexture.frayed);
+    await t.tap(find.text(textureLabel(l10n, HighlighterTexture.grain)));
+    expect(picked, HighlighterTexture.grain);
   });
 
   // ---- ArrowHeadsPickerPopover ------------------------------------------

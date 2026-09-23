@@ -64,8 +64,8 @@ void main() {
   });
 
   test('highlighter texture round-trips and defaults to streaks', () {
-    const s = DrawStyle(texture: HighlighterTexture.frayed);
-    expect(DrawStyle.fromJson(s.toJson()).texture, HighlighterTexture.frayed);
+    const s = DrawStyle(texture: HighlighterTexture.grain);
+    expect(DrawStyle.fromJson(s.toJson()).texture, HighlighterTexture.grain);
     // Default + missing-key fallback.
     expect(const DrawStyle().texture, HighlighterTexture.streaks);
     final old = {'color': 0xFFFF3B30, 'strokeWidth': 4.0, 'fontSize': 18.0};

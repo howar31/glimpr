@@ -110,10 +110,10 @@ void _paintFilledShape(
 /// Paints a highlighter band along the Catmull-Rom curve through [control]
 /// (control points; first/last = the ends). Translucent srcOver only (no
 /// multiply — it vanishes on dark screenshots); honours the colour's own alpha.
-/// Clean is a plain stroked path; streaks/frayed map the baked brush texture
-/// (brush_texture.dart) along the curve as ONE textured ribbon, so a textured
-/// stroke costs a single draw per frame. Reused by the toolbar's texture
-/// preview (a 2-point list = a straight band).
+/// Clean is a plain stroked path; every other texture maps its baked brush
+/// band (brush_texture.dart) along the curve as ONE textured ribbon, so a
+/// textured stroke costs a single draw per frame. Reused by the toolbar's
+/// texture preview (a 2-point list = a straight band).
 void paintHighlighterStroke(
   Canvas canvas,
   List<Offset> control,
@@ -162,20 +162,21 @@ void paintHighlighterStroke(
   // fallback is only for seedless callers (the static toolbar texture preview).
   final seedV = seed ??
       (start.dx * 131 + start.dy * 557 + end.dx * 1289 + end.dy * 2741).round();
-  final baseA = color.a; // the chosen alpha (0..1)
-  Color withA(double a) => color.withValues(alpha: a.clamp(0.0, 0.95));
 
   // The baked band (white + alpha) mapped along the curve as one triangle
   // strip; the stroke colour rides on the vertices and MULTIPLIES the texture
   // (modulate), so the colour's own alpha scales the texture's alpha. No
   // colour filter: a per-draw filter would cost an extra pass on some
   // renderers, whereas vertex-colour x texture is one pass everywhere.
-  final band = BrushTextures.instance.band(seedV);
+  // The band TILES along the stroke (repeat in u) at the texture's own aspect,
+  // so grain / strands keep their size whatever the stroke length; the seed
+  // picks the tiling phase so strokes differ.
+  final band = BrushTextures.instance.band(style.texture);
   final mesh = ribbonMesh(
     spine,
     w,
-    texWidth: band.width.toDouble(),
     texHeight: band.height.toDouble(),
+    uOffset: brushPhase(seedV),
   );
   final ribbon = ui.Vertices(
     ui.VertexMode.triangleStrip,
@@ -190,38 +191,13 @@ void paintHighlighterStroke(
       ..isAntiAlias = true
       ..shader = ui.ImageShader(
         band,
-        TileMode.clamp,
+        TileMode.repeated,
         TileMode.clamp,
         Matrix4.identity().storage,
         filterQuality: FilterQuality.medium,
       ),
   );
 
-  // Frayed: dry split-fork streaks off both ends, along the end tangents.
-  // Plain solid-colour lines (no shader), so they stay cheap as direct draws.
-  if (style.texture == HighlighterTexture.frayed) {
-    final normals = spineNormals(spine);
-    final fn = MarkerNoise(seedV * 5 + 1);
-    final fray = Paint()
-      ..isAntiAlias = true
-      ..strokeCap = StrokeCap.round;
-    final ends = [
-      (end, curveTangent(control, atEnd: true), normals.last),
-      (start, curveTangent(control, atEnd: false), normals.first),
-    ];
-    for (final (ex, u, nrm) in ends) {
-      for (var i = 0; i < 7; i++) {
-        final off = (fn(i * 1.3) - 0.5) * w * 0.95;
-        final length = 6 + fn(i * 2.1 + 9) * 26;
-        final p0 = ex + nrm * off;
-        final p1 = ex + u * length + nrm * (off + (fn(i * 4.0) - 0.5) * 4);
-        fray
-          ..color = withA(baseA * (0.25 + 0.5 * fn(i * 0.7 + 3)))
-          ..strokeWidth = 1.2 + fn(i.toDouble()) * 2.2;
-        canvas.drawLine(p0, p1, fray);
-      }
-    }
-  }
 }
 
 /// Paints the drawable list (annotation layer) and, if [selectedIndex] is set,

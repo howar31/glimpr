@@ -877,7 +877,9 @@ class _FontRow extends StatelessWidget {
 String textureLabel(AppLocalizations l10n, HighlighterTexture t) => switch (t) {
   HighlighterTexture.clean => l10n.popoverTextureClean,
   HighlighterTexture.streaks => l10n.popoverTextureStreaks,
-  HighlighterTexture.frayed => l10n.popoverTextureFrayed,
+  HighlighterTexture.grain => l10n.popoverTextureGrain,
+  HighlighterTexture.bristle => l10n.popoverTextureBristle,
+  HighlighterTexture.chisel => l10n.popoverTextureChisel,
 };
 
 /// A small menu listing the highlighter brush textures by name, each with a
@@ -918,8 +920,8 @@ class TexturePickerPopover extends StatelessWidget {
                     Expanded(
                       // Clip the texture into a uniform rounded pill so every
                       // row's highlight has the SAME left/right bounds and never
-                      // pokes past the panel corners — Clean's round cap and
-                      // Frayed's end streaks would otherwise overflow the band.
+                      // pokes past the panel corners — Clean's round cap would
+                      // otherwise overflow the band.
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(5),
                         child: SizedBox(

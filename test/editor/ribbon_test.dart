@@ -31,7 +31,6 @@ void main() {
       final m = ribbonMesh(
         [const Offset(0, 0), const Offset(100, 0)],
         20,
-        texWidth: 1024,
         texHeight: 128,
       );
       expect(m.positions, [
@@ -42,33 +41,45 @@ void main() {
       ]);
     });
 
-    test('u stretches the texture over the arc length; v spans the height', () {
+    test('u advances at the texture aspect (texels per px = texH / width)', () {
+      // Width 32 -> 4 texels per px; arc lengths 0, 30, 70.
       final m = ribbonMesh(
         [const Offset(0, 0), const Offset(30, 0), const Offset(30, 40)],
-        4,
-        texWidth: 1024,
+        32,
         texHeight: 128,
       );
-      // Arc lengths 0, 30, 70 -> u = 0, 1024*30/70, 1024.
       expect(m.uvs[0], const Offset(0, 0));
       expect(m.uvs[1], const Offset(0, 128));
-      expect(m.uvs[2].dx, closeTo(1024 * 30 / 70, 1e-9));
-      expect(m.uvs[4], const Offset(1024, 0));
-      expect(m.uvs[5], const Offset(1024, 128));
+      expect(m.uvs[2].dx, closeTo(120, 1e-9));
+      expect(m.uvs[4].dx, closeTo(280, 1e-9));
+      expect(m.uvs[5], const Offset(280, 128));
     });
 
-    test('a zero-length spine maps every vertex to u = 0', () {
-      final m = ribbonMesh(
-        [const Offset(5, 5), const Offset(5, 5)],
-        4,
-        texWidth: 1024,
-        texHeight: 128,
-      );
-      expect(m.uvs.every((uv) => uv.dx == 0), isTrue);
+    test('u does not depend on the stroke length (tiling, not stretching)',
+        () {
+      final short = ribbonMesh(
+          [const Offset(0, 0), const Offset(50, 0)], 10, texHeight: 128);
+      final long = ribbonMesh(
+          [const Offset(0, 0), const Offset(50, 0), const Offset(500, 0)], 10,
+          texHeight: 128);
+      expect(long.uvs[2].dx, short.uvs[2].dx);
+    });
+
+    test('uOffset shifts the tiling phase', () {
+      final m = ribbonMesh([const Offset(0, 0), const Offset(10, 0)], 10,
+          texHeight: 128, uOffset: 300);
+      expect(m.uvs[0].dx, 300);
+      expect(m.uvs[2].dx, closeTo(300 + 128, 1e-9));
+    });
+
+    test('a zero-length spine maps every vertex to the phase', () {
+      final m = ribbonMesh([const Offset(5, 5), const Offset(5, 5)], 4,
+          texHeight: 128, uOffset: 7);
+      expect(m.uvs.every((uv) => uv.dx == 7), isTrue);
     });
 
     test('an empty spine yields an empty mesh', () {
-      final m = ribbonMesh(const [], 4, texWidth: 1024, texHeight: 128);
+      final m = ribbonMesh(const [], 4, texHeight: 128);
       expect(m.positions, isEmpty);
       expect(m.uvs, isEmpty);
     });

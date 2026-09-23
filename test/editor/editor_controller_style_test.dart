@@ -15,9 +15,9 @@ void main() {
   test('setHighlighterTexture updates style and remembers it per tool', () {
     final c = EditorController();
     c.selectTool(ToolKind.highlighter);
-    c.setHighlighterTexture(HighlighterTexture.frayed);
-    expect(c.style.value.texture, HighlighterTexture.frayed);
-    expect(c.toolStyles[ToolKind.highlighter]!.texture, HighlighterTexture.frayed);
+    c.setHighlighterTexture(HighlighterTexture.grain);
+    expect(c.style.value.texture, HighlighterTexture.grain);
+    expect(c.toolStyles[ToolKind.highlighter]!.texture, HighlighterTexture.grain);
   });
 
   test('resetTool restores the default style for that tool', () {

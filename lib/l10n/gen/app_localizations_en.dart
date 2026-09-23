@@ -1444,7 +1444,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get popoverTextureStreaks => 'Streaks';
 
   @override
-  String get popoverTextureFrayed => 'Frayed';
+  String get popoverTextureGrain => 'Grain';
+
+  @override
+  String get popoverTextureBristle => 'Bristle';
+
+  @override
+  String get popoverTextureChisel => 'Chisel';
 
   @override
   String get popoverArrowHeadEnd => 'End';

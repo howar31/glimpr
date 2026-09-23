@@ -2730,11 +2730,23 @@ abstract class AppLocalizations {
   /// **'Streaks'**
   String get popoverTextureStreaks;
 
-  /// Highlighter texture picker: frayed texture option
+  /// Highlighter texture picker: grainy crayon-like texture option
   ///
   /// In en, this message translates to:
-  /// **'Frayed'**
-  String get popoverTextureFrayed;
+  /// **'Grain'**
+  String get popoverTextureGrain;
+
+  /// Highlighter texture picker: bristle brush texture option
+  ///
+  /// In en, this message translates to:
+  /// **'Bristle'**
+  String get popoverTextureBristle;
+
+  /// Highlighter texture picker: chisel-tip marker texture option
+  ///
+  /// In en, this message translates to:
+  /// **'Chisel'**
+  String get popoverTextureChisel;
 
   /// Arrowheads picker: arrowhead at end only
   ///

@@ -38,7 +38,7 @@ const double kStrokeMax = 40;
 /// Brush texture for the highlighter tool (consumed only by its painter). Other
 /// tools carry the field but ignore it (it rides on the shared [DrawStyle], like
 /// [DrawStyle.fontFamily] which only the Text tool uses).
-enum HighlighterTexture { clean, streaks, frayed }
+enum HighlighterTexture { clean, streaks, grain, bristle, chisel }
 
 /// Parse a [HighlighterTexture] by name, falling back to [streaks] for a
 /// missing/garbage value (forward/backward compatible persistence).

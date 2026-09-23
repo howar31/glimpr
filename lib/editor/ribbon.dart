@@ -24,27 +24,27 @@ List<Offset> spineNormals(List<Offset> spine) {
 
 /// The triangle-strip mesh of a band of [width] centred on [spine]: two
 /// vertices per spine vertex (offset by half the width along the normal on
-/// either side), with texture coordinates that stretch the WHOLE texture
-/// ([texWidth] x [texHeight]) along the band's arc length (u) and across it
-/// (v). A zero-length spine maps every vertex to u = 0.
+/// either side). Texture coordinates keep the texture's ASPECT: v spans
+/// [texHeight] across the band, and u advances by the same texels-per-px
+/// along the arc length (so a seamless texture TILES along the stroke instead
+/// of stretching over it, and its features stay the same size whatever the
+/// stroke length). [uOffset] shifts the tiling phase (per-stroke variety).
 ({List<Offset> positions, List<Offset> uvs}) ribbonMesh(
   List<Offset> spine,
   double width, {
-  required double texWidth,
   required double texHeight,
+  double uOffset = 0,
 }) {
   final positions = <Offset>[];
   final uvs = <Offset>[];
   if (spine.isEmpty) return (positions: positions, uvs: uvs);
   final normals = spineNormals(spine);
-  final cum = <double>[0];
-  for (var j = 1; j < spine.length; j++) {
-    cum.add(cum[j - 1] + (spine[j] - spine[j - 1]).distance);
-  }
-  final total = cum.last;
+  final texelsPerPx = width <= 0 ? 0.0 : texHeight / width;
   final half = width / 2;
+  var arc = 0.0;
   for (var j = 0; j < spine.length; j++) {
-    final u = total == 0 ? 0.0 : cum[j] / total * texWidth;
+    if (j > 0) arc += (spine[j] - spine[j - 1]).distance;
+    final u = uOffset + arc * texelsPerPx;
     positions.add(spine[j] + normals[j] * half);
     positions.add(spine[j] - normals[j] * half);
     uvs.add(Offset(u, 0));

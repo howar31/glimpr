@@ -1386,7 +1386,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get popoverTextureStreaks => '筆痕';
 
   @override
-  String get popoverTextureFrayed => '毛邊';
+  String get popoverTextureGrain => '顆粒';
+
+  @override
+  String get popoverTextureBristle => '刷毛';
+
+  @override
+  String get popoverTextureChisel => '斜頭';
 
   @override
   String get popoverArrowHeadEnd => '終點';

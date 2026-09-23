@@ -1666,9 +1666,17 @@
   "@popoverTextureStreaks": {
     "description": "Highlighter texture picker: streaks texture option"
   },
-  "popoverTextureFrayed": "Frayed",
-  "@popoverTextureFrayed": {
-    "description": "Highlighter texture picker: frayed texture option"
+  "popoverTextureGrain": "Grain",
+  "@popoverTextureGrain": {
+    "description": "Highlighter texture picker: grainy crayon-like texture option"
+  },
+  "popoverTextureBristle": "Bristle",
+  "@popoverTextureBristle": {
+    "description": "Highlighter texture picker: bristle brush texture option"
+  },
+  "popoverTextureChisel": "Chisel",
+  "@popoverTextureChisel": {
+    "description": "Highlighter texture picker: chisel-tip marker texture option"
   },
   "popoverArrowHeadEnd": "End",
   "@popoverArrowHeadEnd": {
