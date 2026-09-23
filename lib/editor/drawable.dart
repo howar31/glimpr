@@ -108,10 +108,10 @@ class LineDrawable extends Drawable implements Segmented {
       LineDrawable(start, end, s, mids: mids);
 }
 
-/// A freehand translucent marker band through the captured pointer [points].
-/// The painter draws a wide rounded band and composites the WHOLE stroke at the
-/// colour's alpha in one layer, so self-overlap doesn't darken (the highlighter
-/// look) and the chosen alpha is honoured. Move-only.
+/// A translucent marker band along the Catmull-Rom curve through [points].
+/// The painter draws it as ONE band (a plain stroke, or the baked brush
+/// texture mapped along the curve), so the chosen alpha is honoured and the
+/// stroke never darkens itself. See [paintHighlighterStroke].
 class HighlighterDrawable extends Drawable implements Segmented {
   @override
   final List<Offset> points;

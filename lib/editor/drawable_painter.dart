@@ -3,11 +3,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../overlay/hud_lines.dart';
+import 'brush_texture.dart';
 import 'curve.dart';
 import 'draw_style.dart';
 import 'drawable.dart';
 import 'geometry.dart';
 import 'hit_test.dart' show selectionInflate;
+import 'ribbon.dart';
 import 'spotlight.dart';
 import 'text_metrics.dart';
 
@@ -105,30 +107,13 @@ void _paintFilledShape(
   );
 }
 
-/// Smooth, deterministic value noise for the procedural marker texture — same
-/// seed always yields the same curve, so a highlighter never shimmers on repaint.
-class _MarkerNoise {
-  late final List<double> _g;
-  _MarkerNoise(int seed) {
-    final r = math.Random(seed);
-    _g = List.generate(256, (_) => r.nextDouble());
-  }
-  double call(double x) {
-    final i = x.floor();
-    final f = x - i;
-    final a = _g[((i % 256) + 256) % 256];
-    final b = _g[(((i + 1) % 256) + 256) % 256];
-    final u = f * f * (3 - 2 * f); // smoothstep
-    return a + (b - a) * u;
-  }
-}
-
 /// Paints a highlighter band along the Catmull-Rom curve through [control]
 /// (control points; first/last = the ends). Translucent srcOver only (no
 /// multiply — it vanishes on dark screenshots); honours the colour's own alpha.
-/// The Clean texture also honours [DrawStyle.lineStyle]; streaks/frayed are
-/// textured and ignore it. Reused by the toolbar's texture preview (a 2-point
-/// list = a straight band).
+/// Clean is a plain stroked path; streaks/frayed map the baked brush texture
+/// (brush_texture.dart) along the curve as ONE textured ribbon, so a textured
+/// stroke costs a single draw per frame. Reused by the toolbar's texture
+/// preview (a 2-point list = a straight band).
 void paintHighlighterStroke(
   Canvas canvas,
   List<Offset> control,
@@ -172,71 +157,51 @@ void paintHighlighterStroke(
     return;
   }
 
-  // ---- tunable constants (iterate in-app) --------------------------------
-  const streakCount = 18; // felt-tip streak lines across the band — a COUNT, so
-  // the look scales with width AND stays cheap (≈this many draws per stroke).
-  const streakAmp = 0.4; // per-streak intensity variation
-  const lengthAmp = 0.22; // along-stroke variation (per-streak gradient)
-  const edgeInk = 0.7; // extra darkening at the long edges
-
   // A stable per-stroke seed keeps the texture from re-randomizing as the
   // stroke is dragged/moved (the drawable supplies a fixed one). The geometry
   // fallback is only for seedless callers (the static toolbar texture preview).
   final seedV = seed ??
       (start.dx * 131 + start.dy * 557 + end.dx * 1289 + end.dy * 2741).round();
-  final noise = _MarkerNoise(seedV);
   final baseA = color.a; // the chosen alpha (0..1)
   Color withA(double a) => color.withValues(alpha: a.clamp(0.0, 0.95));
 
-  // Unit normal at each spine vertex so the streaks run PARALLEL to the curve.
-  final normals = <Offset>[];
-  for (var j = 0; j < spine.length; j++) {
-    final a = spine[j == 0 ? 0 : j - 1];
-    final b = spine[j == spine.length - 1 ? j : j + 1];
-    var t = b - a;
-    final l = t.distance;
-    t = l == 0 ? const Offset(1, 0) : t / l;
-    normals.add(Offset(-t.dy, t.dx));
-  }
-
-  // A FEW long streaks offset across the band (≈streakCount draws), each a
-  // polyline following the curve at its own offset + intensity (3-stop gradient
-  // along it for felt-tip lengthwise variation).
-  final paint = Paint()
-    ..isAntiAlias = true
-    ..style = PaintingStyle.stroke
-    ..strokeCap = StrokeCap.butt;
-  final bandStep = w / streakCount;
-  for (var i = 0; i < streakCount; i++) {
-    final tt = (i + 0.5) / streakCount; // 0..1 across the band
-    final off = (tt - 0.5) * w;
-    var base = (1 - streakAmp) + streakAmp * noise(i * 1.7 + 3);
-    final edge = math.pow((tt - 0.5).abs() * 2, 2.2).toDouble();
-    base *= 1 + edgeInk * edge; // ink-darker long edges
-    double la(double k) =>
-        baseA * base * ((1 - lengthAmp) + lengthAmp * noise(i * 0.5 + k));
-    final streak = Path();
-    final s0 = spine.first + normals.first * off;
-    streak.moveTo(s0.dx, s0.dy);
-    for (var j = 1; j < spine.length; j++) {
-      final sj = spine[j] + normals[j] * off;
-      streak.lineTo(sj.dx, sj.dy);
-    }
-    final s1 = spine.last + normals.last * off;
-    paint
-      ..strokeWidth = bandStep * 1.3 // overlap so there are no seams
-      ..shader = ui.Gradient.linear(s0, s1, [
-        withA(la(0)),
-        withA(la(6)),
-        withA(la(12)),
-      ], const [0.0, 0.5, 1.0]);
-    canvas.drawPath(streak, paint);
-  }
-  paint.shader = null;
+  // The baked band (white + alpha) mapped along the curve as one triangle
+  // strip; the stroke colour rides on the vertices and MULTIPLIES the texture
+  // (modulate), so the colour's own alpha scales the texture's alpha. No
+  // colour filter: a per-draw filter would cost an extra pass on some
+  // renderers, whereas vertex-colour x texture is one pass everywhere.
+  final band = BrushTextures.instance.band(seedV);
+  final mesh = ribbonMesh(
+    spine,
+    w,
+    texWidth: band.width.toDouble(),
+    texHeight: band.height.toDouble(),
+  );
+  final ribbon = ui.Vertices(
+    ui.VertexMode.triangleStrip,
+    mesh.positions,
+    textureCoordinates: mesh.uvs,
+    colors: List<Color>.filled(mesh.positions.length, color),
+  );
+  canvas.drawVertices(
+    ribbon,
+    BlendMode.modulate,
+    Paint()
+      ..isAntiAlias = true
+      ..shader = ui.ImageShader(
+        band,
+        TileMode.clamp,
+        TileMode.clamp,
+        Matrix4.identity().storage,
+        filterQuality: FilterQuality.medium,
+      ),
+  );
 
   // Frayed: dry split-fork streaks off both ends, along the end tangents.
+  // Plain solid-colour lines (no shader), so they stay cheap as direct draws.
   if (style.texture == HighlighterTexture.frayed) {
-    final fn = _MarkerNoise(seedV * 5 + 1);
+    final normals = spineNormals(spine);
+    final fn = MarkerNoise(seedV * 5 + 1);
     final fray = Paint()
       ..isAntiAlias = true
       ..strokeCap = StrokeCap.round;
