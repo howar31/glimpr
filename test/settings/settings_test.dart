@@ -5,6 +5,7 @@ import 'package:glimpr/editor/loupe_config.dart';
 import 'package:glimpr/overlay/selection_guides.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/platform_gate.dart';
+import 'package:glimpr/settings/gpu_preference.dart';
 import 'package:glimpr/settings/settings.dart';
 
 import '../support/fake_store.dart';
@@ -303,5 +304,27 @@ void main() {
     await s.setHudInvertLines(true);
     expect(await s.getHudInvertLines(), isTrue);
     expect((await s.loadHud()).invertLines, isTrue);
+  });
+
+  test('gpu_preference round-trips via wire names and defaults to system',
+      () async {
+    final s = Settings(FakeStore());
+    expect(await s.getGpuPreference(), GpuPreference.system);
+    await s.setGpuPreference(GpuPreference.lowPower);
+    expect(await s.store.getString('gpu_preference'), 'low_power');
+    expect(await s.getGpuPreference(), GpuPreference.lowPower);
+    await s.setGpuPreference(GpuPreference.highPerformance);
+    expect(await s.store.getString('gpu_preference'), 'high_performance');
+    expect(await s.getGpuPreference(), GpuPreference.highPerformance);
+    await s.setGpuPreference(GpuPreference.system);
+    expect(await s.store.getString('gpu_preference'), 'system');
+  });
+
+  test('gpu_preference unknown stored value falls back to system', () async {
+    final store = FakeStore();
+    await store.setString('gpu_preference', 'integrated');
+    expect(await Settings(store).getGpuPreference(), GpuPreference.system);
+    expect(GpuPreference.fromWire(null), GpuPreference.system);
+    expect(GpuPreference.fromWire(''), GpuPreference.system);
   });
 }

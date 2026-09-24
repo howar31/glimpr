@@ -731,6 +731,41 @@ class AppLocalizationsEn extends AppLocalizations {
       'Default 2 · applies after restarting Glimpr';
 
   @override
+  String get settingsSectionGpu => 'Graphics processor';
+
+  @override
+  String get settingsGpuPreferenceTitle => 'Render with';
+
+  @override
+  String get settingsGpuPreferenceBody =>
+      'Which graphics processor draws the selection overlay, the Image Editor and this window. Only matters on a PC with more than one GPU.';
+
+  @override
+  String get settingsGpuPreferenceSystem => 'System default';
+
+  @override
+  String get settingsGpuPreferenceLowPower => 'Power saving';
+
+  @override
+  String get settingsGpuPreferenceHighPerformance => 'High performance';
+
+  @override
+  String get settingsGpuPreferenceSystemDesc =>
+      'Windows picks the GPU, normally the one your display is connected to. A per-app preference set in the Windows graphics settings still applies.';
+
+  @override
+  String get settingsGpuPreferenceLowPowerDesc =>
+      'Uses the integrated GPU when there is one, so a game or an AI workload filling the discrete GPU cannot slow Glimpr down. A weak integrated GPU may struggle with several 4K displays, and the picture is handed across GPUs when the display is wired to the discrete one.';
+
+  @override
+  String get settingsGpuPreferenceHighPerformanceDesc =>
+      'Uses the discrete GPU when there is one: the fastest drawing, but it shares that GPU with games and other heavy apps.';
+
+  @override
+  String get settingsGpuPreferenceDefault =>
+      'Default: System default · applies after restarting Glimpr; the screenshot overlay follows from the next screenshot';
+
+  @override
   String get settingsSectionCaptureLayers => 'Screenshot layers';
 
   @override

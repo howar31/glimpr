@@ -7,6 +7,7 @@
 #include "app_identity.h"
 #include "crash_dump.h"
 #include "flutter_window.h"
+#include "gpu_preference.h"
 #include "overlay_host.h"
 #include "perf_log.h"
 #include "record_worker.h"
@@ -88,6 +89,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   flutter::DartProject project(L"data");
+  // Settings > Advanced > Graphics processor (restart-effective).
+  prefs::ApplyGpuPreference(&project);
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();

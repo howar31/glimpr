@@ -1392,6 +1392,66 @@ abstract class AppLocalizations {
   /// **'Default 2 · applies after restarting Glimpr'**
   String get settingsWarmEnginesDefault;
 
+  /// Settings > Advanced: section label for the Windows-only GPU preference card
+  ///
+  /// In en, this message translates to:
+  /// **'Graphics processor'**
+  String get settingsSectionGpu;
+
+  /// Settings > Advanced > Graphics processor: card title
+  ///
+  /// In en, this message translates to:
+  /// **'Render with'**
+  String get settingsGpuPreferenceTitle;
+
+  /// Settings > Advanced > Graphics processor: card body
+  ///
+  /// In en, this message translates to:
+  /// **'Which graphics processor draws the selection overlay, the Image Editor and this window. Only matters on a PC with more than one GPU.'**
+  String get settingsGpuPreferenceBody;
+
+  /// GPU choice: let Windows pick
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsGpuPreferenceSystem;
+
+  /// GPU choice: the integrated GPU
+  ///
+  /// In en, this message translates to:
+  /// **'Power saving'**
+  String get settingsGpuPreferenceLowPower;
+
+  /// GPU choice: the discrete GPU
+  ///
+  /// In en, this message translates to:
+  /// **'High performance'**
+  String get settingsGpuPreferenceHighPerformance;
+
+  /// Explanation of the System default GPU choice
+  ///
+  /// In en, this message translates to:
+  /// **'Windows picks the GPU, normally the one your display is connected to. A per-app preference set in the Windows graphics settings still applies.'**
+  String get settingsGpuPreferenceSystemDesc;
+
+  /// Explanation of the Power saving GPU choice
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the integrated GPU when there is one, so a game or an AI workload filling the discrete GPU cannot slow Glimpr down. A weak integrated GPU may struggle with several 4K displays, and the picture is handed across GPUs when the display is wired to the discrete one.'**
+  String get settingsGpuPreferenceLowPowerDesc;
+
+  /// Explanation of the High performance GPU choice
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the discrete GPU when there is one: the fastest drawing, but it shares that GPU with games and other heavy apps.'**
+  String get settingsGpuPreferenceHighPerformanceDesc;
+
+  /// Settings > Advanced > Graphics processor: footer shown while the choice equals its launch value
+  ///
+  /// In en, this message translates to:
+  /// **'Default: System default · applies after restarting Glimpr; the screenshot overlay follows from the next screenshot'**
+  String get settingsGpuPreferenceDefault;
+
   /// Settings > Advanced: Capture layers section label
   ///
   /// In en, this message translates to:

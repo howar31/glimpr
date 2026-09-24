@@ -16,6 +16,7 @@ import '../editor/editor_controller.dart' show ToolKind;
 import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
+import 'gpu_preference.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../overlay/selection_guides.dart';
@@ -176,6 +177,10 @@ class _SettingsAppState extends State<SettingsApp>
   // The warm target active SINCE launch (what OverlayManager actually built with).
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
+  // GPU preference (Windows): restart-effective like the warm target, so the
+  // launch value is kept for the restart-notice comparison.
+  GpuPreference _gpuPreference = GpuPreference.system;
+  GpuPreference? _gpuPreferenceInitial;
   String _filenameTemplate = defaultFilenameTemplate;
   // Opt-in capture decoration, per scenario (all off by default).
   bool _decorateSnap = true;
@@ -521,6 +526,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudLoupe = await _s.getHudLoupe();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
     final hudInvertLines = await _s.getHudInvertLines();
+    final gpuPreference = await _s.getGpuPreference();
     final guideLines = await _s.getGuideLines();
     final guideCenter = await _s.getGuideCenter();
     final guideShown = await _s.getGuideShown();
@@ -565,6 +571,8 @@ class _SettingsAppState extends State<SettingsApp>
       _hudLoupe = hudLoupe;
       _hudMarchingAnts = hudMarchingAnts;
       _hudInvertLines = hudInvertLines;
+      _gpuPreference = gpuPreference;
+      _gpuPreferenceInitial ??= gpuPreference;
       _guideLines = guideLines;
       _guideCenter = guideCenter;
       _guideShown = guideShown;
@@ -2636,6 +2644,26 @@ class _SettingsAppState extends State<SettingsApp>
     );
   }
 
+  /// One "Label: explanation" line under the GPU choice, so each option says
+  /// what it means and what it costs (owner request).
+  Widget _gpuOptionDesc(String label, String desc, GlimprTokens t) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '$label: ',
+                style: GlimprType.sansStyle(12.5, 600, t.fg2),
+              ),
+              TextSpan(
+                text: desc,
+                style: GlimprType.sansStyle(12.5, 400, t.fg3),
+              ),
+            ],
+          ),
+        ),
+      );
+
   List<Widget> _advancedPane(GlimprTokens t) {
     return [
       _h1(_l.settingsPaneAdvanced, t),
@@ -2701,10 +2729,75 @@ class _SettingsAppState extends State<SettingsApp>
         ),
       ),
       const SizedBox(height: 15),
-      // Inverted HUD lines: a performance knob (on Windows it forces a
-      // whole-frame readback every frame), so it lives in Advanced rather than
-      // in Selection & HUD and is not flipped casually (owner 2026-09-24).
-      SectionLabel(_l.settingsSectionOverlayHUD, icon: Icons.grid_goldenratio),
+      // Graphics processor: the rendering performance knobs. The GPU choice is
+      // Windows only (the runner reads it natively at process start and applies
+      // DartProject::set_gpu_preference; macOS has no such switch), each choice
+      // carrying its own one-line meaning + cost. The inverted-HUD-lines toggle
+      // lives here rather than in Selection & HUD because on Windows it forces
+      // a whole-frame readback every frame and must not be flipped casually
+      // (owner 2026-09-24).
+      SectionLabel(_l.settingsSectionGpu, icon: Icons.memory),
+      if (platformIsWindows) ...[
+        GlassCard.padded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _l.settingsGpuPreferenceTitle,
+                style: GlimprType.sansStyle(14.5, 600, t.fg1),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _l.settingsGpuPreferenceBody,
+                style: GlimprType.sansStyle(12.5, 400, t.fg3),
+              ),
+              const SizedBox(height: 16),
+              Segmented<GpuPreference>(
+                full: true,
+                value: _gpuPreference,
+                options: [
+                  (GpuPreference.system, _l.settingsGpuPreferenceSystem),
+                  (GpuPreference.lowPower, _l.settingsGpuPreferenceLowPower),
+                  (
+                    GpuPreference.highPerformance,
+                    _l.settingsGpuPreferenceHighPerformance,
+                  ),
+                ],
+                onChanged: (v) async {
+                  await _s.setGpuPreference(v);
+                  if (mounted) setState(() => _gpuPreference = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              _gpuOptionDesc(
+                _l.settingsGpuPreferenceSystem,
+                _l.settingsGpuPreferenceSystemDesc,
+                t,
+              ),
+              _gpuOptionDesc(
+                _l.settingsGpuPreferenceLowPower,
+                _l.settingsGpuPreferenceLowPowerDesc,
+                t,
+              ),
+              _gpuOptionDesc(
+                _l.settingsGpuPreferenceHighPerformance,
+                _l.settingsGpuPreferenceHighPerformanceDesc,
+                t,
+              ),
+              const SizedBox(height: 6),
+              if (_gpuPreferenceInitial != null &&
+                  _gpuPreference != _gpuPreferenceInitial) ...[
+                ..._restartNotice(),
+              ] else
+                Text(
+                  _l.settingsGpuPreferenceDefault,
+                  style: GlimprType.sansStyle(12, 500, t.fg4),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
       GlassCard.rows([
         SettingRow(
           title: _l.settingsHudInvertLines,

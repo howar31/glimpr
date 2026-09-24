@@ -15,6 +15,7 @@
 #include <thread>
 
 #include "element_snap.h"
+#include "gpu_preference.h"
 #include "overlay_ipc.h"
 #include "overlay_manager.h"
 #include "perf_log.h"
@@ -165,6 +166,9 @@ int OverlayHostMain() {
   }
 
   flutter::DartProject project(L"data");
+  // A fresh host per session, so the GPU choice applies from the next
+  // screenshot without restarting the main process.
+  prefs::ApplyGpuPreference(&project);
   PipeLink link(main_pid);
   OverlayManager manager(project, wnd, &link);
   g_manager = &manager;

@@ -23,6 +23,7 @@
 #include "hdr_util.h"
 #include "overlay_ipc.h"
 #include "pixel_swizzle.h"
+#include "prefs_probe.h"
 #include "record_args.h"
 #include "record_clock.h"
 #include "snap_filter.h"
@@ -525,6 +526,35 @@ void TestOverlayIpc() {
   CHECK(!oipc::ParseBegin(oipc::Parse("READY"), &pin, &live));
 }
 
+void TestPrefsProbe() {
+  // Compact shared_preferences JSON; a longer key ending in the probed key
+  // must never match, and a value equal to the key must be skipped.
+  const std::string j =
+      "{\"a\":1,\"x_gpu_preference\":\"high_performance\","
+      "\"b\":\"gpu_preference\",\"gpu_preference\":\"low_power\","
+      "\"c\":true}";
+  CHECK(prefs::JsonStringValue(j, "gpu_preference") == "low_power");
+  CHECK(prefs::JsonStringValue(j, "missing").empty());
+  CHECK(prefs::JsonStringValue("{\"gpu_preference\":true}",
+                               "gpu_preference").empty());
+  CHECK(prefs::JsonStringValue("{\"gpu_preference\": \"system\"}",
+                               "gpu_preference") == "system");
+  CHECK(prefs::JsonStringValue("{\"gpu_preference\":\"unterminated",
+                               "gpu_preference").empty());
+  CHECK(prefs::JsonStringValue("", "gpu_preference").empty());
+  CHECK(prefs::GpuChoiceFromWire("low_power") == prefs::GpuChoice::kLowPower);
+  CHECK(prefs::GpuChoiceFromWire("high_performance") ==
+        prefs::GpuChoice::kHighPerformance);
+  CHECK(prefs::GpuChoiceFromWire("system") == prefs::GpuChoice::kSystem);
+  CHECK(prefs::GpuChoiceFromWire("integrated") == prefs::GpuChoice::kSystem);
+  CHECK(prefs::GpuChoiceFromWire("") == prefs::GpuChoice::kSystem);
+  // The identity-aware prefs dir ends with the build's own app name.
+  const std::wstring dir = prefs::PrefsDir();
+  const std::wstring tail = std::wstring(L"\\Howar31\\") + GLIMPR_APP_NAME_W;
+  CHECK(dir.size() > tail.size() &&
+        dir.compare(dir.size() - tail.size(), tail.size(), tail) == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -544,6 +574,7 @@ int main() {
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
       {"hdrop", TestDropFilesPayload},     {"drop-filter", TestDropFilter},
       {"ed25519", TestEd25519Verify},     {"overlay-ipc", TestOverlayIpc},
+      {"prefs-probe", TestPrefsProbe},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

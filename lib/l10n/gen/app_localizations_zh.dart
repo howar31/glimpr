@@ -695,6 +695,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsWarmEnginesDefault => '預設 2 · 重新啟動 Glimpr 後生效';
 
   @override
+  String get settingsSectionGpu => '圖形處理器';
+
+  @override
+  String get settingsGpuPreferenceTitle => '使用的顯示卡';
+
+  @override
+  String get settingsGpuPreferenceBody =>
+      '由哪一顆圖形處理器繪製選取畫面、圖片編輯器和這個視窗。只有在同時有兩顆以上 GPU 的電腦上才有差別。';
+
+  @override
+  String get settingsGpuPreferenceSystem => '系統預設';
+
+  @override
+  String get settingsGpuPreferenceLowPower => '省電';
+
+  @override
+  String get settingsGpuPreferenceHighPerformance => '高效能';
+
+  @override
+  String get settingsGpuPreferenceSystemDesc =>
+      '由 Windows 決定，通常是螢幕所連接的那顆 GPU。在 Windows 圖形設定中針對 Glimpr 指定的偏好仍然有效。';
+
+  @override
+  String get settingsGpuPreferenceLowPowerDesc =>
+      '有內建顯示晶片時改用它，這樣遊戲或 AI 工作把獨立顯示卡佔滿時也不會拖慢 Glimpr。較弱的內顯在多顆 4K 螢幕上可能吃力；螢幕接在獨立顯示卡上時，畫面需要跨 GPU 傳遞。';
+
+  @override
+  String get settingsGpuPreferenceHighPerformanceDesc =>
+      '有獨立顯示卡時使用它：繪製最快，但會和遊戲等重度程式共用同一顆 GPU。';
+
+  @override
+  String get settingsGpuPreferenceDefault =>
+      '預設：系統預設 · 重新啟動 Glimpr 後生效；截圖畫面自下一次截圖起生效';
+
+  @override
   String get settingsSectionCaptureLayers => '截圖圖層';
 
   @override

@@ -9,6 +9,7 @@ import '../output/filename.dart';
 import '../output/flow.dart';
 import '../shortcuts/hotkey_binding.dart';
 import '../shortcuts/shortcut_store.dart';
+import 'gpu_preference.dart';
 import 'settings_store.dart';
 
 /// Output image format for a saved / copied capture.
@@ -168,6 +169,7 @@ class Settings {
   static const _hudLoupeKey = 'hud_loupe';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
   static const _hudInvertLinesKey = 'hud_invert_lines';
+  static const _gpuPreferenceKey = 'gpu_preference';
   static const _guideLinesKey = 'guide_lines';
   static const _guideCenterKey = 'guide_center';
   static const _guideShownKey = 'guide_shown';
@@ -557,6 +559,12 @@ class Settings {
       (await store.getBool(_hudInvertLinesKey)) ?? false;
   Future<void> setHudInvertLines(bool v) =>
       store.setBool(_hudInvertLinesKey, v);
+
+  // GPU preference (Windows; applied natively at process start) ------------
+  Future<GpuPreference> getGpuPreference() async =>
+      GpuPreference.fromWire(await store.getString(_gpuPreferenceKey));
+  Future<void> setGpuPreference(GpuPreference v) =>
+      store.setString(_gpuPreferenceKey, v.wire);
 
   // Composition guides (lines style + center mark + shown-by-default) --------
   Future<GuideLines> getGuideLines() async {

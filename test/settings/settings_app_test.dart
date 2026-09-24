@@ -403,4 +403,34 @@ void main() {
     expect(preview, isNotEmpty);
     expect(preview.every((p) => p.invert), isTrue);
   });
+
+  testWidgets(
+      'Advanced pane on Windows: choosing Power saving stores low_power and shows the restart notice',
+      (tester) async {
+    debugPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugPlatformOverride = null);
+    final settings = await _pump(tester);
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(find.text('Render with'), findsOneWidget);
+    expect(find.text('Restart Glimpr for this to take effect.'), findsNothing);
+    await tester.tap(find.text('Power saving'));
+    await tester.pumpAndSettle();
+    expect(await settings.store.getString('gpu_preference'), 'low_power');
+    expect(find.text('Restart Glimpr for this to take effect.'), findsOneWidget);
+    // Back to the launch value: the notice goes away again.
+    await tester.tap(find.text('System default'));
+    await tester.pumpAndSettle();
+    expect(await settings.store.getString('gpu_preference'), 'system');
+    expect(find.text('Restart Glimpr for this to take effect.'), findsNothing);
+  });
+
+  testWidgets('Advanced pane on macOS has no GPU card', (tester) async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugPlatformOverride = null);
+    await _pump(tester);
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(find.text('Render with'), findsNothing);
+  });
 }
