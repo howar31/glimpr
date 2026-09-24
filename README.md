@@ -9,8 +9,7 @@
 
 English | [正體中文](README.zh-Hant.md)
 
-Fast, native screenshot, annotation, and screen-recording tool for macOS and
-Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
+Screenshot, annotation and screen-recording tool for macOS and Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/editor-mac.png">
@@ -20,24 +19,24 @@ Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
 
 ## Features
 
-- **Screenshot** – interactive region, window, and display screenshots on a
+- **Screenshot**: interactive region, window, and display screenshots on a
   frozen, pixel-faithful overlay; window snap and element snap
   (accessibility-based); multi-display support; HDR-aware screenshots
   (HEIC / JPEG XR) alongside SDR.
-- **Annotate** – 12 tools (rectangle, ellipse, line, arrow, pen, highlighter,
+- **Annotate**: 12 tools (rectangle, ellipse, line, arrow, pen, highlighter,
   text, numbered steps, blur, pixelate, spotlight, crop) in the capture
   overlay and a standalone image editor, with a pixel loupe and eyedropper.
-- **Record** – screen recording (H.264 / HEVC including HDR10, GIF) in
+- **Record**: screen recording (H.264 / HEVC including HDR10, GIF) in
   region, window, display, and last-region modes; system audio and
   microphone; pause / resume; auto-stop.
-- **GIF editing** – open any GIF in the image editor to edit it frame by
+- **GIF editing**: open any GIF in the image editor to edit it frame by
   frame and re-encode it smaller; see [GIF editing](#gif-editing) below.
-- **Pin** – float any screenshot as an always-on-top pin with drag and zoom.
-- **Flows** – configurable after-capture and after-edit actions: save, copy,
+- **Pin**: float any screenshot as an always-on-top pin with drag and zoom.
+- **Flows**: configurable after-capture and after-edit actions: save, copy,
   open editor, pin, share; filename templates and date subfolders.
 - Rebindable global hotkeys (including PrintScreen and bare keys), light and
   dark themes, English and Traditional Chinese.
-- **Private by design** – no telemetry, no account; captures never leave your
+- **Private by design**: no telemetry, no account; captures never leave your
   machine. The only network request is the update check, and it can be turned
   off.
 
@@ -49,19 +48,19 @@ Windows. Website: [glimpr.howar31.com](https://glimpr.howar31.com)
   <img alt="Glimpr GIF editing" src="docs/media/gif-editor-mac.png">
 </picture>
 
-Open any GIF — or a GIF recording you just finished — in the image editor,
+Open any GIF, or a GIF recording you just finished, in the image editor,
 which switches to a frame timeline for it:
 
-- **Timeline** – select, delete, trim everything before or after a selection,
+- **Timeline**: select, delete, trim everything before or after a selection,
   reorder, reverse, yoyo; remove duplicate frames; reduce frame rate; frame
   clipboard; full undo / redo.
-- **Timing** – set, adjust or scale frame delays; insert a title frame.
-- **Canvas** – crop, resize, flip, rotate, border.
-- **Annotate** – burn the image editor's tools (shapes, text, blur,
+- **Timing**: set, adjust or scale frame delays; insert a title frame.
+- **Canvas**: crop, resize, flip, rotate, border.
+- **Annotate**: burn the image editor's tools (shapes, text, blur,
   pixelate, spotlight and more) into a frame range.
-- **Motion** – fade and slide transitions, one-click smooth loop,
+- **Motion**: fade and slide transitions, one-click smooth loop,
   cinemagraph and a progress bar.
-- **Export** – adaptive palette with optional dithering, file-size
+- **Export**: adaptive palette with optional dithering, file-size
   optimization (frame diff) and loop control, re-encoded by Glimpr's own
   encoder.
 
@@ -72,12 +71,12 @@ straight from a finished recording via the after-recording flow action
 
 ## Install
 
-**macOS 14+** (screen recording requires macOS 15+) — download the DMG from
+**macOS 14+** (screen recording requires macOS 15+): download the DMG from
 [Releases](https://github.com/howar31/glimpr/releases) and drag Glimpr to
 Applications. Grant Screen Recording (and optionally Accessibility for
 element snap) on first run.
 
-**Windows 10 (1903+) / 11** — download the installer or the portable zip from
+**Windows 10 (1903+) / 11**: download the installer or the portable zip from
 [Releases](https://github.com/howar31/glimpr/releases). SmartScreen may warn
 about the unsigned installer: choose "More info", then "Run anyway".
 

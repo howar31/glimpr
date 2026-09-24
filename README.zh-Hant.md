@@ -9,7 +9,7 @@
 
 [English](README.md) | 正體中文
 
-macOS 與 Windows 上快速、原生的螢幕截圖、標註與螢幕錄影工具。官方網站：[glimpr.howar31.com](https://glimpr.howar31.com)
+macOS 與 Windows 的螢幕截圖、標註與螢幕錄影工具。官方網站：[glimpr.howar31.com](https://glimpr.howar31.com)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/editor-mac-zh.png">
