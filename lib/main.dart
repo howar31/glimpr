@@ -59,8 +59,11 @@ Future<void> main() async {
   // Automatic update check: at launch and then polled while resident
   // (silent, throttled inside UpdateChecker, Settings-toggleable). Never
   // blocks boot; failures are silent by design. A hit flips the tray item to
-  // its "update available" label right away (the Settings UI seeds itself
-  // from the persisted keys separately).
+  // its "update available" label right away and is published on
+  // [updateFeed] so the Settings UI (same engine) follows in place; the UI
+  // also seeds itself from the persisted keys at boot, covering a hit that
+  // lands before it is listening.
+  final updateFeed = ValueNotifier<UpdateCheckResult?>(null);
   startUpdatePolling(
     UpdateChecker(
       store: Settings.instance.store,
@@ -68,10 +71,13 @@ Future<void> main() async {
       currentVersion: () async =>
           await kRoleChannel.invokeMethod<String>('appVersion') ?? '',
     ),
-    (r) => unawaited(kRoleChannel.invokeMethod('setUpdateStatus', {
-      'available': true,
-      'label': appL10n.settingsAboutUpdateAvailable(r.latestTag),
-    }).catchError((_) {})),
+    (r) {
+      unawaited(kRoleChannel.invokeMethod('setUpdateStatus', {
+        'available': true,
+        'label': appL10n.settingsAboutUpdateAvailable(r.latestTag),
+      }).catchError((_) {}));
+      updateFeed.value = r;
+    },
   );
   // Reveal the warm Image-Editor window from a global hotkey (the control
   // engine owns the role channel that MainFlutterWindow handles).
@@ -183,7 +189,10 @@ Future<void> main() async {
     }).catchError((_) {});
   }
 
-  runApp(SettingsApp(settings: Settings.instance, hotkeyService: hotkeyService));
+  runApp(SettingsApp(
+      settings: Settings.instance,
+      hotkeyService: hotkeyService,
+      updateFeed: updateFeed));
 }
 
 /// Float the clipboard image as a centered pin window (⌘⌥6 — Snipaste's F3).

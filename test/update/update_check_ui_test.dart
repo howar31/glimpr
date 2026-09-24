@@ -311,4 +311,46 @@ Lead.
     await openAbout(tester, settings);
     expect(find.textContaining("What's new"), findsNothing);
   });
+  testWidgets('a resident poll hit refreshes the open About pane in place',
+      (tester) async {
+    // The control engine's poll (main.dart) persists the check and publishes
+    // the result on a ValueNotifier the Settings UI listens to, so the About
+    // row and the What's-new card follow the tray without a manual refresh.
+    final calls = mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    final feed = ValueNotifier<UpdateCheckResult?>(null);
+    await tester.pumpWidget(SettingsApp(settings: settings, updateFeed: feed));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Update available'), findsNothing);
+    expect(find.textContaining("What's new"), findsNothing);
+    // What UpdateChecker._check writes before the poll's onNewer fires.
+    const release = ReleaseInfo(
+        tag: 'v9.9.9',
+        url: 'https://example.test/rel',
+        notes:
+            '<!-- glimpr:notes lang=en -->\n- **Nine**: n\n<!-- /glimpr:notes -->');
+    await store.setString('update_latest_tag', release.tag);
+    await store.setString('update_latest_url', release.url);
+    await store.setString(
+        UpdateChecker.releasesKey, jsonEncode([release.toJson()]));
+    feed.value = const UpdateCheckResult(
+        latestTag: 'v9.9.9',
+        url: 'https://example.test/rel',
+        isNewer: true,
+        releases: [release]);
+    await tester.pumpAndSettle();
+    expect(find.text('Update available: v9.9.9'), findsOneWidget);
+    expect(find.text("What's new in v9.9.9"), findsOneWidget);
+    // The tray click now routes to the What's-new page (the Dart side knows
+    // about the update), not to a second manual check.
+    await pushFromNative(kRoleChannel, 'trayCheckUpdates', null);
+    await tester.pumpAndSettle();
+    expect(find.text('Nine'), findsOneWidget);
+    expect(calls.where((c) => c.method == 'appVersion').length,
+        lessThanOrEqualTo(2));
+  });
 }

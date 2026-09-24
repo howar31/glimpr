@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
@@ -57,13 +58,22 @@ import 'dart:io' show Directory;
 /// lights — hence the top inset. Each control persists immediately; overlay
 /// engines read the values fresh on next capture.
 class SettingsApp extends StatefulWidget {
-  const SettingsApp({super.key, required this.settings, this.hotkeyService});
+  const SettingsApp(
+      {super.key,
+      required this.settings,
+      this.hotkeyService,
+      this.updateFeed});
   final Settings settings;
 
   // The live Tier-1 hotkey service from the control engine, used by the
   // Shortcuts pane to re-register a rebound global hotkey on Apply. Null in
   // tests / the overlay engine (which never builds the settings UI).
   final HotkeyService? hotkeyService;
+
+  // The control engine's resident update poll publishes each "newer release"
+  // hit here (main.dart); the About pane follows it in place, so the tray
+  // badge and the Settings UI never disagree. Null in tests / other engines.
+  final ValueListenable<UpdateCheckResult?>? updateFeed;
 
   @override
   State<SettingsApp> createState() => _SettingsAppState();
@@ -299,6 +309,7 @@ class _SettingsAppState extends State<SettingsApp>
     // Repaint the About status line as the self-update progresses.
     _updater.phase.addListener(_onUpdaterPhase);
     _updater.progress.addListener(_onUpdaterPhase);
+    widget.updateFeed?.addListener(_onUpdateFeed);
     _load();
     _seedUpdateBadge();
   }
@@ -320,6 +331,22 @@ class _SettingsAppState extends State<SettingsApp>
       _updateUrl = url;
     });
     _pushTrayUpdateStatus();
+  }
+
+  // A resident-poll hit (control engine, main.dart) while this UI is alive:
+  // mirror the persisted result onto the About row + What's-new card exactly
+  // as a manual check would, without re-fetching. The poll already pushed
+  // the tray label itself.
+  Future<void> _onUpdateFeed() async {
+    final r = widget.updateFeed?.value;
+    if (r == null || !r.isNewer || !mounted) return;
+    await _loadNotes(await _appVersionFuture);
+    if (!mounted) return;
+    setState(() {
+      _updateAvailableTag = r.latestTag;
+      _updateUrl = r.url;
+      _updateJustCheckedClean = false;
+    });
   }
 
   // Build the What's-new sections from the persisted release list: every
@@ -450,6 +477,7 @@ class _SettingsAppState extends State<SettingsApp>
     WidgetsBinding.instance.removeObserver(this);
     _updater.phase.removeListener(_onUpdaterPhase);
     _updater.progress.removeListener(_onUpdaterPhase);
+    widget.updateFeed?.removeListener(_onUpdateFeed);
     _updateFailedTimer?.cancel();
     _filenameController.dispose();
     _filenameFocus.dispose();
