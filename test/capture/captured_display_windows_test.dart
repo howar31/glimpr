@@ -43,4 +43,36 @@ void main() {
     expect(d.windows[1].rect, const Rect.fromLTWH(0, 0, 800, 600));
     expect(d.windows[1].label, 'Finder'); // empty title -> app name
   });
+
+  test('withoutPixels drops the raw frame and detaches the cursor bytes', () {
+    final buffer = Uint8List(64);
+    final d = CapturedDisplay.fromMap({
+      ..._base(),
+      'rawBytes': Uint8List.view(buffer.buffer, 0, 16),
+      'cursorImage': Uint8List.view(buffer.buffer, 16, 8),
+      'cursorLeft': 3.0,
+      'cursorTop': 4.0,
+      'hdrGen': 7,
+    });
+    expect(d.hasPixels, isTrue);
+    final g = d.withoutPixels();
+    expect(g.hasPixels, isFalse);
+    expect(g.rawBytes, isEmpty);
+    // The cursor PNG survives as its own copy, not a view on the frame buffer.
+    expect(g.cursorImageBytes, hasLength(8));
+    expect(identical(g.cursorImageBytes!.buffer, buffer.buffer), isFalse);
+    // Geometry and metadata are unchanged.
+    expect(g.displayId, d.displayId);
+    expect(g.pixelWidth, d.pixelWidth);
+    expect(g.pixelHeight, d.pixelHeight);
+    expect(g.rowBytes, d.rowBytes);
+    expect(g.width, d.width);
+    expect(g.height, d.height);
+    expect(g.scaleFactor, d.scaleFactor);
+    expect(g.isCursorDisplay, d.isCursorDisplay);
+    expect(g.cursorLeft, 3.0);
+    expect(g.cursorTop, 4.0);
+    expect(g.hdrGen, 7);
+    expect(g.windows, same(d.windows));
+  });
 }

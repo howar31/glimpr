@@ -191,8 +191,36 @@ class CapturedDisplay {
   });
 
   /// Whether this dict carries frozen pixels. A live-select session (recording)
-  /// presents WITHOUT them — geometry + windows only.
+  /// presents WITHOUT them — geometry + windows only. False again after
+  /// [withoutPixels].
   bool get hasPixels => rawBytes.isNotEmpty;
+
+  /// The same capture minus its pixel payload. [rawBytes] and
+  /// [cursorImageBytes] are VIEWS on the platform-message buffer, so any
+  /// retained reference (the session, suspended layers) keeps the whole
+  /// native-resolution frame alive for the session's lifetime — call this once
+  /// the pixels are decoded; the session only needs the geometry.
+  CapturedDisplay withoutPixels() => CapturedDisplay(
+    displayId: displayId,
+    rawBytes: Uint8List(0),
+    pixelWidth: pixelWidth,
+    pixelHeight: pixelHeight,
+    rowBytes: rowBytes,
+    left: left,
+    top: top,
+    width: width,
+    height: height,
+    scaleFactor: scaleFactor,
+    isCursorDisplay: isCursorDisplay,
+    cursorX: cursorX,
+    cursorY: cursorY,
+    windows: windows,
+    cursorImageBytes:
+        cursorImageBytes == null ? null : Uint8List.fromList(cursorImageBytes!),
+    cursorLeft: cursorLeft,
+    cursorTop: cursorTop,
+    hdrGen: hdrGen,
+  );
 
   factory CapturedDisplay.fromMap(Map<dynamic, dynamic> m) => CapturedDisplay(
     displayId: m['displayId'] as int,

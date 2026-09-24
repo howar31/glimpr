@@ -235,6 +235,9 @@ class _OverlayAppState extends State<OverlayApp> {
         final cursorTl = (d.cursorLeft != null && d.cursorTop != null)
             ? Offset(d.cursorLeft!, d.cursorTop!)
             : null;
+        // Pixels are on the GPU now; keep only the geometry so the 33 MB
+        // (per 4K display) raw frame is not held for the whole session.
+        final display = d.withoutPixels();
         final loadedStyles = await stylesFuture;
         if (!mounted) {
           _disposeRetiredRs(); // state is going away; nothing references them
@@ -297,7 +300,7 @@ class _OverlayAppState extends State<OverlayApp> {
           _cursorImage = cursorImg;
           _cursorTopLeft = cursorTl;
           _editor = EditorController(toolStyles: _toolStyles);
-          _display = d;
+          _display = display;
           // Bump so EditorCanvas gets a fresh State each capture (re-runs
           // initState with the correct isCursorDisplay + binds the new
           // controller). Without this, a display whose editor was NOT the one
