@@ -48,35 +48,45 @@ class CrosshairPainter extends CustomPainter {
       old.cursor != cursor || old.march != march || old.hole != hole;
 }
 
-/// A SMALL inverting reticle (a short plus) drawn at [cursor] — the precise-aim
+/// A SMALL solid reticle (a short plus) drawn at [cursor] — the precise-aim
 /// cursor that replaces the system arrow for the drawing tools (rectangle, arrow,
 /// pen, etc.). The region tools (crop / blur / pixelate) use the full-screen
 /// [CrosshairPainter] + loupe instead. Shares the HUD line identity (white +
-/// inverting blend + width) with the crosshair, but stays SOLID on purpose (no
-/// marching ants) — a steady aim point distinct from the animated region lines.
+/// width) with the crosshair, but stays SOLID on purpose (no marching ants) — a
+/// steady aim point distinct from the animated region lines. Its blend follows
+/// [invert] (HudConfig.invertLines): a white line over a dark halo by default,
+/// the inverting blend when the user opts in (see [hudSolidPaints]).
 class ReticlePainter extends CustomPainter {
   final Offset cursor;
   final double arm; // half-length of each plus stroke, in logical px
-  const ReticlePainter(this.cursor, {this.arm = kReticleArm});
+  final bool invert; // HudConfig.invertLines
+  const ReticlePainter(
+    this.cursor, {
+    this.arm = kReticleArm,
+    this.invert = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = hudReticlePaint();
-    canvas.drawLine(
-      Offset(cursor.dx - arm, cursor.dy + 0.5),
-      Offset(cursor.dx + arm, cursor.dy + 0.5),
-      p,
-    );
-    canvas.drawLine(
-      Offset(cursor.dx + 0.5, cursor.dy - arm),
-      Offset(cursor.dx + 0.5, cursor.dy + arm),
-      p,
-    );
+    // Outer loop = paints (halo pass for BOTH arms, then the line pass), so the
+    // second arm's halo never covers the first arm's white line at the crossing.
+    for (final p in hudSolidPaints(invert: invert)) {
+      canvas.drawLine(
+        Offset(cursor.dx - arm, cursor.dy + 0.5),
+        Offset(cursor.dx + arm, cursor.dy + 0.5),
+        p,
+      );
+      canvas.drawLine(
+        Offset(cursor.dx + 0.5, cursor.dy - arm),
+        Offset(cursor.dx + 0.5, cursor.dy + arm),
+        p,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(ReticlePainter old) =>
-      old.cursor != cursor || old.arm != arm;
+      old.cursor != cursor || old.arm != arm || old.invert != invert;
 }
 
 /// Paints the text-selection highlight ourselves so the selected range stays
@@ -140,10 +150,13 @@ class LoupePainter extends CustomPainter {
   final EffectImageLookup? effectImage;
   final Size logicalSize;
   // Appearance for the beyond-image backdrop (visible at image edges). The
-  // grid / marker / frame stay difference-blended (any-background legibility),
+  // grid / marker / frame are theme-independent (any-background legibility),
   // so this is the only appearance-dependent bit. Defaults to dark (the brand
   // dark tile in the Settings loupe preview keeps it).
   final bool dark;
+  // Marker + frame blend: inverting when the user opted in
+  // (HudConfig.invertLines), else white over a dark halo. See hudSolidPaints.
+  final bool invert;
   const LoupePainter({
     required this.image,
     required this.cursorLogical,
@@ -153,6 +166,7 @@ class LoupePainter extends CustomPainter {
     this.effectImage,
     this.logicalSize = Size.zero,
     this.dark = true,
+    this.invert = false,
   });
 
   @override
@@ -213,10 +227,10 @@ class LoupePainter extends CustomPainter {
     }
 
     // Pixel grid (one cell per source pixel). A dark, semi-transparent line on a
-    // NORMAL (src-over) blend — NOT difference — so it never re-colours the
-    // magnified pixels: faithful colour reading wins over universal line
-    // legibility. The center marker below stays difference-blended, so the aimed
-    // pixel is always findable even on dark content where this faint grid softens.
+    // NORMAL (src-over) blend so it never re-colours the magnified pixels:
+    // faithful colour reading wins over universal line legibility. The center
+    // marker below is haloed (or inverting when opted in), so the aimed pixel
+    // is always findable even on dark content where this faint grid softens.
     // Anchored to TRUE pixel boundaries: the view is centered on a pixel center,
     // so boundaries sit at half-cell offsets from the loupe center (not at
     // multiples of zoom from the edge).
@@ -232,31 +246,21 @@ class LoupePainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
-    // Center-pixel marker (inverting blend — visible over any pixel).
-    final marker = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..blendMode = BlendMode.difference;
-    canvas.drawRect(
-      Rect.fromCenter(
-        center: size.center(Offset.zero),
-        width: zoom,
-        height: zoom,
-      ),
-      marker,
+    // Center-pixel marker: haloed white (or inverting), visible over any pixel.
+    final markerRect = Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: zoom,
+      height: zoom,
     );
+    for (final p in hudSolidPaints(invert: invert, width: 1.5)) {
+      canvas.drawRect(markerRect, p);
+    }
     canvas.restore();
 
-    // Border (inverting blend so the loupe frame is visible on any background).
-    canvas.drawRRect(
-      rrect,
-      Paint()
-        ..color = const Color(0xFFFFFFFF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..blendMode = BlendMode.difference,
-    );
+    // Border: same treatment, so the loupe frame reads on any background.
+    for (final p in hudSolidPaints(invert: invert, width: 2)) {
+      canvas.drawRRect(rrect, p);
+    }
   }
 
   @override
@@ -266,7 +270,8 @@ class LoupePainter extends CustomPainter {
       old.zoom != zoom ||
       old.drawables != drawables ||
       old.effectImage != effectImage ||
-      old.dark != dark;
+      old.dark != dark ||
+      old.invert != invert;
 }
 
 // Shared HUD pill (loupe readout + box-size label): chrome on the app-wide
@@ -492,8 +497,9 @@ class StartCoordLabel extends StatelessWidget {
 }
 
 /// A snap highlight around a hovered window: a single rounded outline drawn with
-/// the shared HUD line identity (white + inverting BlendMode.difference, so a thin
-/// line stays visible on any backdrop) and animated as marching ants via [march].
+/// the shared HUD line identity (two-tone white + black dashes over srcOver, so a
+/// thin line stays visible on any backdrop) and animated as marching ants via
+/// [march].
 /// Center is untouched (transparent), so the window content stays fully visible;
 /// rounded corners approximate native window radii (macOS/Windows).
 class WindowHighlightPainter extends CustomPainter {

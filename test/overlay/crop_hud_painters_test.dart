@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glimpr/overlay/crop_hud.dart';
+import 'package:glimpr/overlay/hud_lines.dart';
 
 Future<ui.Image> _solidImage(int w, int h) async {
   final rec = ui.PictureRecorder();
@@ -24,12 +25,26 @@ Widget _paintHost(CustomPainter painter) => Directionality(
 class _RecordingCanvas implements Canvas {
   Rect? imageSrc;
   Rect? imageDst;
+  // Stroke paints of the solid HUD lines, in draw order (blend mode / halo
+  // assertions for the inverting-lines setting).
+  final List<Paint> linePaints = [];
+  final List<Paint> rrectPaints = [];
+  final List<Paint> rectPaints = [];
 
   @override
   void drawImageRect(ui.Image image, Rect src, Rect dst, Paint paint) {
     imageSrc = src;
     imageDst = dst;
   }
+
+  @override
+  void drawLine(Offset p1, Offset p2, Paint paint) => linePaints.add(paint);
+
+  @override
+  void drawRRect(RRect rrect, Paint paint) => rrectPaints.add(paint);
+
+  @override
+  void drawRect(Rect rect, Paint paint) => rectPaints.add(paint);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -193,5 +208,70 @@ void main() {
     expect(find.text(','), findsOneWidget);
     expect(find.text('grow'), findsOneWidget);
     expect(find.byType(Table), findsOneWidget);
+  });
+
+  group('inverting HUD lines setting', () {
+    test('ReticlePainter default = halo then white line, srcOver only', () {
+      final c = _RecordingCanvas();
+      const ReticlePainter(Offset(50, 50)).paint(c, const Size(200, 150));
+      // two arms x (halo + line)
+      expect(c.linePaints.length, 4);
+      expect(c.linePaints.every((p) => p.blendMode == BlendMode.srcOver), isTrue);
+      expect(c.linePaints[0].color.toARGB32(), kHudHalo.toARGB32());
+      expect(c.linePaints[1].color.toARGB32(), kHudHalo.toARGB32());
+      expect(c.linePaints[2].color.toARGB32(), kHudLineColor.toARGB32());
+      expect(c.linePaints[3].color.toARGB32(), kHudLineColor.toARGB32());
+    });
+
+    test('ReticlePainter invert = difference strokes only', () {
+      final c = _RecordingCanvas();
+      const ReticlePainter(Offset(50, 50), invert: true)
+          .paint(c, const Size(200, 150));
+      expect(c.linePaints.length, 2);
+      expect(c.linePaints.every((p) => p.blendMode == BlendMode.difference),
+          isTrue);
+    });
+
+    test('ReticlePainter.shouldRepaint reacts to invert', () {
+      const a = ReticlePainter(Offset(1, 1));
+      expect(a.shouldRepaint(const ReticlePainter(Offset(1, 1))), isFalse);
+      expect(a.shouldRepaint(const ReticlePainter(Offset(1, 1), invert: true)),
+          isTrue);
+    });
+
+    test('LoupePainter marker + frame follow invert', () {
+      for (final invert in [false, true]) {
+        final c = _RecordingCanvas();
+        LoupePainter(
+          image: base,
+          cursorLogical: const Offset(10, 10),
+          scaleFactor: 1,
+          zoom: 8,
+          invert: invert,
+        ).paint(c, const Size(120, 120));
+        // frame: 1 rrect (difference) or 2 (halo + white)
+        expect(c.rrectPaints.length, invert ? 1 : 2, reason: 'invert=$invert');
+        expect(c.rrectPaints.last.blendMode,
+            invert ? BlendMode.difference : BlendMode.srcOver);
+        // centre marker: the backdrop rect + 1 or 2 marker rects, none of them
+        // difference-blended unless inverting
+        final markers = c.rectPaints.where((p) => p.style == PaintingStyle.stroke);
+        expect(markers.length, invert ? 1 : 2, reason: 'invert=$invert');
+        expect(markers.last.blendMode,
+            invert ? BlendMode.difference : BlendMode.srcOver);
+      }
+    });
+
+    test('LoupePainter.shouldRepaint reacts to invert', () {
+      final a = LoupePainter(image: base, cursorLogical: Offset.zero, scaleFactor: 1);
+      expect(
+        a.shouldRepaint(LoupePainter(image: base, cursorLogical: Offset.zero, scaleFactor: 1)),
+        isFalse,
+      );
+      expect(
+        a.shouldRepaint(LoupePainter(image: base, cursorLogical: Offset.zero, scaleFactor: 1, invert: true)),
+        isTrue,
+      );
+    });
   });
 }

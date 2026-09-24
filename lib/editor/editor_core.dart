@@ -2725,6 +2725,7 @@ class _EditorCoreState extends State<EditorCore> {
                 zoom: widget.loupe.zoom.toDouble(),
                 drawables: _effectiveDrawables(),
                 effectImage: _lookupEffect,
+                invert: widget.hud.invertLines,
                 logicalSize: _canvasSize,
                 dark: MediaQuery.platformBrightnessOf(context) ==
                     Brightness.dark,
@@ -2845,6 +2846,7 @@ class _EditorCoreState extends State<EditorCore> {
                 zoom: widget.loupe.zoom.toDouble(),
                 drawables: live ? const [] : _effectiveDrawables(),
                 effectImage: live ? null : _lookupEffect,
+                invert: widget.hud.invertLines,
                 logicalSize: live
                     ? Size.zero
                     : Size(_canvasSize.width, _canvasSize.height),
@@ -3398,6 +3400,7 @@ class _EditorCoreState extends State<EditorCore> {
                                   rect: rect,
                                   lines: c.guideLines.value,
                                   center: c.guideCenter.value,
+                                  invert: widget.hud.invertLines,
                                 ),
                               ),
                             // Adjust mode: handles on a pending selection so it
@@ -3468,19 +3471,25 @@ class _EditorCoreState extends State<EditorCore> {
                   IgnorePointer(
                     child: CustomPaint(
                       size: _canvasSize,
-                      painter: ReticlePainter(_cursor),
+                      painter: ReticlePainter(
+                        _cursor,
+                        invert: widget.hud.invertLines,
+                      ),
                     ),
                   ),
                 // Loupe: its own tool set + toggle (decoupled from the crosshair).
                 if (showLoupe && !_interactive) _overlayLoupe(),
                 // Small reticle for the drawing tools (replaces the system arrow
-                // with a precise inverting cross). Region tools use the crosshair
-                // above. OVERLAY only; the editor renders it in the outer stack.
+                // with a precise cross). Region tools use the crosshair above.
+                // OVERLAY only; the editor renders it in the outer stack.
                 if (_showsReticle && !_interactive)
                   IgnorePointer(
                     child: CustomPaint(
                       size: _canvasSize,
-                      painter: ReticlePainter(_cursor),
+                      painter: ReticlePainter(
+                        _cursor,
+                        invert: widget.hud.invertLines,
+                      ),
                     ),
                   ),
                 // Eyedropper badge beside the reticle so colour-sampling mode is
@@ -3689,7 +3698,10 @@ class _EditorCoreState extends State<EditorCore> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: CustomPaint(
-                        painter: ReticlePainter(v.toLocal(_cursor)),
+                        painter: ReticlePainter(
+                          v.toLocal(_cursor),
+                          invert: widget.hud.invertLines,
+                        ),
                       ),
                     ),
                   ),

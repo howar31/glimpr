@@ -265,6 +265,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '讓選取範圍、十字線與視窗外框的虛線流動。關閉後為靜態虛線（動態較少，也稍省資源）。';
 
   @override
+  String get settingsHudInvertLines => '反相 HUD 線條';
+
+  @override
+  String get settingsHudInvertLinesHint =>
+      '準星、放大鏡外框和輔助線中心標記的繪製方式。\n預設為關閉，使用帶深色暈邊的白線。開啟時，以反相顏色方式繪製。\n注意：開啟此選項會顯著增加 GPU 負擔。';
+
+  @override
   String get settingsSectionAfterCapture => '截圖後';
 
   @override

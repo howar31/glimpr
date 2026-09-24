@@ -1,5 +1,6 @@
 import '../platform_gate.dart';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:shared_preferences_windows/shared_preferences_windows.dart';
 
@@ -19,6 +20,8 @@ import 'package:shared_preferences_windows/shared_preferences_windows.dart';
 /// this before such a cross-engine read. Best-effort: any failure leaves the
 /// existing cached values (a stale read is acceptable; a crash is not).
 Future<void> reloadSettingsCache() async {
+  final hook = debugReloadSettingsCache;
+  if (hook != null) return hook();
   if (!platformIsWindows) return;
   final platform = SharedPreferencesAsyncPlatform.instance;
   if (platform is SharedPreferencesAsyncWindows) {
@@ -33,3 +36,9 @@ Future<void> reloadSettingsCache() async {
     }
   }
 }
+
+/// Test seam: when set, [reloadSettingsCache] calls this instead of the
+/// platform reload (on every OS), so widget tests can assert that a
+/// cross-engine read path reloads the cache before it reads.
+@visibleForTesting
+Future<void> Function()? debugReloadSettingsCache;

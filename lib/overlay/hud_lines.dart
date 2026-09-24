@@ -4,13 +4,13 @@ import 'dart:ui';
 
 /// Shared visual identity for the precise-aim HUD lines drawn over a capture /
 /// edit session: the full-screen crop crosshair, the crop selection-box border,
-/// and the window-snap highlight. All three are WHITE drawn with an inverting
-/// blend (BlendMode.difference) so a thin line stays visible on any background,
-/// share one stroke width, and animate as "marching ants" (a dash pattern that
-/// crawls along the path).
+/// and the window-snap highlight. All three are two-tone (white + black) dashes
+/// over the fixed-function srcOver blend, share one stroke width, and animate
+/// as "marching ants" (a dash pattern that crawls along the path).
 ///
-/// The small drawing-tool reticle reuses the colour / blend / width but stays
-/// SOLID (no dash) on purpose — see [ReticlePainter] in crop_hud.dart.
+/// The SOLID (no dash) lines — the drawing-tool reticle, the loupe centre marker
+/// + frame, the guide centre mark — come from [hudSolidPaints]: a white line over
+/// a dark halo by default, or the inverting blend when the user opts in.
 ///
 /// PERF: every painter batches its dashes into a SINGLE [Canvas.drawRawPoints]
 /// call (no per-dash [Path] allocation, no [PathMetric.extractPath]); the marching
@@ -48,14 +48,50 @@ Paint _strokePaint(Color color) => Paint()
   ..style = PaintingStyle.stroke
   ..strokeWidth = kHudLineWidth;
 
-/// The small drawing-tool reticle KEEPS the inverting blend: it is tiny and never
-/// animates, so its advanced-blend readback area / frequency is negligible — and
-/// it preserves the reticle's distinct inverting identity. See [ReticlePainter].
-Paint hudReticlePaint() => Paint()
-  ..color = kHudLineColor
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = kHudLineWidth
-  ..blendMode = BlendMode.difference;
+/// Halo under a non-inverting solid HUD line: 60% black, [kHudHaloExtra] px
+/// wider than the line, so a white 1px line reads on white AND black content.
+/// Tunable.
+const Color kHudHalo = Color(0x99000000);
+const double kHudHaloExtra = 2.0;
+
+/// The paints for a SOLID (non-dashed) HUD line: the reticle, the loupe centre
+/// marker + frame, the guide centre mark. Draw the returned paints IN ORDER
+/// (halo first, line on top).
+///
+/// [invert] = the user's "inverting HUD lines" setting (HudConfig.invertLines,
+/// default OFF). On: ONE white `BlendMode.difference` stroke (the original
+/// inverting identity). Off: a dark halo stroke, then a white srcOver stroke.
+///
+/// WHY the default is off: on Windows (Impeller GLES via ANGLE, which has no
+/// framebuffer fetch) ANY advanced blend on the root layer, however small,
+/// makes Impeller render the WHOLE frame to an offscreen 4x MSAA target and
+/// blit it back on every frame (dl_dispatcher RequiresReadbackForBlends). It
+/// is NOT proportional to the drawn area. Measured 2026-09-24 on two 4K
+/// displays: +750 MB GPU memory per screenshot session and ~3.5x the per-frame
+/// GPU work; an integrated GPU saturated. macOS (Metal, framebuffer fetch) is
+/// unaffected. Rule: no advanced blend on the root layer of any surface unless
+/// the user opted in.
+List<Paint> hudSolidPaints({required bool invert, double width = kHudLineWidth}) {
+  if (invert) {
+    return [
+      Paint()
+        ..color = kHudLineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..blendMode = BlendMode.difference,
+    ];
+  }
+  return [
+    Paint()
+      ..color = kHudHalo
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width + kHudHaloExtra,
+    Paint()
+      ..color = kHudLineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width,
+  ];
+}
 
 /// Pure dash math: the "on" intervals to draw along a line / contour of [length],
 /// given the [dash] / [gap] pattern shifted by [phase] (logical px — driving the

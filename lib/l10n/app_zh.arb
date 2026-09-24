@@ -76,6 +76,8 @@
   "settingsLoupeEnableHint": "用大多數工具與取色器瞄準時顯示像素放大鏡；準星不受影響。可從工具列或快捷即時切換。",
   "settingsAnimateMarchingAnts": "虛線框動畫",
   "settingsAnimateMarchingAntsHint": "讓選取範圍、十字線與視窗外框的虛線流動。關閉後為靜態虛線（動態較少，也稍省資源）。",
+  "settingsHudInvertLines": "反相 HUD 線條",
+  "settingsHudInvertLinesHint": "準星、放大鏡外框和輔助線中心標記的繪製方式。\n預設為關閉，使用帶深色暈邊的白線。開啟時，以反相顏色方式繪製。\n注意：開啟此選項會顯著增加 GPU 負擔。",
   "settingsSectionAfterCapture": "截圖後",
   "settingsSectionAfterEditorDone": "圖片編輯器完成後",
   "settingsSectionSounds": "音效",

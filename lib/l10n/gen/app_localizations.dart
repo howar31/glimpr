@@ -558,6 +558,18 @@ abstract class AppLocalizations {
   /// **'Flow the dashed selection / crosshair / window outlines. Turn off for static dashes (less motion, slightly lighter).'**
   String get settingsAnimateMarchingAntsHint;
 
+  /// Settings > Advanced > Overlay HUD: toggle title for drawing the reticle, loupe frame and guide centre mark with an inverting blend
+  ///
+  /// In en, this message translates to:
+  /// **'Inverted HUD lines'**
+  String get settingsHudInvertLines;
+
+  /// Settings > Advanced > Overlay HUD: hint under the inverted HUD lines toggle
+  ///
+  /// In en, this message translates to:
+  /// **'How the aim reticle, the loupe frame and the guide centre mark are drawn.\nOff (default): white lines with a dark halo. On: inverted against the pixels beneath.\nNote: turning this on adds a lot of GPU load.'**
+  String get settingsHudInvertLinesHint;
+
   /// Settings > Workflow: After capture section label
   ///
   /// In en, this message translates to:

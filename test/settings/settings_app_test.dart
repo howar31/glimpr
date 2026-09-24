@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/channels.dart';
 import 'package:glimpr/output/flow.dart';
+import 'package:glimpr/overlay/crop_hud.dart';
 import 'package:glimpr/platform_gate.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
@@ -330,11 +331,11 @@ void main() {
     final s = await _pump(tester);
     await tester.tap(find.text('Advanced'));
     await tester.pumpAndSettle();
-    // The Advanced pane has two GlassToggles on macOS: element snap first,
-    // then the auto update-check toggle in the Updates section below it.
-    expect(find.byType(GlassToggle), findsNWidgets(2));
+    // The Advanced pane has three GlassToggles on macOS: inverted HUD lines,
+    // element snap, then the auto update-check toggle in the Updates section.
+    expect(find.byType(GlassToggle), findsNWidgets(3));
     // Element snap now defaults ON, so the tap turns it OFF and persists.
-    await tester.tap(find.byType(GlassToggle).first);
+    await tester.tap(find.byType(GlassToggle).at(1));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
@@ -378,5 +379,28 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Inverted HUD lines toggle (Advanced) persists to hud_invert_lines',
+      (tester) async {
+    final settings = await _pump(tester);
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<GlassToggle>(_toggleInRow('Inverted HUD lines')).value,
+        isFalse);
+    await tester.tap(_toggleInRow('Inverted HUD lines'));
+    await tester.pumpAndSettle();
+    expect(await settings.getHudInvertLines(), isTrue);
+    expect(tester.widget<GlassToggle>(_toggleInRow('Inverted HUD lines')).value,
+        isTrue);
+    // The loupe preview (Selection & HUD pane) follows the toggle live.
+    await tester.tap(find.text('Selection & HUD'));
+    await tester.pumpAndSettle();
+    final preview = tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((w) => w.painter)
+        .whereType<LoupePainter>();
+    expect(preview, isNotEmpty);
+    expect(preview.every((p) => p.invert), isTrue);
   });
 }

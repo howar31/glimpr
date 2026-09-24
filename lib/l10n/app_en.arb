@@ -322,6 +322,14 @@
   "@settingsAnimateMarchingAntsHint": {
     "description": "Settings > Capture > Overlay HUD: marching ants toggle hint"
   },
+  "settingsHudInvertLines": "Inverted HUD lines",
+  "@settingsHudInvertLines": {
+    "description": "Settings > Advanced > Overlay HUD: toggle title for drawing the reticle, loupe frame and guide centre mark with an inverting blend"
+  },
+  "settingsHudInvertLinesHint": "How the aim reticle, the loupe frame and the guide centre mark are drawn.\nOff (default): white lines with a dark halo. On: inverted against the pixels beneath.\nNote: turning this on adds a lot of GPU load.",
+  "@settingsHudInvertLinesHint": {
+    "description": "Settings > Advanced > Overlay HUD: hint under the inverted HUD lines toggle"
+  },
   "settingsSectionAfterCapture": "After screenshot",
   "@settingsSectionAfterCapture": {
     "description": "Settings > Workflow: After capture section label"

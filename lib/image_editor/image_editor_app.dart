@@ -596,18 +596,24 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   /// Deliberately does NOT re-read in-session interaction state (the in-progress
   /// tool styles, the current tool / selection), so returning never clobbers what
   /// the user is doing.
-  void _reload() {
-    Settings.instance.loadAppConfig().then((cfg) {
-      if (mounted) {
-        setState(() {
-          _loupe = cfg.loupe;
-          _hud = cfg.hud;
-          _cap = cfg.capture;
-          _bindings = cfg.bindings;
-        });
-        _seedHudToggles(cfg.hud);
-      }
-    }).catchError((_) {});
+  Future<void> _reload() async {
+    // Windows caches shared_preferences PER ENGINE: the Settings window's
+    // writes are invisible here until this engine reloads its cache, so do
+    // that BEFORE reading or the change lands one focus cycle late.
+    await reloadSettingsCache();
+    try {
+      final cfg = await Settings.instance.loadAppConfig();
+      if (!mounted) return;
+      setState(() {
+        _loupe = cfg.loupe;
+        _hud = cfg.hud;
+        _cap = cfg.capture;
+        _bindings = cfg.bindings;
+      });
+      _seedHudToggles(cfg.hud);
+    } catch (_) {
+      // Keep the current config.
+    }
   }
 
   /// Seed the controller's HUD toggle state from settings, UNLESS the user

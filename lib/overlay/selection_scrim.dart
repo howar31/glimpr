@@ -40,8 +40,8 @@ class SelectionScrimPainter extends CustomPainter {
 }
 
 /// The crop selection's marching-ants outline. Shares the HUD line identity
-/// (white + inverting BlendMode.difference, shared width) with the crosshair and
-/// window-snap highlight; driven by [march] (a ~30fps phase notifier). Kept apart
+/// (two-tone white + black dashes over srcOver, shared width) with the crosshair
+/// and window-snap highlight; driven by [march] (a ~30fps phase notifier). Kept apart
 /// from the scrim FILL so the cheap line redraw — not the costly scrim — is what
 /// repaints each animation frame.
 class SelectionBorderPainter extends CustomPainter {
@@ -80,17 +80,20 @@ class SelectionBorderPainter extends CustomPainter {
 /// STATIC (no marching phase; repaints only when the rect or options change)
 /// so it never competes with the animated border. The LINES are two-tone
 /// dashes (white + black gap-fill, like the border) so they read on any
-/// background without an advanced blend; the tiny center plus is SOLID with
-/// the reticle's inverting blend (its readback area is a few px, negligible).
+/// background without an advanced blend; the tiny center plus is SOLID and
+/// follows [invert] like the reticle (see hudSolidPaints: even a few px of an
+/// advanced blend cost a whole-frame readback on Windows).
 class SelectionGuidesPainter extends CustomPainter {
   final Rect rect;
   final GuideLines lines;
   final bool center;
+  final bool invert; // HudConfig.invertLines
 
   const SelectionGuidesPainter({
     required this.rect,
     required this.lines,
     required this.center,
+    this.invert = false,
   });
 
   @override
@@ -112,13 +115,15 @@ class SelectionGuidesPainter extends CustomPainter {
     }
     final mark = guideCenterMark(rect, center: center);
     if (mark.isNotEmpty) {
-      final p = hudReticlePaint(); // solid + inverting, like the reticle
-      for (final (a, b) in mark) {
-        canvas.drawLine(
-          Offset(a.dx + 0.5, a.dy + 0.5),
-          Offset(b.dx + 0.5, b.dy + 0.5),
-          p,
-        );
+      // Solid, like the reticle: halo pass first, then the white pass.
+      for (final p in hudSolidPaints(invert: invert)) {
+        for (final (a, b) in mark) {
+          canvas.drawLine(
+            Offset(a.dx + 0.5, a.dy + 0.5),
+            Offset(b.dx + 0.5, b.dy + 0.5),
+            p,
+          );
+        }
       }
     }
   }
@@ -137,5 +142,8 @@ class SelectionGuidesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SelectionGuidesPainter old) =>
-      old.rect != rect || old.lines != lines || old.center != center;
+      old.rect != rect ||
+      old.lines != lines ||
+      old.center != center ||
+      old.invert != invert;
 }

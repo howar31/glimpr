@@ -295,4 +295,13 @@ void main() {
     expect(await s.getHdrScreenshot(), isFalse);
     expect((await s.loadCapture()).hdrScreenshot, isFalse);
   });
+
+  test('hud_invert_lines round-trips and defaults false', () async {
+    final s = Settings(FakeStore());
+    expect(await s.getHudInvertLines(), isFalse);
+    expect((await s.loadHud()).invertLines, isFalse);
+    await s.setHudInvertLines(true);
+    expect(await s.getHudInvertLines(), isTrue);
+    expect((await s.loadHud()).invertLines, isTrue);
+  });
 }

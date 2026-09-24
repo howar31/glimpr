@@ -28,6 +28,16 @@ class HudConfig {
   /// toolbar / G hotkey override it per session (like [crosshair]).
   final bool guideShown;
 
+  /// Draw the aim reticle, the loupe centre marker + frame and the guide
+  /// centre mark with the inverting `BlendMode.difference` (the original HUD
+  /// identity). OFF by default: on Windows (Impeller GLES, no framebuffer
+  /// fetch) any advanced blend on the root layer forces the WHOLE frame
+  /// through an offscreen 4x MSAA target + blit every frame (measured
+  /// 2026-09-24: +750 MB per session and ~3.5x the per-frame GPU work on two
+  /// 4K displays). Off = white line over a dark halo (two srcOver strokes),
+  /// visible on any background without any readback. See hudSolidPaints.
+  final bool invertLines;
+
   const HudConfig({
     this.crosshair = true,
     this.loupe = true,
@@ -35,5 +45,6 @@ class HudConfig {
     this.guideLines = GuideLines.none,
     this.guideCenter = false,
     this.guideShown = false,
+    this.invertLines = false,
   });
 }

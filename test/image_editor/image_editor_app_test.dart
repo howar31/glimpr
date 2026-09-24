@@ -10,6 +10,7 @@ import 'package:glimpr/image_editor/checkerboard.dart';
 import 'package:glimpr/image_editor/image_editor_app.dart';
 import 'package:glimpr/image_editor/recent_images.dart';
 import 'package:glimpr/platform_gate.dart';
+import 'package:glimpr/settings/prefs_cache.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -339,5 +340,27 @@ void main() {
     expect(find.text('Image Editor'), findsNothing);
     // The localized title is pushed to the native OS caption instead.
     expect(calls.any((c) => c.method == 'setWindowTitle'), isTrue);
+  });
+
+  testWidgets(
+      'settingsClosed and windowBecameKey re-read the prefs cache before reloading',
+      (tester) async {
+    // On Windows each engine caches shared_preferences per instance, so a
+    // Settings-window write is invisible to this engine until it reloads the
+    // cache FIRST; otherwise a changed HUD/loupe setting lands one focus
+    // cycle late.
+    mockMethodChannel(channel);
+    var reloads = 0;
+    debugReloadSettingsCache = () async => reloads++;
+    addTearDown(() => debugReloadSettingsCache = null);
+    await pumpApp(tester);
+    final atStart = reloads; // start-up recents refresh may reload once too
+    await pushFromNative(channel, 'settingsClosed');
+    await tester.pump();
+    expect(reloads, atStart + 1);
+    await pushFromNative(channel, 'windowBecameKey');
+    await tester.pump();
+    // windowBecameKey reloads config AND the recents (both cross-engine reads).
+    expect(reloads, greaterThanOrEqualTo(atStart + 2));
   });
 }

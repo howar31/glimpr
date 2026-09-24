@@ -93,4 +93,32 @@ void main() {
       }
     });
   });
+
+  group('hudSolidPaints', () {
+    test('inverting = one white difference stroke', () {
+      final ps = hudSolidPaints(invert: true, width: 1.5);
+      expect(ps.length, 1);
+      expect(ps.single.blendMode, BlendMode.difference);
+      expect(ps.single.color, kHudLineColor);
+      expect(ps.single.strokeWidth, 1.5);
+      expect(ps.single.style, PaintingStyle.stroke);
+    });
+
+    test('non-inverting = dark halo under a white line, both srcOver', () {
+      final ps = hudSolidPaints(invert: false, width: 1.5);
+      expect(ps.length, 2);
+      // Paint stores colours as float32; compare the 8-bit ARGB, not doubles.
+      expect(ps[0].color.toARGB32(), kHudHalo.toARGB32());
+      expect(ps[0].strokeWidth, 1.5 + kHudHaloExtra);
+      expect(ps[0].blendMode, BlendMode.srcOver);
+      expect(ps[0].style, PaintingStyle.stroke);
+      expect(ps[1].color.toARGB32(), kHudLineColor.toARGB32());
+      expect(ps[1].strokeWidth, 1.5);
+      expect(ps[1].blendMode, BlendMode.srcOver);
+    });
+
+    test('default width is the shared HUD line width', () {
+      expect(hudSolidPaints(invert: true).single.strokeWidth, kHudLineWidth);
+    });
+  });
 }

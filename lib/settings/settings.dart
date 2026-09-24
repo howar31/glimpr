@@ -167,6 +167,7 @@ class Settings {
   static const _hudCrosshairKey = 'hud_crosshair';
   static const _hudLoupeKey = 'hud_loupe';
   static const _hudMarchingAntsKey = 'hud_marching_ants';
+  static const _hudInvertLinesKey = 'hud_invert_lines';
   static const _guideLinesKey = 'guide_lines';
   static const _guideCenterKey = 'guide_center';
   static const _guideShownKey = 'guide_shown';
@@ -550,6 +551,13 @@ class Settings {
   Future<void> setHudMarchingAnts(bool v) =>
       store.setBool(_hudMarchingAntsKey, v);
 
+  /// Inverting (difference-blend) solid HUD lines; default OFF, see
+  /// [HudConfig.invertLines] for the Windows GPU cost behind the default.
+  Future<bool> getHudInvertLines() async =>
+      (await store.getBool(_hudInvertLinesKey)) ?? false;
+  Future<void> setHudInvertLines(bool v) =>
+      store.setBool(_hudInvertLinesKey, v);
+
   // Composition guides (lines style + center mark + shown-by-default) --------
   Future<GuideLines> getGuideLines() async {
     final n = await store.getString(_guideLinesKey);
@@ -587,6 +595,7 @@ class Settings {
     guideLines: await getGuideLines(),
     guideCenter: await getGuideCenter(),
     guideShown: await getGuideShown(),
+    invertLines: await getHudInvertLines(),
   );
 
   /// One-shot snapshot of every capture-time setting (prefetched per capture).

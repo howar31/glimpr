@@ -64,5 +64,8 @@ void main() {
     expect(a.shouldRepaint(same), isFalse);
     expect(a.shouldRepaint(moved), isTrue);
     expect(a.shouldRepaint(noCenter), isTrue);
+    const inverted = SelectionGuidesPainter(
+        rect: r, lines: GuideLines.grid, center: true, invert: true);
+    expect(a.shouldRepaint(inverted), isTrue);
   });
 }

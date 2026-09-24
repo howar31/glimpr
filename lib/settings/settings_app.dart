@@ -206,6 +206,7 @@ class _SettingsAppState extends State<SettingsApp>
   bool _hudCrosshair = true;
   bool _hudLoupe = true;
   bool _hudMarchingAnts = true;
+  bool _hudInvertLines = false;
   GuideLines _guideLines = GuideLines.none;
   bool _guideCenter = false;
   bool _guideShown = false;
@@ -519,6 +520,7 @@ class _SettingsAppState extends State<SettingsApp>
     final hudCrosshair = await _s.getHudCrosshair();
     final hudLoupe = await _s.getHudLoupe();
     final hudMarchingAnts = await _s.getHudMarchingAnts();
+    final hudInvertLines = await _s.getHudInvertLines();
     final guideLines = await _s.getGuideLines();
     final guideCenter = await _s.getGuideCenter();
     final guideShown = await _s.getGuideShown();
@@ -562,6 +564,7 @@ class _SettingsAppState extends State<SettingsApp>
       _hudCrosshair = hudCrosshair;
       _hudLoupe = hudLoupe;
       _hudMarchingAnts = hudMarchingAnts;
+      _hudInvertLines = hudInvertLines;
       _guideLines = guideLines;
       _guideCenter = guideCenter;
       _guideShown = guideShown;
@@ -2280,7 +2283,11 @@ class _SettingsAppState extends State<SettingsApp>
   Widget _loupePreviewStage(GlimprTokens t) {
     const stage = _kLoupePreviewStage;
     final box = (_loupeSpan * _loupeZoom).toDouble();
-    final Widget content = _LoupePreview(span: _loupeSpan, zoom: _loupeZoom);
+    final Widget content = _LoupePreview(
+      span: _loupeSpan,
+      zoom: _loupeZoom,
+      invert: _hudInvertLines,
+    );
     return Container(
       width: stage,
       height: stage,
@@ -2693,6 +2700,24 @@ class _SettingsAppState extends State<SettingsApp>
           ],
         ),
       ),
+      const SizedBox(height: 15),
+      // Inverted HUD lines: a performance knob (on Windows it forces a
+      // whole-frame readback every frame), so it lives in Advanced rather than
+      // in Selection & HUD and is not flipped casually (owner 2026-09-24).
+      SectionLabel(_l.settingsSectionOverlayHUD, icon: Icons.grid_goldenratio),
+      GlassCard.rows([
+        SettingRow(
+          title: _l.settingsHudInvertLines,
+          hint: _l.settingsHudInvertLinesHint,
+          trailing: GlassToggle(
+            value: _hudInvertLines,
+            onChanged: (v) async {
+              await _s.setHudInvertLines(v);
+              if (mounted) setState(() => _hudInvertLines = v);
+            },
+          ),
+        ),
+      ]),
       const SizedBox(height: 15),
       // Element snap: the SECTION is macOS-only. On Windows the feature is
       // ALWAYS ON with no setting (UIA needs no permission and the hover cost
@@ -3353,7 +3378,12 @@ class _DecorationFillSwatch extends StatelessWidget {
 class _LoupePreview extends StatefulWidget {
   final int span;
   final int zoom;
-  const _LoupePreview({required this.span, required this.zoom});
+  final bool invert; // the inverting-lines setting, previewed live
+  const _LoupePreview({
+    required this.span,
+    required this.zoom,
+    required this.invert,
+  });
 
   @override
   State<_LoupePreview> createState() => _LoupePreviewState();
@@ -3418,6 +3448,7 @@ class _LoupePreviewState extends State<_LoupePreview> {
         cursorLogical: const Offset(_n / 2, _n / 2),
         scaleFactor: 1,
         zoom: widget.zoom.toDouble(),
+        invert: widget.invert,
       ),
     );
   }

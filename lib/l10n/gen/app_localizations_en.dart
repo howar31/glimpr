@@ -273,6 +273,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Flow the dashed selection / crosshair / window outlines. Turn off for static dashes (less motion, slightly lighter).';
 
   @override
+  String get settingsHudInvertLines => 'Inverted HUD lines';
+
+  @override
+  String get settingsHudInvertLinesHint =>
+      'How the aim reticle, the loupe frame and the guide centre mark are drawn.\nOff (default): white lines with a dark halo. On: inverted against the pixels beneath.\nNote: turning this on adds a lot of GPU load.';
+
+  @override
   String get settingsSectionAfterCapture => 'After screenshot';
 
   @override
