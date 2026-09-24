@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'glimpr_controls.dart';
@@ -38,44 +37,41 @@ Future<bool> showDiscardConfirm(
             constraints: const BoxConstraints(maxWidth: 380),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(GlimprTokens.radiusCard),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: BoxDecoration(
-                    color: t.hudBg,
-                    borderRadius:
-                        BorderRadius.circular(GlimprTokens.radiusCard),
-                    border: Border.all(color: t.hudBorder),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        rTitle,
-                        style: GlimprType.sansStyle(18, 700, t.fg1,
-                            letterSpacing: -0.3),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        rMessage,
-                        style: GlimprType.sansStyle(13.5, 400, t.fg3,
-                            height: 1.45),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          GhostButton(rCancel,
-                              onTap: () => Navigator.of(c).pop(false)),
-                          const SizedBox(width: 10),
-                          AccentButton(rConfirm,
-                              onTap: () => Navigator.of(c).pop(true)),
-                        ],
-                      ),
-                    ],
-                  ),
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: t.hudBg,
+                  borderRadius:
+                      BorderRadius.circular(GlimprTokens.radiusCard),
+                  border: Border.all(color: t.hudBorder),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rTitle,
+                      style: GlimprType.sansStyle(18, 700, t.fg1,
+                          letterSpacing: -0.3),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      rMessage,
+                      style: GlimprType.sansStyle(13.5, 400, t.fg3,
+                          height: 1.45),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        GhostButton(rCancel,
+                            onTap: () => Navigator.of(c).pop(false)),
+                        const SizedBox(width: 10),
+                        AccentButton(rConfirm,
+                            onTap: () => Navigator.of(c).pop(true)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),

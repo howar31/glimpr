@@ -1,4 +1,3 @@
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -111,7 +110,6 @@ class EditorToolbar extends StatelessWidget {
       accent: recordMode
           ? GlimprTokens.recordingAccent
           : GlimprTokens.accent,
-      liveBackdrop: recordMode,
       child: TooltipTheme(
         data: tooltipData,
         child: Column(
@@ -421,28 +419,22 @@ class _ToolbarTheme extends InheritedWidget {
   const _ToolbarTheme({
     required this.palette,
     required this.accent,
-    required this.liveBackdrop,
     required super.child,
   });
   final _ToolbarPalette palette;
   // Subsystem accent for active/selected states: recording red in record mode,
   // brand blue otherwise (design guide: recording flow is red end-to-end).
   final Color accent;
-  // Dynamic backdrop = the record live-select overlay floats over the LIVE
-  // desktop, which Flutter can't frost — bars wear a tint (no blur) instead.
-  final bool liveBackdrop;
 
   static _ToolbarTheme _of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_ToolbarTheme>()!;
   static _ToolbarPalette of(BuildContext context) => _of(context).palette;
   static Color accentOf(BuildContext context) => _of(context).accent;
-  static bool liveBackdropOf(BuildContext context) => _of(context).liveBackdrop;
 
   @override
   bool updateShouldNotify(_ToolbarTheme oldWidget) =>
       palette != oldWidget.palette ||
-      accent != oldWidget.accent ||
-      liveBackdrop != oldWidget.liveBackdrop;
+      accent != oldWidget.accent;
 }
 
 /// The bottom-right shortcut badge shared by tool buttons and HUD toggles, so
@@ -771,15 +763,14 @@ class _Bar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final live = _ToolbarTheme.liveBackdropOf(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     // NEAR-SOLID bar, not liquid glass (design guide, owner 2026-06-13): a
     // near-opaque themed fill keeps small text / icons legible over ANY
     // backdrop (white, black, busy) — frosting a uniform colour gave no
-    // contrast. A faint blur stays UNDER the fill for a frosted texture on
-    // static backdrops; on the live record backdrop the blur frosts nothing,
-    // so it's dropped. No per-mark halo needed — the solid fill IS the
-    // contrast (the old glass-era shadows were removed).
+    // contrast. No backdrop blur: a BackdropFilter anywhere in the frame makes
+    // Impeller render the WHOLE frame offscreen first (measured ~1.8 GB GPU on
+    // two 4K displays), and under a near-solid fill it frosted nothing visible.
+    // No per-mark halo needed — the solid fill IS the contrast.
     const radius = 12.0;
     final inner = Container(
       height: height,
@@ -800,21 +791,14 @@ class _Bar extends StatelessWidget {
     );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: live
-          ? inner
-          : BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: inner,
-            ),
+      child: inner,
     );
   }
 }
 
 /// The popover's surface, matching [_Bar]: a near-solid themed fill (legible
-/// over any backdrop) + subtle border; a faint blur stays under it on a static
-/// backdrop and is dropped on the live record backdrop (nothing to frost).
+/// over any backdrop) + subtle border, no backdrop blur (see [_Bar]).
 Widget _popoverGlass({
-  required bool live,
   required bool dark,
   required Widget child,
 }) {
@@ -829,12 +813,7 @@ Widget _popoverGlass({
     ),
     child: child,
   );
-  return live
-      ? inner
-      : BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: inner,
-        );
+  return inner;
 }
 
 /// Which contextual popover (if any) is currently open above the toolbar.
@@ -1303,9 +1282,6 @@ class _OptionsRowState extends State<_OptionsRow> {
     required double width,
     required Widget child,
   }) {
-    // Same rule as _Bar: on the live record backdrop the blur frosts nothing,
-    // so it's dropped (the near-solid fill carries the surface either way).
-    final live = _ToolbarTheme.liveBackdropOf(context);
     final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     final overlay = Overlay.of(context);
     _entry = OverlayEntry(
@@ -1344,7 +1320,6 @@ class _OptionsRowState extends State<_OptionsRow> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: _popoverGlass(
-                      live: live,
                       dark: dark,
                       child: child,
                     ),
