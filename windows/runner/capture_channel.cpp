@@ -1,3 +1,4 @@
+#include "process_identity.h"
 #include "capture_channel.h"
 
 #include <windows.h>
@@ -21,7 +22,7 @@
 #include "deco_args.h"
 #include "dpi_util.h"
 #include "decoration.h"
-#include "editor_window.h"
+#include "editor_host_client.h"
 #include "image_codec.h"
 #include "overlay_host_client.h"
 #include "perf_log.h"
@@ -54,7 +55,8 @@ HWND PickForegroundWindow() {
     if (rc.right - rc.left < 40 || rc.bottom - rc.top < 40) continue;
     DWORD pid = 0;
     GetWindowThreadProcessId(w, &pid);
-    if (pid == self) continue;
+    // Ours = this process or any other glimpr process (the editor host).
+    if (pid == self || procid::IsOurProcess(pid)) continue;
     return w;
   }
   return nullptr;
@@ -167,16 +169,16 @@ void CaptureChannel::HandleMethodCall(
     const EncodableMap& map = args ? *args : empty;
     if (const auto* v = Find(map, "path")) {
       if (const auto* path = std::get_if<std::string>(v)) {
-        if (editor_window_) editor_window_->OpenWithPath(*path);
+        if (editor_host_) editor_host_->OpenWithPath(*path);
       }
     }
     result->Success();
     return;
   }
   if (call.method_name() == "recentChanged") {
-    // A direct capture saved a file into the shared recent store -> tell the
-    // editor engine to reload + re-push its list to the tray submenu.
-    if (editor_window_) editor_window_->RefreshRecent();
+    // A direct capture saved a file into the shared recent store -> the tray
+    // list re-pushes and a live editor reloads its gallery.
+    if (recent_changed_cb_) recent_changed_cb_();
     result->Success();
     return;
   }

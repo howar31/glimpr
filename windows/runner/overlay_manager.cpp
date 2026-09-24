@@ -15,6 +15,7 @@
 
 #include "app_identity.h"
 #include "channel_args.h"
+#include "font_enum.h"
 #include "cursor_image.h"
 #include "dpi_util.h"
 #include "utils.h"
@@ -60,6 +61,8 @@ int CALLBACK FontFamilyProc(const LOGFONTW* lf, const TEXTMETRICW*, DWORD,
   return 1;
 }
 
+}  // namespace
+
 EncodableValue EnumerateFontFamilies() {
   // Cached: every overlay engine's font popover asks, and the installed set
   // effectively never changes within a session (restart picks up new fonts,
@@ -81,6 +84,8 @@ EncodableValue EnumerateFontFamilies() {
   have_cached = true;
   return cached;
 }
+
+namespace {
 
 std::unique_ptr<EncodableValue> Args(EncodableMap m) {
   return std::make_unique<EncodableValue>(EncodableValue(std::move(m)));

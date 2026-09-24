@@ -22,6 +22,7 @@
 #include "win_reveal.h"
 
 using flutter::EncodableMap;
+using flutter::EncodableList;
 using flutter::EncodableValue;
 
 namespace {
@@ -229,6 +230,7 @@ bool FlutterWindow::OnCreate() {
           RelaunchApp();
           if (tray_icon_) tray_icon_->Remove();
           if (overlay_host_) overlay_host_->Shutdown();
+          if (editor_host_) editor_host_->Shutdown();
           result->Success();
           // Force-exit: PostQuitMessage relies on a clean message-loop teardown,
           // but tearing down the overlay + editor Flutter engines on the way out
@@ -236,10 +238,10 @@ bool FlutterWindow::OnCreate() {
           // guarantees the old process dies so the watcher restarts us.
           ExitProcess(0);
         } else if (m == "openImageEditor") {
-          if (editor_window_) editor_window_->RevealEditor();
+          if (editor_host_) editor_host_->Reveal();
           result->Success();
         } else if (m == "openImageEditorClipboard") {
-          if (editor_window_) editor_window_->LoadClipboard();
+          if (editor_host_) editor_host_->LoadClipboard();
           result->Success();
         } else if (m == "openImageEditorPath") {
           // After-recording flow: reveal the editor and load a path (a .gif
@@ -253,9 +255,22 @@ bool FlutterWindow::OnCreate() {
               }
             }
           }
-          if (editor_window_ && !path.empty()) {
-            editor_window_->OpenWithPath(path);  // reveals itself
+          if (editor_host_ && !path.empty()) {
+            editor_host_->OpenWithPath(path);  // reveals itself
           }
+          result->Success();
+        } else if (m == "setRecentImages") {
+          // The control engine's Dart owns the tray "Open Recent" list on
+          // Windows (the editor engine only exists while the editor is open).
+          std::vector<std::string> list;
+          if (const auto* l = std::get_if<EncodableList>(call.arguments())) {
+            for (const auto& v : *l) {
+              if (const auto* s = std::get_if<std::string>(&v)) {
+                list.push_back(*s);
+              }
+            }
+          }
+          if (tray_icon_) tray_icon_->SetRecentImages(std::move(list));
           result->Success();
         } else if (m == "setTrayLabels") {
           // The control engine's Dart pushes the localized tray-menu labels
@@ -394,6 +409,7 @@ bool FlutterWindow::OnCreate() {
             // The installer replaces the exe the overlay host also maps: end
             // the host now, on this thread, not from the exit thread below.
             if (overlay_host_) overlay_host_->Shutdown();
+            if (editor_host_) editor_host_->Shutdown();
             CreateThread(
                 nullptr, 0,
                 [](LPVOID) -> DWORD {
@@ -423,11 +439,9 @@ bool FlutterWindow::OnCreate() {
   // created below and looked up when a call lands.
   OverlayHostClient::Callbacks overlay_calls;
   overlay_calls.open_in_editor = [this](const std::string& path) {
-    if (editor_window_) editor_window_->OpenWithPath(path);
+    if (editor_host_) editor_host_->OpenWithPath(path);
   };
-  overlay_calls.recent_changed = [this]() {
-    if (editor_window_) editor_window_->RefreshRecent();
-  };
+  overlay_calls.recent_changed = [this]() { RecentChanged(); };
   overlay_calls.pin_image = [this](const flutter::EncodableMap& args) {
     PinFromOverlay(args);
   };
@@ -447,18 +461,32 @@ bool FlutterWindow::OnCreate() {
   // (WM_GLIMPR_CAPTURE in MessageHandler).
   capture_channel_->SetControlHwnd(GetHandle());
 
-  // The standalone Image Editor (its own engine + window). Warm-built on the
-  // deferred timer below; revealed on demand (tray / open-in-editor / hotkey).
-  editor_window_ = std::make_unique<EditorWindow>(project_, GetHandle());
+  // The standalone Image Editor lives in a child process spawned on the first
+  // open (editor_host.h). Its one-way calls land on the resident objects
+  // created below; the callbacks look them up when a call arrives.
+  EditorHostClient::Callbacks editor_calls;
+  editor_calls.set_recent_images = [this](std::vector<std::string> paths) {
+    if (tray_icon_) tray_icon_->SetRecentImages(std::move(paths));
+  };
+  editor_calls.pin_image = [this](const std::string& path) {
+    // The editor's pin flow leg: float the image centered (no rect).
+    if (pin_manager_) pin_manager_->Pin(path, std::nullopt);
+  };
+  editor_calls.set_processing = [this](bool active, const std::string& label) {
+    if (tray_icon_) tray_icon_->SetProcessing(active, label);  // editor
+  };
+  editor_calls.open_settings = [this]() { RevealControlWindow(); };
+  editor_host_ = std::make_unique<EditorHostClient>(GetHandle(),
+                                                    std::move(editor_calls));
   // The capture flow's open-in-editor leg + recents relay reach the editor from
   // both the direct-capture (control) and overlay engines.
-  capture_channel_->SetEditorWindow(editor_window_.get());
+  capture_channel_->SetEditorHost(editor_host_.get());
+  capture_channel_->SetRecentChangedCallback([this]() { RecentChanged(); });
 
   // The shared pin manager: the pin flow leg reaches it from the control, overlay
   // and editor engines.
   pin_manager_ = std::make_unique<PinManager>();
   capture_channel_->SetPinManager(pin_manager_.get());
-  editor_window_->SetPinManager(pin_manager_.get());
 
   // System tray (the menu-bar analogue). Live items fire through the same Dart
   // dispatcher as the hotkeys; Settings / About / Quit are native callbacks.
@@ -472,10 +500,13 @@ bool FlutterWindow::OnCreate() {
           },
           [this]() { Quit(); },
           [this](const std::string& path) {
-            if (editor_window_) editor_window_->OpenWithPath(path);
+            if (editor_host_) editor_host_->OpenWithPath(path);
           },
           [this]() {
-            if (editor_window_) editor_window_->ClearRecent();
+            // The control engine's Dart owns the list; a live editor reloads
+            // its gallery from the cleared store.
+            if (role_channel_) role_channel_->InvokeMethod("clearRecent", nullptr);
+            if (editor_host_) editor_host_->ClearRecent();
           },
           [this]() {
             // Always reveal Settings first. Dart then lands on About and
@@ -486,12 +517,6 @@ bool FlutterWindow::OnCreate() {
             role_channel_->InvokeMethod("trayCheckUpdates", nullptr);
           },
       });
-  // The warm editor engine pushes its recent-images list to the tray "Open
-  // Recent" submenu (it boots ~2s after launch, so recents populate before the
-  // editor window is ever revealed).
-  editor_window_->SetRecentImagesCallback([this](std::vector<std::string> p) {
-    if (tray_icon_) tray_icon_->SetRecentImages(std::move(p));
-  });
   // The tray mark reflects the recording state (red breathing while recording).
   record_channel_->SetRecordingStateCallback([this](bool active, bool graceful) {
     if (tray_icon_) tray_icon_->SetRecordingState(active, graceful);
@@ -514,17 +539,12 @@ bool FlutterWindow::OnCreate() {
       [this](bool active, const std::string& label) {
         if (tray_icon_) tray_icon_->SetProcessing(active, label);  // direct
       });
-  editor_window_->SetProcessingCallback(
-      [this](bool active, const std::string& label) {
-        if (tray_icon_) tray_icon_->SetProcessing(active, label);  // editor
-      });
 
   // A second instance posts this to reveal the running one's Settings.
   reveal_message_ = RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
 
   // Deferred background warm-up: a short while after launch, pre-build the
-  // overlay engines (instant first capture) and the editor engine (instant first
-  // editor open), off the launch critical path.
+  // overlay engines (instant first capture), off the launch critical path.
   SetTimer(GetHandle(), kWarmupTimerId, kWarmupDelayMs, nullptr);
 
   HWND view_hwnd = flutter_controller_->view()->GetNativeWindow();
@@ -557,6 +577,11 @@ void FlutterWindow::RevealControlWindow() {
   ShowWindow(hwnd, SW_SHOW);
   if (flutter_controller_) flutter_controller_->ForceRedraw();
   SetForegroundWindow(hwnd);
+}
+
+void FlutterWindow::RecentChanged() {
+  if (role_channel_) role_channel_->InvokeMethod("refreshRecent", nullptr);
+  if (editor_host_) editor_host_->RefreshRecent();
 }
 
 void FlutterWindow::PinFromOverlay(const flutter::EncodableMap& args) {
@@ -600,6 +625,7 @@ void FlutterWindow::Quit() {
   if (tray_icon_) tray_icon_->Remove();
   // The overlay host's windows are not ours: end it before we go.
   if (overlay_host_) overlay_host_->Shutdown();
+  if (editor_host_) editor_host_->Shutdown();
   // Force-exit instead of PostQuitMessage: the clean message-loop teardown
   // destroys the editor + per-display overlay Flutter engines before the main
   // HWND, so the still-visible windows linger for seconds after the tray icon
@@ -655,11 +681,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     overlay_host_->OnHostMessage();
     return 0;
   }
+  if (message == WM_GLIMPR_EDITOR_HOST && editor_host_) {
+    editor_host_->OnHostMessage();
+    return 0;
+  }
   if (message == WM_TIMER && wparam == kWarmupTimerId) {
     KillTimer(GetHandle(), kWarmupTimerId);  // one-shot
     perf::Mark("warmupBegin");
     if (overlay_host_) overlay_host_->WarmUp();
-    if (editor_window_) editor_window_->WarmUp();  // instant first editor open
     perf::Mark("warmupEnd");
     return 0;
   }

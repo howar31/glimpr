@@ -6,6 +6,7 @@
 
 #include "app_identity.h"
 #include "crash_dump.h"
+#include "editor_host.h"
 #include "flutter_window.h"
 #include "gpu_preference.h"
 #include "overlay_host.h"
@@ -46,9 +47,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     LPWSTR *argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
     bool is_worker = false;
     bool is_overlay_host = false;
+    bool is_editor_host = false;
     for (int i = 1; argv && i < argc; ++i) {
       if (::wcscmp(argv[i], L"--record-worker") == 0) is_worker = true;
       if (::wcscmp(argv[i], L"--overlay-host") == 0) is_overlay_host = true;
+      if (::wcscmp(argv[i], L"--editor-host") == 0) is_editor_host = true;
     }
     if (argv) ::LocalFree(argv);
     if (is_worker) return RecordWorkerMain();
@@ -56,6 +59,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     // overlay engines for one capture session (see overlay_host.h). Same
     // reasons to branch here as the worker above.
     if (is_overlay_host) return OverlayHostMain();
+    // Editor host: a child the running instance spawns to own the Image
+    // Editor engine while the editor is open (see editor_host.h).
+    if (is_editor_host) return EditorHostMain();
   }
 
   // Debug-gated perf marks (inert unless the shared debugHooks prefs key is

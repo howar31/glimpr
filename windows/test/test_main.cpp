@@ -19,11 +19,15 @@
 #include "clipboard_dib.h"
 #include "clipboard_hdrop.h"
 #include "drop_filter.h"
+#include "editor_exit_gate.h"
+#include "editor_host_state.h"
+#include "editor_placement.h"
 #include "ed25519/ed25519.h"
 #include "hdr_util.h"
 #include "overlay_ipc.h"
 #include "pixel_swizzle.h"
 #include "prefs_probe.h"
+#include "process_identity.h"
 #include "record_args.h"
 #include "record_clock.h"
 #include "snap_filter.h"
@@ -555,6 +559,124 @@ void TestPrefsProbe() {
         dir.compare(dir.size() - tail.size(), tail.size(), tail) == 0);
 }
 
+// --- editor host ------------------------------------------------------------
+
+void TestEditorPlacement() {
+  eplace::Placement p{-100, 40, 1500, 900, 3};  // SW_SHOWMAXIMIZED
+  const std::string s = eplace::Encode(p);
+  CHECK(s == "-100,40,1500,900,3");
+  eplace::Placement q{};
+  CHECK(eplace::Parse(s, &q));
+  CHECK(q.left == -100 && q.top == 40 && q.right == 1500 && q.bottom == 900);
+  CHECK(q.show_cmd == 3);
+  CHECK(!eplace::Parse("", &q));
+  CHECK(!eplace::Parse("1,2,3", &q));
+  CHECK(!eplace::Parse("a,b,c,d,e", &q));
+  CHECK(!eplace::Parse("1,2,3,4,5,6", &q));
+  CHECK(!eplace::Parse("1,2,3,4,", &q));
+  // A degenerate rect never parses (right <= left or bottom <= top).
+  CHECK(!eplace::Parse("10,10,10,50,1", &q));
+  // Unknown show commands normalise to SW_SHOWNORMAL (1).
+  CHECK(eplace::Parse("0,0,800,600,99", &q) && q.show_cmd == 1);
+}
+
+void TestEditorExitGate() {
+  egate::State st;
+  egate::Inputs in{true, false, true, 1000};
+  CHECK(!egate::MayExit(in, &st));  // arms, starts settling
+  in.now_ms = 1500;
+  CHECK(!egate::MayExit(in, &st));
+  in.now_ms = 2000;
+  CHECK(egate::MayExit(in, &st));  // 1 s settled
+  // Processing blocks and resets the settle clock.
+  st = egate::State{};
+  in = egate::Inputs{true, true, true, 1000};
+  CHECK(!egate::MayExit(in, &st));
+  in.now_ms = 5000;
+  CHECK(!egate::MayExit(in, &st));
+  in.processing = false;
+  in.now_ms = 5100;
+  CHECK(!egate::MayExit(in, &st));
+  in.now_ms = 6100;
+  CHECK(egate::MayExit(in, &st));
+  // Sound still playing blocks the same way.
+  st = egate::State{};
+  in = egate::Inputs{true, false, false, 1000};
+  CHECK(!egate::MayExit(in, &st));
+  in.now_ms = 3000;
+  CHECK(!egate::MayExit(in, &st));
+  // Hard bound: a stuck export still lets the process go after 10 s.
+  in.now_ms = 11000;
+  CHECK(egate::MayExit(in, &st));
+  // A reveal disarms.
+  st = egate::State{};
+  in = egate::Inputs{true, false, true, 1000};
+  CHECK(!egate::MayExit(in, &st));
+  in.hidden = false;
+  in.now_ms = 1500;
+  CHECK(!egate::MayExit(in, &st));
+  CHECK(st.armed_ms == 0);
+  in.hidden = true;
+  in.now_ms = 2000;
+  CHECK(!egate::MayExit(in, &st));
+  in.now_ms = 2900;
+  CHECK(!egate::MayExit(in, &st));
+  in.now_ms = 3000;
+  CHECK(egate::MayExit(in, &st));
+}
+
+void TestEditorHostState() {
+  using namespace ehstate;
+  using A = Machine::Action;
+  Machine m;
+  // Request while none: spawn, keep it pending, deliver on READY.
+  CHECK(m.OnRequest(Pending::kPath, "C:\\a.png") == A::kSpawn);
+  CHECK(m.OnSpawned(true) == A::kNone && m.state == State::kSpawning);
+  // A plain reveal must not downgrade the pending path.
+  CHECK(m.OnRequest(Pending::kReveal, "") == A::kNone);
+  CHECK(m.pending.kind == Pending::kPath && m.pending.path == "C:\\a.png");
+  // A newer path replaces it.
+  CHECK(m.OnRequest(Pending::kPath, "C:\\b.png") == A::kNone);
+  CHECK(m.pending.path == "C:\\b.png");
+  CHECK(m.OnReady() == A::kSendPending && m.state == State::kOpen);
+  m.pending = Pending{};  // the client consumes it
+  // Open: requests go straight through.
+  CHECK(m.OnRequest(Pending::kClipboard, "") == A::kSend);
+  CHECK(m.pending.kind == Pending::kNoneKind);
+  // Normal end.
+  CHECK(m.OnBye() == A::kNone && m.state == State::kEnding && m.said_bye);
+  CHECK(m.OnExit() == A::kNone && m.state == State::kNone);
+  // A request during kEnding waits for the exit, then respawns.
+  m.said_bye = false;
+  m.OnRequest(Pending::kReveal, "");
+  m.OnSpawned(true);
+  m.OnReady();
+  m.OnBye();
+  CHECK(m.OnRequest(Pending::kReveal, "") == A::kNone);
+  CHECK(m.OnExit() == A::kSpawn && m.pending.kind == Pending::kReveal);
+  // Crash (EOF without BYE) from kOpen drops to kNone with nothing pending.
+  Machine c;
+  c.OnRequest(Pending::kReveal, "");
+  c.OnSpawned(true);
+  c.OnReady();
+  c.pending = Pending{};
+  CHECK(c.OnExit() == A::kNone && c.state == State::kNone && !c.said_bye);
+  // Spawn failure drops the pending request.
+  Machine f;
+  f.OnRequest(Pending::kPath, "x");
+  CHECK(f.OnSpawned(false) == A::kDropPending && f.state == State::kNone);
+  CHECK(f.pending.kind == Pending::kNoneKind);
+}
+
+void TestProcessIdentity() {
+  CHECK(procid::SameExePath(L"C:\\A\\glimpr.exe", L"c:\\a\\GLIMPR.EXE"));
+  CHECK(!procid::SameExePath(L"C:\\a\\glimpr.exe", L"C:\\a\\glimpr_dev.exe"));
+  CHECK(!procid::SameExePath(L"", L"x"));
+  CHECK(procid::IsOurProcess(GetCurrentProcessId()));
+  CHECK(!procid::IsOurProcess(0));
+  CHECK(!procid::OwnExePath().empty());
+}
+
 }  // namespace
 
 int main() {
@@ -574,7 +696,9 @@ int main() {
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
       {"hdrop", TestDropFilesPayload},     {"drop-filter", TestDropFilter},
       {"ed25519", TestEd25519Verify},     {"overlay-ipc", TestOverlayIpc},
-      {"prefs-probe", TestPrefsProbe},
+      {"prefs-probe", TestPrefsProbe}, {"editor-placement", TestEditorPlacement},
+      {"editor-gate", TestEditorExitGate}, {"editor-state", TestEditorHostState},
+      {"process-identity", TestProcessIdentity},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

@@ -8,6 +8,7 @@ import 'capture/capture_bridge.dart';
 import 'capture/direct_capture.dart';
 import 'channels.dart';
 import 'image_editor/image_editor_app.dart';
+import 'image_editor/tray_recents.dart';
 import 'output/clipboard.dart';
 import 'output/deliver.dart' show effectiveSaveDir;
 import 'output/filename.dart';
@@ -187,6 +188,9 @@ Future<void> main() async {
       'frames': l.recordStripFrames,
       'countdownCancel': l.recordCountdownCancel,
     }).catchError((_) {});
+    // The tray "Open Recent" list: this engine is the only resident one on
+    // Windows (the editor engine lives in a per-open child process).
+    unawaited(TrayRecents(store: Settings.instance.store).refresh());
   }
 
   runApp(SettingsApp(

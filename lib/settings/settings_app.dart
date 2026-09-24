@@ -21,6 +21,7 @@ import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../overlay/selection_guides.dart';
 import '../capture/capture_bridge.dart';
+import '../image_editor/tray_recents.dart';
 import '../capture/direct_capture.dart'
     show
         kDisplayCaptureLabel,
@@ -415,6 +416,14 @@ class _SettingsAppState extends State<SettingsApp>
   Future<dynamic> _onRoleCall(MethodCall call) async {
     if (call.method == 'showAbout' && mounted) {
       setState(() => _section = _kAboutSection);
+    }
+    // Windows: the tray "Open Recent" list is fed from this resident engine
+    // (a capture saved a file / the tray's Clear Recent).
+    if (call.method == 'refreshRecent' && platformIsWindows) {
+      await TrayRecents(store: _s.store).refresh();
+    }
+    if (call.method == 'clearRecent' && platformIsWindows) {
+      await TrayRecents(store: _s.store).clear();
     }
     if (call.method == 'trayCheckUpdates' && mounted) {
       // Native revealed the Settings window before this call; land on the

@@ -13,6 +13,8 @@ add_executable(${BINARY_NAME} WIN32
   "crash_dump.cpp"
   "cursor_image.cpp"
   "decoration.cpp"
+  "editor_host.cpp"
+  "editor_host_client.cpp"
   "editor_window.cpp"
   "element_snap.cpp"
   "encode_channel.cpp"

@@ -17,6 +17,7 @@
 #include "dpi_util.h"
 #include "perf_log.h"
 #include "record_clock.h"
+#include "process_identity.h"
 #include "utils.h"
 #include "window_enum.h"
 
@@ -147,7 +148,10 @@ std::optional<EncodableMap> RunQuery(IUIAutomation* ua,
   // Our own window (Settings / editor / pin) on top: null -> Dart whole-window
   // snaps it (element-level snap inside our own windows is impossible, the
   // topmost overlay shadows our own tree -- the mac ruling carried over).
-  if (pid == GetCurrentProcessId() || pid == g_main_pid) return std::nullopt;
+  if (pid == GetCurrentProcessId() || pid == g_main_pid ||
+      procid::IsOurProcess(pid)) {
+    return std::nullopt;  // any glimpr process (the editor host included)
+  }
 
   // Descend the HWND layer first: the SMALLEST visible descendant window
   // containing the point (ShareX's control-detection granularity is exactly

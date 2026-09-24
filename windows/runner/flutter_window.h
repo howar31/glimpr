@@ -9,7 +9,7 @@
 #include "capture_channel.h"
 #include "clipboard_channel.h"
 #include "sound_channel.h"
-#include "editor_window.h"
+#include "editor_host_client.h"
 #include "hotkey_host.h"
 #include "overlay_host_client.h"
 #include "pin_window.h"
@@ -35,6 +35,9 @@ class FlutterWindow : public Win32Window {
 
   // The overlay host's pinImage call: pin the file at args[path].
   void PinFromOverlay(const flutter::EncodableMap& args);
+  // A capture flow saved a file into the shared recent store: the control
+  // engine re-pushes the tray list, and a live editor reloads its gallery.
+  void RecentChanged();
 
   // Broadcast message a second instance posts to reveal the running one's
   // Settings (RegisterWindowMessageW("GlimprRevealSettings")).
@@ -88,9 +91,9 @@ class FlutterWindow : public Win32Window {
   // that serves one capture session and is then replaced (overlay_host.h).
   std::unique_ptr<OverlayHostClient> overlay_host_;
 
-  // The standalone Image Editor engine + window (warm-built shortly after launch;
-  // revealed on demand). The macOS warm editor window analogue.
-  std::unique_ptr<EditorWindow> editor_window_;
+  // The standalone Image Editor: its engine + window live in a child process
+  // spawned on the first open and gone after the editor closes (editor_host.h).
+  std::unique_ptr<EditorHostClient> editor_host_;
 
   // The live floating pins (pin-to-screen). The macOS PinPanel set analogue.
   std::unique_ptr<PinManager> pin_manager_;
