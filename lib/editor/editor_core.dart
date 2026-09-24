@@ -223,6 +223,10 @@ class _EditorCoreState extends State<EditorCore> {
   final Map<(bool, Rect), (ui.Image, double)> _effectCache = {};
   final Set<(bool, Rect, double)> _effectPending = {};
   int _effectGen = 0; // bumped on clear to discard in-flight (stale-frame) builds
+  // Bumped on EVERY cache mutation (image landed / evicted / cleared) and handed
+  // to the painters: the lookup callback is stable and the drawable list does not
+  // change when an image lands, so this is what makes shouldRepaint fire.
+  int _effectVersion = 0;
 
   // Move/resize an existing drawable.
   int? _editIndex;
@@ -967,6 +971,7 @@ class _EditorCoreState extends State<EditorCore> {
     for (final k
         in _effectCache.keys.where((k) => !needed.contains(k)).toList()) {
       _effectCache.remove(k)?.$1.dispose();
+      _effectVersion++;
     }
   }
 
@@ -1005,7 +1010,7 @@ class _EditorCoreState extends State<EditorCore> {
       final ck = (isBlur, rect);
       _effectCache[ck]?.$1.dispose(); // replace the old image now the new is ready
       _effectCache[ck] = (img, strength);
-      setState(() {});
+      setState(() => _effectVersion++);
     } finally {
       _effectPending.remove(buildKey);
     }
@@ -1013,6 +1018,7 @@ class _EditorCoreState extends State<EditorCore> {
 
   void _clearEffectCache() {
     _effectGen++;
+    _effectVersion++;
     for (final e in _effectCache.values) {
       e.$1.dispose();
     }
@@ -2647,6 +2653,7 @@ class _EditorCoreState extends State<EditorCore> {
             painter: DrawablePainter(
               drawables: drawables,
               effectImage: _lookupEffect,
+              effectVersion: _effectVersion,
               // The magnify tool samples the base image directly.
               baseImage: _canvasImage,
               baseScale: widget.host.pixelScale,

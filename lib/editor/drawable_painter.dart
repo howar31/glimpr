@@ -226,6 +226,11 @@ class DrawablePainter extends CustomPainter {
   final double baseScale; // logical -> native for the magnify source sample
   final ui.Image? spotlightImage; // full-canvas blur/pixelate for the spotlight layer
   final MagnifyPart magnifyPart; // HDR export chrome split (see MagnifyPart)
+  /// Version of the effect-image cache behind [effectImage]: the lookup is a
+  /// stable callback, so a region image landing (or being evicted) changes the
+  /// painted result without changing any other field. The host bumps this on
+  /// every cache mutation so [shouldRepaint] sees it.
+  final int effectVersion;
   const DrawablePainter({
     required this.drawables,
     this.effectImage,
@@ -233,6 +238,7 @@ class DrawablePainter extends CustomPainter {
     this.baseScale = 1,
     this.spotlightImage,
     this.magnifyPart = MagnifyPart.all,
+    this.effectVersion = 0,
   });
 
   @override
@@ -797,6 +803,7 @@ class DrawablePainter extends CustomPainter {
   bool shouldRepaint(DrawablePainter old) =>
       !listEquals(old.drawables, drawables) ||
       old.effectImage != effectImage ||
+      old.effectVersion != effectVersion ||
       old.baseImage != baseImage ||
       old.spotlightImage != spotlightImage;
 }
