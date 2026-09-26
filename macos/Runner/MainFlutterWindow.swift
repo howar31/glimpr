@@ -210,6 +210,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       // string above stays pure — the update compare parses it.
       case "appIsDev":
         result(Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true)
+      // Report-an-issue page: environment snapshot, gathered on demand only.
+      case "diagnostics":
+        result(MainFlutterWindow.diagnosticsSnapshot())
       default: result(FlutterMethodNotImplemented)
       }
     }
@@ -904,6 +907,56 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     let overlayCapture = overlayManager?.isSuspended == true
     let regular = (editorVisible || settingsVisible) && !overlayCapture
     NSApp.setActivationPolicy(regular ? .regular : .accessory)
+  }
+
+  // MARK: - Diagnostics (Settings > About > Report an issue)
+
+  /// OS build, CPU, and every screen with its scale, EDR headroom and colour
+  /// space. Keys are the wire names lib/settings/diagnostics.dart renders;
+  /// per-screen keys other than name/width/height/scale/primary print as
+  /// `key=value`, so adding one here needs no Dart change.
+  static func diagnosticsSnapshot() -> [String: Any] {
+    let pi = ProcessInfo.processInfo
+    let v = pi.operatingSystemVersion
+    var build = ""
+    // "Version 26.0.1 (Build 25A362)" -> "25A362".
+    if let open = pi.operatingSystemVersionString.range(of: "(Build "),
+       let close = pi.operatingSystemVersionString.range(of: ")", range: open.upperBound..<pi.operatingSystemVersionString.endIndex) {
+      build = String(pi.operatingSystemVersionString[open.upperBound..<close.lowerBound])
+    }
+    let os = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+      + (build.isEmpty ? "" : " (\(build))")
+    var uts = utsname()
+    uname(&uts)
+    let arch = withUnsafePointer(to: &uts.machine) {
+      $0.withMemoryRebound(to: CChar.self, capacity: Int(_SYS_NAMELEN)) { String(cString: $0) }
+    }
+    var screens: [[String: Any]] = []
+    for (i, s) in NSScreen.screens.enumerated() {
+      let scale = s.backingScaleFactor
+      screens.append([
+        "name": s.localizedName,
+        "width": Int((s.frame.width * scale).rounded()),
+        "height": Int((s.frame.height * scale).rounded()),
+        "scale": Double(scale),
+        "primary": i == 0,
+        "edr_potential": Double(s.maximumPotentialExtendedDynamicRangeColorComponentValue),
+        "edr_current": Double(s.maximumExtendedDynamicRangeColorComponentValue),
+        "edr_reference": Double(s.maximumReferenceExtendedDynamicRangeColorComponentValue),
+        "color_space": s.colorSpace?.localizedName ?? "",
+      ])
+    }
+    var out: [String: Any] = ["os": os, "arch": arch, "displays": screens]
+    if let cpu = sysctlString("machdep.cpu.brand_string") { out["cpu"] = cpu }
+    return out
+  }
+
+  private static func sysctlString(_ name: String) -> String? {
+    var size = 0
+    guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+    var buf = [CChar](repeating: 0, count: size)
+    guard sysctlbyname(name, &buf, &size, nil, 0) == 0 else { return nil }
+    return String(cString: buf)
   }
 }
 

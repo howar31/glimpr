@@ -98,6 +98,11 @@ no-op stub package by design; see [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
+Bug reports and feature requests go to
+[GitHub Issues](https://github.com/howar31/glimpr/issues/new/choose).
+In the app, Settings > About > Report an issue opens the form with the
+environment details filled in.
+
 If Glimpr is useful to you, you can sponsor development:
 [Sponsor](https://donate.howar31.com/) · [Ko-fi](https://ko-fi.com/howar31)
 

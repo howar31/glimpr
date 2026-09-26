@@ -72,7 +72,11 @@ flutter build windows --release  # Windows (VS 2022 C++ toolchain)
 公開 repo 建置出完整的免費版本。`packages/glimpr_pro` 是刻意保留的 no-op
 stub 套件；詳見 [CONTRIBUTING](CONTRIBUTING.md)。
 
-## 贊助
+## 支援
+
+問題回報與功能建議請到
+[GitHub Issues](https://github.com/howar31/glimpr/issues/new/choose)。
+在 app 內，設定 > 關於 > 回報問題會開啟已帶入環境資訊的表單。
 
 如果 Glimpr 對你有幫助，歡迎贊助開發：
 [贊助](https://donate.howar31.com/) · [Ko-fi](https://ko-fi.com/howar31)

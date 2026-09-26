@@ -140,6 +140,8 @@ MonitorHdrInfo QueryMonitorHdr(HMONITOR monitor) {
           if (SUCCEEDED(out6->GetDesc1(&d))) {
             info.hdr =
                 d.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+            info.color_space = static_cast<int>(d.ColorSpace);
+            info.bits_per_color = static_cast<int>(d.BitsPerColor);
             if (d.MaxLuminance > 0) info.max_nits = d.MaxLuminance;
           }
           out6->Release();

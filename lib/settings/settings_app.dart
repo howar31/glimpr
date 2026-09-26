@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
 
+import 'diagnostics.dart';
 import 'licenses_page.dart';
+import 'report_issue_page.dart';
 import 'whats_new_page.dart';
 import '../channels.dart';
 import '../editor/crop_confirm_mode.dart';
@@ -1164,6 +1166,12 @@ class _SettingsAppState extends State<SettingsApp>
             divider: true,
             onTap: () => _openUrl('https://github.com/howar31/glimpr')),
         _aboutLinkRow(t,
+            icon: Icons.bug_report_outlined,
+            label: _l.settingsAboutReportIssue,
+            divider: true,
+            external: false,
+            onTap: _openReportIssue),
+        _aboutLinkRow(t,
             // Our own site → the Glimpr mark (solid, tinted like the other icons).
             iconWidget: GlimprMark(size: 18, color: t.accentFg),
             label: _l.settingsAboutWebsite,
@@ -1371,6 +1379,49 @@ class _SettingsAppState extends State<SettingsApp>
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => glimprLicenseSurface(tokens, const LicensesView()),
     ));
+  }
+
+  void _openReportIssue() {
+    final ctx = _pageContext;
+    if (ctx == null) return;
+    final tokens = GlimprTheme.of(ctx);
+    final locale = Localizations.localeOf(ctx).toLanguageTag();
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => glimprLicenseSurface(
+          tokens,
+          ReportIssueView(
+              report: _collectDiagnostics(locale), onOpenUrl: _openUrl)),
+    ));
+  }
+
+  // The report page's environment snapshot: gathered on open only (one
+  // native call + the capture-relevant settings), never in the background.
+  Future<String> _collectDiagnostics(String locale) async {
+    final v = await _versionDisplayFuture;
+    final native = await fetchNativeDiagnostics(_roleChannel);
+    final settings = <String, String>{
+      'format': (await _s.getFormat()).name,
+      'hdr_screenshot': '${await _s.getHdrScreenshot()}',
+      'capture_cursor': '${await _s.getCaptureCursor()}',
+      if (!platformIsWindows)
+        'snap_element': '${await _s.getSnapElementMode()}',
+      'record_format': (await _s.getRecordFormat()).name,
+      'record_fps': '${await _s.getRecordFps()}',
+      'hud_invert_lines': '${await _s.getHudInvertLines()}',
+      if (platformIsWindows)
+        'gpu_preference': (await _s.getGpuPreference()).wire,
+      if (!platformIsWindows) 'warm_engines': '$_warmTarget',
+      'layer_cap': '${await _s.getCaptureLayerCap()}',
+      'app_language': await _s.getAppLanguage(),
+    };
+    return formatDiagnostics(
+      appVersion: v.version,
+      isDev: v.dev,
+      platformName: platformIsWindows ? 'Windows' : 'macOS',
+      locale: locale,
+      native: native,
+      settings: settings,
+    );
   }
 
   List<Widget> _generalPane(GlimprTokens t) {

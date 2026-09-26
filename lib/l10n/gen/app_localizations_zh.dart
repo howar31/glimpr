@@ -58,6 +58,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutLicenses => '授權與第三方致謝';
 
   @override
+  String get settingsAboutReportIssue => '回報問題';
+
+  @override
+  String get reportIssueIntro =>
+      '遇到問題或有功能建議，歡迎到 GitHub Issues 留言。請在表單中附上下方的診斷資訊。';
+
+  @override
+  String get reportIssueOpenGithub => '在 GitHub 開啟 issue';
+
+  @override
+  String get reportIssueCopy => '複製診斷資訊';
+
+  @override
+  String get reportIssueCopied => '已複製';
+
+  @override
+  String get reportIssueDiagnostics => '診斷資訊';
+
+  @override
+  String get reportIssueCollecting => '蒐集中…';
+
+  @override
   String get settingsAboutCheckUpdates => '檢查更新';
 
   @override

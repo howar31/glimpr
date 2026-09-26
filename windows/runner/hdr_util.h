@@ -24,6 +24,9 @@ struct MonitorHdrInfo {
   bool hdr = false;
   float sdr_white_nits = 240.0f;  // Windows default SDR brightness slider
   float max_nits = 1000.0f;       // panel peak (HDR10 metadata hint)
+  // Raw DXGI_OUTPUT_DESC1 facts for the diagnostics snapshot (-1 = unknown).
+  int color_space = -1;
+  int bits_per_color = -1;
 };
 
 // Whether |monitor| is currently in HDR mode (advanced colour, PQ colour

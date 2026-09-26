@@ -1,0 +1,26 @@
+name: Feature request / 功能建議
+description: Propose a new capability or a change to an existing one. / 提出新功能或既有功能的調整。
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do? / 你想完成什麼？
+      description: The situation the feature would help with. / 這個功能要解決的情境。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour / 建議的作法
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform / 平台
+      multiple: true
+      options:
+        - macOS
+        - Windows

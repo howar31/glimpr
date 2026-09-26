@@ -67,6 +67,34 @@
   "@settingsAboutLicenses": {
     "description": "About pane: opens the in-app open-source license page"
   },
+  "settingsAboutReportIssue": "Report an issue",
+  "@settingsAboutReportIssue": {
+    "description": "About pane row + page title: bug reports and feature requests on GitHub Issues"
+  },
+  "reportIssueIntro": "Found a bug or have a suggestion? Open an issue on GitHub and include the diagnostics below in the form.",
+  "@reportIssueIntro": {
+    "description": "Report-an-issue page: the sentence above the action buttons"
+  },
+  "reportIssueOpenGithub": "Open an issue on GitHub",
+  "@reportIssueOpenGithub": {
+    "description": "Report-an-issue page: primary button, opens the prefilled GitHub issue form in the browser"
+  },
+  "reportIssueCopy": "Copy diagnostics",
+  "@reportIssueCopy": {
+    "description": "Report-an-issue page: secondary button, copies the diagnostics text to the clipboard"
+  },
+  "reportIssueCopied": "Copied",
+  "@reportIssueCopied": {
+    "description": "Report-an-issue page: the copy button's label right after copying"
+  },
+  "reportIssueDiagnostics": "Diagnostics",
+  "@reportIssueDiagnostics": {
+    "description": "Report-an-issue page: heading over the environment snapshot block"
+  },
+  "reportIssueCollecting": "Collecting…",
+  "@reportIssueCollecting": {
+    "description": "Report-an-issue page: placeholder while the diagnostics are gathered"
+  },
   "settingsAboutCheckUpdates": "Check for updates",
   "@settingsAboutCheckUpdates": {
     "description": "About pane: manual update-check row label (idle state)"

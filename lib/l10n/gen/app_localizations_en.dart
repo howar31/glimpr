@@ -58,6 +58,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAboutLicenses => 'Licenses & acknowledgements';
 
   @override
+  String get settingsAboutReportIssue => 'Report an issue';
+
+  @override
+  String get reportIssueIntro =>
+      'Found a bug or have a suggestion? Open an issue on GitHub and include the diagnostics below in the form.';
+
+  @override
+  String get reportIssueOpenGithub => 'Open an issue on GitHub';
+
+  @override
+  String get reportIssueCopy => 'Copy diagnostics';
+
+  @override
+  String get reportIssueCopied => 'Copied';
+
+  @override
+  String get reportIssueDiagnostics => 'Diagnostics';
+
+  @override
+  String get reportIssueCollecting => 'Collecting…';
+
+  @override
   String get settingsAboutCheckUpdates => 'Check for updates';
 
   @override

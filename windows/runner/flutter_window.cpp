@@ -15,6 +15,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include "app_identity.h"
+#include "diagnostics.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "perf_log.h"
 #include "update_installer.h"
@@ -206,6 +207,9 @@ bool FlutterWindow::OnCreate() {
           result->Success();  // no native key interceptor on Windows -> no-op
         } else if (m == "appVersion") {
           result->Success(EncodableValue(AppVersionString()));
+        } else if (m == "diagnostics") {
+          // Report-an-issue page: environment snapshot, on demand only.
+          result->Success(diag::Collect());
         } else if (m == "appIsDev") {
           // Display-only dev-identity flag (app_identity.h). appVersion stays
           // pure -- the update compare parses it.

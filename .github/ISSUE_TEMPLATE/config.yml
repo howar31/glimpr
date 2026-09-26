@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Releases
+    url: https://github.com/howar31/glimpr/releases
+    about: Check the latest version before reporting; the fix may already be out.

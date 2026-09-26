@@ -188,6 +188,48 @@ abstract class AppLocalizations {
   /// **'Licenses & acknowledgements'**
   String get settingsAboutLicenses;
 
+  /// About pane row + page title: bug reports and feature requests on GitHub Issues
+  ///
+  /// In en, this message translates to:
+  /// **'Report an issue'**
+  String get settingsAboutReportIssue;
+
+  /// Report-an-issue page: the sentence above the action buttons
+  ///
+  /// In en, this message translates to:
+  /// **'Found a bug or have a suggestion? Open an issue on GitHub and include the diagnostics below in the form.'**
+  String get reportIssueIntro;
+
+  /// Report-an-issue page: primary button, opens the prefilled GitHub issue form in the browser
+  ///
+  /// In en, this message translates to:
+  /// **'Open an issue on GitHub'**
+  String get reportIssueOpenGithub;
+
+  /// Report-an-issue page: secondary button, copies the diagnostics text to the clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy diagnostics'**
+  String get reportIssueCopy;
+
+  /// Report-an-issue page: the copy button's label right after copying
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get reportIssueCopied;
+
+  /// Report-an-issue page: heading over the environment snapshot block
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get reportIssueDiagnostics;
+
+  /// Report-an-issue page: placeholder while the diagnostics are gathered
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting…'**
+  String get reportIssueCollecting;
+
   /// About pane: manual update-check row label (idle state)
   ///
   /// In en, this message translates to:
