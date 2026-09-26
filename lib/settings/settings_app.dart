@@ -19,6 +19,7 @@ import '../editor/loupe_config.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
 import 'gpu_preference.dart';
+import 'install_scope_page.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../overlay/selection_guides.dart';
@@ -186,6 +187,18 @@ class _SettingsAppState extends State<SettingsApp>
   // Refreshed off the critical path (disk probe) after the badge itself.
   bool _updateStaged = false;
 
+  // Settings > Advanced install-scope row (Windows): which scope this copy
+  // runs from and whether the account may switch it. Null = unknown or not
+  // an installed build, and the section hides. Read once per Settings open.
+  InstallScopeInfo? _installScope;
+
+  Future<void> _seedInstallScope() async {
+    if (!platformIsWindows) return;
+    final info = await _updater.installScope();
+    if (!mounted) return;
+    setState(() => _installScope = info);
+  }
+
   Future<void> _refreshStaged(String? tag) async {
     final staged = tag != null && await _updater.stagedExists(tag);
     if (!mounted || staged == _updateStaged) return;
@@ -339,6 +352,7 @@ class _SettingsAppState extends State<SettingsApp>
     widget.updateFeed?.addListener(_onUpdateFeed);
     _load();
     _seedUpdateBadge();
+    unawaited(_seedInstallScope());
   }
 
   // Surface a persisted launch-check hit (written by the control engine's
@@ -1410,6 +1424,52 @@ class _SettingsAppState extends State<SettingsApp>
     final tokens = GlimprTheme.of(ctx);
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => glimprLicenseSurface(tokens, const LicensesView()),
+    ));
+  }
+
+  Widget _installScopeRow(GlimprTokens t) {
+    final info = _installScope!;
+    final admin = info.admin;
+    final value = info.scope == InstallScope.machine
+        ? _l.settingsInstallScopeMachine
+        : _l.settingsInstallScopeUser;
+    final row = SettingRow(
+      icon: Icons.install_desktop,
+      title: _l.settingsInstallScopeTitle,
+      hint: admin ? null : _l.settingsInstallScopeAdminHint,
+      enabled: admin,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value, style: GlimprType.sansStyle(12.5, 500, t.fg3)),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right, size: 18, color: t.fg4),
+        ],
+      ),
+    );
+    if (!admin) return row;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openInstallScope,
+      child: row,
+    );
+  }
+
+  void _openInstallScope() {
+    final ctx = _pageContext;
+    final scope = _installScope?.scope;
+    if (ctx == null || scope == null) return;
+    final tokens = GlimprTheme.of(ctx);
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => glimprLicenseSurface(
+          tokens,
+          InstallScopeView(
+            current: scope,
+            phase: _updater.phase,
+            progress: _updater.progress,
+            onSwitch: (target) async =>
+                _updater.switchScope(target, await _appVersionFuture),
+          )),
     ));
   }
 
@@ -2995,6 +3055,16 @@ class _SettingsAppState extends State<SettingsApp>
           ),
         ),
       ]),
+      // Install scope (Windows): only an installed build has one, and only an
+      // administrator account may switch it (another account's credentials
+      // would make Setup's HKCU the wrong hive). The switch is a one-time,
+      // user-triggered reinstall of the running version; nothing migrates by
+      // itself.
+      if (platformIsWindows && _installScope?.scope != null) ...[
+        const SizedBox(height: 15),
+        SectionLabel(_l.settingsSectionInstall, icon: Icons.install_desktop),
+        GlassCard.rows([_installScopeRow(t)]),
+      ],
     ];
   }
 

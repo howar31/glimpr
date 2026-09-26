@@ -176,12 +176,14 @@ void main() {
     expect(none!.scope, isNull);
     expect(none.admin, isFalse);
 
-    // A malformed reply or no handler at all reads as unknown (null).
+    // A malformed reply reads as unknown (null); a handler that throws too.
     mockMethodChannel(_update,
         handler: (c) => c.method == 'installScope' ? 'garbage' : null);
     expect(await make().installScope(), isNull);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_update, null);
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'installScope'
+            ? throw PlatformException(code: 'x')
+            : null);
     expect(await make().installScope(), isNull);
   });
 

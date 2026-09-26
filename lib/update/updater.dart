@@ -180,11 +180,13 @@ class UpdaterService {
 
   /// The install scope of this copy and whether the account may switch it;
   /// null when the native side cannot say (no channel, malformed reply).
+  /// No timeout on purpose: the caller seeds a hidden-by-default section
+  /// without awaiting, so a native side that never replies costs nothing,
+  /// while a timer would outlive the widget tests' fake clock.
   Future<InstallScopeInfo?> installScope() async {
     try {
-      final r = await channel
-          .invokeMethod<Map<Object?, Object?>>('installScope')
-          .timeout(const Duration(seconds: 3));
+      final r =
+          await channel.invokeMethod<Map<Object?, Object?>>('installScope');
       if (r == null) return null;
       final scope = r['scope'];
       final admin = r['admin'];

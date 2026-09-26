@@ -433,4 +433,85 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Render with'), findsNothing);
   });
+
+  // ---- Advanced pane, install scope (Windows) -----------------------------
+
+  Future<void> pumpAdvancedWindows(WidgetTester tester,
+      {required Object? scopeReply}) async {
+    debugPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugPlatformOverride = null);
+    mockMethodChannel(
+      const MethodChannel('glimpr/update'),
+      handler: (call) => call.method == 'installScope' ? scopeReply : null,
+    );
+    mockMethodChannel(
+      kRoleChannel,
+      handler: (call) => call.method == 'appVersion' ? '1.21.0 (36)' : null,
+    );
+    await _pump(tester);
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Advanced pane on Windows: machine install shows the scope row',
+      (tester) async {
+    await pumpAdvancedWindows(tester,
+        scopeReply: <String, Object?>{'scope': 'machine', 'admin': true});
+    // SectionLabel renders its text upper-cased.
+    expect(find.text('INSTALLATION'), findsOneWidget);
+    expect(find.text('Install scope'), findsOneWidget);
+    expect(find.text('All accounts'), findsOneWidget);
+    expect(find.text('Changing this needs an administrator account'),
+        findsNothing);
+    // Tapping opens the page for the opposite direction.
+    await tester.tap(find.text('Install scope'));
+    await tester.pumpAndSettle();
+    expect(find.text('Switch to this account only'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Advanced pane on Windows: a standard account sees the row '
+      'disabled with the hint', (tester) async {
+    await pumpAdvancedWindows(tester,
+        scopeReply: <String, Object?>{'scope': 'user', 'admin': false});
+    expect(find.text('This account only'), findsOneWidget);
+    expect(find.text('Changing this needs an administrator account'),
+        findsOneWidget);
+    // The disabled row takes no pointer events, so the tap lands on nothing
+    // and no page opens.
+    await tester.tap(find.text('Install scope'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(find.text('Switch to all accounts'), findsNothing);
+  });
+
+  testWidgets('Advanced pane on Windows: no install scope hides the section',
+      (tester) async {
+    await pumpAdvancedWindows(tester,
+        scopeReply: <String, Object?>{'scope': null, 'admin': true});
+    expect(find.text('INSTALLATION'), findsNothing);
+    expect(find.text('Install scope'), findsNothing);
+  });
+
+  testWidgets(
+      'Advanced pane on Windows: a missing native reply hides the section',
+      (tester) async {
+    await pumpAdvancedWindows(tester, scopeReply: null);
+    expect(find.text('Install scope'), findsNothing);
+  });
+
+  testWidgets('Advanced pane on macOS never shows the install-scope section',
+      (tester) async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugPlatformOverride = null);
+    mockMethodChannel(
+      const MethodChannel('glimpr/update'),
+      handler: (call) => call.method == 'installScope'
+          ? <String, Object?>{'scope': 'user', 'admin': true}
+          : null,
+    );
+    await _pump(tester);
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(find.text('Install scope'), findsNothing);
+  });
 }
