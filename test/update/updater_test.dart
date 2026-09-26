@@ -158,6 +158,140 @@ void main() {
     expect(await make().supported(), isFalse);
   });
 
+  test('installScope parses the native reply and fails closed', () async {
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'installScope'
+            ? <String, Object?>{'scope': 'machine', 'admin': true}
+            : null);
+    final info = await make().installScope();
+    expect(info, isNotNull);
+    expect(info!.scope, InstallScope.machine);
+    expect(info.admin, isTrue);
+
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'installScope'
+            ? <String, Object?>{'scope': null, 'admin': false}
+            : null);
+    final none = await make().installScope();
+    expect(none!.scope, isNull);
+    expect(none.admin, isFalse);
+
+    // A malformed reply or no handler at all reads as unknown (null).
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'installScope' ? 'garbage' : null);
+    expect(await make().installScope(), isNull);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_update, null);
+    expect(await make().installScope(), isNull);
+  });
+
+  test('windows: installTag forwards the scope to applyStaged (keep by default)',
+      () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    final calls = mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final s = make(assets: {
+      'Glimpr-Setup-9.9.9.exe': 'https://example.test/setup.exe',
+      'Glimpr-Setup-9.9.9.exe.sig': 'https://example.test/setup.sig',
+    });
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
+    var args = (calls.last.arguments as Map).cast<String, Object?>();
+    expect(args['scope'], 'keep');
+
+    expect(await s.installTag('v9.9.9', scope: InstallScopeTarget.user),
+        InstallOutcome.handed);
+    args = (calls.last.arguments as Map).cast<String, Object?>();
+    expect(args['scope'], 'user');
+  });
+
+  test('macOS: installTag never sends a scope', () async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    final calls = mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final s = make(assets: {
+      'Glimpr-macOS-9.9.9.dmg': 'https://example.test/mac.dmg',
+    });
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
+    final args = (calls.single.arguments as Map).cast<String, Object?>();
+    expect(args.containsKey('scope'), isFalse);
+  });
+
+  group('pickTagForVersion', () {
+    const body = '''
+[
+ {"tag_name": "v1.21.0-rc.1", "prerelease": true, "draft": false},
+ {"tag_name": "v1.20.0", "prerelease": false, "draft": false},
+ {"tag_name": "v1.19.0", "prerelease": false, "draft": false}
+]''';
+    test('prefers the stable release with the same core', () {
+      expect(pickTagForVersion(body, '1.20.0'), 'v1.20.0');
+    });
+    test('falls back to a prerelease with the same core (rc rehearsal)', () {
+      expect(pickTagForVersion(body, '1.21.0'), 'v1.21.0-rc.1');
+    });
+    test('drafts and unknown cores yield null', () {
+      const drafts =
+          '[{"tag_name": "v1.22.0", "prerelease": false, "draft": true}]';
+      expect(pickTagForVersion(drafts, '1.22.0'), isNull);
+      expect(pickTagForVersion(body, '0.9.9'), isNull);
+      expect(pickTagForVersion('not json', '1.20.0'), isNull);
+    });
+  });
+
+  test('switchScope installs the tag resolved for the running version',
+      () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    final calls = mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final asked = <String>[];
+    final fetched = <String>[];
+    final s = UpdaterService(
+      fetchAssets: (tag) async {
+        fetched.add(tag);
+        return plain({
+          'Glimpr-Setup-1.21.0-rc.1.exe': 'https://example.test/setup.exe',
+          'Glimpr-Setup-1.21.0-rc.1.exe.sig': 'https://example.test/setup.sig',
+        });
+      },
+      download: (url, toPath, onProgress) async {
+        await File(toPath).writeAsString('payload');
+      },
+      stageRoot: () async => stage.createTemp('s'),
+      resolveTag: (core) async {
+        asked.add(core);
+        return 'v1.21.0-rc.1';
+      },
+    );
+    expect(await s.switchScope(InstallScopeTarget.user, '1.21.0 (36)'),
+        InstallOutcome.handed);
+    expect(asked, ['1.21.0']);
+    expect(fetched, ['v1.21.0-rc.1']);
+    final args = (calls.single.arguments as Map).cast<String, Object?>();
+    expect(args['scope'], 'user');
+  });
+
+  test('switchScope falls back to v<core> when no release resolves, and fails '
+      'closed when that tag has no listing', () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    final calls = mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final fetched = <String>[];
+    final s = UpdaterService(
+      fetchAssets: (tag) async {
+        fetched.add(tag);
+        return null; // no such release
+      },
+      download: (url, toPath, onProgress) async {},
+      stageRoot: () async => stage.createTemp('s'),
+      resolveTag: (core) async => null,
+    );
+    expect(await s.switchScope(InstallScopeTarget.machine, '0.9.9 (1)'),
+        InstallOutcome.failed);
+    expect(fetched, ['v0.9.9']);
+    expect(calls.where((c) => c.method == 'applyStaged'), isEmpty);
+    expect(s.phase.value, UpdatePhase.failed);
+  });
+
   test('progress mirrors the main asset download and clears before apply',
       () async {
     debugPlatformOverride = TargetPlatform.windows;

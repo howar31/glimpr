@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../platform_gate.dart';
+import 'version_display.dart';
 
 /// One-click self-update for INSTALLED builds (macOS /Applications bundle,
 /// Windows Inno install). The Dart side orchestrates: resolve the release's
@@ -29,6 +30,29 @@ enum InstallOutcome {
   /// Download, verification or apply failed; the caller falls back to the
   /// release page.
   failed,
+}
+
+/// Where the Windows copy is installed (the Inno install mode).
+enum InstallScope { machine, user }
+
+/// What an apply asks the installer for: keep the current scope (an
+/// update) or move to the named one (the Settings > Advanced switch). The
+/// wire strings are what the native side parses.
+enum InstallScopeTarget {
+  keep('keep'),
+  machine('machine'),
+  user('user');
+
+  const InstallScopeTarget(this.wire);
+  final String wire;
+}
+
+/// The native `installScope` reply: [scope] null = portable / dev tree
+/// (the Settings row hides); [admin] = the account may switch scopes.
+class InstallScopeInfo {
+  const InstallScopeInfo({required this.scope, required this.admin});
+  final InstallScope? scope;
+  final bool admin;
 }
 
 /// Bytes received so far and the expected total (null when the server sent
@@ -98,6 +122,7 @@ class UpdaterService {
     required this.download,
     required this.stageRoot,
     this.legacyTemp,
+    this.resolveTag,
     this.channel = kUpdateChannel,
   });
 
@@ -117,6 +142,11 @@ class UpdaterService {
   /// Where releases before the per-tag layout staged (`glimpr-update*`
   /// folders in the system temp dir); [cleanupStaging] removes them.
   final Directory? legacyTemp;
+
+  /// Release tag for a version core ("1.21.0" -> "v1.21.0" or
+  /// "v1.21.0-rc.1"); null when the release list is unavailable or has no
+  /// such release. Defaults to [defaultResolveTag].
+  final Future<String?> Function(String core)? resolveTag;
 
   final MethodChannel channel;
 
@@ -148,10 +178,50 @@ class UpdaterService {
     }
   }
 
+  /// The install scope of this copy and whether the account may switch it;
+  /// null when the native side cannot say (no channel, malformed reply).
+  Future<InstallScopeInfo?> installScope() async {
+    try {
+      final r = await channel
+          .invokeMethod<Map<Object?, Object?>>('installScope')
+          .timeout(const Duration(seconds: 3));
+      if (r == null) return null;
+      final scope = r['scope'];
+      final admin = r['admin'];
+      return InstallScopeInfo(
+        scope: scope == 'machine'
+            ? InstallScope.machine
+            : scope == 'user'
+                ? InstallScope.user
+                : null,
+        admin: admin == true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Reinstall the RUNNING version in [target]'s scope (Windows). The
+  /// binary knows only its numeric core, so the tag comes from the release
+  /// list (prereleases included, so an rc build can switch too); without a
+  /// resolution the plain `v<core>` tag is tried and fails closed when it
+  /// does not exist.
+  Future<InstallOutcome> switchScope(
+      InstallScopeTarget target, String runningVersion) async {
+    final core = versionCore(runningVersion);
+    String? tag;
+    try {
+      tag = await (resolveTag ?? defaultResolveTag)(core);
+    } catch (_) {}
+    return installTag(tag ?? 'v$core', scope: target);
+  }
+
   /// Download + verify + install [tag]; see [InstallOutcome]. Anything other
   /// than [InstallOutcome.handed] changed nothing on disk except, on
-  /// failure, the staged file a refused apply removed.
-  Future<InstallOutcome> installTag(String tag) async {
+  /// failure, the staged file a refused apply removed. On Windows [scope]
+  /// tells the installer which install mode to use (keep = the current one).
+  Future<InstallOutcome> installTag(String tag,
+      {InstallScopeTarget scope = InstallScopeTarget.keep}) async {
     try {
       progress.value = null;
       phase.value = UpdatePhase.downloading;
@@ -174,9 +244,11 @@ class UpdaterService {
         phase.value = UpdatePhase.installing;
         // A declined apply (failed verification, not installed) changed
         // nothing on disk: fall back like any other failure.
-        final applied = await channel.invokeMethod(
-            'applyStaged',
-            {'path': exePath, 'sigPath': sigPath}).timeout(_kApplyTimeout);
+        final applied = await channel.invokeMethod('applyStaged', {
+          'path': exePath,
+          'sigPath': sigPath,
+          'scope': scope.wire,
+        }).timeout(_kApplyTimeout);
         if (applied == 'cancelled') {
           progress.value = null;
           phase.value = UpdatePhase.idle;
@@ -358,6 +430,54 @@ ReleaseAssets? parseReleaseAssets(String body) {
       }
     }
     return out;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Production tag resolver: the release list including prereleases (the
+/// switch must work on an rc build during rehearsal), matched on the tag's
+/// core by [pickTagForVersion].
+Future<String?> defaultResolveTag(String core) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+  try {
+    final req = await client.getUrl(Uri.parse(
+        'https://api.github.com/repos/howar31/glimpr/releases?per_page=20'));
+    req.headers.set(HttpHeaders.userAgentHeader, 'Glimpr');
+    req.headers.set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
+    final res = await req.close().timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) return null;
+    return pickTagForVersion(await res.transform(utf8.decoder).join(), core);
+  } catch (_) {
+    return null;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Pure: the tag in a GitHub release-list body whose core equals [core]
+/// (leading `v` and any `-suffix` stripped). A stable release wins over a
+/// prerelease with the same core; drafts never match; null when none.
+String? pickTagForVersion(String body, String core) {
+  try {
+    final json = jsonDecode(body);
+    if (json is! List) return null;
+    String? prerelease;
+    for (final r in json) {
+      if (r is! Map || r['draft'] == true) continue;
+      final tag = r['tag_name'];
+      if (tag is! String) continue;
+      var c = tag.startsWith('v') || tag.startsWith('V') ? tag.substring(1) : tag;
+      final dash = c.indexOf('-');
+      if (dash != -1) c = c.substring(0, dash);
+      if (c != core) continue;
+      if (r['prerelease'] == true) {
+        prerelease ??= tag;
+      } else {
+        return tag;
+      }
+    }
+    return prerelease;
   } catch (_) {
     return null;
   }

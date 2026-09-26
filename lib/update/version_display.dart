@@ -12,3 +12,14 @@ String displayVersion(String raw) {
   if (s.startsWith('V')) return 'v${s.substring(1)}';
   return 'v$s';
 }
+
+/// The numeric core of any version string the app sees: "1.20.0 (33)",
+/// "v1.20.0" and "V1.20.0 (2)" all give "1.20.0". Release tags are compared
+/// and resolved on this core (an rc suffix lives only in the tag).
+String versionCore(String raw) {
+  var s = raw.trim();
+  final space = s.indexOf(' ');
+  if (space != -1) s = s.substring(0, space);
+  if (s.startsWith('v') || s.startsWith('V')) s = s.substring(1);
+  return s;
+}
