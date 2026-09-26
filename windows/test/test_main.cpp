@@ -24,6 +24,7 @@
 #include "editor_placement.h"
 #include "ed25519/ed25519.h"
 #include "hdr_util.h"
+#include "install_scope.h"
 #include "overlay_ipc.h"
 #include "pixel_swizzle.h"
 #include "prefs_probe.h"
@@ -677,6 +678,44 @@ void TestProcessIdentity() {
   CHECK(!procid::OwnExePath().empty());
 }
 
+// --- install scope ------------------------------------------------------------
+
+void TestInstallScope() {
+  g_case = "install-scope";
+  using install_scope::Effective;
+  using install_scope::InstallerParams;
+  using install_scope::NeedsElevation;
+  using install_scope::Scope;
+  using install_scope::Target;
+  using install_scope::TargetFromString;
+
+  // keep = the current scope; a named target wins over the current one.
+  CHECK(Effective(Scope::kUser, Target::kKeep) == Scope::kUser);
+  CHECK(Effective(Scope::kMachine, Target::kKeep) == Scope::kMachine);
+  CHECK(Effective(Scope::kUser, Target::kMachine) == Scope::kMachine);
+  CHECK(Effective(Scope::kMachine, Target::kUser) == Scope::kUser);
+
+  // Only a per-user update runs un-elevated.
+  CHECK(!NeedsElevation(Scope::kUser, Scope::kUser));
+  CHECK(NeedsElevation(Scope::kMachine, Scope::kMachine));
+  CHECK(NeedsElevation(Scope::kUser, Scope::kMachine));
+  CHECK(NeedsElevation(Scope::kMachine, Scope::kUser));
+
+  // Flags never mix and the PID handshake is always present.
+  CHECK(InstallerParams(Scope::kUser, 4242) ==
+        L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /PID=4242 /CURRENTUSER");
+  CHECK(InstallerParams(Scope::kMachine, 7) ==
+        L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /PID=7 /ALLUSERS");
+
+  CHECK(TargetFromString("machine") == Target::kMachine);
+  CHECK(TargetFromString("user") == Target::kUser);
+  CHECK(TargetFromString("keep") == Target::kKeep);
+  CHECK(TargetFromString("") == Target::kKeep);
+  CHECK(std::string(install_scope::ScopeName(Scope::kMachine)) == "machine");
+  CHECK(std::string(install_scope::ScopeName(Scope::kUser)) == "user");
+  CHECK(std::string(install_scope::ScopeName(Scope::kNone)).empty());
+}
+
 }  // namespace
 
 int main() {
@@ -699,6 +738,7 @@ int main() {
       {"prefs-probe", TestPrefsProbe}, {"editor-placement", TestEditorPlacement},
       {"editor-gate", TestEditorExitGate}, {"editor-state", TestEditorHostState},
       {"process-identity", TestProcessIdentity},
+      {"install-scope", TestInstallScope},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);
