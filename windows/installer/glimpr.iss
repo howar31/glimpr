@@ -63,6 +63,12 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/im {#MyAppExeName} /f"; Flags: runhidden; RunOnceId: "KillGlimpr"
 
+[UninstallDelete]
+; Crash minidumps are written by the app next to its exe (crash_dump.cpp);
+; the uninstaller only removes files it installed, so they would stay
+; behind, e.g. after a switch of the install scope.
+Type: filesandordirs; Name: "{app}\crashdumps"
+
 [Code]
 // Self-update handshake. The app launches Setup elevated while it is still
 // running (so a declined elevation prompt leaves the app untouched) and
