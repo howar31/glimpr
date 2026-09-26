@@ -1399,9 +1399,21 @@ class _SettingsAppState extends State<SettingsApp>
   Future<String> _collectDiagnostics(String locale) async {
     final v = await _versionDisplayFuture;
     final native = await fetchNativeDiagnostics(_roleChannel);
+    final format = await _s.getFormat();
+    final decorate = <String>[
+      if (await _s.getDecorateSnap()) 'snap',
+      if (await _s.getDecorateCrop()) 'crop',
+      if (await _s.getDecorateWindow()) 'window',
+      if (await _s.getDecorateDisplay()) 'display',
+      if (await _s.getDecorateLastRegion()) 'last_region',
+    ];
     final settings = <String, String>{
-      'format': (await _s.getFormat()).name,
+      'format': format.name,
+      if (format == ImageFormat.jpeg)
+        'jpeg_quality': '${await _s.getJpegQuality()}',
       'hdr_screenshot': '${await _s.getHdrScreenshot()}',
+      'after_capture': flowToString(await _s.getAfterCaptureFlow()),
+      'decorate': decorate.isEmpty ? 'none' : decorate.join('+'),
       'capture_cursor': '${await _s.getCaptureCursor()}',
       if (!platformIsWindows)
         'snap_element': '${await _s.getSnapElementMode()}',
