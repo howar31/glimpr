@@ -78,10 +78,15 @@ element snap) on first run.
 
 **Windows 10 (1903+) / 11**: download the installer or the portable zip from
 [Releases](https://github.com/howar31/glimpr/releases). SmartScreen may warn
-about the unsigned installer: choose "More info", then "Run anyway".
+about the unsigned installer: choose "More info", then "Run anyway". The
+installer installs for the current account by default and needs no
+administrator rights; choose "all accounts" at install time, or switch later
+in Settings > Advanced. On managed machines, run the installer from a
+command line with `/ALLUSERS` or `/CURRENTUSER` (quit Glimpr first).
 
 Installed builds update themselves: when a new release is out, updating is
-one click from the tray menu or the About pane.
+one click from the tray menu or the About pane. A per-account install
+updates without an elevation prompt.
 
 ## Build from source
 
