@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. Fill in what you can; the Diagnostics block is the part that saves the most back-and-forth.
-        感謝回報。能填多少填多少；「診斷資訊」是最能減少來回追問的部分。
+        Thanks for the report. Fill in what you can, especially the Diagnostics block; it helps us reproduce the problem.
+        感謝回報。請盡量填寫，尤其是「診斷資訊」，它能幫助我們重現問題。
   - type: dropdown
     id: platform
     attributes:
