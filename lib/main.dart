@@ -25,6 +25,7 @@ import 'shortcuts/shortcut_actions.dart';
 import 'shortcuts/shortcut_store.dart';
 import 'shortcuts/windows_hotkey_registrar.dart';
 import 'update/update_check.dart';
+import 'update/updater.dart';
 
 /// Every engine runs this same main(). The native side answers `glimpr/role`
 /// with 'overlay' for the per-display overlay engines and 'control' for the
@@ -65,6 +66,23 @@ Future<void> main() async {
   // also seeds itself from the persisted keys at boot, covering a hit that
   // lands before it is listening.
   final updateFeed = ValueNotifier<UpdateCheckResult?>(null);
+  // Staged downloads: keep the one for a still-pending newer release (a
+  // declined install resumes without re-downloading), drop everything else,
+  // including the pre-1.18 per-attempt temp folders.
+  unawaited(() async {
+    final store = Settings.instance.store;
+    final tag = await store.getString('update_latest_tag');
+    final version =
+        await kRoleChannel.invokeMethod<String>('appVersion') ?? '';
+    final keep =
+        tag != null && UpdateChecker.isNewer(version, tag) ? tag : null;
+    await UpdaterService(
+      fetchAssets: defaultFetchAssets,
+      download: defaultDownload,
+      stageRoot: defaultStageRoot,
+      legacyTemp: Directory.systemTemp,
+    ).cleanupStaging(keepTag: keep);
+  }());
   startUpdatePolling(
     UpdateChecker(
       store: Settings.instance.store,

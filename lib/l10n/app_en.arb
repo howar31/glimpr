@@ -114,6 +114,13 @@
       "version": { "type": "String" }
     }
   },
+  "settingsAboutUpdateReady": "Update downloaded: {version}, tap to install",
+  "@settingsAboutUpdateReady": {
+    "description": "About pane: update row label when the newer release is already staged on disk (an earlier install was declined); tapping verifies and installs without downloading again",
+    "placeholders": {
+      "version": { "type": "String" }
+    }
+  },
   "settingsAboutUpToDate": "You are up to date",
   "@settingsAboutUpToDate": {
     "description": "About pane: update row label right after a manual check found no newer release"
@@ -135,9 +142,9 @@
       "total": { "type": "String" }
     }
   },
-  "settingsAboutUpdateFailed": "Download failed; the release page has been opened",
+  "settingsAboutUpdateFailed": "Update failed; the release page has been opened",
   "@settingsAboutUpdateFailed": {
-    "description": "About pane: transient status after a self-update could not download or apply; the browser fallback already opened"
+    "description": "About pane: transient status after a self-update could not download or was refused at install; the browser fallback already opened"
   },
   "settingsSectionUpdates": "Updates",
   "@settingsSectionUpdates": {

@@ -254,6 +254,12 @@ abstract class AppLocalizations {
   /// **'Update available: {version}'**
   String settingsAboutUpdateAvailable(String version);
 
+  /// About pane: update row label when the newer release is already staged on disk (an earlier install was declined); tapping verifies and installs without downloading again
+  ///
+  /// In en, this message translates to:
+  /// **'Update downloaded: {version}, tap to install'**
+  String settingsAboutUpdateReady(String version);
+
   /// About pane: update row label right after a manual check found no newer release
   ///
   /// In en, this message translates to:
@@ -282,10 +288,10 @@ abstract class AppLocalizations {
     String total,
   );
 
-  /// About pane: transient status after a self-update could not download or apply; the browser fallback already opened
+  /// About pane: transient status after a self-update could not download or was refused at install; the browser fallback already opened
   ///
   /// In en, this message translates to:
-  /// **'Download failed; the release page has been opened'**
+  /// **'Update failed; the release page has been opened'**
   String get settingsAboutUpdateFailed;
 
   /// Advanced pane: updates section label

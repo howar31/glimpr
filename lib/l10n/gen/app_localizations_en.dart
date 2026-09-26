@@ -95,6 +95,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String settingsAboutUpdateReady(String version) {
+    return 'Update downloaded: $version, tap to install';
+  }
+
+  @override
   String get settingsAboutUpToDate => 'You are up to date';
 
   @override
@@ -115,7 +120,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAboutUpdateFailed =>
-      'Download failed; the release page has been opened';
+      'Update failed; the release page has been opened';
 
   @override
   String get settingsSectionUpdates => 'Updates';

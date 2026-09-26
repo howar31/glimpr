@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glimpr/platform_gate.dart';
@@ -21,19 +23,25 @@ void main() {
     debugPlatformOverride = null;
   });
 
+  // Plain url maps (no size/digest) never qualify for reuse, so every
+  // pre-existing test keeps its download expectations.
+  ReleaseAssets? plain(Map<String, String>? m) => m?.map(
+      (k, v) => MapEntry(k, AssetInfo(url: v)));
+
   UpdaterService make({
     Map<String, String>? assets,
     List<String>? downloadedUrls,
+    Directory? root,
   }) {
     return UpdaterService(
-      fetchAssets: (tag) async => assets,
+      fetchAssets: (tag) async => plain(assets),
       download: (url, toPath, onProgress) async {
         downloadedUrls?.add(url);
         onProgress(0, 10);
         onProgress(10, 10);
         await File(toPath).writeAsString('payload of $url');
       },
-      stageDir: () async => stage.createTemp('s'),
+      stageRoot: () async => root ?? await stage.createTemp('s'),
     );
   }
 
@@ -107,10 +115,11 @@ void main() {
     debugPlatformOverride = TargetPlatform.macOS;
     final calls = mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = UpdaterService(
-      fetchAssets: (tag) async => {'Glimpr-macOS.dmg': 'https://x/d.dmg'},
+      fetchAssets: (tag) async =>
+          {'Glimpr-macOS.dmg': const AssetInfo(url: 'https://x/d.dmg')},
       download: (url, toPath, _) async =>
           throw const SocketException('offline'),
-      stageDir: () async => stage.createTemp('s'),
+      stageRoot: () async => stage.createTemp('s'),
     );
     expect(await s.installTag('v9.9.9'), isFalse);
     expect(calls.where((c) => c.method == 'applyStaged'), isEmpty);
@@ -125,13 +134,18 @@ void main() {
     expect(s.phase.value, UpdatePhase.failed);
   });
 
-  test('a DECLINED native apply reports failure (fallback path)', () async {
+  test('a DECLINED native apply reports failure and drops the staged file',
+      () async {
     debugPlatformOverride = TargetPlatform.macOS;
-    mockMethodChannel(_update,
+    final calls = mockMethodChannel(_update,
         handler: (c) => c.method == 'applyStaged' ? false : null);
-    final s = make(assets: {'Glimpr-macOS.dmg': 'https://x/d.dmg'});
+    final root = await stage.createTemp('root');
+    final s = make(assets: {'Glimpr-macOS.dmg': 'https://x/d.dmg'}, root: root);
     expect(await s.installTag('v9.9.9'), isFalse);
     expect(s.phase.value, UpdatePhase.failed);
+    final path = (calls.single.arguments as Map)['path'] as String;
+    expect(File(path).existsSync(), isFalse);
+    expect(await s.stagedExists('v9.9.9'), isFalse);
   });
 
   test('supported() reflects the native answer and defaults to false',
@@ -154,8 +168,9 @@ void main() {
     late UpdaterService s;
     s = UpdaterService(
       fetchAssets: (tag) async => {
-        'Glimpr-Setup-9.9.9.exe': 'https://x/setup.exe',
-        'Glimpr-Setup-9.9.9.exe.sig': 'https://x/setup.sig',
+        'Glimpr-Setup-9.9.9.exe': const AssetInfo(url: 'https://x/setup.exe'),
+        'Glimpr-Setup-9.9.9.exe.sig':
+            const AssetInfo(url: 'https://x/setup.sig'),
       },
       download: (url, toPath, onProgress) async {
         if (url.endsWith('.exe')) {
@@ -169,13 +184,159 @@ void main() {
         }
         await File(toPath).writeAsString('x');
       },
-      stageDir: () async => stage.createTemp('s'),
+      stageRoot: () async => stage.createTemp('s'),
     );
     s.progress.addListener(() => seen.add(s.progress.value));
     expect(await s.installTag('v9.9.9'), isTrue);
     final fractions = seen.map((p) => p?.fraction).toList();
     expect(fractions, [0.0, 0.4, 1.0, null]);
     expect(s.progress.value, isNull);
+  });
+
+  String digestOf(String payload) =>
+      'sha256:${sha256.convert(utf8.encode(payload))}';
+
+  UpdaterService withDigests(Directory root, List<String> urls,
+      {required String exeDigest, int? exeSize}) {
+    const payload = 'payload of https://x/setup.exe';
+    return UpdaterService(
+      fetchAssets: (tag) async => {
+        'Glimpr-Setup-9.9.9.exe': AssetInfo(
+            url: 'https://x/setup.exe',
+            size: exeSize ?? payload.length,
+            digest: exeDigest),
+        'Glimpr-Setup-9.9.9.exe.sig':
+            const AssetInfo(url: 'https://x/setup.sig', size: 64),
+      },
+      download: (url, toPath, onProgress) async {
+        urls.add(url);
+        await File(toPath).writeAsString('payload of $url');
+      },
+      stageRoot: () async => root,
+    );
+  }
+
+  test('stages under <root>/<tag> and reuses a staged file whose size and '
+      'digest match the listing (the .sig is still fetched fresh)', () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final root = await stage.createTemp('root');
+    const payload = 'payload of https://x/setup.exe';
+    final urls = <String>[];
+    final s = withDigests(root, urls, exeDigest: digestOf(payload));
+    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(urls, ['https://x/setup.exe', 'https://x/setup.sig']);
+    final exe = File('${root.path}/v9.9.9/Glimpr-Setup-9.9.9.exe');
+    expect(exe.existsSync(), isTrue);
+    expect(await s.stagedExists('v9.9.9'), isTrue);
+
+    // Second attempt (e.g. after a declined UAC): the installer is NOT
+    // downloaded again, the signature is.
+    urls.clear();
+    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(urls, ['https://x/setup.sig']);
+  });
+
+  test('a staged file whose digest differs from the listing is replaced',
+      () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final root = await stage.createTemp('root');
+    final exe = File('${root.path}/v9.9.9/Glimpr-Setup-9.9.9.exe')
+      ..createSync(recursive: true)
+      // Same length as the genuine payload, one byte different.
+      ..writeAsStringSync('Payload of https://x/setup.exe');
+    expect(exe.lengthSync(), 'payload of https://x/setup.exe'.length);
+    final urls = <String>[];
+    final s = withDigests(root, urls,
+        exeDigest: digestOf('payload of https://x/setup.exe'));
+    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(urls, contains('https://x/setup.exe'));
+    expect(exe.readAsStringSync(), 'payload of https://x/setup.exe');
+  });
+
+  test('a listing without a digest never reuses a staged file', () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final root = await stage.createTemp('root');
+    final urls = <String>[];
+    final s = make(assets: {
+      'Glimpr-Setup-9.9.9.exe': 'https://x/setup.exe',
+      'Glimpr-Setup-9.9.9.exe.sig': 'https://x/setup.sig',
+    }, downloadedUrls: urls, root: root);
+    expect(await s.installTag('v9.9.9'), isTrue);
+    urls.clear();
+    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(urls, contains('https://x/setup.exe'));
+  });
+
+  test('verifiedAgainst checks existence, length and sha256', () async {
+    final dir = await stage.createTemp('v');
+    final f = File('${dir.path}/a.bin')..writeAsStringSync('abc');
+    final good = AssetInfo(url: 'u', size: 3, digest: digestOf('abc'));
+    expect(await UpdaterService.verifiedAgainst(f, good), isTrue);
+    expect(
+        await UpdaterService.verifiedAgainst(
+            f, AssetInfo(url: 'u', size: 4, digest: digestOf('abc'))),
+        isFalse);
+    expect(
+        await UpdaterService.verifiedAgainst(
+            f, AssetInfo(url: 'u', size: 3, digest: digestOf('abd'))),
+        isFalse);
+    expect(await UpdaterService.verifiedAgainst(f, const AssetInfo(url: 'u')),
+        isFalse);
+    expect(
+        await UpdaterService.verifiedAgainst(
+            File('${dir.path}/missing'), good),
+        isFalse);
+  });
+
+  test('cleanupStaging keeps only the pending tag and drops legacy folders',
+      () async {
+    final root = await stage.createTemp('root');
+    final legacy = await stage.createTemp('legacy');
+    for (final t in ['v1.0.0', 'v1.1.0', 'v1.2.0']) {
+      File('${root.path}/$t/Glimpr-Setup-$t.exe')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('x');
+    }
+    Directory('${legacy.path}/glimpr-update1234').createSync();
+    Directory('${legacy.path}/other').createSync();
+    final s = UpdaterService(
+      fetchAssets: (_) async => null,
+      download: (_, _, _) async {},
+      stageRoot: () async => root,
+      legacyTemp: legacy,
+    );
+    await s.cleanupStaging(keepTag: 'v1.2.0');
+    expect(Directory('${root.path}/v1.2.0').existsSync(), isTrue);
+    expect(Directory('${root.path}/v1.1.0').existsSync(), isFalse);
+    expect(Directory('${root.path}/v1.0.0').existsSync(), isFalse);
+    expect(Directory('${legacy.path}/glimpr-update1234').existsSync(), isFalse);
+    expect(Directory('${legacy.path}/other').existsSync(), isTrue);
+    await s.cleanupStaging();
+    expect(Directory('${root.path}/v1.2.0').existsSync(), isFalse);
+  });
+
+  test('parseReleaseAssets keeps size and digest', () {
+    final assets = parseReleaseAssets(jsonEncode({
+      'assets': [
+        {
+          'name': 'Glimpr-Setup-1.0.0.exe',
+          'browser_download_url': 'https://x/s.exe',
+          'size': 42,
+          'digest': 'sha256:abc',
+        },
+        {'name': 'old.exe', 'browser_download_url': 'https://x/o.exe'},
+      ]
+    }))!;
+    expect(assets['Glimpr-Setup-1.0.0.exe']!.size, 42);
+    expect(assets['Glimpr-Setup-1.0.0.exe']!.digest, 'sha256:abc');
+    expect(assets['old.exe']!.size, isNull);
+    expect(assets['old.exe']!.digest, isNull);
   });
 
   test('DownloadProgress.fraction is null without a total', () {

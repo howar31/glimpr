@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -34,8 +35,19 @@ class DownloadProgress {
 /// Progress sink for one download; [total] is null when unknown.
 typedef ProgressSink = void Function(int received, int? total);
 
-/// name -> browser_download_url for one release tag.
-typedef ReleaseAssets = Map<String, String>;
+/// One release asset as the GitHub API lists it. [digest] is the API's
+/// `sha256:<hex>` when present (null on older listings); a staged file is
+/// reused ONLY when both [size] and [digest] match it, so a file that was
+/// tampered with, truncated, or belongs to a re-cut release is re-downloaded.
+class AssetInfo {
+  const AssetInfo({required this.url, this.size, this.digest});
+  final String url;
+  final int? size;
+  final String? digest;
+}
+
+/// name -> asset for one release tag.
+typedef ReleaseAssets = Map<String, AssetInfo>;
 
 const kUpdateChannel = MethodChannel('glimpr/update');
 
@@ -53,7 +65,7 @@ const kDownloadStallTimeout = Duration(seconds: 30);
 /// (Glimpr-Setup-1.1.1.exe), so resolution matches by prefix + suffix
 /// instead of exact names; pre-1.1.1 unversioned names still match. The
 /// .sig is looked up by the matched exe's own name.
-MapEntry<String, String>? _findAsset(ReleaseAssets assets, String suffix) {
+MapEntry<String, AssetInfo>? _findAsset(ReleaseAssets assets, String suffix) {
   for (final e in assets.entries) {
     if (e.key.startsWith('Glimpr') && e.key.endsWith(suffix)) return e;
   }
@@ -64,7 +76,8 @@ class UpdaterService {
   UpdaterService({
     required this.fetchAssets,
     required this.download,
-    required this.stageDir,
+    required this.stageRoot,
+    this.legacyTemp,
     this.channel = kUpdateChannel,
   });
 
@@ -76,8 +89,14 @@ class UpdaterService {
   final Future<void> Function(
       String url, String toPath, ProgressSink onProgress) download;
 
-  /// A fresh writable staging directory per install attempt.
-  final Future<Directory> Function() stageDir;
+  /// The staging root; each tag stages under `<root>/<tag>/`, so a download
+  /// that was applied but not installed (declined UAC, app quit) is found
+  /// again on the next attempt instead of being fetched twice.
+  final Future<Directory> Function() stageRoot;
+
+  /// Where releases before the per-tag layout staged (`glimpr-update*`
+  /// folders in the system temp dir); [cleanupStaging] removes them.
+  final Directory? legacyTemp;
 
   final MethodChannel channel;
 
@@ -118,17 +137,19 @@ class UpdaterService {
       phase.value = UpdatePhase.downloading;
       final assets = await fetchAssets(tag);
       if (assets == null) throw StateError('release listing unavailable');
-      final dir = await stageDir();
+      final dir = await _tagDir(tag);
       if (platformIsWindows) {
         final exe = _findAsset(assets, '.exe');
-        final sigUrl = exe == null ? null : assets['${exe.key}.sig'];
-        if (exe == null || sigUrl == null) {
+        final sig = exe == null ? null : assets['${exe.key}.sig'];
+        if (exe == null || sig == null) {
           throw StateError('installer or signature asset missing');
         }
         final exePath = '${dir.path}${Platform.pathSeparator}${exe.key}';
         final sigPath = '$exePath.sig';
-        await download(exe.value, exePath, _report);
-        await download(sigUrl, sigPath, _ignoreProgress);
+        await _fetchOrReuse(exe.value, exePath);
+        // The signature is always fetched fresh: the staged installer must
+        // verify against what GitHub publishes NOW, never a stored copy.
+        await download(sig.url, sigPath, _ignoreProgress);
         progress.value = null;
         phase.value = UpdatePhase.installing;
         // A declined apply (failed verification, not installed) changed
@@ -136,18 +157,18 @@ class UpdaterService {
         final applied = await channel.invokeMethod(
             'applyStaged',
             {'path': exePath, 'sigPath': sigPath}).timeout(_kApplyTimeout);
-        if (applied != true) throw StateError('apply declined');
+        if (applied != true) await _discardDeclined(exePath);
       } else {
         final dmg = _findAsset(assets, '.dmg');
         if (dmg == null) throw StateError('dmg asset missing');
         final dmgPath = '${dir.path}${Platform.pathSeparator}${dmg.key}';
-        await download(dmg.value, dmgPath, _report);
+        await _fetchOrReuse(dmg.value, dmgPath);
         progress.value = null;
         phase.value = UpdatePhase.installing;
         final applied = await channel
             .invokeMethod('applyStaged', {'path': dmgPath}).timeout(
                 _kApplyTimeout);
-        if (applied != true) throw StateError('apply declined');
+        if (applied != true) await _discardDeclined(dmgPath);
       }
       return true;
     } catch (_) {
@@ -156,7 +177,106 @@ class UpdaterService {
       return false;
     }
   }
+
+  // A file the native side refused (signature / codesign mismatch) must not
+  // be offered again: without this, a staged file whose digest matches the
+  // listing but whose signature does not would be reused and refused on
+  // every tap. Dropping it makes the next attempt download afresh.
+  Future<Never> _discardDeclined(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+    throw StateError('apply declined');
+  }
+
+  Future<Directory> _tagDir(String tag) async {
+    final root = await stageRoot();
+    return Directory('${root.path}${Platform.pathSeparator}$tag')
+        .create(recursive: true);
+  }
+
+  // Reuses the file at [path] when it matches the listing's size AND
+  // sha256 digest; otherwise deletes whatever is there and downloads. A
+  // listing without a digest never qualifies for reuse.
+  Future<void> _fetchOrReuse(AssetInfo asset, String path) async {
+    final f = File(path);
+    if (await verifiedAgainst(f, asset)) {
+      final size = asset.size;
+      _report(size ?? 0, size);
+      return;
+    }
+    if (await f.exists()) await f.delete();
+    await download(asset.url, path, _report);
+  }
+
+  /// Whether [file] is byte-for-byte the asset GitHub lists: it exists, its
+  /// length equals [AssetInfo.size], and its SHA-256 equals
+  /// [AssetInfo.digest] (`sha256:<hex>`). False when the listing carries no
+  /// digest or size, so the answer is never a guess.
+  static Future<bool> verifiedAgainst(File file, AssetInfo asset) async {
+    final size = asset.size;
+    final digest = asset.digest;
+    if (size == null || digest == null) return false;
+    if (!await file.exists() || await file.length() != size) return false;
+    final hex = (await sha256.bind(file.openRead()).first).toString();
+    return digest.toLowerCase() == 'sha256:$hex';
+  }
+
+  /// Whether a download for [tag] is staged (the platform's main asset is
+  /// present under `<root>/<tag>/`). A presence check only; [installTag]
+  /// re-verifies it against the release listing before anything runs.
+  Future<bool> stagedExists(String tag) async {
+    try {
+      final root = await stageRoot();
+      final dir = Directory('${root.path}${Platform.pathSeparator}$tag');
+      if (!await dir.exists()) return false;
+      final suffix = platformIsWindows ? '.exe' : '.dmg';
+      await for (final e in dir.list()) {
+        final name = e.uri.pathSegments.last;
+        if (e is File && name.startsWith('Glimpr') && name.endsWith(suffix)) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Removes every staged tag except [keepTag] (null keeps nothing) and the
+  /// legacy `glimpr-update*` folders in [legacyTemp]. Run at launch: after a
+  /// successful install the running version is the latest, so everything
+  /// goes; after a declined install the pending tag stays for the next tap.
+  Future<void> cleanupStaging({String? keepTag}) async {
+    try {
+      final root = await stageRoot();
+      if (await root.exists()) {
+        await for (final e in root.list()) {
+          if (e is! Directory) continue;
+          if (e.uri.pathSegments.where((s) => s.isNotEmpty).last == keepTag) {
+            continue;
+          }
+          await e.delete(recursive: true);
+        }
+      }
+    } catch (_) {}
+    final legacy = legacyTemp;
+    if (legacy == null) return;
+    try {
+      await for (final e in legacy.list()) {
+        final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
+        if (e is Directory && name.startsWith('glimpr-update')) {
+          await e.delete(recursive: true);
+        }
+      }
+    } catch (_) {}
+  }
 }
+
+/// The production staging root: `<system temp>/Glimpr/update`.
+Future<Directory> defaultStageRoot() =>
+    Directory('${Directory.systemTemp.path}${Platform.pathSeparator}Glimpr'
+            '${Platform.pathSeparator}update')
+        .create(recursive: true);
 
 /// Production asset fetcher: the release-by-tag endpoint (stable releases
 /// only ever reach the updater; see the class doc).
@@ -185,12 +305,19 @@ ReleaseAssets? parseReleaseAssets(String body) {
     if (json is! Map) return null;
     final assets = json['assets'];
     if (assets is! List) return null;
-    final out = <String, String>{};
+    final out = <String, AssetInfo>{};
     for (final a in assets) {
       if (a is! Map) continue;
       final name = a['name'];
       final url = a['browser_download_url'];
-      if (name is String && url is String) out[name] = url;
+      final size = a['size'];
+      final digest = a['digest'];
+      if (name is String && url is String) {
+        out[name] = AssetInfo(
+            url: url,
+            size: size is int ? size : null,
+            digest: digest is String && digest.isNotEmpty ? digest : null);
+      }
     }
     return out;
   } catch (_) {

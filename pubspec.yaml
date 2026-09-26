@@ -53,6 +53,9 @@ dependencies:
   # build swaps this for a same-named private package via pubspec_overrides.yaml.
   glimpr_pro:
     path: packages/glimpr_pro
+  # SHA-256 of a staged update against the release asset's digest before it
+  # is reused (lib/update/updater.dart).
+  crypto: ^3.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter

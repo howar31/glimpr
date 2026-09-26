@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,6 +75,44 @@ void main() {
     await store.setString('update_latest_url', 'https://example.test/rel');
     await openAbout(tester, settings);
     expect(find.text('Update available: v9.9.9'), findsOneWidget);
+  });
+
+  testWidgets('a staged download for the pending release relabels the row',
+      (tester) async {
+    mockMethodChannel(kRoleChannel,
+        handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
+    final store = FakeStore();
+    final settings = Settings(store);
+    await store.setString('update_latest_tag', 'v9.9.9');
+    await store.setString('update_latest_url', 'https://example.test/rel');
+    late Directory root;
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('glimpr-stage-test');
+      File('${root.path}/v9.9.9/Glimpr-macOS-9.9.9.dmg')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('x');
+    });
+    addTearDown(() => root.delete(recursive: true));
+    await tester.pumpWidget(SettingsApp(
+        settings: settings, updateStageRoot: () async => root));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About'));
+    await tester.pumpAndSettle();
+    // The disk probe runs off the badge's critical path: drain real IO
+    // until the relabel lands.
+    for (var i = 0; i < 50; i++) {
+      if (find
+          .text('Update downloaded: v9.9.9, tap to install')
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    expect(find.text('Update downloaded: v9.9.9, tap to install'),
+        findsOneWidget);
+    expect(find.text('Update available: v9.9.9'), findsNothing);
   });
 
   testWidgets('persisted older tag does not show a badge', (tester) async {

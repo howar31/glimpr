@@ -66,7 +66,8 @@ class SettingsApp extends StatefulWidget {
       {super.key,
       required this.settings,
       this.hotkeyService,
-      this.updateFeed});
+      this.updateFeed,
+      this.updateStageRoot});
   final Settings settings;
 
   // The live Tier-1 hotkey service from the control engine, used by the
@@ -78,6 +79,10 @@ class SettingsApp extends StatefulWidget {
   // hit here (main.dart); the About pane follows it in place, so the tray
   // badge and the Settings UI never disagree. Null in tests / other engines.
   final ValueListenable<UpdateCheckResult?>? updateFeed;
+
+  // Where the self-updater stages downloads; tests point it at a temp dir.
+  // Null = the production root (system temp / Glimpr / update).
+  final Future<Directory> Function()? updateStageRoot;
 
   @override
   State<SettingsApp> createState() => _SettingsAppState();
@@ -171,8 +176,20 @@ class _SettingsAppState extends State<SettingsApp>
   late final UpdaterService _updater = UpdaterService(
     fetchAssets: defaultFetchAssets,
     download: defaultDownload,
-    stageDir: () => Directory.systemTemp.createTemp('glimpr-update'),
+    stageRoot: widget.updateStageRoot ?? defaultStageRoot,
+    legacyTemp: Directory.systemTemp,
   );
+  // A download for [_updateAvailableTag] is already staged (an earlier
+  // install was declined or interrupted): the row says so, and the next tap
+  // re-verifies the file against the release listing instead of fetching.
+  // Refreshed off the critical path (disk probe) after the badge itself.
+  bool _updateStaged = false;
+
+  Future<void> _refreshStaged(String? tag) async {
+    final staged = tag != null && await _updater.stagedExists(tag);
+    if (!mounted || staged == _updateStaged) return;
+    setState(() => _updateStaged = staged);
+  }
   // App language choice + the value active since launch (restart-effective,
   // like the warm target): the restart hint shows while they differ.
   String _appLanguage = 'system';
@@ -340,6 +357,7 @@ class _SettingsAppState extends State<SettingsApp>
       _updateUrl = url;
     });
     _pushTrayUpdateStatus();
+    unawaited(_refreshStaged(tag));
   }
 
   // A resident-poll hit (control engine, main.dart) while this UI is alive:
@@ -356,6 +374,7 @@ class _SettingsAppState extends State<SettingsApp>
       _updateUrl = r.url;
       _updateJustCheckedClean = false;
     });
+    unawaited(_refreshStaged(r.latestTag));
   }
 
   // Build the What's-new sections from the persisted release list: every
@@ -394,6 +413,7 @@ class _SettingsAppState extends State<SettingsApp>
     if (handed || !mounted) return;
     _openUrl(url);
     setState(() => _updateFailedNotice = true);
+    unawaited(_refreshStaged(tag));
     _updateFailedTimer?.cancel();
     _updateFailedTimer = Timer(const Duration(seconds: 6), () {
       if (mounted) setState(() => _updateFailedNotice = false);
@@ -1237,11 +1257,14 @@ class _SettingsAppState extends State<SettingsApp>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _l.settingsAboutUpdateAvailable(tag),
+                _updateStaged
+                    ? _l.settingsAboutUpdateReady(tag)
+                    : _l.settingsAboutUpdateAvailable(tag),
                 style: GlimprType.sansStyle(12, 600, t.accentFg),
               ),
               const SizedBox(width: 3),
-              Icon(Icons.download, size: 13, color: t.accentFg),
+              Icon(_updateStaged ? Icons.system_update_alt : Icons.download,
+                  size: 13, color: t.accentFg),
             ],
           ),
         ),
@@ -1340,6 +1363,7 @@ class _SettingsAppState extends State<SettingsApp>
         _updateJustCheckedClean = r != null;
       }
     });
+    unawaited(_refreshStaged(_updateAvailableTag));
     _pushTrayUpdateStatus();
   }
 

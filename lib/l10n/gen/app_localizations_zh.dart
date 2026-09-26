@@ -94,6 +94,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String settingsAboutUpdateReady(String version) {
+    return '更新已下載：$version，點擊安裝';
+  }
+
+  @override
   String get settingsAboutUpToDate => '目前已是最新版本';
 
   @override
@@ -112,7 +117,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsAboutUpdateFailed => '下載失敗，已開啟下載頁面';
+  String get settingsAboutUpdateFailed => '更新失敗，已開啟下載頁面';
 
   @override
   String get settingsSectionUpdates => '更新';
