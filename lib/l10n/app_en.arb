@@ -95,6 +95,10 @@
   "@reportIssueCollecting": {
     "description": "Report-an-issue page: placeholder while the diagnostics are gathered"
   },
+  "reportIssuePrivacyNote": "This information is not sent on its own and contains no personally identifiable data.",
+  "@reportIssuePrivacyNote": {
+    "description": "Report-an-issue page: dim caption under the diagnostics block"
+  },
   "settingsAboutCheckUpdates": "Check for updates",
   "@settingsAboutCheckUpdates": {
     "description": "About pane: manual update-check row label (idle state)"

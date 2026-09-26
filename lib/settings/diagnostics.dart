@@ -70,9 +70,21 @@ String _displayLine(int index, Map d, {required bool windowsScale}) {
       .toList()
     ..sort();
   for (final k in rest) {
-    b.write(', $k=${d[k]}');
+    b.write(', $k=${_value(d[k])}');
   }
   return b.toString();
+}
+
+// Doubles print with at most three decimals (and at least one), so a value
+// the native side held as a 32-bit float (1.2 arriving as
+// 1.2000000476837158) reads as 1.2. Every other type prints as is.
+String _value(Object? v) {
+  if (v is! double) return '$v';
+  var s = v.toStringAsFixed(3);
+  while (s.endsWith('0')) {
+    s = s.substring(0, s.length - 1);
+  }
+  return s.endsWith('.') ? '${s}0' : s;
 }
 
 /// The native side's `diagnostics` reply as a string-keyed map, or null when

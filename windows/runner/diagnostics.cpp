@@ -20,9 +20,11 @@ namespace diag {
 
 namespace {
 
-// "Windows 11 24H2 (10.0.26100.4351)": kernel version via RtlGetVersion (the
-// documented GetVersionEx lies past 8.1 without a manifest), the marketing
-// name + UBR from the CurrentVersion registry key.
+// "Windows 24H2 (10.0.26100.4351)": kernel version via RtlGetVersion (the
+// documented GetVersionEx lies past 8.1 without a manifest) + the
+// DisplayVersion and UBR values from the CurrentVersion registry key. No
+// marketing name: the registry's ProductName still says Windows 10 on 11,
+// and any build-number threshold would misname the next major release.
 std::string OsString() {
   using RtlGetVersionFn = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
   RTL_OSVERSIONINFOW v{};
@@ -50,10 +52,9 @@ std::string OsString() {
     }
     RegCloseKey(key);
   }
-  const char* name = v.dwBuildNumber >= 22000 ? "Windows 11" : "Windows 10";
   char out[128];
   const std::string dv = Utf8FromUtf16(display_version);
-  sprintf_s(out, "%s%s%s (%lu.%lu.%lu.%lu)", name, dv.empty() ? "" : " ",
+  sprintf_s(out, "Windows%s%s (%lu.%lu.%lu.%lu)", dv.empty() ? "" : " ",
             dv.c_str(), v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
             ubr);
   return out;
@@ -70,8 +71,22 @@ std::string ArchString() {
   }
 }
 
-// GPU adapters (software renderers skipped) + which adapter drives each
-// monitor, from one DXGI walk.
+// "32.0.15.6614": the adapter's user-mode driver version, the four 16-bit
+// fields of the LARGE_INTEGER CheckInterfaceSupport reports.
+std::string DriverVersion(IDXGIAdapter1* adapter) {
+  LARGE_INTEGER v{};
+  if (FAILED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &v))) {
+    return "";
+  }
+  char out[48];
+  sprintf_s(out, "%u.%u.%u.%u", HIWORD(v.HighPart), LOWORD(v.HighPart),
+            HIWORD(v.LowPart), LOWORD(v.LowPart));
+  return out;
+}
+
+// GPU adapters exactly as DXGI enumerates them (software renderers skipped;
+// a GPU listed twice is reported twice, the snapshot does not interpret) +
+// which adapter drives each monitor, from one DXGI walk.
 struct AdapterInfo {
   std::vector<std::string> gpus;
   std::map<HMONITOR, std::string> adapter_for_monitor;
@@ -92,7 +107,9 @@ AdapterInfo WalkAdapters() {
     if (SUCCEEDED(adapter->GetDesc1(&ad)) &&
         !(ad.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
       name = Utf8FromUtf16(ad.Description);
-      info.gpus.push_back(name);
+      const std::string driver = DriverVersion(adapter);
+      info.gpus.push_back(driver.empty() ? name
+                                         : name + " (driver " + driver + ")");
     }
     for (UINT o = 0;; ++o) {
       IDXGIOutput* output = nullptr;
@@ -165,6 +182,9 @@ EncodableMap DisplayEntry(HMONITOR m, const AdapterInfo& adapters) {
     std::string name = FriendlyName(mi.szDevice);
     if (name.empty()) name = Utf8FromUtf16(mi.szDevice);
     d[EncodableValue("name")] = EncodableValue(name);
+    // The GDI device (\\.\DISPLAYn) matches the numbering in Windows'
+    // display settings, which the EDID name alone does not reveal.
+    d[EncodableValue("device")] = EncodableValue(Utf8FromUtf16(mi.szDevice));
   }
   UINT dpi_x = 96, dpi_y = 96;
   if (SUCCEEDED(GetDpiForMonitor(m, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {

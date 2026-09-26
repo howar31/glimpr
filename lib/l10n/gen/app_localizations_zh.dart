@@ -80,6 +80,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reportIssueCollecting => '蒐集中…';
 
   @override
+  String get reportIssuePrivacyNote => '這些資訊不會主動傳送，也不含可識別的個人資料。';
+
+  @override
   String get settingsAboutCheckUpdates => '檢查更新';
 
   @override

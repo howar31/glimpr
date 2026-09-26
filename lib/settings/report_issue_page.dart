@@ -96,6 +96,9 @@ class _ReportIssueViewState extends State<ReportIssueView> {
                           .copyWith(height: 1.55),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(l.reportIssuePrivacyNote,
+                      style: GlimprType.sansStyle(11.5, 400, t.fg4)),
                 ],
               );
             },

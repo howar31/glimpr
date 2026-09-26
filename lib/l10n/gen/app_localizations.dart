@@ -230,6 +230,12 @@ abstract class AppLocalizations {
   /// **'Collecting…'**
   String get reportIssueCollecting;
 
+  /// Report-an-issue page: dim caption under the diagnostics block
+  ///
+  /// In en, this message translates to:
+  /// **'This information is not sent on its own and contains no personally identifiable data.'**
+  String get reportIssuePrivacyNote;
+
   /// About pane: manual update-check row label (idle state)
   ///
   /// In en, this message translates to:

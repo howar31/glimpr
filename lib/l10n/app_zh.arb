@@ -22,6 +22,7 @@
   "reportIssueCopied": "已複製",
   "reportIssueDiagnostics": "診斷資訊",
   "reportIssueCollecting": "蒐集中…",
+  "reportIssuePrivacyNote": "這些資訊不會主動傳送，也不含可識別的個人資料。",
   "settingsAboutCheckUpdates": "檢查更新",
   "settingsAboutChecking": "檢查中…",
   "settingsAboutUpdateAvailable": "有新版本：{version}",

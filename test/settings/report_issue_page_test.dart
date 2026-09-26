@@ -47,6 +47,10 @@ void main() {
     await tester.pump(); // FutureBuilder rebuild
     expect(find.text('Collecting…'), findsNothing);
     expect(find.text('Glimpr 1.0.0, macOS'), findsOneWidget);
+    expect(
+        find.text(
+            'This information is not sent on its own and contains no personally identifiable data.'),
+        findsOneWidget);
   });
 
   testWidgets('the GitHub button opens the prefilled form URL',

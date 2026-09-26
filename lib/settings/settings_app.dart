@@ -1385,7 +1385,8 @@ class _SettingsAppState extends State<SettingsApp>
     final ctx = _pageContext;
     if (ctx == null) return;
     final tokens = GlimprTheme.of(ctx);
-    final locale = Localizations.localeOf(ctx).toLanguageTag();
+    // The OS locale (the app's own choice is the app_language setting).
+    final locale = ui.PlatformDispatcher.instance.locale.toLanguageTag();
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => glimprLicenseSurface(
           tokens,

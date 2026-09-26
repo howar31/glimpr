@@ -82,6 +82,32 @@ void main() {
           'Display 1: DELL AW3225QF, 3840x2160 @150%, color_space=12, hdr=true, max_nits=1000.0, sdr_white_nits=240.0');
     });
 
+    test('doubles print with at most three decimals', () {
+      final text = formatDiagnostics(
+        appVersion: '1.0.0',
+        isDev: false,
+        platformName: 'macOS',
+        locale: 'en',
+        native: {
+          'displays': [
+            {
+              'name': 'D',
+              'width': 1,
+              'height': 1,
+              'scale': 2.0,
+              'edr_current': 1.2000000476837158,
+              'edr_potential': 16.0,
+              'ratio': 1.23456,
+              'count': 3,
+            },
+          ],
+        },
+        settings: const {},
+      );
+      expect(text.split('\n').last,
+          'Display 1: D, 1x1 @2x, count=3, edr_current=1.2, edr_potential=16.0, ratio=1.235');
+    });
+
     test('a missing native map is reported instead of crashing', () {
       final text = formatDiagnostics(
         appVersion: '1.0.0',

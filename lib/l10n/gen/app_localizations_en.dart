@@ -80,6 +80,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportIssueCollecting => 'Collecting…';
 
   @override
+  String get reportIssuePrivacyNote =>
+      'This information is not sent on its own and contains no personally identifiable data.';
+
+  @override
   String get settingsAboutCheckUpdates => 'Check for updates';
 
   @override

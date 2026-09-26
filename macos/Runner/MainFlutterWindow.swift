@@ -916,14 +916,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   /// per-screen keys other than name/width/height/scale/primary print as
   /// `key=value`, so adding one here needs no Dart change.
   static func diagnosticsSnapshot() -> [String: Any] {
-    let pi = ProcessInfo.processInfo
-    let v = pi.operatingSystemVersion
-    var build = ""
-    // "Version 26.0.1 (Build 25A362)" -> "25A362".
-    if let open = pi.operatingSystemVersionString.range(of: "(Build "),
-       let close = pi.operatingSystemVersionString.range(of: ")", range: open.upperBound..<pi.operatingSystemVersionString.endIndex) {
-      build = String(pi.operatingSystemVersionString[open.upperBound..<close.lowerBound])
-    }
+    let v = ProcessInfo.processInfo.operatingSystemVersion
+    // The build tag straight from the kernel (no parsing of the localized
+    // operatingSystemVersionString).
+    let build = sysctlString("kern.osversion") ?? ""
     let os = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
       + (build.isEmpty ? "" : " (\(build))")
     var uts = utsname()
