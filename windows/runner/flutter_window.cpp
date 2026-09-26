@@ -17,6 +17,7 @@
 #include "app_identity.h"
 #include "diagnostics.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "install_scope.h"
 #include "perf_log.h"
 #include "update_installer.h"
 #include "utils.h"
@@ -364,9 +365,25 @@ bool FlutterWindow::OnCreate() {
         const auto& m = call.method_name();
         if (m == "updateSupported") {
           result->Success(EncodableValue(update_installer::UpdateSupported()));
+        } else if (m == "installScope") {
+          // Settings > Advanced install-scope row: which scope this copy
+          // runs from (null = portable / dev tree, row hidden) and whether
+          // the account may switch it.
+          const auto scope = update_installer::CurrentScope();
+          EncodableMap out;
+          if (scope == install_scope::Scope::kNone) {
+            out[EncodableValue("scope")] = EncodableValue();
+          } else {
+            out[EncodableValue("scope")] =
+                EncodableValue(install_scope::ScopeName(scope));
+          }
+          out[EncodableValue("admin")] =
+              EncodableValue(update_installer::IsAdminAccount());
+          result->Success(EncodableValue(out));
         } else if (m == "applyStaged") {
           std::wstring exe_path;
           std::wstring sig_path;
+          std::string scope;
           if (const auto* args =
                   std::get_if<EncodableMap>(call.arguments())) {
             for (const auto& kv : *args) {
@@ -376,12 +393,15 @@ bool FlutterWindow::OnCreate() {
               std::wstring wide = Utf16FromUtf8(*v);
               if (*k == "path") exe_path = wide;
               if (*k == "sigPath") sig_path = wide;
+              if (*k == "scope") scope = *v;
             }
           }
           const auto applied =
               exe_path.empty() || sig_path.empty()
                   ? update_installer::ApplyResult::kRejected
-                  : update_installer::ApplyStaged(exe_path, sig_path);
+                  : update_installer::ApplyStaged(
+                        exe_path, sig_path,
+                        install_scope::TargetFromString(scope));
           if (applied == update_installer::ApplyResult::kCancelled) {
             // Declined elevation: the app keeps running, the staged file
             // stays for the next tap (no error, per the UAC guidelines).

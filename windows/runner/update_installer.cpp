@@ -84,18 +84,69 @@ bool ReadAllBytes(const std::wstring& path, std::vector<unsigned char>* out) {
 
 }  // namespace
 
-bool UpdateSupported() {
+install_scope::Scope CurrentScope() {
   const std::wstring exe_dir = Canon(ExeDir());
-  if (exe_dir.empty()) return false;
-  for (HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
-    const std::wstring loc = ReadInstallLocation(root);
-    if (!loc.empty() && Canon(loc) == exe_dir) return true;
+  if (exe_dir.empty()) return install_scope::Scope::kNone;
+  const std::wstring machine = ReadInstallLocation(HKEY_LOCAL_MACHINE);
+  if (!machine.empty() && Canon(machine) == exe_dir) {
+    return install_scope::Scope::kMachine;
   }
-  return false;
+  const std::wstring user = ReadInstallLocation(HKEY_CURRENT_USER);
+  if (!user.empty() && Canon(user) == exe_dir) {
+    return install_scope::Scope::kUser;
+  }
+  return install_scope::Scope::kNone;
+}
+
+bool UpdateSupported() {
+  return CurrentScope() != install_scope::Scope::kNone;
+}
+
+bool IsAdminAccount() {
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE,
+                        &token)) {
+    return false;
+  }
+  // Under UAC an administrator's interactive process holds a FILTERED
+  // token; membership must be judged on the linked full token, or every
+  // administrator account would read as a standard user.
+  HANDLE judged = token;
+  HANDLE linked = nullptr;
+  TOKEN_ELEVATION_TYPE type = TokenElevationTypeDefault;
+  DWORD n = 0;
+  if (GetTokenInformation(token, TokenElevationType, &type, sizeof(type),
+                          &n) &&
+      type == TokenElevationTypeLimited) {
+    TOKEN_LINKED_TOKEN lt = {};
+    if (GetTokenInformation(token, TokenLinkedToken, &lt, sizeof(lt), &n)) {
+      linked = lt.LinkedToken;
+      judged = linked;
+    }
+  }
+  bool admin = false;
+  // CheckTokenMembership wants an impersonation token.
+  HANDLE imp = nullptr;
+  if (DuplicateToken(judged, SecurityIdentification, &imp)) {
+    SID_IDENTIFIER_AUTHORITY nt = SECURITY_NT_AUTHORITY;
+    PSID admins = nullptr;
+    if (AllocateAndInitializeSid(&nt, 2, SECURITY_BUILTIN_DOMAIN_RID,
+                                 DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0,
+                                 &admins)) {
+      BOOL member = FALSE;
+      if (CheckTokenMembership(imp, admins, &member)) admin = member != FALSE;
+      FreeSid(admins);
+    }
+    CloseHandle(imp);
+  }
+  if (linked) CloseHandle(linked);
+  CloseHandle(token);
+  return admin;
 }
 
 ApplyResult ApplyStaged(const std::wstring& exe_path,
-                        const std::wstring& sig_path) {
+                        const std::wstring& sig_path,
+                        install_scope::Target target) {
   if (!UpdateSupported()) return ApplyResult::kRejected;
   std::vector<unsigned char> exe_bytes;
   std::vector<unsigned char> sig_bytes;
@@ -109,19 +160,24 @@ ApplyResult ApplyStaged(const std::wstring& exe_path,
   }
   // Verified: drop the Mark-of-the-Web so the silent run is not gated.
   DeleteFileW((exe_path + L":Zone.Identifier").c_str());
-  // The installer's manifest requests administrator rights, so ShellExecuteEx
-  // raises the elevation prompt here, with this app still running. Its
-  // AppMutex check would refuse to start while our single-instance mutex
-  // exists, so the mutex goes first (and comes back on a decline).
-  wchar_t params[128];
-  swprintf_s(params, L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /PID=%lu",
-             GetCurrentProcessId());
+  // The installer's manifest no longer asks for administrator rights (it
+  // installs per user by default), so elevation is OUR choice: the runas
+  // verb whenever a machine scope is involved, plain open otherwise. Either
+  // way the app is still running, so a declined prompt leaves it untouched.
+  // Setup's AppMutex check would refuse to start while our single-instance
+  // mutex exists, so the mutex goes first (and comes back on a decline).
+  const install_scope::Scope current = CurrentScope();
+  const install_scope::Scope effective =
+      install_scope::Effective(current, target);
+  const std::wstring params =
+      install_scope::InstallerParams(effective, GetCurrentProcessId());
+  const bool elevate = install_scope::NeedsElevation(current, effective);
   SHELLEXECUTEINFOW sei = {};
   sei.cbSize = sizeof(sei);
   sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
-  sei.lpVerb = L"open";
+  sei.lpVerb = elevate ? L"runas" : L"open";
   sei.lpFile = exe_path.c_str();
-  sei.lpParameters = params;
+  sei.lpParameters = params.c_str();
   sei.nShow = SW_SHOWNORMAL;
   instance_mutex::Release();
   if (!ShellExecuteExW(&sei)) {
