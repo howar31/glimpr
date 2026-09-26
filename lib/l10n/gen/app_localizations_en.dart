@@ -133,6 +133,66 @@ class AppLocalizationsEn extends AppLocalizations {
       'Every six hours, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.';
 
   @override
+  String get settingsSectionInstall => 'Installation';
+
+  @override
+  String get settingsInstallScopeTitle => 'Install scope';
+
+  @override
+  String get settingsInstallScopeUser => 'This account only';
+
+  @override
+  String get settingsInstallScopeMachine => 'All accounts';
+
+  @override
+  String get settingsInstallScopeAdminHint =>
+      'Changing this needs an administrator account';
+
+  @override
+  String get installScopeCurrentUser =>
+      'Glimpr is installed for this account only.';
+
+  @override
+  String get installScopeCurrentMachine =>
+      'Glimpr is installed for all accounts on this computer.';
+
+  @override
+  String get installScopeEffects => 'What switching does';
+
+  @override
+  String get installScopeEffectUac =>
+      'Windows asks for administrator approval once (UAC).';
+
+  @override
+  String get installScopeEffectRestart =>
+      'Glimpr restarts; settings, recent items and launch at login are kept.';
+
+  @override
+  String get installScopeEffectUserNoUac =>
+      'Updates no longer ask for administrator approval.';
+
+  @override
+  String get installScopeEffectUserOthers =>
+      'Other accounts on this computer will no longer have Glimpr.';
+
+  @override
+  String get installScopeEffectMachineAll =>
+      'Glimpr becomes available to every account on this computer.';
+
+  @override
+  String get installScopeEffectMachineUac =>
+      'Every update asks for administrator approval.';
+
+  @override
+  String get installScopeSwitchToUser => 'Switch to this account only';
+
+  @override
+  String get installScopeSwitchToMachine => 'Switch to all accounts';
+
+  @override
+  String get installScopeFailed => 'The switch failed; nothing was changed.';
+
+  @override
   String settingsLicenseCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

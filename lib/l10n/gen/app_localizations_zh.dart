@@ -129,6 +129,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsUpdateCheckBody => '每六小時向 GitHub 查詢一次是否有新版本，不會傳送其他資料。';
 
   @override
+  String get settingsSectionInstall => '安裝';
+
+  @override
+  String get settingsInstallScopeTitle => '安裝範圍';
+
+  @override
+  String get settingsInstallScopeUser => '僅此帳號';
+
+  @override
+  String get settingsInstallScopeMachine => '所有帳號';
+
+  @override
+  String get settingsInstallScopeAdminHint => '變更需要系統管理員帳號';
+
+  @override
+  String get installScopeCurrentUser => 'Glimpr 目前只安裝給此帳號。';
+
+  @override
+  String get installScopeCurrentMachine => 'Glimpr 目前安裝給這台電腦的所有帳號。';
+
+  @override
+  String get installScopeEffects => '切換後的影響';
+
+  @override
+  String get installScopeEffectUac => 'Windows 會要求一次系統管理員核准（UAC）。';
+
+  @override
+  String get installScopeEffectRestart => 'Glimpr 會重新啟動；設定、最近項目與登入時啟動都會保留。';
+
+  @override
+  String get installScopeEffectUserNoUac => '之後更新不再需要系統管理員核准。';
+
+  @override
+  String get installScopeEffectUserOthers => '這台電腦的其他帳號將無法使用 Glimpr。';
+
+  @override
+  String get installScopeEffectMachineAll => '這台電腦的所有帳號都能使用 Glimpr。';
+
+  @override
+  String get installScopeEffectMachineUac => '之後每次更新都需要系統管理員核准。';
+
+  @override
+  String get installScopeSwitchToUser => '改為僅此帳號';
+
+  @override
+  String get installScopeSwitchToMachine => '改為所有帳號';
+
+  @override
+  String get installScopeFailed => '切換失敗，未做任何變更。';
+
+  @override
   String settingsLicenseCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

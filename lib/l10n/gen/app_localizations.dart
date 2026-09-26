@@ -312,6 +312,108 @@ abstract class AppLocalizations {
   /// **'Every six hours, Glimpr asks GitHub whether a newer release exists. Nothing else is sent.'**
   String get settingsUpdateCheckBody;
 
+  /// Advanced pane (Windows): install-scope section label
+  ///
+  /// In en, this message translates to:
+  /// **'Installation'**
+  String get settingsSectionInstall;
+
+  /// Advanced pane (Windows): install-scope row title
+  ///
+  /// In en, this message translates to:
+  /// **'Install scope'**
+  String get settingsInstallScopeTitle;
+
+  /// Install scope value: per-user install
+  ///
+  /// In en, this message translates to:
+  /// **'This account only'**
+  String get settingsInstallScopeUser;
+
+  /// Install scope value: machine-wide install
+  ///
+  /// In en, this message translates to:
+  /// **'All accounts'**
+  String get settingsInstallScopeMachine;
+
+  /// Install-scope row hint when the account is not an administrator (row disabled)
+  ///
+  /// In en, this message translates to:
+  /// **'Changing this needs an administrator account'**
+  String get settingsInstallScopeAdminHint;
+
+  /// Install-scope page: current state, per-user
+  ///
+  /// In en, this message translates to:
+  /// **'Glimpr is installed for this account only.'**
+  String get installScopeCurrentUser;
+
+  /// Install-scope page: current state, machine-wide
+  ///
+  /// In en, this message translates to:
+  /// **'Glimpr is installed for all accounts on this computer.'**
+  String get installScopeCurrentMachine;
+
+  /// Install-scope page: label above the effects list
+  ///
+  /// In en, this message translates to:
+  /// **'What switching does'**
+  String get installScopeEffects;
+
+  /// Install-scope page: effect, both directions
+  ///
+  /// In en, this message translates to:
+  /// **'Windows asks for administrator approval once (UAC).'**
+  String get installScopeEffectUac;
+
+  /// Install-scope page: effect, both directions
+  ///
+  /// In en, this message translates to:
+  /// **'Glimpr restarts; settings, recent items and launch at login are kept.'**
+  String get installScopeEffectRestart;
+
+  /// Install-scope page: effect when switching to this account only
+  ///
+  /// In en, this message translates to:
+  /// **'Updates no longer ask for administrator approval.'**
+  String get installScopeEffectUserNoUac;
+
+  /// Install-scope page: effect when switching to this account only
+  ///
+  /// In en, this message translates to:
+  /// **'Other accounts on this computer will no longer have Glimpr.'**
+  String get installScopeEffectUserOthers;
+
+  /// Install-scope page: effect when switching to all accounts
+  ///
+  /// In en, this message translates to:
+  /// **'Glimpr becomes available to every account on this computer.'**
+  String get installScopeEffectMachineAll;
+
+  /// Install-scope page: effect when switching to all accounts
+  ///
+  /// In en, this message translates to:
+  /// **'Every update asks for administrator approval.'**
+  String get installScopeEffectMachineUac;
+
+  /// Install-scope page: action button (to per-user)
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to this account only'**
+  String get installScopeSwitchToUser;
+
+  /// Install-scope page: action button (to machine-wide)
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to all accounts'**
+  String get installScopeSwitchToMachine;
+
+  /// Install-scope page: inline notice after a failed download or verification
+  ///
+  /// In en, this message translates to:
+  /// **'The switch failed; nothing was changed.'**
+  String get installScopeFailed;
+
   /// About > Licenses: number of licenses a package has
   ///
   /// In en, this message translates to:

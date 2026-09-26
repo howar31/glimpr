@@ -158,6 +158,74 @@
   "@settingsUpdateCheckBody": {
     "description": "Advanced pane: auto update-check toggle explanation"
   },
+  "settingsSectionInstall": "Installation",
+  "@settingsSectionInstall": {
+    "description": "Advanced pane (Windows): install-scope section label"
+  },
+  "settingsInstallScopeTitle": "Install scope",
+  "@settingsInstallScopeTitle": {
+    "description": "Advanced pane (Windows): install-scope row title"
+  },
+  "settingsInstallScopeUser": "This account only",
+  "@settingsInstallScopeUser": {
+    "description": "Install scope value: per-user install"
+  },
+  "settingsInstallScopeMachine": "All accounts",
+  "@settingsInstallScopeMachine": {
+    "description": "Install scope value: machine-wide install"
+  },
+  "settingsInstallScopeAdminHint": "Changing this needs an administrator account",
+  "@settingsInstallScopeAdminHint": {
+    "description": "Install-scope row hint when the account is not an administrator (row disabled)"
+  },
+  "installScopeCurrentUser": "Glimpr is installed for this account only.",
+  "@installScopeCurrentUser": {
+    "description": "Install-scope page: current state, per-user"
+  },
+  "installScopeCurrentMachine": "Glimpr is installed for all accounts on this computer.",
+  "@installScopeCurrentMachine": {
+    "description": "Install-scope page: current state, machine-wide"
+  },
+  "installScopeEffects": "What switching does",
+  "@installScopeEffects": {
+    "description": "Install-scope page: label above the effects list"
+  },
+  "installScopeEffectUac": "Windows asks for administrator approval once (UAC).",
+  "@installScopeEffectUac": {
+    "description": "Install-scope page: effect, both directions"
+  },
+  "installScopeEffectRestart": "Glimpr restarts; settings, recent items and launch at login are kept.",
+  "@installScopeEffectRestart": {
+    "description": "Install-scope page: effect, both directions"
+  },
+  "installScopeEffectUserNoUac": "Updates no longer ask for administrator approval.",
+  "@installScopeEffectUserNoUac": {
+    "description": "Install-scope page: effect when switching to this account only"
+  },
+  "installScopeEffectUserOthers": "Other accounts on this computer will no longer have Glimpr.",
+  "@installScopeEffectUserOthers": {
+    "description": "Install-scope page: effect when switching to this account only"
+  },
+  "installScopeEffectMachineAll": "Glimpr becomes available to every account on this computer.",
+  "@installScopeEffectMachineAll": {
+    "description": "Install-scope page: effect when switching to all accounts"
+  },
+  "installScopeEffectMachineUac": "Every update asks for administrator approval.",
+  "@installScopeEffectMachineUac": {
+    "description": "Install-scope page: effect when switching to all accounts"
+  },
+  "installScopeSwitchToUser": "Switch to this account only",
+  "@installScopeSwitchToUser": {
+    "description": "Install-scope page: action button (to per-user)"
+  },
+  "installScopeSwitchToMachine": "Switch to all accounts",
+  "@installScopeSwitchToMachine": {
+    "description": "Install-scope page: action button (to machine-wide)"
+  },
+  "installScopeFailed": "The switch failed; nothing was changed.",
+  "@installScopeFailed": {
+    "description": "Install-scope page: inline notice after a failed download or verification"
+  },
   "settingsLicenseCount": "{count, plural, =1{1 license} other{{count} licenses}}",
   "@settingsLicenseCount": {
     "description": "About > Licenses: number of licenses a package has",
