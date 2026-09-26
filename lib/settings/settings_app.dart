@@ -410,8 +410,14 @@ class _SettingsAppState extends State<SettingsApp>
       _openUrl(url);
       return;
     }
-    final handed = await _updater.installTag(tag);
-    if (handed || !mounted) return;
+    final outcome = await _updater.installTag(tag);
+    if (outcome == InstallOutcome.handed || !mounted) return;
+    if (outcome == InstallOutcome.cancelled) {
+      // Declined elevation: back to the row as it was (the download stays
+      // staged), no error, per the platform's elevation guidelines.
+      unawaited(_refreshStaged(tag));
+      return;
+    }
     _openUrl(url);
     setState(() => _updateFailedNotice = true);
     unawaited(_refreshStaged(tag));

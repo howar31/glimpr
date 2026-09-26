@@ -378,15 +378,21 @@ bool FlutterWindow::OnCreate() {
               if (*k == "sigPath") sig_path = wide;
             }
           }
-          if (!exe_path.empty() && !sig_path.empty() &&
-              update_installer::ApplyStaged(exe_path, sig_path)) {
+          const auto applied =
+              exe_path.empty() || sig_path.empty()
+                  ? update_installer::ApplyResult::kRejected
+                  : update_installer::ApplyStaged(exe_path, sig_path);
+          if (applied == update_installer::ApplyResult::kCancelled) {
+            // Declined elevation: the app keeps running, the staged file
+            // stays for the next tap (no error, per the UAC guidelines).
+            result->Success(EncodableValue("cancelled"));
+          } else if (applied == update_installer::ApplyResult::kLaunched) {
             if (tray_icon_) tray_icon_->Remove();
             result->Success(EncodableValue(true));
             // Exit AFTER a short beat so the Settings UI can paint its
-            // "installing, restarting" state (macOS shows it for the seconds
-            // its apply takes; the win apply is near-instant). The watcher
-            // waits on our death before running the installer, and force-exit
-            // is still required: a clean engine teardown can hang (same
+            // "installing, restarting" state. The elevated installer waits
+            // on this process id before replacing files, and force-exit is
+            // still required: a clean engine teardown can hang (same
             // rationale as the relaunch handler).
             // The installer replaces the exe the overlay host also maps: end
             // the host now, on this thread, not from the exit thread below.

@@ -2,12 +2,15 @@
 
 #include <windows.h>
 
+#include <shellapi.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <vector>
 
 #include "ed25519/ed25519.h"
+#include "instance_mutex.h"
 
 namespace update_installer {
 
@@ -37,12 +40,6 @@ std::wstring ExeDir() {
   std::wstring path(buf, n);
   size_t slash = path.find_last_of(L'\\');
   return slash == std::wstring::npos ? L"" : path.substr(0, slash);
-}
-
-std::wstring ExeFile() {
-  wchar_t buf[MAX_PATH];
-  DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
-  return (n == 0 || n >= MAX_PATH) ? L"" : std::wstring(buf, n);
 }
 
 // 8.3 short names (a shortcut or launcher may hand us C:\PROGRA~1\...) must
@@ -97,44 +94,43 @@ bool UpdateSupported() {
   return false;
 }
 
-bool ApplyStaged(const std::wstring& exe_path, const std::wstring& sig_path) {
-  if (!UpdateSupported()) return false;
+ApplyResult ApplyStaged(const std::wstring& exe_path,
+                        const std::wstring& sig_path) {
+  if (!UpdateSupported()) return ApplyResult::kRejected;
   std::vector<unsigned char> exe_bytes;
   std::vector<unsigned char> sig_bytes;
-  if (!ReadAllBytes(exe_path, &exe_bytes)) return false;
+  if (!ReadAllBytes(exe_path, &exe_bytes)) return ApplyResult::kRejected;
   if (!ReadAllBytes(sig_path, &sig_bytes) || sig_bytes.size() != 64) {
-    return false;
+    return ApplyResult::kRejected;
   }
   if (ed25519_verify(sig_bytes.data(), exe_bytes.data(), exe_bytes.size(),
                      kReleasePubKey) != 1) {
-    return false;
+    return ApplyResult::kRejected;
   }
   // Verified: drop the Mark-of-the-Web so the silent run is not gated.
   DeleteFileW((exe_path + L":Zone.Identifier").c_str());
-  // Detached watcher (RelaunchApp's proven shape): wait for this process to
-  // die (ping delay releases the single-instance mutex), run the installer
-  // silently, then start the installed exe. `start` MUST NOT be used for the
-  // installer (the watcher must block on it before relaunching).
-  const std::wstring app_exe = ExeFile();
-  if (app_exe.empty()) return false;
-  // cmd strips the FIRST and LAST quote of the /c string, so every inner
-  // path keeps ONE plain pair (RelaunchApp's proven quoting).
-  wchar_t cmd[2048];
-  swprintf_s(cmd,
-             L"cmd.exe /c \"ping -n 3 127.0.0.1 >nul & \"%ls\" "
-             L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART & "
-             L"start \"\" \"%ls\"\"",
-             exe_path.c_str(), app_exe.c_str());
-  STARTUPINFOW si = {};
-  si.cb = sizeof(si);
-  PROCESS_INFORMATION pi = {};
-  if (!CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                      nullptr, nullptr, &si, &pi)) {
-    return false;
+  // The installer's manifest requests administrator rights, so ShellExecuteEx
+  // raises the elevation prompt here, with this app still running. Its
+  // AppMutex check would refuse to start while our single-instance mutex
+  // exists, so the mutex goes first (and comes back on a decline).
+  wchar_t params[128];
+  swprintf_s(params, L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /PID=%lu",
+             GetCurrentProcessId());
+  SHELLEXECUTEINFOW sei = {};
+  sei.cbSize = sizeof(sei);
+  sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
+  sei.lpVerb = L"open";
+  sei.lpFile = exe_path.c_str();
+  sei.lpParameters = params;
+  sei.nShow = SW_SHOWNORMAL;
+  instance_mutex::Release();
+  if (!ShellExecuteExW(&sei)) {
+    const DWORD err = GetLastError();
+    instance_mutex::Reacquire();
+    return err == ERROR_CANCELLED ? ApplyResult::kCancelled
+                                  : ApplyResult::kRejected;
   }
-  CloseHandle(pi.hThread);
-  CloseHandle(pi.hProcess);
-  return true;
+  return ApplyResult::kLaunched;
 }
 
 }  // namespace update_installer

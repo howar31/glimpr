@@ -13,12 +13,21 @@ namespace update_installer {
 // case-insensitive, trailing-separator-agnostic).
 bool UpdateSupported();
 
+enum class ApplyResult {
+  kLaunched,   // installer running elevated; the caller must exit now
+  kCancelled,  // the user declined the elevation prompt; nothing changed
+  kRejected,   // signature / launch failure; nothing changed
+};
+
 // Verify the staged installer's detached Ed25519 signature against the
 // embedded release public key; on success strip the Mark-of-the-Web and
-// spawn a detached watcher that waits for this process to exit, runs the
-// installer silently, then relaunches the app. Returns true when the watcher
-// was spawned (the caller must then exit); false = nothing was changed.
-bool ApplyStaged(const std::wstring& exe_path, const std::wstring& sig_path);
+// launch the installer silently WHILE THIS PROCESS STILL RUNS, so the
+// elevation prompt appears first: declining it leaves the app running
+// (kCancelled). On consent the installer waits for this process id to exit
+// (its /PID parameter, see windows/installer/glimpr.iss) before replacing
+// files, then relaunches the app un-elevated.
+ApplyResult ApplyStaged(const std::wstring& exe_path,
+                        const std::wstring& sig_path);
 
 }  // namespace update_installer
 

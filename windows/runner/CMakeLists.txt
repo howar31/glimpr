@@ -25,6 +25,7 @@ add_executable(${BINARY_NAME} WIN32
   "hdr_util.cpp"
   "hotkey_host.cpp"
   "image_codec.cpp"
+  "instance_mutex.cpp"
   "live_frame_source.cpp"
   "main.cpp"
   "overlay_host.cpp"

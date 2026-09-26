@@ -5,6 +5,7 @@
 #include <shellapi.h>
 
 #include "app_identity.h"
+#include "instance_mutex.h"
 #include "crash_dump.h"
 #include "editor_host.h"
 #include "flutter_window.h"
@@ -85,9 +86,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Identity-scoped (app_identity.h): a dev build and the installed copy each
   // keep their own single-instance scope and reveal broadcast, so they can
   // coexist without the second launch silently deferring to the other one.
-  HANDLE instance_mutex =
-      ::CreateMutexW(nullptr, TRUE, GLIMPR_MUTEX_NAME_W);
-  if (instance_mutex && ::GetLastError() == ERROR_ALREADY_EXISTS) {
+  if (instance_mutex::AcquireOrDetect()) {
     UINT reveal = ::RegisterWindowMessageW(GLIMPR_REVEAL_MESSAGE_W);
     ::PostMessage(HWND_BROADCAST, reveal, 0, 0);
     ::OleUninitialize();
