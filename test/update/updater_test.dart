@@ -56,8 +56,7 @@ void main() {
       'Glimpr-macOS-9.9.9.dmg': 'https://example.test/mac.dmg',
       'Glimpr-Windows-Portable-9.9.9.zip': 'https://example.test/portable.zip',
     }, downloadedUrls: urls);
-    final handed = await s.installTag('v9.9.9');
-    expect(handed, isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, containsAll(['https://example.test/setup.exe', 'https://example.test/setup.sig']));
     expect(urls, isNot(contains('https://example.test/mac.dmg')));
     expect(urls, isNot(contains('https://example.test/portable.zip')));
@@ -77,7 +76,7 @@ void main() {
     final s = make(assets: {
       'Glimpr-Setup-9.9.9.exe': 'https://example.test/setup.exe',
     });
-    expect(await s.installTag('v9.9.9'), isFalse);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.failed);
     expect(calls.where((c) => c.method == 'applyStaged'), isEmpty);
     expect(s.phase.value, UpdatePhase.failed);
   });
@@ -90,7 +89,7 @@ void main() {
       'Glimpr-Setup-9.9.9.exe': 'https://example.test/setup.exe',
       'Glimpr-macOS-9.9.9.dmg': 'https://example.test/mac.dmg',
     }, downloadedUrls: urls);
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, ['https://example.test/mac.dmg']);
     final args =
         (calls.singleWhere((c) => c.method == 'applyStaged').arguments as Map)
@@ -107,7 +106,7 @@ void main() {
       'Glimpr-Setup.exe.sig': 'https://example.test/setup.sig',
       'Glimpr-macOS.dmg': 'https://example.test/mac.dmg',
     }, downloadedUrls: urls);
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, containsAll(['https://example.test/setup.exe', 'https://example.test/setup.sig']));
   });
 
@@ -121,7 +120,7 @@ void main() {
           throw const SocketException('offline'),
       stageRoot: () async => stage.createTemp('s'),
     );
-    expect(await s.installTag('v9.9.9'), isFalse);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.failed);
     expect(calls.where((c) => c.method == 'applyStaged'), isEmpty);
     expect(s.phase.value, UpdatePhase.failed);
   });
@@ -130,7 +129,7 @@ void main() {
     debugPlatformOverride = TargetPlatform.macOS;
     mockMethodChannel(_update, handler: (c) => c.method == 'applyStaged' ? true : null);
     final s = make(assets: null);
-    expect(await s.installTag('v9.9.9'), isFalse);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.failed);
     expect(s.phase.value, UpdatePhase.failed);
   });
 
@@ -141,7 +140,7 @@ void main() {
         handler: (c) => c.method == 'applyStaged' ? false : null);
     final root = await stage.createTemp('root');
     final s = make(assets: {'Glimpr-macOS.dmg': 'https://x/d.dmg'}, root: root);
-    expect(await s.installTag('v9.9.9'), isFalse);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.failed);
     expect(s.phase.value, UpdatePhase.failed);
     final path = (calls.single.arguments as Map)['path'] as String;
     expect(File(path).existsSync(), isFalse);
@@ -187,7 +186,7 @@ void main() {
       stageRoot: () async => stage.createTemp('s'),
     );
     s.progress.addListener(() => seen.add(s.progress.value));
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     final fractions = seen.map((p) => p?.fraction).toList();
     expect(fractions, [0.0, 0.4, 1.0, null]);
     expect(s.progress.value, isNull);
@@ -225,7 +224,7 @@ void main() {
     const payload = 'payload of https://x/setup.exe';
     final urls = <String>[];
     final s = withDigests(root, urls, exeDigest: digestOf(payload));
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, ['https://x/setup.exe', 'https://x/setup.sig']);
     final exe = File('${root.path}/v9.9.9/Glimpr-Setup-9.9.9.exe');
     expect(exe.existsSync(), isTrue);
@@ -234,7 +233,7 @@ void main() {
     // Second attempt (e.g. after a declined UAC): the installer is NOT
     // downloaded again, the signature is.
     urls.clear();
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, ['https://x/setup.sig']);
   });
 
@@ -252,7 +251,7 @@ void main() {
     final urls = <String>[];
     final s = withDigests(root, urls,
         exeDigest: digestOf('payload of https://x/setup.exe'));
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, contains('https://x/setup.exe'));
     expect(exe.readAsStringSync(), 'payload of https://x/setup.exe');
   });
@@ -267,10 +266,55 @@ void main() {
       'Glimpr-Setup-9.9.9.exe': 'https://x/setup.exe',
       'Glimpr-Setup-9.9.9.exe.sig': 'https://x/setup.sig',
     }, downloadedUrls: urls, root: root);
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     urls.clear();
-    expect(await s.installTag('v9.9.9'), isTrue);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
     expect(urls, contains('https://x/setup.exe'));
+  });
+
+  test('an interrupted download never counts as staged; the retry starts over',
+      () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final root = await stage.createTemp('root');
+    var attempts = 0;
+    final s = UpdaterService(
+      fetchAssets: (tag) async => {
+        'Glimpr-Setup-9.9.9.exe': const AssetInfo(url: 'https://x/setup.exe'),
+        'Glimpr-Setup-9.9.9.exe.sig':
+            const AssetInfo(url: 'https://x/setup.sig'),
+      },
+      download: (url, toPath, onProgress) async {
+        if (url.endsWith('.exe') && ++attempts == 1) {
+          // Half the bytes, then the connection drops.
+          await File(toPath).writeAsString('half');
+          throw const SocketException('dropped');
+        }
+        await File(toPath).writeAsString('payload of $url');
+      },
+      stageRoot: () async => root,
+    );
+    expect(await s.installTag('v9.9.9'), InstallOutcome.failed);
+    // Only the .part is on disk: the final name is absent, so the About row
+    // will NOT claim a download is ready.
+    final dir = Directory('${root.path}/v9.9.9');
+    expect(File('${dir.path}/Glimpr-Setup-9.9.9.exe').existsSync(), isFalse);
+    expect(File('${dir.path}/Glimpr-Setup-9.9.9.exe.part').existsSync(),
+        isTrue);
+    expect(await s.stagedExists('v9.9.9'), isFalse);
+
+    // Launch-time cleanup keeps the pending tag but drops the fragment.
+    await s.cleanupStaging(keepTag: 'v9.9.9');
+    expect(dir.existsSync(), isTrue);
+    expect(File('${dir.path}/Glimpr-Setup-9.9.9.exe.part').existsSync(),
+        isFalse);
+
+    // The retry downloads afresh and lands the final name.
+    expect(await s.installTag('v9.9.9'), InstallOutcome.handed);
+    expect(File('${dir.path}/Glimpr-Setup-9.9.9.exe').readAsStringSync(),
+        'payload of https://x/setup.exe');
+    expect(await s.stagedExists('v9.9.9'), isTrue);
   });
 
   test('verifiedAgainst checks existence, length and sha256', () async {
@@ -337,6 +381,22 @@ void main() {
     expect(assets['Glimpr-Setup-1.0.0.exe']!.digest, 'sha256:abc');
     expect(assets['old.exe']!.size, isNull);
     expect(assets['old.exe']!.digest, isNull);
+  });
+
+  test('windows: a declined elevation prompt is cancelled, not failed, and '
+      'keeps the staged file', () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? 'cancelled' : null);
+    final root = await stage.createTemp('root');
+    final s = make(assets: {
+      'Glimpr-Setup-9.9.9.exe': 'https://x/setup.exe',
+      'Glimpr-Setup-9.9.9.exe.sig': 'https://x/setup.sig',
+    }, root: root);
+    expect(await s.installTag('v9.9.9'), InstallOutcome.cancelled);
+    expect(s.phase.value, UpdatePhase.idle);
+    expect(s.progress.value, isNull);
+    expect(await s.stagedExists('v9.9.9'), isTrue);
   });
 
   test('DownloadProgress.fraction is null without a total', () {

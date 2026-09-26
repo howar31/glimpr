@@ -17,6 +17,20 @@ import '../platform_gate.dart';
 /// `releases/latest`, which excludes them.
 enum UpdatePhase { idle, downloading, installing, failed }
 
+/// How [UpdaterService.installTag] ended.
+enum InstallOutcome {
+  /// The native apply is running; this process is about to exit/relaunch.
+  handed,
+
+  /// The user declined the elevation prompt (Windows): nothing changed, the
+  /// staged download stays, and the caller shows no error.
+  cancelled,
+
+  /// Download, verification or apply failed; the caller falls back to the
+  /// release page.
+  failed,
+}
+
 /// Bytes received so far and the expected total (null when the server sent
 /// no Content-Length; the UI then shows an indeterminate bar).
 class DownloadProgress {
@@ -51,15 +65,21 @@ typedef ReleaseAssets = Map<String, AssetInfo>;
 
 const kUpdateChannel = MethodChannel('glimpr/update');
 
-// Mount/verify/swap (mac) or verify/spawn (win) runs seconds; a hung native
-// side must not wedge the flow in "installing" forever.
-const _kApplyTimeout = Duration(minutes: 2);
+// Mount/verify/swap (mac) runs seconds; on Windows the apply also waits on
+// the user's answer to the elevation prompt (Windows itself dismisses an
+// unanswered prompt after a couple of minutes). A hung native side must not
+// wedge the flow in "installing" forever.
+const _kApplyTimeout = Duration(minutes: 5);
 
 // A download that stops delivering bytes for this long is dead (captive
 // portal, dropped connection): fail it so the flow falls back to the release
 // page instead of sitting in "downloading" forever. Measured between chunks,
 // so a slow-but-moving link never trips it.
 const kDownloadStallTimeout = Duration(seconds: 30);
+
+/// Suffix of an in-flight download; the file takes its final name only once
+/// every byte is written.
+const kPartialSuffix = '.part';
 
 /// Asset names carry the release version since v1.1.1
 /// (Glimpr-Setup-1.1.1.exe), so resolution matches by prefix + suffix
@@ -128,10 +148,10 @@ class UpdaterService {
     }
   }
 
-  /// Download + verify + install [tag]. Returns true when the apply step was
-  /// handed to native (the process is about to exit/relaunch); false means
-  /// nothing was changed and the caller should open the release page instead.
-  Future<bool> installTag(String tag) async {
+  /// Download + verify + install [tag]; see [InstallOutcome]. Anything other
+  /// than [InstallOutcome.handed] changed nothing on disk except, on
+  /// failure, the staged file a refused apply removed.
+  Future<InstallOutcome> installTag(String tag) async {
     try {
       progress.value = null;
       phase.value = UpdatePhase.downloading;
@@ -157,6 +177,11 @@ class UpdaterService {
         final applied = await channel.invokeMethod(
             'applyStaged',
             {'path': exePath, 'sigPath': sigPath}).timeout(_kApplyTimeout);
+        if (applied == 'cancelled') {
+          progress.value = null;
+          phase.value = UpdatePhase.idle;
+          return InstallOutcome.cancelled;
+        }
         if (applied != true) await _discardDeclined(exePath);
       } else {
         final dmg = _findAsset(assets, '.dmg');
@@ -170,11 +195,11 @@ class UpdaterService {
                 _kApplyTimeout);
         if (applied != true) await _discardDeclined(dmgPath);
       }
-      return true;
+      return InstallOutcome.handed;
     } catch (_) {
       progress.value = null;
       phase.value = UpdatePhase.failed;
-      return false;
+      return InstallOutcome.failed;
     }
   }
 
@@ -198,7 +223,10 @@ class UpdaterService {
 
   // Reuses the file at [path] when it matches the listing's size AND
   // sha256 digest; otherwise deletes whatever is there and downloads. A
-  // listing without a digest never qualifies for reuse.
+  // listing without a digest never qualifies for reuse. The download lands
+  // in a `.part` sibling and is renamed only once complete, so a transfer
+  // cut short (app quit, crash, dropped link) never leaves a file under the
+  // final name: "downloaded" in the UI means the whole file is there.
   Future<void> _fetchOrReuse(AssetInfo asset, String path) async {
     final f = File(path);
     if (await verifiedAgainst(f, asset)) {
@@ -207,7 +235,10 @@ class UpdaterService {
       return;
     }
     if (await f.exists()) await f.delete();
-    await download(asset.url, path, _report);
+    final part = File('$path$kPartialSuffix');
+    if (await part.exists()) await part.delete();
+    await download(asset.url, part.path, _report);
+    await part.rename(path);
   }
 
   /// Whether [file] is byte-for-byte the asset GitHub lists: it exists, its
@@ -253,6 +284,13 @@ class UpdaterService {
         await for (final e in root.list()) {
           if (e is! Directory) continue;
           if (e.uri.pathSegments.where((s) => s.isNotEmpty).last == keepTag) {
+            // The pending tag stays, but an interrupted transfer in it is
+            // dead weight (the next attempt starts over anyway).
+            await for (final f in e.list()) {
+              if (f is File && f.path.endsWith(kPartialSuffix)) {
+                await f.delete();
+              }
+            }
             continue;
           }
           await e.delete(recursive: true);
