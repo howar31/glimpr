@@ -274,8 +274,8 @@ void main() {
     expect(find.text('Website'), findsOneWidget);
     expect(find.text('Licenses & acknowledgements'), findsOneWidget);
     // The About pane shows the full version; the sidebar shows just x.y.z.
-    expect(find.text('2.1.0 (42)'), findsOneWidget);
-    expect(find.text('Glimpr 2.1.0'), findsOneWidget);
+    expect(find.text('v2.1.0 (42)'), findsOneWidget);
+    expect(find.text('Glimpr v2.1.0'), findsOneWidget);
 
     // The sponsor row opens the sponsor page (not a provider directly).
     await tester.tap(find.text('Sponsor'));

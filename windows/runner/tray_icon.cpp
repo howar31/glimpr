@@ -243,8 +243,19 @@ void TrayIcon::ShowMenu() {
   };
 
   HMENU menu = CreatePopupMenu();
+  // "Glimpr v1.18.0": the identity name + the exe's marketing version, read
+  // once (the resource never changes while running). The leading v is the
+  // app-wide display rule (lib/update/version_display.dart): GitHub names
+  // releases vX.Y.Z and every visible surface matches it.
+  static const std::string version = [] {
+    const std::string v = AppMarketingVersion();
+    return v.empty() ? v : "v" + v;
+  }();
+  const std::string name_version =
+      version.empty() ? std::string(GLIMPR_APP_NAME)
+                      : std::string(GLIMPR_APP_NAME) + " " + version;
   // Header (disabled). Brand name, never translated.
-  AppendItem(menu, 0, GLIMPR_APP_NAME, "", false);
+  AppendItem(menu, 0, name_version, "", false);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   // Live screenshot actions, with accelerator hints from the bound hotkeys.
   AppendItem(menu, kCmdCaptureRegion, L("captureArea", "Screenshot Region"),
@@ -304,7 +315,10 @@ void TrayIcon::ShowMenu() {
              update_label_.empty() ? L("checkUpdates", "Check for updates")
                                    : update_label_,
              "", true);
-  AppendItem(menu, kCmdAbout, L("about", "About Glimpr"), "", true);
+  AppendItem(menu, kCmdAbout,
+             version.empty() ? L("about", "About Glimpr")
+                             : L("about", "About Glimpr") + " " + version,
+             "", true);
   AppendItem(menu, kCmdSettings, L("settings", "Settings..."), "", true);
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendItem(menu, kCmdQuit, L("quit", "Quit Glimpr"), "", true);

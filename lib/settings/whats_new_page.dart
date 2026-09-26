@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../theme/glimpr_theme.dart';
 import '../update/release_notes.dart';
+import '../update/version_display.dart';
 import 'licenses_page.dart' show GlimprSubpageHeader;
 
 /// "What's new": one section per release (newest first) in the settings
@@ -40,7 +41,7 @@ class WhatsNewView extends StatelessWidget {
                 if (showHeadings)
                   Padding(
                     padding: EdgeInsets.only(top: s == 0 ? 0 : 14, bottom: 10),
-                    child: Text(sections[s].tag,
+                    child: Text(displayVersion(sections[s].tag),
                         style: GlimprType.sansStyle(12.5, 700, t.fg3,
                             letterSpacing: 0.3)),
                   ),

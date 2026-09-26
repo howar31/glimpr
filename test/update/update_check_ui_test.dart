@@ -49,7 +49,7 @@ void main() {
     mockMethodChannel(kRoleChannel,
         handler: (c) => c.method == 'appVersion' ? '1.0.0 (1)' : null);
     await openAbout(tester, Settings(FakeStore()));
-    expect(find.text('1.0.0 (1)'), findsOneWidget);
+    expect(find.text('v1.0.0 (1)'), findsOneWidget);
     expect(find.textContaining('Dev'), findsNothing);
   });
 
@@ -61,8 +61,8 @@ void main() {
       return null;
     });
     await openAbout(tester, Settings(FakeStore()));
-    expect(find.text('1.0.0 (1) Dev'), findsOneWidget);
-    expect(find.text('1.0.0 (1)'), findsNothing); // replaced, not duplicated
+    expect(find.text('v1.0.0 (1) Dev'), findsOneWidget);
+    expect(find.text('v1.0.0 (1)'), findsNothing); // replaced, not duplicated
   });
 
   testWidgets('persisted newer release shows the update badge row',

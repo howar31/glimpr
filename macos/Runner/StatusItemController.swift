@@ -8,6 +8,16 @@ import Cocoa
 private let kAppName =
   (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Glimpr"
 
+/// Marketing version from the bundle ("1.18.0"); the menu header and the About
+/// item append it so the running version is visible without opening Settings.
+private let kAppVersion =
+  (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+
+/// "Glimpr v1.18.0" (just the name when the version is unreadable). The
+/// leading v is the app-wide display rule (lib/update/version_display.dart):
+/// GitHub names releases vX.Y.Z, and every visible surface matches it.
+private let kAppNameVersion = kAppVersion.isEmpty ? kAppName : "\(kAppName) v\(kAppVersion)"
+
 /// The menu-bar (NSStatusItem) shell. Every global action gets a menu item
 /// whose key-equivalent HINT mirrors the effective (rebindable) hotkey —
 /// refreshed on each menu open via [keyHint]. Actions are injected so this
@@ -137,7 +147,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.delegate = self // refresh the key-equivalent hints on each open
     // App-name header: disabled, non-clickable. action == nil + autoenablesItems
     // (on by default) renders it greyed out; isEnabled = false makes the intent explicit.
-    let header = NSMenuItem(title: kAppName, action: nil, keyEquivalent: "")
+    let header = NSMenuItem(title: kAppNameVersion, action: nil, keyEquivalent: "")
     header.isEnabled = false
     menu.addItem(header)
     menu.addItem(.separator())
@@ -195,7 +205,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       action: #selector(checkUpdates), key: "")
     updateItem = update
     menu.addItem(update)
-    menu.addItem(menuItem(title: L.s("About \(kAppName)", "關於 \(kAppName)"), action: #selector(about), key: ""))
+    menu.addItem(menuItem(title: L.s("About \(kAppNameVersion)", "關於 \(kAppNameVersion)"), action: #selector(about), key: ""))
     menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: L.s("Quit \(kAppName)", "結束 \(kAppName)"), action: #selector(quit), key: "q"))

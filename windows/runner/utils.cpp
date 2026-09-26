@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <iostream>
+#include <vector>
 
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
@@ -90,4 +91,44 @@ std::wstring Utf16FromUtf8(const std::string& utf8) {
   ::MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(),
                         static_cast<int>(utf8.size()), w.data(), n);
   return w;
+}
+
+namespace {
+bool ReadFixedFileInfo(VS_FIXEDFILEINFO* out) {
+  wchar_t path[MAX_PATH];
+  if (GetModuleFileNameW(nullptr, path, MAX_PATH) == 0) return false;
+  DWORD handle = 0;
+  DWORD size = GetFileVersionInfoSizeW(path, &handle);
+  if (size == 0) return false;
+  std::vector<BYTE> data(size);
+  if (!GetFileVersionInfoW(path, 0, size, data.data())) return false;
+  VS_FIXEDFILEINFO* info = nullptr;
+  UINT len = 0;
+  if (!VerQueryValueW(data.data(), L"\\", reinterpret_cast<LPVOID*>(&info),
+                      &len) ||
+      !info) {
+    return false;
+  }
+  *out = *info;
+  return true;
+}
+}  // namespace
+
+std::string AppVersionString() {
+  VS_FIXEDFILEINFO info{};
+  if (!ReadFixedFileInfo(&info)) return "";
+  char out[64];
+  sprintf_s(out, "%u.%u.%u (%u)", HIWORD(info.dwProductVersionMS),
+            LOWORD(info.dwProductVersionMS), HIWORD(info.dwProductVersionLS),
+            LOWORD(info.dwProductVersionLS));
+  return out;
+}
+
+std::string AppMarketingVersion() {
+  VS_FIXEDFILEINFO info{};
+  if (!ReadFixedFileInfo(&info)) return "";
+  char out[48];
+  sprintf_s(out, "%u.%u.%u", HIWORD(info.dwProductVersionMS),
+            LOWORD(info.dwProductVersionMS), HIWORD(info.dwProductVersionLS));
+  return out;
 }

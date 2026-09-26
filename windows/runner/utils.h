@@ -19,6 +19,13 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string);
 std::string Utf8FromUtf16(const std::wstring& utf16);
 std::wstring Utf16FromUtf8(const std::string& utf8);
 
+// The running exe's VERSIONINFO product version: "major.minor.patch (build)"
+// (the About pane / update compare wire format) and the bare
+// "major.minor.patch" for user-facing chrome such as the tray menu. Empty
+// when the resource is unreadable.
+std::string AppVersionString();
+std::string AppMarketingVersion();
+
 // Gets the command line arguments passed in as a std::vector<std::string>,
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();

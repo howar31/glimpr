@@ -49,6 +49,7 @@ import 'login_item.dart';
 import 'settings.dart';
 import 'token_picker.dart';
 import '../update/release_notes.dart';
+import '../update/version_display.dart';
 import '../update/update_check.dart';
 import '../update/updater.dart';
 import 'dart:io' show Directory;
@@ -428,7 +429,7 @@ class _SettingsAppState extends State<SettingsApp>
     _roleChannel.invokeMethod('setUpdateStatus', {
       'available': tag != null,
       'label': tag != null
-          ? _l.settingsAboutUpdateAvailable(tag)
+          ? _l.settingsAboutUpdateAvailable(displayVersion(tag))
           : _l.settingsAboutCheckUpdates,
     }).catchError((_) {});
   }
@@ -1042,7 +1043,7 @@ class _SettingsAppState extends State<SettingsApp>
                 final name =
                     (snap.data?.dev ?? false) ? 'GlimprDev' : 'Glimpr';
                 return Text(
-                  v.isEmpty ? name : '$name $v',
+                  v.isEmpty ? name : '$name ${displayVersion(v)}',
                   style: GlimprType.sansStyle(11.5, 500, t.fg4),
                 );
               },
@@ -1125,7 +1126,7 @@ class _SettingsAppState extends State<SettingsApp>
                   builder: (_, snap) => Text(
                     snap.data == null
                         ? ''
-                        : '${snap.data!.version}${snap.data!.dev ? ' Dev' : ''}',
+                        : '${displayVersion(snap.data!.version)}${snap.data!.dev ? ' Dev' : ''}',
                     style: GlimprType.sansStyle(12.5, 500, t.fg4),
                   ),
                 ),
@@ -1258,8 +1259,8 @@ class _SettingsAppState extends State<SettingsApp>
             children: [
               Text(
                 _updateStaged
-                    ? _l.settingsAboutUpdateReady(tag)
-                    : _l.settingsAboutUpdateAvailable(tag),
+                    ? _l.settingsAboutUpdateReady(displayVersion(tag))
+                    : _l.settingsAboutUpdateAvailable(displayVersion(tag)),
                 style: GlimprType.sansStyle(12, 600, t.accentFg),
               ),
               const SizedBox(width: 3),
@@ -1374,9 +1375,10 @@ class _SettingsAppState extends State<SettingsApp>
   // "What's new in v1.9.1" for one release; "What's new from v1.9.0 to
   // v1.9.1" when several updates are pending (sections are newest first).
   String get _whatsNewTitle => _notesSections.length == 1
-      ? _l.settingsAboutWhatsNew(_notesSections.single.tag)
+      ? _l.settingsAboutWhatsNew(displayVersion(_notesSections.single.tag))
       : _l.settingsAboutWhatsNewRange(
-          _notesSections.last.tag, _notesSections.first.tag);
+          displayVersion(_notesSections.last.tag),
+          displayVersion(_notesSections.first.tag));
 
   void _openWhatsNew() {
     final ctx = _pageContext;
@@ -1452,7 +1454,7 @@ class _SettingsAppState extends State<SettingsApp>
       'app_language': await _s.getAppLanguage(),
     };
     return formatDiagnostics(
-      appVersion: v.version,
+      appVersion: displayVersion(v.version),
       isDev: v.dev,
       platformName: platformIsWindows ? 'Windows' : 'macOS',
       locale: locale,

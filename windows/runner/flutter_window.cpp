@@ -40,28 +40,6 @@ std::wstring ExePath() {
   return std::wstring(buf);
 }
 
-// "major.minor.patch (build)" from the exe's VERSIONINFO resource.
-std::string AppVersionString() {
-  std::wstring path = ExePath();
-  DWORD handle = 0;
-  DWORD size = GetFileVersionInfoSizeW(path.c_str(), &handle);
-  if (size == 0) return "";
-  std::vector<BYTE> data(size);
-  if (!GetFileVersionInfoW(path.c_str(), 0, size, data.data())) return "";
-  VS_FIXEDFILEINFO* info = nullptr;
-  UINT len = 0;
-  if (!VerQueryValueW(data.data(), L"\\",
-                      reinterpret_cast<LPVOID*>(&info), &len) ||
-      !info) {
-    return "";
-  }
-  char out[64];
-  sprintf_s(out, "%u.%u.%u (%u)",
-            HIWORD(info->dwProductVersionMS), LOWORD(info->dwProductVersionMS),
-            HIWORD(info->dwProductVersionLS), LOWORD(info->dwProductVersionLS));
-  return out;
-}
-
 // Spawn a detached watcher that, after a short delay (long enough for this
 // force-exited process to die + release the single-instance mutex), starts a
 // fresh instance. cmd.exe resolves from System32 (powershell.exe lives in a

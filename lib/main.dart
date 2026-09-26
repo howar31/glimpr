@@ -26,6 +26,7 @@ import 'shortcuts/shortcut_store.dart';
 import 'shortcuts/windows_hotkey_registrar.dart';
 import 'update/update_check.dart';
 import 'update/updater.dart';
+import 'update/version_display.dart';
 
 /// Every engine runs this same main(). The native side answers `glimpr/role`
 /// with 'overlay' for the per-display overlay engines and 'control' for the
@@ -93,7 +94,8 @@ Future<void> main() async {
     (r) {
       unawaited(kRoleChannel.invokeMethod('setUpdateStatus', {
         'available': true,
-        'label': appL10n.settingsAboutUpdateAvailable(r.latestTag),
+        'label':
+            appL10n.settingsAboutUpdateAvailable(displayVersion(r.latestTag)),
       }).catchError((_) {}));
       updateFeed.value = r;
     },
