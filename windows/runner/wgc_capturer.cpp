@@ -171,10 +171,16 @@ std::optional<CaptureFrame> CaptureItem(cap::GraphicsCaptureItem const& item,
                         src + static_cast<size_t>(y) * mapped.RowPitch,
                         f16_stride);
           }
+          // One-shot capture: measure the frame so HDR content above SDR
+          // white is exposed / rolled off instead of clipped (a pure SDR
+          // frame maps exactly as before).
+          const auto* f16_px = reinterpret_cast<const uint16_t*>(cf.f16.data());
+          const hdr::ToneMapExposure exposure = hdr::MeasureExposure(
+              f16_px, cf.width, cf.height, hdr_info.sdr_white_nits,
+              hdr_info.max_nits);
           hdr::ToneMapLut lut;
-          lut.Build(hdr_info.sdr_white_nits);
-          lut.MapToBgra(reinterpret_cast<const uint16_t*>(cf.f16.data()),
-                        static_cast<size_t>(cf.width) * cf.height,
+          lut.Build(hdr_info.sdr_white_nits, exposure);
+          lut.MapToBgra(f16_px, static_cast<size_t>(cf.width) * cf.height,
                         cf.bgra.data());
           if (!keep_f16) {
             cf.f16.clear();

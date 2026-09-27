@@ -261,6 +261,235 @@ void TestToneMapLut() {
   CHECK(rgba[0] == bgra[2] && rgba[2] == bgra[0] && rgba[1] == bgra[1]);
 }
 
+// --- Frame-adaptive exposure + shoulder ------------------------------------
+
+void TestToneMapCurve() {
+  g_case = "tonemap-curve";
+  // Default exposure == the legacy clip: exact within SDR, clipped above.
+  hdr::ToneMapExposure none;
+  CHECK(Near(hdr::ToneMapCurve(0.0f, none), 0.0f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(0.5f, none), 0.5f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(0.95f, none), 0.95f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(1.0f, none), 1.0f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(2.0f, none), 1.0f, 1e-6));
+
+  // Exposure only: the frame's white point lands on 1.0, no shoulder.
+  hdr::ToneMapExposure exposed;
+  exposed.white = 2.0f;
+  CHECK(Near(hdr::ToneMapCurve(2.0f, exposed), 1.0f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(1.0f, exposed), 0.5f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(4.0f, exposed), 1.0f, 1e-6));
+
+  // Shoulder only (desktop + an HDR window): below the knee identity, the
+  // peak reaches white, monotone and continuous in between.
+  hdr::ToneMapExposure shoulder;
+  shoulder.peak = 2.0f;
+  const float knee = hdr::kToneMapKnee;
+  CHECK(knee > 0.5f && knee < 1.0f);
+  CHECK(Near(hdr::ToneMapCurve(0.5f, shoulder), 0.5f, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(knee, shoulder), knee, 1e-6));
+  CHECK(Near(hdr::ToneMapCurve(2.0f, shoulder), 1.0f, 1e-4));
+  CHECK(hdr::ToneMapCurve(3.0f, shoulder) <= 1.0f);
+  // SDR white in a mixed frame is compressed but stays near white.
+  const float sdr_white = hdr::ToneMapCurve(1.0f, shoulder);
+  CHECK(sdr_white < 1.0f && sdr_white > knee);
+  // C1 at the knee: the slope just above the knee is ~1.
+  const float d = 1e-3f;
+  CHECK(Near((hdr::ToneMapCurve(knee + d, shoulder) - knee) / d, 1.0f, 0.02));
+  // Monotone across the whole shoulder.
+  float prev = 0.0f;
+  for (int i = 1; i <= 300; ++i) {
+    const float t = 3.0f * static_cast<float>(i) / 300.0f;
+    const float y = hdr::ToneMapCurve(t, shoulder);
+    CHECK(y >= prev - 1e-6f);
+    prev = y;
+  }
+
+  // A peak barely above 1 is nearly identity (no visible desktop shift).
+  hdr::ToneMapExposure slight;
+  slight.peak = 1.02f;
+  CHECK(hdr::ToneMapCurve(1.0f, slight) > 0.98f);
+}
+
+void TestToneMapLutExposure() {
+  g_case = "tonemap-lut-exposure";
+  auto half = [](float f) { return hdr::FloatToHalfScalar(f); };
+  // Default exposure reproduces the legacy table byte for byte on a sweep.
+  hdr::ToneMapLut legacy;
+  legacy.Build(240.0f);
+  hdr::ToneMapLut same;
+  same.Build(240.0f, hdr::ToneMapExposure{});
+  const float sweep[] = {0.0f, 0.1f, 0.75f, 1.5f, 2.9f, 3.0f, 3.5f, 6.0f};
+  for (float v : sweep) {
+    uint16_t px[4] = {half(v), half(v), half(v), half(1.0f)};
+    uint8_t a[4], b[4];
+    legacy.MapToBgra(px, 1, a);
+    same.MapToBgra(px, 1, b);
+    CHECK(a[0] == b[0] && a[1] == b[1] && a[2] == b[2]);
+  }
+  // Exposure white 2 (relative): scRGB 6.0 (= 2x SDR white at 240 nits) is
+  // full white and 3.0 (SDR white) is mid-grey.
+  hdr::ToneMapExposure ex;
+  ex.white = 2.0f;
+  hdr::ToneMapLut lut;
+  lut.Build(240.0f, ex);
+  uint16_t px[4] = {half(6.0f), half(3.0f), half(0.0f), half(1.0f)};
+  uint8_t bgra[4];
+  lut.MapToBgra(px, 1, bgra);
+  CHECK(bgra[2] == 255);
+  CHECK(bgra[1] >= 186 && bgra[1] <= 190);  // sRGB(0.5) = 187.5
+  CHECK(bgra[0] == 0);
+  // Rebuild for a different exposure actually rebuilds (no stale cache).
+  lut.Build(240.0f, hdr::ToneMapExposure{});
+  lut.MapToBgra(px, 1, bgra);
+  CHECK(bgra[1] == 255);
+}
+
+// sRGB 8-bit -> linear, for reading tone-mapped output back.
+float DecodeSrgb8(uint8_t v) {
+  return hdr::ExtSrgbDecode(static_cast<float>(v) / 255.0f);
+}
+
+void TestToneMapHuePreserved() {
+  g_case = "tonemap-hue";
+  auto half = [](float f) { return hdr::FloatToHalfScalar(f); };
+  // A saturated orange at 4x / 2x / 1x SDR white (scRGB 12 / 6 / 3 at 240
+  // nits) in a frame whose peak is 4x: the shoulder maps the max channel and
+  // the other two follow with the same ratio, so the linear channel ratios
+  // survive instead of every channel piling up near white.
+  hdr::ToneMapExposure ex;
+  ex.peak = 4.0f;
+  hdr::ToneMapLut lut;
+  lut.Build(240.0f, ex);
+  uint16_t px[4] = {half(12.0f), half(6.0f), half(3.0f), half(1.0f)};
+  uint8_t rgba[4];
+  lut.MapToRgba(px, 1, rgba);
+  CHECK(rgba[0] >= 250);  // the frame peak lands on white
+  const float r = DecodeSrgb8(rgba[0]);
+  const float g = DecodeSrgb8(rgba[1]);
+  const float b = DecodeSrgb8(rgba[2]);
+  CHECK(Near(g / r, 0.5f, 0.03));
+  CHECK(Near(b / r, 0.25f, 0.03));
+  // BGRA order gives the same bytes swapped.
+  uint8_t bgra[4];
+  lut.MapToBgra(px, 1, bgra);
+  CHECK(bgra[2] == rgba[0] && bgra[1] == rgba[1] && bgra[0] == rgba[2]);
+  CHECK(bgra[3] == 255 && rgba[3] == 255);
+
+  // A pixel entirely below the knee is untouched by the shoulder: same bytes
+  // as the plain clip table.
+  hdr::ToneMapLut plain;
+  plain.Build(240.0f);
+  uint16_t low[4] = {half(2.0f), half(1.0f), half(0.5f), half(1.0f)};
+  uint8_t a[4], c[4];
+  plain.MapToRgba(low, 1, a);
+  lut.MapToRgba(low, 1, c);
+  CHECK(a[0] == c[0] && a[1] == c[1] && a[2] == c[2]);
+
+  // Monotone along the max channel: brighter input never maps darker.
+  uint8_t prev = 0;
+  for (int i = 1; i <= 40; ++i) {
+    const float v = 0.3f * static_cast<float>(i);  // up to scRGB 12 (4x)
+    uint16_t q[4] = {half(v), half(v * 0.5f), half(0.0f), half(1.0f)};
+    uint8_t o[4];
+    lut.MapToRgba(q, 1, o);
+    CHECK(o[0] >= prev);
+    prev = o[0];
+  }
+  // Negative / NaN channels still map to 0 on the shoulder path.
+  uint16_t bad[4] = {half(12.0f), 0xFC00, 0x7E00, half(1.0f)};
+  uint8_t o[4];
+  lut.MapToRgba(bad, 1, o);
+  CHECK(o[0] >= 250 && o[1] == 0 && o[2] == 0);
+}
+
+// A tightly-packed RGBA16F frame filled with one scRGB grey value.
+std::vector<uint16_t> F16Frame(uint32_t w, uint32_t h, float grey) {
+  const uint16_t g = hdr::FloatToHalfScalar(grey);
+  std::vector<uint16_t> f(static_cast<size_t>(w) * h * 4);
+  for (size_t i = 0; i < static_cast<size_t>(w) * h; ++i) {
+    f[i * 4 + 0] = g;
+    f[i * 4 + 1] = g;
+    f[i * 4 + 2] = g;
+    f[i * 4 + 3] = hdr::FloatToHalfScalar(1.0f);
+  }
+  return f;
+}
+
+// Overwrite the top |rows| rows with one grey value.
+void FillRows(std::vector<uint16_t>& f, uint32_t w, uint32_t rows, float grey) {
+  const uint16_t g = hdr::FloatToHalfScalar(grey);
+  for (size_t i = 0; i < static_cast<size_t>(w) * rows; ++i) {
+    f[i * 4 + 0] = g;
+    f[i * 4 + 1] = g;
+    f[i * 4 + 2] = g;
+  }
+}
+
+void TestMeasureExposure() {
+  g_case = "measure-exposure";
+  const uint32_t W = 256, H = 200;
+  const float sdr = 240.0f;   // SDR white == scRGB 3.0
+  const float peak_nits = 1000.0f;
+
+  // Pure SDR frame (a white document): nothing to do.
+  {
+    auto f = F16Frame(W, H, 3.0f);
+    const hdr::ToneMapExposure ex =
+        hdr::MeasureExposure(f.data(), W, H, sdr, peak_nits);
+    CHECK(Near(ex.white, 1.0f, 1e-6));
+    CHECK(Near(ex.peak, 1.0f, 1e-6));
+  }
+  // Full-screen HDR game: bulk at 2x SDR white, a 0.5% sun at 4x.
+  {
+    auto f = F16Frame(W, H, 6.0f);
+    FillRows(f, W, 1, 12.0f);
+    const hdr::ToneMapExposure ex =
+        hdr::MeasureExposure(f.data(), W, H, sdr, peak_nits);
+    CHECK(Near(ex.white, 2.0f, 0.05));
+    CHECK(Near(ex.peak, 2.0f, 0.1));   // 4x / exposure 2x
+  }
+  // A typical Auto HDR game frame: 45% of rows above SDR white (2x), the
+  // rest in range. Mid-tones are anchored, so exposure stays 1 and the
+  // shoulder takes the highlights.
+  {
+    auto f = F16Frame(W, H, 1.5f);
+    FillRows(f, W, H * 45 / 100, 6.0f);
+    const hdr::ToneMapExposure ex =
+        hdr::MeasureExposure(f.data(), W, H, sdr, peak_nits);
+    CHECK(Near(ex.white, 1.0f, 1e-6));
+    CHECK(Near(ex.peak, 2.0f, 0.1));
+  }
+  // Desktop with a small HDR window (10% of rows at 3x): exposure stays 1,
+  // the shoulder gets the window's peak.
+  {
+    auto f = F16Frame(W, H, 1.5f);
+    FillRows(f, W, H / 10, 9.0f);
+    const hdr::ToneMapExposure ex =
+        hdr::MeasureExposure(f.data(), W, H, sdr, peak_nits);
+    CHECK(Near(ex.white, 1.0f, 1e-6));
+    CHECK(Near(ex.peak, 3.0f, 0.1));
+  }
+  // Exposure never exceeds the panel's peak relative to SDR white.
+  {
+    auto f = F16Frame(W, H, 60.0f);  // 20x SDR white, above a 400-nit panel
+    const hdr::ToneMapExposure ex =
+        hdr::MeasureExposure(f.data(), W, H, sdr, 400.0f);
+    CHECK(ex.white <= 400.0f / sdr + 1e-3f);
+  }
+  // Negative / NaN texels do not poison the statistics.
+  {
+    auto f = F16Frame(W, H, 1.5f);
+    f[0] = 0xFC00;  // -inf
+    f[1] = 0x7E00;  // NaN
+    f[2] = 0x8000;  // -0
+    const hdr::ToneMapExposure ex =
+        hdr::MeasureExposure(f.data(), W, H, sdr, peak_nits);
+    CHECK(Near(ex.white, 1.0f, 1e-6));
+    CHECK(Near(ex.peak, 1.0f, 1e-6));
+  }
+}
+
 // --- QPC 100ns overflow-split ----------------------------------------------
 
 void TestQpc100nsFrom() {
@@ -782,6 +1011,10 @@ int main() {
       {"wav", TestParseWav},             {"parsespec-def", TestParseSpecDefaults},
       {"parsespec-full", TestParseSpecFull}, {"half", TestHalfFloatRoundTrip},
       {"ext-srgb", TestExtSrgb},         {"tonemap", TestToneMapLut},
+      {"tonemap-curve", TestToneMapCurve},
+      {"tonemap-lut-exposure", TestToneMapLutExposure},
+      {"tonemap-hue", TestToneMapHuePreserved},
+      {"measure-exposure", TestMeasureExposure},
       {"qpc-100ns", TestQpc100nsFrom},   {"snap-filter", TestSnapFilter},
       {"capture-key", TestCaptureKeyRule}, {"clipdib", TestOpaqueDib},
       {"hdrop", TestDropFilesPayload},     {"drop-filter", TestDropFilter},
