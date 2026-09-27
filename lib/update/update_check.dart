@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../settings/settings_store.dart';
+import 'version_display.dart';
 
 /// Release metadata from the GitHub "latest release" endpoint, compared
 /// against the running app version. The check itself only notifies; the
@@ -126,23 +127,27 @@ class UpdateChecker {
         releases: releases);
   }
 
-  /// Pure semver-triple compare; any parse failure means "not newer".
+  /// Pure semver compare; any parse failure means "not newer". The X.Y.Z
+  /// core decides first; on an equal core a prerelease ("1.21.1-rc.1") is
+  /// older than the stable release, and two prereleases compare by their
+  /// dot-separated identifiers (numeric ones numerically, others as text,
+  /// a shorter list is older), per SemVer 2.0.0 item 11.
   static bool isNewer(String current, String latest) {
-    final c = _triple(current);
-    final l = _triple(latest);
+    final c = _triple(versionCore(current));
+    final l = _triple(versionCore(latest));
     if (c == null || l == null) return false;
     for (var i = 0; i < 3; i++) {
       if (l[i] != c[i]) return l[i] > c[i];
     }
-    return false;
+    final cPre = versionPrerelease(current);
+    final lPre = versionPrerelease(latest);
+    if (cPre.isEmpty) return false; // stable: nothing of the same core is newer
+    if (lPre.isEmpty) return true; // prerelease -> its stable
+    return _comparePrerelease(lPre, cPre) > 0;
   }
 
-  static List<int>? _triple(String v) {
-    var s = v.trim();
-    final space = s.indexOf(' ');
-    if (space != -1) s = s.substring(0, space); // drop " (build)"
-    if (s.startsWith('v') || s.startsWith('V')) s = s.substring(1);
-    final parts = s.split('.');
+  static List<int>? _triple(String core) {
+    final parts = core.split('.');
     if (parts.length != 3) return null;
     final nums = <int>[];
     for (final p in parts) {
@@ -151,6 +156,27 @@ class UpdateChecker {
       nums.add(n);
     }
     return nums;
+  }
+
+  static int _comparePrerelease(String a, String b) {
+    final ai = a.split('.');
+    final bi = b.split('.');
+    for (var i = 0; i < ai.length && i < bi.length; i++) {
+      final an = int.tryParse(ai[i]);
+      final bn = int.tryParse(bi[i]);
+      final int r;
+      if (an != null && bn != null) {
+        r = an.compareTo(bn);
+      } else if (an != null) {
+        r = -1; // numeric identifiers rank below alphanumeric ones
+      } else if (bn != null) {
+        r = 1;
+      } else {
+        r = ai[i].compareTo(bi[i]);
+      }
+      if (r != 0) return r;
+    }
+    return ai.length.compareTo(bi.length);
   }
 }
 

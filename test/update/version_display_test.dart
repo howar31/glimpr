@@ -17,4 +17,16 @@ void main() {
     expect(versionCore('  1.2.3  '), '1.2.3');
     expect(versionCore(''), '');
   });
+
+  test('versionCore also drops a prerelease suffix', () {
+    expect(versionCore('1.21.1-rc.1 (35)'), '1.21.1');
+    expect(versionCore('v1.21.1-rc.1'), '1.21.1');
+  });
+
+  test('versionPrerelease is the suffix after the core, empty for stable', () {
+    expect(versionPrerelease('1.21.1-rc.1 (35)'), 'rc.1');
+    expect(versionPrerelease('v1.21.1-rc.2'), 'rc.2');
+    expect(versionPrerelease('1.21.1 (35)'), '');
+    expect(versionPrerelease(''), '');
+  });
 }

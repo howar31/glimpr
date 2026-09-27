@@ -50,7 +50,11 @@ jobs:
           security list-keychains -d user -s build.keychain login.keychain
           rm /tmp/cert.p12
       - run: flutter pub get
-      - run: flutter build macos --release
+      # The tag (minus v) is the build name, so a release candidate carries
+      # its -rc.N suffix in CFBundleShortVersionString / ProductVersion and
+      # the app shows and compares it as a prerelease. A stable tag equals the
+      # pubspec version (version-gate), so nothing changes for it.
+      - run: flutter build macos --release --build-name="${GITHUB_REF_NAME#v}"
       - name: Verify signature
         run: |
           codesign --verify --deep --strict build/macos/Build/Products/Release/Glimpr.app
@@ -105,7 +109,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build windows --release
+      - shell: pwsh
+        run: flutter build windows --release --build-name="$("$env:GITHUB_REF_NAME".TrimStart('v'))"
       - name: Build installer
         shell: pwsh
         run: |

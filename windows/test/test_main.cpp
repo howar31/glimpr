@@ -33,6 +33,7 @@
 #include "record_args.h"
 #include "record_clock.h"
 #include "snap_filter.h"
+#include "version_string.h"
 #include "wav_parse.h"
 
 namespace {
@@ -747,6 +748,25 @@ void TestCrashDumpPath() {
   CHECK(!crash_dump_path::Parent(L"C:", p1, MAX_PATH));
 }
 
+// --- version string ----------------------------------------------------------
+
+void TestVersionString() {
+  g_case = "version-string";
+  std::string marketing, build;
+  // The Flutter tool writes "<build-name>+<build-number>" into ProductVersion.
+  CHECK(version_string::Split("1.21.1+35", &marketing, &build));
+  CHECK(marketing == "1.21.1" && build == "35");
+  CHECK(version_string::Split("1.21.1-rc.1+35", &marketing, &build));
+  CHECK(marketing == "1.21.1-rc.1" && build == "35");
+  // No build part: marketing only, empty build.
+  CHECK(version_string::Split("1.21.1-rc.1", &marketing, &build));
+  CHECK(marketing == "1.21.1-rc.1" && build.empty());
+  // Empty input fails closed.
+  CHECK(!version_string::Split("", &marketing, &build));
+  CHECK(version_string::Display("1.21.1-rc.1", "35") == "1.21.1-rc.1 (35)");
+  CHECK(version_string::Display("1.21.1", "") == "1.21.1");
+}
+
 }  // namespace
 
 int main() {
@@ -771,6 +791,7 @@ int main() {
       {"process-identity", TestProcessIdentity},
       {"install-scope", TestInstallScope},
       {"crash-dump-path", TestCrashDumpPath},
+      {"version-string", TestVersionString},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

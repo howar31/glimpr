@@ -272,6 +272,37 @@ void main() {
     expect(args['scope'], 'user');
   });
 
+  test('switchScope on a prerelease build uses its own tag without resolving',
+      () async {
+    debugPlatformOverride = TargetPlatform.windows;
+    final calls = mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? true : null);
+    final fetched = <String>[];
+    var resolved = 0;
+    final s = UpdaterService(
+      fetchAssets: (tag) async {
+        fetched.add(tag);
+        return plain({
+          'Glimpr-Setup-1.21.1-rc.1.exe': 'https://example.test/setup.exe',
+          'Glimpr-Setup-1.21.1-rc.1.exe.sig': 'https://example.test/setup.sig',
+        });
+      },
+      download: (url, toPath, onProgress) async {
+        await File(toPath).writeAsString('payload');
+      },
+      stageRoot: () async => stage.createTemp('s'),
+      resolveTag: (core) async {
+        resolved++;
+        return 'v1.21.1';
+      },
+    );
+    expect(await s.switchScope(InstallScopeTarget.machine, '1.21.1-rc.1 (35)'),
+        InstallOutcome.handed);
+    expect(resolved, 0);
+    expect(fetched, ['v1.21.1-rc.1']);
+    expect(calls.where((c) => c.method == 'applyStaged'), hasLength(1));
+  });
+
   test('switchScope falls back to v<core> when no release resolves, and fails '
       'closed when that tag has no listing', () async {
     debugPlatformOverride = TargetPlatform.windows;

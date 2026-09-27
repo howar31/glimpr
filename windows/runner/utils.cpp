@@ -8,6 +8,8 @@
 #include <iostream>
 #include <vector>
 
+#include "version_string.h"
+
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
     FILE *unused;
@@ -114,21 +116,73 @@ bool ReadFixedFileInfo(VS_FIXEDFILEINFO* out) {
 }
 }  // namespace
 
-std::string AppVersionString() {
+namespace {
+
+// The ProductVersion string from the exe's version resource (any language
+// block), or "" when absent. Kept next to the numeric reader above as the
+// fallback source for both version strings.
+std::string ReadProductVersionString() {
+  wchar_t path[MAX_PATH];
+  if (GetModuleFileNameW(nullptr, path, MAX_PATH) == 0) return "";
+  DWORD handle = 0;
+  DWORD size = GetFileVersionInfoSizeW(path, &handle);
+  if (size == 0) return "";
+  std::vector<BYTE> data(size);
+  if (!GetFileVersionInfoW(path, 0, size, data.data())) return "";
+  struct LangCodePage {
+    WORD language;
+    WORD code_page;
+  };
+  LangCodePage* translations = nullptr;
+  UINT len = 0;
+  if (!VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation",
+                      reinterpret_cast<LPVOID*>(&translations), &len) ||
+      !translations) {
+    return "";
+  }
+  for (UINT i = 0; i < len / sizeof(LangCodePage); ++i) {
+    wchar_t query[64];
+    swprintf_s(query, L"\\StringFileInfo\\%04x%04x\\ProductVersion",
+               translations[i].language, translations[i].code_page);
+    wchar_t* value = nullptr;
+    UINT value_len = 0;
+    if (VerQueryValueW(data.data(), query, reinterpret_cast<LPVOID*>(&value),
+                       &value_len) &&
+        value && value_len > 0) {
+      return Utf8FromUtf16(std::wstring(value));
+    }
+  }
+  return "";
+}
+
+// Marketing + build from the ProductVersion string; the numeric fields are
+// the fallback when the string is missing (they cannot carry a prerelease).
+bool ReadVersionParts(std::string* marketing, std::string* build) {
+  if (version_string::Split(ReadProductVersionString(), marketing, build)) {
+    return true;
+  }
   VS_FIXEDFILEINFO info{};
-  if (!ReadFixedFileInfo(&info)) return "";
-  char out[64];
-  sprintf_s(out, "%u.%u.%u (%u)", HIWORD(info.dwProductVersionMS),
-            LOWORD(info.dwProductVersionMS), HIWORD(info.dwProductVersionLS),
-            LOWORD(info.dwProductVersionLS));
-  return out;
+  if (!ReadFixedFileInfo(&info)) return false;
+  char m[48];
+  sprintf_s(m, "%u.%u.%u", HIWORD(info.dwProductVersionMS),
+            LOWORD(info.dwProductVersionMS), HIWORD(info.dwProductVersionLS));
+  char b[16];
+  sprintf_s(b, "%u", LOWORD(info.dwProductVersionLS));
+  *marketing = m;
+  *build = b;
+  return true;
+}
+
+}  // namespace
+
+std::string AppVersionString() {
+  std::string marketing, build;
+  if (!ReadVersionParts(&marketing, &build)) return "";
+  return version_string::Display(marketing, build);
 }
 
 std::string AppMarketingVersion() {
-  VS_FIXEDFILEINFO info{};
-  if (!ReadFixedFileInfo(&info)) return "";
-  char out[48];
-  sprintf_s(out, "%u.%u.%u", HIWORD(info.dwProductVersionMS),
-            LOWORD(info.dwProductVersionMS), HIWORD(info.dwProductVersionLS));
-  return out;
+  std::string marketing, build;
+  if (!ReadVersionParts(&marketing, &build)) return "";
+  return marketing;
 }

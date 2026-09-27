@@ -24,6 +24,22 @@ void main() {
       expect(UpdateChecker.isNewer('', 'v1.0.1'), isFalse);
       expect(UpdateChecker.isNewer('1.0.0 (1)', 'v1.0'), isFalse);
     });
+    test('a prerelease is older than the stable of the same core', () {
+      expect(UpdateChecker.isNewer('1.21.1-rc.1 (35)', 'v1.21.1'), isTrue);
+      expect(UpdateChecker.isNewer('1.21.1 (35)', 'v1.21.1-rc.1'), isFalse);
+      expect(UpdateChecker.isNewer('1.21.1-rc.1 (35)', 'v1.21.1-rc.1'), isFalse);
+    });
+    test('prereleases of the same core compare by their identifiers', () {
+      expect(UpdateChecker.isNewer('1.21.1-rc.1', 'v1.21.1-rc.2'), isTrue);
+      expect(UpdateChecker.isNewer('1.21.1-rc.2', 'v1.21.1-rc.1'), isFalse);
+      expect(UpdateChecker.isNewer('1.21.1-rc.9', 'v1.21.1-rc.10'), isTrue);
+      expect(UpdateChecker.isNewer('1.21.1-beta.1', 'v1.21.1-rc.1'), isTrue);
+    });
+    test('the core still decides across different cores', () {
+      expect(UpdateChecker.isNewer('1.21.1-rc.1', 'v1.21.2'), isTrue);
+      expect(UpdateChecker.isNewer('1.21.1-rc.1', 'v1.21.0'), isFalse);
+      expect(UpdateChecker.isNewer('1.21.0 (34)', 'v1.21.1-rc.1'), isTrue);
+    });
   });
 
   group('UpdateChecker', () {

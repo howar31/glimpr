@@ -13,13 +13,30 @@ String displayVersion(String raw) {
   return 'v$s';
 }
 
-/// The numeric core of any version string the app sees: "1.20.0 (33)",
-/// "v1.20.0" and "V1.20.0 (2)" all give "1.20.0". Release tags are compared
-/// and resolved on this core (an rc suffix lives only in the tag).
-String versionCore(String raw) {
+/// The version without its " (build)" part or leading v: "1.20.0 (33)",
+/// "v1.20.0" and "V1.21.1-rc.1 (2)" give "1.20.0", "1.20.0", "1.21.1-rc.1".
+String _versionBody(String raw) {
   var s = raw.trim();
   final space = s.indexOf(' ');
   if (space != -1) s = s.substring(0, space);
   if (s.startsWith('v') || s.startsWith('V')) s = s.substring(1);
   return s;
+}
+
+/// The numeric core of any version string the app sees: "1.20.0 (33)",
+/// "v1.20.0" and "1.21.1-rc.1 (35)" all give the X.Y.Z part. Release tags
+/// resolve on this core; the prerelease suffix is [versionPrerelease].
+String versionCore(String raw) {
+  final s = _versionBody(raw);
+  final dash = s.indexOf('-');
+  return dash == -1 ? s : s.substring(0, dash);
+}
+
+/// The prerelease identifiers after the core ("rc.1" for "1.21.1-rc.1 (35)"),
+/// empty for a stable version. A release build carries them because CI
+/// passes the tag as the build name, so an rc build knows it is one.
+String versionPrerelease(String raw) {
+  final s = _versionBody(raw);
+  final dash = s.indexOf('-');
+  return dash == -1 ? '' : s.substring(dash + 1);
 }

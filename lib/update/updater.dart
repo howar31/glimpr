@@ -204,14 +204,16 @@ class UpdaterService {
     }
   }
 
-  /// Reinstall the RUNNING version in [target]'s scope (Windows). The
-  /// binary knows only its numeric core, so the tag comes from the release
-  /// list (prereleases included, so an rc build can switch too); without a
-  /// resolution the plain `v<core>` tag is tried and fails closed when it
-  /// does not exist.
+  /// Reinstall the RUNNING version in [target]'s scope (Windows). A
+  /// prerelease build knows its full tag (CI passes the tag as the build
+  /// name); a stable build knows only its core, so the tag comes from the
+  /// release list, and without a resolution the plain `v<core>` tag is
+  /// tried and fails closed when it does not exist.
   Future<InstallOutcome> switchScope(
       InstallScopeTarget target, String runningVersion) async {
     final core = versionCore(runningVersion);
+    final pre = versionPrerelease(runningVersion);
+    if (pre.isNotEmpty) return installTag('v$core-$pre', scope: target);
     String? tag;
     try {
       tag = await (resolveTag ?? defaultResolveTag)(core);
