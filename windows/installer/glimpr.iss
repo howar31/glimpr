@@ -4,6 +4,9 @@
 #define MyAppPublisher "Howar31"
 #define MyAppURL "https://github.com/howar31/glimpr"
 #define MyAppExeName "glimpr.exe"
+; HKCU Run value for launch-at-login; must match kRunValue in
+; windows/runner/flutter_window.cpp (the app toggles the same value).
+#define MyRunValue "Glimpr"
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
 #endif
@@ -50,7 +53,7 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Glimpr"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: launchatlogin; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyRunValue}"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: launchatlogin; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
@@ -119,7 +122,7 @@ end;
 const
   UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{FA7E5DB0-A63A-4538-80F4-2E03416E3CFF}_is1';
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
-  RunValue = 'Glimpr';
+  RunValue = '{#MyRunValue}';
 
 var
   HadLaunchAtLogin: Boolean;

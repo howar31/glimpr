@@ -69,7 +69,8 @@ class SettingsApp extends StatefulWidget {
       required this.settings,
       this.hotkeyService,
       this.updateFeed,
-      this.updateStageRoot});
+      this.updateStageRoot,
+      this.updater});
   final Settings settings;
 
   // The live Tier-1 hotkey service from the control engine, used by the
@@ -85,6 +86,11 @@ class SettingsApp extends StatefulWidget {
   // Where the self-updater stages downloads; tests point it at a temp dir.
   // Null = the production root (system temp / Glimpr / update).
   final Future<Directory> Function()? updateStageRoot;
+
+  /// Test seam: a fully faked updater (release listing, downloader, tag
+  /// resolution) so the Settings wiring can be exercised end to end without
+  /// the network. Production leaves it null.
+  final UpdaterService? updater;
 
   @override
   State<SettingsApp> createState() => _SettingsAppState();
@@ -175,12 +181,13 @@ class _SettingsAppState extends State<SettingsApp>
   );
   // Installed-build self-update; unsupported builds (win portable, dev tree)
   // fall back to opening the release page.
-  late final UpdaterService _updater = UpdaterService(
-    fetchAssets: defaultFetchAssets,
-    download: defaultDownload,
-    stageRoot: widget.updateStageRoot ?? defaultStageRoot,
-    legacyTemp: Directory.systemTemp,
-  );
+  late final UpdaterService _updater = widget.updater ??
+      UpdaterService(
+        fetchAssets: defaultFetchAssets,
+        download: defaultDownload,
+        stageRoot: widget.updateStageRoot ?? defaultStageRoot,
+        legacyTemp: Directory.systemTemp,
+      );
   // A download for [_updateAvailableTag] is already staged (an earlier
   // install was declined or interrupted): the row says so, and the next tap
   // re-verifies the file against the release listing instead of fetching.
@@ -1463,6 +1470,10 @@ class _SettingsAppState extends State<SettingsApp>
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => glimprLicenseSurface(
           tokens,
+          // The page shares the About row's updater, so its phase and
+          // progress are the same notifiers: an About download in flight
+          // shows on this page as progress instead of the button, and a
+          // switch in flight keeps _startInstall from starting a second job.
           InstallScopeView(
             current: scope,
             phase: _updater.phase,

@@ -63,7 +63,10 @@ void RelaunchApp() {
   }
 }
 
-// Launch-at-login: a per-user HKCU Run value pointing at the exe.
+// Launch-at-login: a per-user HKCU Run value pointing at the exe. The value
+// name must match the installer (windows/installer/glimpr.iss, MyRunValue),
+// which writes the same value for the wizard's task and rewrites it after an
+// install-scope switch.
 constexpr wchar_t kRunKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kRunValue[] = L"Glimpr";

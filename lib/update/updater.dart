@@ -180,9 +180,10 @@ class UpdaterService {
 
   /// The install scope of this copy and whether the account may switch it;
   /// null when the native side cannot say (no channel, malformed reply).
-  /// No timeout on purpose: the caller seeds a hidden-by-default section
-  /// without awaiting, so a native side that never replies costs nothing,
-  /// while a timer would outlive the widget tests' fake clock.
+  /// No timeout, unlike [supported]: the Settings engine registers the
+  /// `glimpr/update` handler itself, and an engine without it fails at once
+  /// with MissingPluginException rather than hanging, so the unawaited seed
+  /// that calls this has nothing to wait out.
   Future<InstallScopeInfo?> installScope() async {
     try {
       final r =

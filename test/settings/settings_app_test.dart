@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,7 @@ import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
 import 'package:glimpr/shortcuts/widgets/key_cap_chips.dart';
 import 'package:glimpr/theme/glimpr_controls.dart';
+import 'package:glimpr/update/updater.dart';
 
 import '../support/fake_store.dart';
 import '../support/mock_channels.dart';
@@ -513,5 +516,78 @@ void main() {
     await tester.tap(find.text('Advanced'));
     await tester.pumpAndSettle();
     expect(find.text('Install scope'), findsNothing);
+  });
+
+  testWidgets(
+      'Advanced pane on Windows: the scope page button runs the switch '
+      'through the updater with the resolved tag and the opposite scope',
+      (tester) async {
+    debugPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugPlatformOverride = null);
+    final calls = mockMethodChannel(
+      const MethodChannel('glimpr/update'),
+      handler: (call) => call.method == 'installScope'
+          ? <String, Object?>{'scope': 'machine', 'admin': true}
+          : call.method == 'applyStaged'
+              ? true
+              : null,
+    );
+    mockMethodChannel(
+      kRoleChannel,
+      handler: (call) => call.method == 'appVersion' ? '1.21.0 (36)' : null,
+    );
+    final asked = <String>[];
+    final fetched = <String>[];
+    late Directory stage;
+    await tester.runAsync(() async {
+      stage = await Directory.systemTemp.createTemp('settings-switch');
+    });
+    addTearDown(() => stage.delete(recursive: true));
+    final updater = UpdaterService(
+      fetchAssets: (tag) async {
+        fetched.add(tag);
+        return {
+          'Glimpr-Setup-1.21.0.exe':
+              const AssetInfo(url: 'https://example.test/setup.exe'),
+          'Glimpr-Setup-1.21.0.exe.sig':
+              const AssetInfo(url: 'https://example.test/setup.sig'),
+        };
+      },
+      download: (url, toPath, onProgress) async {
+        await File(toPath).writeAsString('payload of $url');
+      },
+      stageRoot: () async => stage,
+      resolveTag: (core) async {
+        asked.add(core);
+        return 'v1.21.0';
+      },
+    );
+    tester.view.physicalSize = const Size(1200, 3600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+        SettingsApp(settings: Settings(FakeStore()), updater: updater));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Install scope'));
+    await tester.pumpAndSettle();
+    // The switch does real file IO (staging), so it runs on the real clock.
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Switch to this account only'));
+      for (var i = 0; i < 100; i++) {
+        await tester.pump();
+        if (calls.any((c) => c.method == 'applyStaged')) break;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    expect(asked, ['1.21.0']);
+    expect(fetched, ['v1.21.0']);
+    final apply = calls.where((c) => c.method == 'applyStaged').toList();
+    expect(apply, hasLength(1));
+    final args = (apply.single.arguments as Map).cast<String, Object?>();
+    expect(args['scope'], 'user');
+    expect(args['path']! as String, endsWith('Glimpr-Setup-1.21.0.exe'));
   });
 }
