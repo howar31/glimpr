@@ -18,6 +18,7 @@
 #include "capture_key_rule.h"
 #include "clipboard_dib.h"
 #include "clipboard_hdrop.h"
+#include "crash_dump_path.h"
 #include "drop_filter.h"
 #include "editor_exit_gate.h"
 #include "editor_host_state.h"
@@ -716,6 +717,36 @@ void TestInstallScope() {
   CHECK(std::string(install_scope::ScopeName(Scope::kNone)).empty());
 }
 
+// --- crash dump path ------------------------------------------------------------
+
+void TestCrashDumpPath() {
+  g_case = "crash-dump-path";
+  wchar_t out[MAX_PATH];
+  CHECK(crash_dump_path::Build(L"C:\\Users\\u\\AppData\\Local", L"Glimpr", out,
+                               MAX_PATH));
+  CHECK(std::wstring(out) ==
+        L"C:\\Users\\u\\AppData\\Local\\Howar31\\Glimpr\\crashdumps");
+  // A trailing separator on the known folder is not doubled.
+  CHECK(crash_dump_path::Build(L"C:\\Users\\u\\AppData\\Local\\", L"GlimprDev",
+                               out, MAX_PATH));
+  CHECK(std::wstring(out) ==
+        L"C:\\Users\\u\\AppData\\Local\\Howar31\\GlimprDev\\crashdumps");
+  // Too small a buffer fails closed and leaves an empty string.
+  wchar_t tiny[8];
+  CHECK(!crash_dump_path::Build(L"C:\\x", L"Glimpr", tiny, 8));
+  CHECK(tiny[0] == 0);
+  // An empty base (known folder unavailable) fails closed.
+  CHECK(!crash_dump_path::Build(L"", L"Glimpr", out, MAX_PATH));
+  // The parents to create, innermost last: Howar31, <app>, crashdumps.
+  wchar_t p1[MAX_PATH], p2[MAX_PATH];
+  CHECK(crash_dump_path::Parent(
+      L"C:\\Users\\u\\AppData\\Local\\Howar31\\Glimpr\\crashdumps", p1, MAX_PATH));
+  CHECK(std::wstring(p1) == L"C:\\Users\\u\\AppData\\Local\\Howar31\\Glimpr");
+  CHECK(crash_dump_path::Parent(p1, p2, MAX_PATH));
+  CHECK(std::wstring(p2) == L"C:\\Users\\u\\AppData\\Local\\Howar31");
+  CHECK(!crash_dump_path::Parent(L"C:", p1, MAX_PATH));
+}
+
 }  // namespace
 
 int main() {
@@ -739,6 +770,7 @@ int main() {
       {"editor-gate", TestEditorExitGate}, {"editor-state", TestEditorHostState},
       {"process-identity", TestProcessIdentity},
       {"install-scope", TestInstallScope},
+      {"crash-dump-path", TestCrashDumpPath},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

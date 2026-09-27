@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "crash_dump.h"
 #include "hdr_util.h"
 #include "utils.h"
 
@@ -213,6 +214,9 @@ EncodableValue Collect() {
   EncodableMap out;
   out[EncodableValue("os")] = EncodableValue(OsString());
   out[EncodableValue("arch")] = EncodableValue(ArchString());
+  // Where a crash minidump would land, so a report can name the file.
+  out[EncodableValue("crash_dumps")] =
+      EncodableValue(Utf8FromUtf16(CrashDumpDir()));
   const AdapterInfo adapters = WalkAdapters();
   EncodableList gpus;
   for (const auto& g : adapters.gpus) gpus.push_back(EncodableValue(g));

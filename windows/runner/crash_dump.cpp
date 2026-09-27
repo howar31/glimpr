@@ -3,8 +3,12 @@
 #include <windows.h>
 // dbghelp.h must follow windows.h.
 #include <dbghelp.h>
+#include <shlobj.h>
 
 #include <cstdio>
+
+#include "app_identity.h"
+#include "crash_dump_path.h"
 
 namespace {
 
@@ -13,12 +17,29 @@ namespace {
 // crash with repeated files.
 LONG g_dumped = 0;
 
-// Writes a minidump to "<dir-of-exe>\crashdumps\glimpr-<tag>-<pid>-<tick>.dmp".
-// Deliberately uses only stack buffers + Win32 calls (no heap), so it still works
-// when the crash is heap corruption. |tag| is a short ASCII/wide literal.
-void WriteDump(EXCEPTION_POINTERS* ep, const wchar_t* tag) {
-  if (::InterlockedExchange(&g_dumped, 1) != 0) return;
+// The dump directory, resolved once in InstallCrashHandler (startup, heap
+// allowed) so the crash path below only reads it. Empty until then.
+wchar_t g_dump_dir[MAX_PATH] = {0};
 
+// Resolves "<LocalAppData>\Howar31\<app>\crashdumps" and creates the three
+// levels (CreateDirectoryW is not recursive); falls back to
+// "<dir-of-exe>\crashdumps" when the known folder is unavailable, which a
+// machine-scope install cannot write but is better than no path at all.
+void ResolveDumpDir() {
+  wchar_t local[MAX_PATH] = {0};
+  if (SUCCEEDED(::SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr,
+                                   SHGFP_TYPE_CURRENT, local)) &&
+      crash_dump_path::Build(local, GLIMPR_APP_NAME_W, g_dump_dir, MAX_PATH)) {
+    wchar_t app[MAX_PATH];
+    wchar_t vendor[MAX_PATH];
+    if (crash_dump_path::Parent(g_dump_dir, app, MAX_PATH) &&
+        crash_dump_path::Parent(app, vendor, MAX_PATH)) {
+      ::CreateDirectoryW(vendor, nullptr);
+      ::CreateDirectoryW(app, nullptr);
+    }
+    ::CreateDirectoryW(g_dump_dir, nullptr);
+    return;
+  }
   wchar_t exe[MAX_PATH];
   DWORD n = ::GetModuleFileNameW(nullptr, exe, MAX_PATH);
   if (n == 0 || n >= MAX_PATH) return;
@@ -28,14 +49,23 @@ void WriteDump(EXCEPTION_POINTERS* ep, const wchar_t* tag) {
       break;
     }
   }
+  if (_snwprintf_s(g_dump_dir, MAX_PATH, _TRUNCATE, L"%s\\crashdumps", exe) < 0) {
+    g_dump_dir[0] = 0;
+    return;
+  }
+  ::CreateDirectoryW(g_dump_dir, nullptr);
+}
 
-  wchar_t dir[MAX_PATH];
-  if (_snwprintf_s(dir, MAX_PATH, _TRUNCATE, L"%s\\crashdumps", exe) < 0) return;
-  ::CreateDirectoryW(dir, nullptr);
+// Writes a minidump to "<dump dir>\glimpr-<tag>-<pid>-<tick>.dmp".
+// Deliberately uses only stack buffers + Win32 calls (no heap), so it still works
+// when the crash is heap corruption. |tag| is a short ASCII/wide literal.
+void WriteDump(EXCEPTION_POINTERS* ep, const wchar_t* tag) {
+  if (::InterlockedExchange(&g_dumped, 1) != 0) return;
+  if (g_dump_dir[0] == 0) return;
 
   wchar_t file[MAX_PATH];
-  if (_snwprintf_s(file, MAX_PATH, _TRUNCATE, L"%s\\glimpr-%s-%lu-%llu.dmp", dir,
-                   tag, ::GetCurrentProcessId(),
+  if (_snwprintf_s(file, MAX_PATH, _TRUNCATE, L"%s\\glimpr-%s-%lu-%llu.dmp",
+                   g_dump_dir, tag, ::GetCurrentProcessId(),
                    static_cast<unsigned long long>(::GetTickCount64())) < 0) {
     return;
   }
@@ -80,6 +110,9 @@ LONG WINAPI VectoredFilter(EXCEPTION_POINTERS* ep) {
 }  // namespace
 
 void InstallCrashHandler() {
+  ResolveDumpDir();
   ::SetUnhandledExceptionFilter(UnhandledFilter);
   ::AddVectoredExceptionHandler(0, VectoredFilter);
 }
+
+const wchar_t* CrashDumpDir() { return g_dump_dir; }
