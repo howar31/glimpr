@@ -156,20 +156,28 @@ std::string ReadProductVersionString() {
 }
 
 // Marketing + build from the ProductVersion string; the numeric fields are
-// the fallback when the string is missing (they cannot carry a prerelease).
+// the fallback when the string is missing (they cannot carry a prerelease)
+// and supply the build number when the string carries none (the Flutter
+// tool drops the +build part when only a build name is passed).
 bool ReadVersionParts(std::string* marketing, std::string* build) {
-  if (version_string::Split(ReadProductVersionString(), marketing, build)) {
-    return true;
-  }
+  const bool from_string =
+      version_string::Split(ReadProductVersionString(), marketing, build);
+  if (from_string && !build->empty()) return true;
   VS_FIXEDFILEINFO info{};
-  if (!ReadFixedFileInfo(&info)) return false;
-  char m[48];
-  sprintf_s(m, "%u.%u.%u", HIWORD(info.dwProductVersionMS),
-            LOWORD(info.dwProductVersionMS), HIWORD(info.dwProductVersionLS));
-  char b[16];
-  sprintf_s(b, "%u", LOWORD(info.dwProductVersionLS));
-  *marketing = m;
-  *build = b;
+  if (!ReadFixedFileInfo(&info)) return from_string;
+  if (!from_string) {
+    char m[48];
+    sprintf_s(m, "%u.%u.%u", HIWORD(info.dwProductVersionMS),
+              LOWORD(info.dwProductVersionMS),
+              HIWORD(info.dwProductVersionLS));
+    *marketing = m;
+  }
+  const unsigned build_number = LOWORD(info.dwProductVersionLS);
+  if (build_number != 0) {
+    char b[16];
+    sprintf_s(b, "%u", build_number);
+    *build = b;
+  }
   return true;
 }
 
