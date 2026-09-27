@@ -123,6 +123,10 @@ void OverlayManager::SyncUnitsToScreens() {
     if (current.find(it->first) == current.end()) {
       it = units_.erase(it);
     } else {
+      // A resident unit's display may have been re-scaled since its last
+      // capture; the view must learn the new DPI BEFORE the frozen frame lays
+      // out (WM_DPICHANGED alone never resends the view's metrics).
+      it->second.window->SyncViewDpi();
       ++it;
     }
   }

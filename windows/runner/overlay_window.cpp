@@ -5,6 +5,8 @@
 
 #include <optional>
 
+#include "dpi_util.h"
+
 #ifndef WDA_EXCLUDEFROMCAPTURE
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011  // Win10 2004+; excludes from WGC capture
 #endif
@@ -77,6 +79,11 @@ bool OverlayWindow::Create(const flutter::DartProject& project,
   child_ = controller_->view()->GetNativeWindow();
   SetParent(child_, hwnd_);
   MoveWindow(child_, 0, 0, w, h, TRUE);
+  // The view was born on HWND_MESSAGE with the PRIMARY monitor's DPI; this
+  // window's monitor may be scaled differently (issue #2). Sync unconditionally
+  // here (no frame has been laid out yet), then only on change (SyncViewDpi).
+  view_dpi_ = GetDpiForWindow(hwnd_);
+  SyncFlutterViewDpi(child_, w, h);
   // Permanent DWM "glass sheet": DWM composites the Flutter surface's
   // premultiplied alpha against the desktop, so a frozen screenshot's alpha-255
   // pixels read opaque while the live record-select picker's transparent base
@@ -119,6 +126,16 @@ void OverlayWindow::SetCaptureExcluded(bool excluded) {
   // recording over a screenshot session captures the overlay as content. (The
   // DWM glass is permanent -- applied in Create -- so this never changes opacity.)
   SetWindowDisplayAffinity(hwnd_, excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+}
+
+void OverlayWindow::SyncViewDpi() {
+  if (!hwnd_ || !child_) return;
+  const UINT dpi = GetDpiForWindow(hwnd_);
+  if (dpi == 0 || dpi == view_dpi_) return;
+  view_dpi_ = dpi;
+  RECT cc{};
+  GetClientRect(hwnd_, &cc);
+  SyncFlutterViewDpi(child_, cc.right - cc.left, cc.bottom - cc.top);
 }
 
 void OverlayWindow::SetForeground() {

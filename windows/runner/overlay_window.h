@@ -52,6 +52,11 @@ class OverlayWindow {
   // display). Best-effort against Windows' SetForegroundWindow restrictions.
   void SetForeground();
 
+  // Re-sync the Flutter view's DPI to this window's monitor when it changed
+  // since the view last learned it (a display re-scaled between captures).
+  // Called before each capture so the frozen frame lays out at the right ratio.
+  void SyncViewDpi();
+
   bool visible() const { return visible_; }
   HWND hwnd() const { return hwnd_; }
   flutter::FlutterViewController* controller() const { return controller_.get(); }
@@ -67,6 +72,7 @@ class OverlayWindow {
 
   HWND hwnd_ = nullptr;
   HWND child_ = nullptr;  // the Flutter view's native window
+  UINT view_dpi_ = 0;     // the DPI the Flutter view was last synced to
   bool visible_ = false;
   std::unique_ptr<flutter::FlutterViewController> controller_;
 };

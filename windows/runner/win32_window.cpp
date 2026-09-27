@@ -3,6 +3,7 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
+#include "dpi_util.h"
 #include "resource.h"
 
 namespace {
@@ -280,6 +281,11 @@ void Win32Window::SetChildContent(HWND content) {
 
   MoveWindow(content, frame.left, frame.top, frame.right - frame.left,
              frame.bottom - frame.top, true);
+  // A window created on a monitor scaled unlike the primary never receives
+  // WM_DPICHANGED, so the reparented view would keep the primary DPI it was
+  // born with; sync it to this window's monitor (same root cause as issue #2).
+  SyncFlutterViewDpi(content, frame.right - frame.left,
+                     frame.bottom - frame.top);
 
   SetFocus(child_content_);
 }
