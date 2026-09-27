@@ -56,7 +56,10 @@ jobs:
       # pubspec version (version-gate), so nothing changes for it. The build
       # number is passed too: with only a build name the tool leaves the
       # +build part out of the version string.
-      - run: flutter build macos --release --build-name="${GITHUB_REF_NAME#v}" --build-number="$(sed -n 's/^version: .*+//p' pubspec.yaml)"
+      - run: |
+          NAME="${GITHUB_REF_NAME#v}"
+          NUMBER="$(sed -n 's/^version: .*+//p' pubspec.yaml)"
+          flutter build macos --release --build-name="$NAME" --build-number="$NUMBER"
       - name: Verify signature
         run: |
           codesign --verify --deep --strict build/macos/Build/Products/Release/Glimpr.app
