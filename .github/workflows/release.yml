@@ -74,6 +74,7 @@ jobs:
           brew install create-dmg
           create-dmg \
             --volname "Glimpr" \
+            --volicon "build/macos/Build/Products/Release/Glimpr.app/Contents/Resources/AppIcon.icns" \
             --window-size 540 380 \
             --icon-size 128 \
             --icon "Glimpr.app" 140 180 \
