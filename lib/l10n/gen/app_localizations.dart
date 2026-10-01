@@ -294,6 +294,41 @@ abstract class AppLocalizations {
   /// **'Update failed; the release page has been opened'**
   String get settingsAboutUpdateFailed;
 
+  /// About pane: download status with the time estimate appended; remaining is one of the settingsAboutUpdateRemaining strings
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the update… {percent}% ({received} / {total} MB), {remaining}'**
+  String settingsAboutUpdateDownloadProgressEta(
+    int percent,
+    String received,
+    String total,
+    String remaining,
+  );
+
+  /// About pane: estimated download time left, whole minutes rounded up
+  ///
+  /// In en, this message translates to:
+  /// **'about {minutes} min left'**
+  String settingsAboutUpdateRemainingMinutes(int minutes);
+
+  /// About pane: estimated download time left when under a minute
+  ///
+  /// In en, this message translates to:
+  /// **'less than 1 min left'**
+  String get settingsAboutUpdateRemainingSoon;
+
+  /// About pane: extra line under the progress bar when the update download is slow
+  ///
+  /// In en, this message translates to:
+  /// **'Download speed depends on the connection between your network and GitHub\'s download servers. The download is still running.'**
+  String get settingsAboutUpdateSlowHint;
+
+  /// About pane: transient status after the self-update download dropped or stalled; the browser fallback already opened
+  ///
+  /// In en, this message translates to:
+  /// **'Download interrupted; the release page has been opened. If the browser download is just as slow, try again later.'**
+  String get settingsAboutUpdateDownloadFailed;
+
   /// Advanced pane: updates section label
   ///
   /// In en, this message translates to:

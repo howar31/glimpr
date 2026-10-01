@@ -18,13 +18,14 @@ void main() {
     required InstallScope current,
     required ValueNotifier<UpdatePhase> phase,
     required Future<InstallOutcome> Function(InstallScopeTarget) onSwitch,
+    ValueNotifier<DownloadProgress?>? progress,
   }) async {
     await tester.pumpWidget(localizedApp(glimprLicenseSurface(
       GlimprTokens.dark,
       InstallScopeView(
         current: current,
         phase: phase,
-        progress: ValueNotifier<DownloadProgress?>(null),
+        progress: progress ?? ValueNotifier<DownloadProgress?>(null),
         onSwitch: onSwitch,
       ),
     )));
@@ -130,5 +131,31 @@ void main() {
     phase.value = UpdatePhase.installing;
     await tester.pump();
     expect(find.text('Installing, the app will restart…'), findsOneWidget);
+  });
+
+  testWidgets('a slow download adds the estimate and the hint line',
+      (tester) async {
+    const mb = 1024 * 1024;
+    const hint = 'Download speed depends on the connection between your '
+        "network and GitHub's download servers. The download is still "
+        'running.';
+    final progress = ValueNotifier<DownloadProgress?>(null);
+    await pump(tester,
+        current: InstallScope.user,
+        phase: ValueNotifier(UpdatePhase.downloading),
+        progress: progress,
+        onSwitch: (_) async => InstallOutcome.handed);
+    progress.value = const DownloadProgress(3 * mb, 24 * mb,
+        remaining: Duration(minutes: 1, seconds: 30));
+    await tester.pump();
+    expect(
+        find.text(
+            'Downloading the update… 12% (3.0 / 24.0 MB), about 2 min left'),
+        findsOneWidget);
+    expect(find.text(hint), findsNothing);
+    progress.value = const DownloadProgress(3 * mb, 24 * mb,
+        remaining: Duration(minutes: 9), slow: true);
+    await tester.pump();
+    expect(find.text(hint), findsOneWidget);
   });
 }

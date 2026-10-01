@@ -20,6 +20,7 @@ import '../l10n/gen/app_localizations.dart';
 import 'app_locale.dart';
 import 'gpu_preference.dart';
 import 'install_scope_page.dart';
+import 'update_download_text.dart';
 import '../editor/tool_meta.dart';
 import '../overlay/crop_hud.dart';
 import '../overlay/selection_guides.dart';
@@ -168,6 +169,9 @@ class _SettingsAppState extends State<SettingsApp>
   // A failed self-update shows a short notice (the release page already
   // opened) before the tappable "update available" row returns.
   bool _updateFailedNotice = false;
+  // The failure happened while fetching the file (dropped or stalled
+  // transfer): the notice says so instead of the generic wording.
+  bool _updateFailedInDownload = false;
   Timer? _updateFailedTimer;
   // "What's new": one section per release newer than the running version
   // (the pending updates, newest first), or the latest release alone once
@@ -440,10 +444,15 @@ class _SettingsAppState extends State<SettingsApp>
       return;
     }
     _openUrl(url);
-    setState(() => _updateFailedNotice = true);
+    final inDownload = _updater.failedInDownload;
+    setState(() {
+      _updateFailedNotice = true;
+      _updateFailedInDownload = inDownload;
+    });
     unawaited(_refreshStaged(tag));
     _updateFailedTimer?.cancel();
-    _updateFailedTimer = Timer(const Duration(seconds: 6), () {
+    // The download notice is two sentences: keep it up longer.
+    _updateFailedTimer = Timer(Duration(seconds: inDownload ? 12 : 6), () {
       if (mounted) setState(() => _updateFailedNotice = false);
     });
   }
@@ -1179,11 +1188,18 @@ class _SettingsAppState extends State<SettingsApp>
                   ),
               ],
             ),
-            // Result line (fixed height, no layout jump): up-to-date in the
-            // quiet caption tone; a new version in accent, tappable.
-            SizedBox(
-              height: 22,
-              child: Center(child: _updateStatusLine(t)),
+            // Result line: up-to-date in the quiet caption tone; a new
+            // version in accent, tappable. One-line states fit the 22px
+            // minimum (no layout jump); the slow-download hint and the
+            // download-failure notice grow it, animated.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 22),
+                child: Center(child: _updateStatusLine(t)),
+              ),
             ),
           ],
         ),
@@ -1268,8 +1284,15 @@ class _SettingsAppState extends State<SettingsApp>
         break;
     }
     if (_updateFailedNotice) {
-      return Text(_l.settingsAboutUpdateFailed,
-          style: GlimprType.sansStyle(12, 500, t.fg4));
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 340),
+        child: Text(
+            _updateFailedInDownload
+                ? _l.settingsAboutUpdateDownloadFailed
+                : _l.settingsAboutUpdateFailed,
+            textAlign: TextAlign.center,
+            style: GlimprType.sansStyle(12, 500, t.fg4)),
+      );
     }
     final tag = _updateAvailableTag;
     if (tag != null) {
@@ -1306,16 +1329,14 @@ class _SettingsAppState extends State<SettingsApp>
   }
 
   // Download progress: the caption line with percent + MB once the total is
-  // known, a thin bar underneath (determinate when the total is known, else
-  // indeterminate). Fits the fixed 22px status slot: no layout jump.
+  // known and the time estimate once the rate is measurable, a thin bar
+  // underneath (determinate when the total is known, else indeterminate).
+  // Caption + bar fit the 22px status slot; a slow download adds a hint
+  // line below.
   Widget _updateDownloadLine(GlimprTokens t) {
     final p = _updater.progress.value;
     final fraction = p?.fraction;
-    final total = p?.total;
-    final label = total == null
-        ? _l.settingsAboutUpdateDownloading
-        : _l.settingsAboutUpdateDownloadProgress(
-            (fraction! * 100).floor(), _mb(p!.received), _mb(total));
+    final label = updateDownloadLabel(_l, p);
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -1336,11 +1357,19 @@ class _SettingsAppState extends State<SettingsApp>
             ),
           ),
         ),
+        if (p != null && p.slow)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Text(_l.settingsAboutUpdateSlowHint,
+                  textAlign: TextAlign.center,
+                  style: GlimprType.sansStyle(11, 500, t.fg4)),
+            ),
+          ),
       ],
     );
   }
-
-  static String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
 
   // A full-width tappable About row: SettingRow's icon tile + label, with a
   // trailing affordance (↗ = opens an external URL, › = an in-app page).

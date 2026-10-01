@@ -123,6 +123,32 @@ class AppLocalizationsEn extends AppLocalizations {
       'Update failed; the release page has been opened';
 
   @override
+  String settingsAboutUpdateDownloadProgressEta(
+    int percent,
+    String received,
+    String total,
+    String remaining,
+  ) {
+    return 'Downloading the update… $percent% ($received / $total MB), $remaining';
+  }
+
+  @override
+  String settingsAboutUpdateRemainingMinutes(int minutes) {
+    return 'about $minutes min left';
+  }
+
+  @override
+  String get settingsAboutUpdateRemainingSoon => 'less than 1 min left';
+
+  @override
+  String get settingsAboutUpdateSlowHint =>
+      'Download speed depends on the connection between your network and GitHub\'s download servers. The download is still running.';
+
+  @override
+  String get settingsAboutUpdateDownloadFailed =>
+      'Download interrupted; the release page has been opened. If the browser download is just as slow, try again later.';
+
+  @override
   String get settingsSectionUpdates => 'Updates';
 
   @override

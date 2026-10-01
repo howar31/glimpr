@@ -6,6 +6,7 @@ import '../theme/glimpr_controls.dart';
 import '../theme/glimpr_theme.dart';
 import '../update/updater.dart';
 import 'licenses_page.dart' show GlimprSubpageHeader;
+import 'update_download_text.dart';
 
 /// The scope a switch from [current] moves to.
 InstallScopeTarget oppositeOf(InstallScope current) =>
@@ -177,11 +178,7 @@ class _InstallScopeViewState extends State<InstallScopeView> {
       valueListenable: widget.progress,
       builder: (context, p, _) {
         final fraction = p?.fraction;
-        final total = p?.total;
-        final label = total == null
-            ? l.settingsAboutUpdateDownloading
-            : l.settingsAboutUpdateDownloadProgress(
-                (fraction! * 100).floor(), _mb(p!.received), _mb(total));
+        final label = updateDownloadLabel(l, p);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -201,11 +198,15 @@ class _InstallScopeViewState extends State<InstallScopeView> {
                 ),
               ),
             ),
+            if (p != null && p.slow)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(l.settingsAboutUpdateSlowHint,
+                    style: GlimprType.sansStyle(11, 500, t.fg4)),
+              ),
           ],
         );
       },
     );
   }
-
-  static String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
 }

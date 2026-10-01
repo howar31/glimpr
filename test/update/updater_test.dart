@@ -572,4 +572,114 @@ void main() {
     expect(const DownloadProgress(5, 10).fraction, 0.5);
     expect(const DownloadProgress(20, 10).fraction, 1.0);
   });
+  group('DownloadRate', () {
+    late DateTime now;
+    DownloadRate rate() {
+      now = DateTime(2026, 1, 1);
+      return DownloadRate(() => now);
+    }
+
+    const mb = 1024 * 1024;
+
+    test('no estimate before the reports span the minimum', () {
+      final r = rate();
+      expect(r.add(0, 10 * mb).remaining, isNull);
+      now = now.add(const Duration(seconds: 2));
+      expect(r.add(mb, 10 * mb).remaining, isNull);
+    });
+
+    test('no estimate without a total', () {
+      final r = rate();
+      r.add(0, null);
+      now = now.add(const Duration(seconds: 5));
+      expect(r.add(mb, null).remaining, isNull);
+    });
+
+    test('estimates the time left from the recent rate', () {
+      final r = rate();
+      r.add(0, 10 * mb);
+      now = now.add(const Duration(seconds: 4));
+      // 2 MB in 4 s = 0.5 MB/s, 8 MB left.
+      final p = r.add(2 * mb, 10 * mb);
+      expect(p.remaining, const Duration(seconds: 16));
+      expect(p.slow, isFalse);
+    });
+
+    test('the rate follows the last window, not the whole download', () {
+      final r = rate();
+      r.add(0, 100 * mb);
+      // 30 s at 1 MB/s, one report per second.
+      for (var i = 1; i <= 30; i++) {
+        now = now.add(const Duration(seconds: 1));
+        r.add(i * mb, 100 * mb);
+      }
+      // Then 10 s at 0.1 MB/s.
+      late DownloadProgress p;
+      for (var i = 1; i <= 10; i++) {
+        now = now.add(const Duration(seconds: 1));
+        p = r.add(30 * mb + i * mb ~/ 10, 100 * mb);
+      }
+      // 69 MB left at about 0.1 MB/s, far above the whole-run average.
+      expect(p.remaining!.inSeconds, greaterThan(600));
+    });
+
+    test('slow needs both the elapsed time and a long estimate', () {
+      final r = rate();
+      r.add(0, 100 * mb);
+      now = now.add(const Duration(seconds: 10));
+      // Long estimate, but not running long enough yet.
+      expect(r.add(mb, 100 * mb).slow, isFalse);
+      now = now.add(const Duration(seconds: 10));
+      expect(r.add(2 * mb, 100 * mb).slow, isTrue);
+    });
+
+    test('a fast download past the threshold is not slow', () {
+      final r = rate();
+      r.add(0, 100 * mb);
+      now = now.add(const Duration(seconds: 25));
+      final p = r.add(50 * mb, 100 * mb);
+      expect(p.remaining, const Duration(seconds: 25));
+      expect(p.slow, isFalse);
+    });
+
+    test('slow stays set once the estimate drops', () {
+      final r = rate();
+      r.add(0, 100 * mb);
+      now = now.add(const Duration(seconds: 20));
+      expect(r.add(mb, 100 * mb).slow, isTrue);
+      now = now.add(const Duration(seconds: 20));
+      final p = r.add(99 * mb, 100 * mb);
+      expect(p.remaining! < kSlowDownloadRemaining, isTrue);
+      expect(p.slow, isTrue);
+    });
+  });
+
+  test('failedInDownload: set when the transfer throws', () async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    mockMethodChannel(_update, handler: (c) => null);
+    final s = UpdaterService(
+      fetchAssets: (tag) async => {
+        'Glimpr-macOS-9.9.9.dmg': const AssetInfo(url: 'https://x/mac.dmg'),
+      },
+      download: (url, toPath, onProgress) async =>
+          throw const SocketException('stalled'),
+      stageRoot: () async => stage.createTemp('s'),
+    );
+    expect(await s.installTag('v9.9.9'), InstallOutcome.failed);
+    expect(s.failedInDownload, isTrue);
+  });
+
+  test('failedInDownload: clear for a missing listing or a refused apply',
+      () async {
+    debugPlatformOverride = TargetPlatform.macOS;
+    mockMethodChannel(_update,
+        handler: (c) => c.method == 'applyStaged' ? false : null);
+    final noListing = make(assets: null);
+    expect(await noListing.installTag('v9.9.9'), InstallOutcome.failed);
+    expect(noListing.failedInDownload, isFalse);
+    final refused =
+        make(assets: {'Glimpr-macOS-9.9.9.dmg': 'https://x/mac.dmg'});
+    expect(await refused.installTag('v9.9.9'), InstallOutcome.failed);
+    expect(refused.failedInDownload, isFalse);
+  });
 }

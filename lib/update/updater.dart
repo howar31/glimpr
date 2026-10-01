@@ -58,15 +58,73 @@ class InstallScopeInfo {
 /// Bytes received so far and the expected total (null when the server sent
 /// no Content-Length; the UI then shows an indeterminate bar).
 class DownloadProgress {
-  const DownloadProgress(this.received, this.total);
+  const DownloadProgress(this.received, this.total,
+      {this.remaining, this.slow = false});
   final int received;
   final int? total;
+
+  /// Estimated time left at the recent transfer rate; null until the rate
+  /// is measurable or when the total is unknown.
+  final Duration? remaining;
+
+  /// The download has run past [kSlowDownloadAfter] and still had more than
+  /// [kSlowDownloadRemaining] to go. Stays set for the rest of the download.
+  final bool slow;
 
   /// 0..1 when the total is known, else null.
   double? get fraction {
     final t = total;
     if (t == null || t <= 0) return null;
     return (received / t).clamp(0.0, 1.0);
+  }
+}
+
+/// The rate is measured over the most recent [kDownloadRateWindow] of
+/// progress reports, and reported once they span [kDownloadRateMinSpan].
+const kDownloadRateWindow = Duration(seconds: 10);
+const kDownloadRateMinSpan = Duration(seconds: 3);
+
+/// A download counts as slow once it has run this long and its estimate
+/// still exceeds [kSlowDownloadRemaining].
+const kSlowDownloadAfter = Duration(seconds: 20);
+const kSlowDownloadRemaining = Duration(minutes: 2);
+
+/// Turns the byte counts of one download into [DownloadProgress] values
+/// carrying the remaining-time estimate and the slow flag.
+class DownloadRate {
+  DownloadRate(this._clock);
+  final DateTime Function() _clock;
+
+  DateTime? _start;
+  final List<(DateTime, int)> _samples = [];
+  bool _slow = false;
+
+  DownloadProgress add(int received, int? total) {
+    final now = _clock();
+    final start = _start ??= now;
+    _samples.add((now, received));
+    while (_samples.length > 2 &&
+        now.difference(_samples[1].$1) >= kDownloadRateWindow) {
+      _samples.removeAt(0);
+    }
+    Duration? remaining;
+    final (t0, b0) = _samples.first;
+    final span = now.difference(t0);
+    final bytes = received - b0;
+    if (total != null && span >= kDownloadRateMinSpan && bytes > 0) {
+      final left = total - received;
+      remaining = left <= 0
+          ? Duration.zero
+          : Duration(
+              milliseconds: (left * span.inMilliseconds / bytes).ceil());
+    }
+    if (remaining != null &&
+        now.difference(start) >= kSlowDownloadAfter &&
+        remaining > kSlowDownloadRemaining) {
+      _slow = true;
+    }
+    return DownloadProgress(received, total,
+        remaining: remaining, slow: _slow);
   }
 }
 
@@ -124,6 +182,7 @@ class UpdaterService {
     this.legacyTemp,
     this.resolveTag,
     this.channel = kUpdateChannel,
+    this.clock = DateTime.now,
   });
 
   /// Release assets for [tag], or null when the listing is unavailable.
@@ -156,8 +215,26 @@ class UpdaterService {
   /// outside that phase. The tiny .sig companion is not tracked.
   final ValueNotifier<DownloadProgress?> progress = ValueNotifier(null);
 
+  /// Time source for the transfer-rate estimate.
+  final DateTime Function() clock;
+
+  /// Whether the last [InstallOutcome.failed] happened while a file was
+  /// being fetched (dropped or stalled transfer), as opposed to a missing
+  /// listing or a refused apply.
+  bool get failedInDownload => _failedInDownload;
+  bool _failedInDownload = false;
+  bool _fetching = false;
+
+  DownloadRate? _rate;
+
   void _report(int received, int? total) {
-    progress.value = DownloadProgress(received, total);
+    progress.value = (_rate ??= DownloadRate(clock)).add(received, total);
+  }
+
+  Future<void> _download(String url, String toPath, ProgressSink sink) async {
+    _fetching = true;
+    await download(url, toPath, sink);
+    _fetching = false;
   }
 
   static void _ignoreProgress(int received, int? total) {}
@@ -229,6 +306,9 @@ class UpdaterService {
       {InstallScopeTarget scope = InstallScopeTarget.keep}) async {
     try {
       progress.value = null;
+      _rate = null;
+      _fetching = false;
+      _failedInDownload = false;
       phase.value = UpdatePhase.downloading;
       final assets = await fetchAssets(tag);
       if (assets == null) throw StateError('release listing unavailable');
@@ -244,7 +324,7 @@ class UpdaterService {
         await _fetchOrReuse(exe.value, exePath);
         // The signature is always fetched fresh: the staged installer must
         // verify against what GitHub publishes NOW, never a stored copy.
-        await download(sig.url, sigPath, _ignoreProgress);
+        await _download(sig.url, sigPath, _ignoreProgress);
         progress.value = null;
         phase.value = UpdatePhase.installing;
         // A declined apply (failed verification, not installed) changed
@@ -274,6 +354,7 @@ class UpdaterService {
       }
       return InstallOutcome.handed;
     } catch (_) {
+      _failedInDownload = _fetching;
       progress.value = null;
       phase.value = UpdatePhase.failed;
       return InstallOutcome.failed;
@@ -314,7 +395,7 @@ class UpdaterService {
     if (await f.exists()) await f.delete();
     final part = File('$path$kPartialSuffix');
     if (await part.exists()) await part.delete();
-    await download(asset.url, part.path, _report);
+    await _download(asset.url, part.path, _report);
     await part.rename(path);
   }
 

@@ -120,6 +120,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutUpdateFailed => '更新失敗，已開啟下載頁面';
 
   @override
+  String settingsAboutUpdateDownloadProgressEta(
+    int percent,
+    String received,
+    String total,
+    String remaining,
+  ) {
+    return '正在下載更新… $percent%（$received / $total MB），$remaining';
+  }
+
+  @override
+  String settingsAboutUpdateRemainingMinutes(int minutes) {
+    return '約剩 $minutes 分鐘';
+  }
+
+  @override
+  String get settingsAboutUpdateRemainingSoon => '剩不到 1 分鐘';
+
+  @override
+  String get settingsAboutUpdateSlowHint =>
+      '下載速度取決於你的網路到 GitHub 下載伺服器的連線。下載仍在進行。';
+
+  @override
+  String get settingsAboutUpdateDownloadFailed =>
+      '下載中斷，已開啟下載頁面。若瀏覽器下載同樣緩慢，可稍後再試。';
+
+  @override
   String get settingsSectionUpdates => '更新';
 
   @override

@@ -146,6 +146,35 @@
   "@settingsAboutUpdateFailed": {
     "description": "About pane: transient status after a self-update could not download or was refused at install; the browser fallback already opened"
   },
+  "settingsAboutUpdateDownloadProgressEta": "Downloading the update… {percent}% ({received} / {total} MB), {remaining}",
+  "@settingsAboutUpdateDownloadProgressEta": {
+    "description": "About pane: download status with the time estimate appended; remaining is one of the settingsAboutUpdateRemaining strings",
+    "placeholders": {
+      "percent": { "type": "int" },
+      "received": { "type": "String" },
+      "total": { "type": "String" },
+      "remaining": { "type": "String" }
+    }
+  },
+  "settingsAboutUpdateRemainingMinutes": "about {minutes} min left",
+  "@settingsAboutUpdateRemainingMinutes": {
+    "description": "About pane: estimated download time left, whole minutes rounded up",
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "settingsAboutUpdateRemainingSoon": "less than 1 min left",
+  "@settingsAboutUpdateRemainingSoon": {
+    "description": "About pane: estimated download time left when under a minute"
+  },
+  "settingsAboutUpdateSlowHint": "Download speed depends on the connection between your network and GitHub's download servers. The download is still running.",
+  "@settingsAboutUpdateSlowHint": {
+    "description": "About pane: extra line under the progress bar when the update download is slow"
+  },
+  "settingsAboutUpdateDownloadFailed": "Download interrupted; the release page has been opened. If the browser download is just as slow, try again later.",
+  "@settingsAboutUpdateDownloadFailed": {
+    "description": "About pane: transient status after the self-update download dropped or stalled; the browser fallback already opened"
+  },
   "settingsSectionUpdates": "Updates",
   "@settingsSectionUpdates": {
     "description": "Advanced pane: updates section label"
