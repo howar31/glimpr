@@ -31,6 +31,10 @@ enum ToolKind {
 
 enum EditorPhase { annotate, crop }
 
+/// The style colour an eyedropper sample writes to: the stroke / text colour,
+/// the shape fill (text backdrop), or the text outline.
+enum EyedropperTarget { stroke, fill, outline }
+
 /// Tools that may show the pixel loupe / the full-screen crosshair lines:
 /// everything EXCEPT text + Select. Kept as SEPARATE consts (identical members
 /// today) so the two can diverge later. The eyedropper enables both too — see
@@ -140,8 +144,33 @@ class EditorController {
   /// click, sets the colour, and clears this). A shared notifier is the channel
   /// between the popover and the canvas.
   final eyedropperActive = ValueNotifier<bool>(false);
-  void startEyedropper() => eyedropperActive.value = true;
+
+  /// Which style colour the running sample writes to (the picker that started
+  /// it). Set before [eyedropperActive] flips so listeners read the new target.
+  EyedropperTarget eyedropperTarget = EyedropperTarget.stroke;
+  void startEyedropper([EyedropperTarget target = EyedropperTarget.stroke]) {
+    eyedropperTarget = target;
+    eyedropperActive.value = true;
+  }
+
   void stopEyedropper() => eyedropperActive.value = false;
+
+  /// Writes a sampled (opaque) pixel colour to the [eyedropperTarget] colour,
+  /// keeping that colour's alpha. Fill / outline at alpha 0 mean "none", so a
+  /// sample there lands fully opaque instead of staying invisible.
+  void applySampledColor(Color sampled) {
+    final st = style.value;
+    switch (eyedropperTarget) {
+      case EyedropperTarget.stroke:
+        setColor(sampled.withValues(alpha: st.color.a));
+      case EyedropperTarget.fill:
+        final a = st.fillColor.a;
+        setFillColor(sampled.withValues(alpha: a == 0 ? 1.0 : a));
+      case EyedropperTarget.outline:
+        final a = st.outlineColor.a;
+        setOutlineColor(sampled.withValues(alpha: a == 0 ? 1.0 : a));
+    }
+  }
 
   /// Whether the captured mouse-pointer layer (overlay only) is shown. Initialised
   /// per capture from the "capture mouse pointer" setting; flipped by the toolbar

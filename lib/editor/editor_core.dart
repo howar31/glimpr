@@ -731,10 +731,7 @@ class _EditorCoreState extends State<EditorCore> {
         sampled = Color.fromARGB(255, b[0], b[1], b[2]);
       }
     }
-    if (sampled != null) {
-      final keepAlpha = c.style.value.color.a; // preserve the tool's alpha (0..1)
-      c.setColor(sampled.withValues(alpha: keepAlpha));
-    }
+    if (sampled != null) c.applySampledColor(sampled);
     c.stopEyedropper();
   }
 

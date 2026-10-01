@@ -938,15 +938,15 @@ class _OptionsRowState extends State<_OptionsRow> {
   /// Shared skeleton for the three colour pickers (stroke / fill / text
   /// outline): toggle-off if already open, load the recent colours, then a
   /// 242px [ColorPickerPopover]. [pushTransparent] is false for fill/outline
-  /// (a cleared alpha-0 colour isn't worth recalling); [onPickFromScreen] is
-  /// the stroke picker's eyedropper only.
+  /// (a cleared alpha-0 colour isn't worth recalling); [eyedropper] names the
+  /// style colour the picker's eyedropper samples into.
   Future<void> _openColorPickerPopover(
     _OpenPopover kind, {
     required Color color,
     required List<Color> presets,
     required ValueChanged<Color> onChanged,
+    required EyedropperTarget eyedropper,
     bool pushTransparent = true,
-    VoidCallback? onPickFromScreen,
   }) async {
     // Toggle off if already open; ensure only one popover at a time.
     if (_open == kind) {
@@ -976,7 +976,12 @@ class _OptionsRowState extends State<_OptionsRow> {
             ).pushRecentColor(color.toARGB32());
           }
         },
-        onPickFromScreen: onPickFromScreen,
+        // Start eyedropper sampling on the canvas; close the popover so the
+        // whole frozen frame / editor image is pickable.
+        onPickFromScreen: () {
+          _c.startEyedropper(eyedropper);
+          _closePopover();
+        },
       ),
     );
   }
@@ -991,22 +996,18 @@ class _OptionsRowState extends State<_OptionsRow> {
             ? kHighlighterPresets
             : kColorPresets,
         onChanged: _c.setColor,
-        // Start eyedropper sampling on the canvas; close the popover so the
-        // whole frozen frame / editor image is pickable.
-        onPickFromScreen: () {
-          _c.startEyedropper();
-          _closePopover();
-        },
+        eyedropper: EyedropperTarget.stroke,
       );
 
   // The fill picker (rect/ellipse only). Mirrors the stroke picker but seeds
   // and writes [DrawStyle.fillColor]; the alpha slider doubles as "drag to 0 =
-  // no fill". No eyedropper — that path targets the outline colour.
+  // no fill".
   Future<void> _openFillPopover() => _openColorPickerPopover(
         _OpenPopover.fill,
         color: _c.style.value.fillColor,
         presets: kColorPresets,
         onChanged: _c.setFillColor,
+        eyedropper: EyedropperTarget.fill,
         pushTransparent: false,
       );
 
@@ -1017,6 +1018,7 @@ class _OptionsRowState extends State<_OptionsRow> {
         color: _c.style.value.outlineColor,
         presets: kColorPresets,
         onChanged: _c.setOutlineColor,
+        eyedropper: EyedropperTarget.outline,
         pushTransparent: false,
       );
 
@@ -1307,9 +1309,6 @@ class _OptionsRowState extends State<_OptionsRow> {
               type: MaterialType.transparency,
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: width),
-                // Match the toolbar bar exactly: STATIC backdrop = blur (frosts
-                // the frozen screenshot); DYNAMIC backdrop (record live-select)
-                // = tint, no blur.
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
