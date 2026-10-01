@@ -120,8 +120,8 @@ class GlimprTokens {
   /// unreadable. A near-opaque fill following dark/light keeps marks legible
   /// on ANY backdrop (white, black, busy); a faint blur may sit under it for a
   /// frosted texture (static backdrops only). Windows stay pure vibrancy.
-  static const Color barBgDark = Color(0xB31A1E28); // neutral dark ~70%
-  static const Color barBgLight = Color(0xB3F7F8FB); // near-white ~70%
+  static const Color barBgDark = Color(0xF21A1E28); // neutral dark ~95%
+  static const Color barBgLight = Color(0xF2F7F8FB); // near-white ~95%
   static const Color barBorderDark = Color(0x26FFFFFF); // ~15% white hairline
   static const Color barBorderLight = Color(0x1A0F172A); // ~10% slate hairline
 
