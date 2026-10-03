@@ -485,12 +485,6 @@ abstract class AppLocalizations {
   /// **'Start Glimpr automatically when you log in'**
   String get settingsLaunchAtLoginHint;
 
-  /// Settings > General > Language: subtitle below the language picker
-  ///
-  /// In en, this message translates to:
-  /// **'Applies after restarting Glimpr'**
-  String get settingsLanguageAppliesAfterRestart;
-
   /// Settings > General/Advanced: warning shown when a restart-required setting changes
   ///
   /// In en, this message translates to:

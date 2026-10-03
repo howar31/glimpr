@@ -282,10 +282,6 @@
   "@settingsLaunchAtLoginHint": {
     "description": "Settings > General > Startup: launch at login toggle hint"
   },
-  "settingsLanguageAppliesAfterRestart": "Applies after restarting Glimpr",
-  "@settingsLanguageAppliesAfterRestart": {
-    "description": "Settings > General > Language: subtitle below the language picker"
-  },
   "settingsRestartNotice": "Restart Glimpr for this to take effect.",
   "@settingsRestartNotice": {
     "description": "Settings > General/Advanced: warning shown when a restart-required setting changes"

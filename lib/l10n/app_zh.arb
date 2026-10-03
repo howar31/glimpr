@@ -63,7 +63,6 @@
   "settingsSectionStartup": "啟動",
   "settingsLaunchAtLogin": "登入時啟動",
   "settingsLaunchAtLoginHint": "登入時自動啟動 Glimpr",
-  "settingsLanguageAppliesAfterRestart": "重新啟動 Glimpr 後生效",
   "settingsRestartNotice": "重新啟動 Glimpr 後此設定才會生效。",
   "settingsRestartNow": "立即重新啟動 Glimpr",
   "settingsRestartNowConfirm": "再按一次以重新啟動 Glimpr",

@@ -191,6 +191,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           NSWorkspace.shared.open(url)
         }
         result(nil)
+      // Settings changed the app language: re-read it and re-apply the
+      // strings held by long-lived objects. The Flutter engines re-resolve
+      // their own locale in Dart.
+      case "languageChanged":
+        L.reload()
+        self?.title = L.s("Glimpr Settings", "Glimpr 設定")
+        self?.imageEditorWindow?.title = L.s("Image Editor", "圖片編輯器")
+        self?.statusItem?.relocalize()
+        result(nil)
       // Update-check state for the menu-bar item (label + availability);
       // pushed by Dart whenever the About row's state changes.
       case "setUpdateStatus":
@@ -1680,12 +1689,12 @@ enum PerfLog {
 /// SharedPreferencesAsync writes NSUserDefaults key "app_language" with NO
 /// prefix ("system" | "en" | "zh") - unlike the legacy shared_preferences
 /// API, the async API does not add "flutter." -
-/// read once at launch. The language applies on restart, so a static snapshot
-/// is correct by design. Only English and Traditional Chinese exist.
+/// read at launch and again on `reload` when Settings changes the choice.
+/// Only English and Traditional Chinese exist.
 enum L {
   /// Pure resolution of the stored preference ("system"/nil falls back to
   /// [systemLanguages]). Extracted from the `zh` initializer so the mapping
-  /// is unit-testable (the cached `zh` resolves only once per launch).
+  /// is unit-testable (the cached `zh` only changes on `reload`).
   static func resolveZh(pref: String?, systemLanguages: [String]) -> Bool {
     switch pref {
     case "zh": return true
@@ -1696,9 +1705,16 @@ enum L {
       return systemLanguages.first?.hasPrefix("zh") == true
     }
   }
-  static let zh: Bool = resolveZh(
-    pref: UserDefaults.standard.string(forKey: "app_language"),
-    systemLanguages: Locale.preferredLanguages)
+  static private(set) var zh: Bool = resolveCurrent()
+  private static func resolveCurrent() -> Bool {
+    resolveZh(
+      pref: UserDefaults.standard.string(forKey: "app_language"),
+      systemLanguages: Locale.preferredLanguages)
+  }
+  /// Re-read the stored choice after Settings changed it. Strings read through
+  /// `s` at use time follow on their own; long-lived ones (menu items, window
+  /// titles) are re-applied by the caller.
+  static func reload() { zh = resolveCurrent() }
   static func s(_ en: String, _ zhHant: String) -> String { zh ? zhHant : en }
 }
 

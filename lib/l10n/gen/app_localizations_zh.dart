@@ -231,9 +231,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLaunchAtLoginHint => '登入時自動啟動 Glimpr';
 
   @override
-  String get settingsLanguageAppliesAfterRestart => '重新啟動 Glimpr 後生效';
-
-  @override
   String get settingsRestartNotice => '重新啟動 Glimpr 後此設定才會生效。';
 
   @override

@@ -40,6 +40,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   private let onClearRecent: () -> Void
   // The "Open Recent" submenu, rebuilt from the Dart-owned recent list.
   private let recentMenu = NSMenu()
+  private var recentPaths: [String] = []
   // Items whose key-equivalent hint follows a rebindable global action.
   private var hintedItems: [(NSMenuItem, String)] = []
   // About Glimpr menu item → reveal Settings on the About pane (set by the host).
@@ -145,6 +146,30 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     let menu = NSMenu()
     menu.delegate = self // refresh the key-equivalent hints on each open
+    item.menu = menu
+    populateMenu(menu)
+  }
+
+  /// Rebuild the menu in the current language after Settings changed it, then
+  /// re-apply the state the items carry (recording, recents, update label).
+  func relocalize() {
+    guard let menu = item.menu else { return }
+    let updateTitle = updateAvailable ? updateItem?.title : nil
+    // Detach the shared "Open Recent" submenu before its item goes away: a
+    // menu can only be attached to one item at a time.
+    for mi in menu.items { mi.submenu = nil }
+    menu.removeAllItems()
+    hintedItems.removeAll()
+    populateMenu(menu)
+    for mi in recordControlItems { mi.isHidden = !isRecordingState }
+    for mi in recordStartItems { mi.isHidden = isRecordingState }
+    setRecordingPaused(recordPausedState)
+    // Dart re-pushes the update label in the new language right after; keep
+    // the known one until then.
+    if let updateTitle { updateItem?.title = updateTitle }
+  }
+
+  private func populateMenu(_ menu: NSMenu) {
     // App-name header: disabled, non-clickable. action == nil + autoenablesItems
     // (on by default) renders it greyed out; isEnabled = false makes the intent explicit.
     let header = NSMenuItem(title: kAppNameVersion, action: nil, keyEquivalent: "")
@@ -195,7 +220,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     let recentItem = NSMenuItem(title: L.s("Open Recent", "開啟最近項目"), action: nil, keyEquivalent: "")
     recentItem.submenu = recentMenu
     menu.addItem(recentItem)
-    rebuildRecent([]) // seed the placeholder until Dart pushes the list
+    rebuildRecent(recentPaths) // the placeholder until Dart pushes the list
     menu.addItem(menuItem(
       title: L.s("Open Save Folder", "開啟儲存資料夾"),
       action: #selector(openSaveFolder), key: ""))
@@ -209,7 +234,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: L.s("Quit \(kAppName)", "結束 \(kAppName)"), action: #selector(quit), key: "q"))
-    item.menu = menu
   }
 
   /// Refresh the global items' key-equivalent hints from the EFFECTIVE
@@ -239,6 +263,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   }
 
   private func rebuildRecent(_ paths: [String]) {
+    recentPaths = paths
     recentMenu.removeAllItems()
     guard !paths.isEmpty else {
       // action == nil + autoenablesItems greys this out (no recent files yet).

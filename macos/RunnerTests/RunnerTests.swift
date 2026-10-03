@@ -519,9 +519,9 @@ final class AudioMixerMathTests: XCTestCase {
 // MARK: - L localization (MainFlutterWindow.swift)
 
 final class LocalizationTests: XCTestCase {
-  // NOTE: L.zh is a `static let` resolved ONCE per process (by design — the
-  // language applies on restart), so the preference variants are tested via
-  // the extracted pure resolveZh, not by mutating UserDefaults.
+  // NOTE: L.zh is cached and only re-read on L.reload(), so the preference
+  // variants are tested via the extracted pure resolveZh, not by mutating
+  // UserDefaults.
   func testResolveZhExplicitPreference() {
     XCTAssertTrue(L.resolveZh(pref: "zh", systemLanguages: ["en-US"]))
     XCTAssertFalse(L.resolveZh(pref: "en", systemLanguages: ["zh-Hant-TW"]))
@@ -537,7 +537,7 @@ final class LocalizationTests: XCTestCase {
   }
 
   func testSFollowsResolvedLanguage() {
-    // Whatever the host resolved at launch, s() must agree with L.zh.
+    // Whatever the host resolved, s() must agree with L.zh.
     XCTAssertEqual(L.s("English", "中文"), L.zh ? "中文" : "English")
   }
 }

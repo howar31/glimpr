@@ -33,8 +33,8 @@ import 'update/version_display.dart';
 /// resident menu-bar engine, so we mount the right widget tree per engine.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Resolve the language choice once per engine boot (restart-effective);
-  // every MaterialApp reads the resulting appLocaleOverride.
+  // Resolve the language choice before the first frame; every MaterialApp
+  // reads the resulting appLocaleOverride (reloaded when the choice changes).
   await loadAppLocaleOverride();
   // Resolve Pro entitlement once per engine boot (offline; never blocks boot).
   // In the OSS build this is the no-op stub — every Pro feature stays locked.
@@ -165,49 +165,10 @@ Future<void> main() async {
     CaptureBridge().showError('${l.shortcutsConflictWarning}\n\n$lines');
   }
 
-  // Windows: push the localized tray-menu labels to native. The runner C++ is
-  // ASCII-only (cp950), so it cannot hold the zh strings — Dart owns l10n and
-  // sends them. Global-action items reuse the Shortcuts-pane action labels;
-  // menu-only items use dedicated keys. Sent once at boot (restart-effective).
+  // Windows: push the localized tray-menu and recording-strip labels to
+  // native (no-op on macOS, whose native side reads the choice itself).
+  syncNativeLanguage();
   if (platformIsWindows) {
-    final l = appL10n;
-    control.invokeMethod('setTrayLabels', <String, String>{
-      'captureArea': globalActionLabel(l, kCaptureAreaKey),
-      'captureWindow': globalActionLabel(l, kCaptureWindowKey),
-      'captureScreen': globalActionLabel(l, kCaptureScreenKey),
-      'captureLast': globalActionLabel(l, kCaptureLastRegionKey),
-      'pinArea': globalActionLabel(l, kPinAreaKey),
-      'pinClipboard': globalActionLabel(l, kPinClipboardKey),
-      'recordRegion': globalActionLabel(l, kRecordRegionKey),
-      'recordWindow': globalActionLabel(l, kRecordWindowKey),
-      'recordDisplay': globalActionLabel(l, kRecordDisplayKey),
-      'recordLast': globalActionLabel(l, kRecordLastRegionKey),
-      'openEditor': globalActionLabel(l, kOpenEditorKey),
-      'openEditorClipboard': globalActionLabel(l, kOpenEditorClipboardKey),
-      'openRecent': l.trayOpenRecent,
-      'clearRecent': l.trayClearRecent,
-      'openSaveFolder': l.trayOpenSaveFolder,
-      'checkUpdates': l.settingsAboutCheckUpdates,
-      'about': l.trayAbout,
-      'settings': l.traySettings,
-      'quit': l.trayQuit,
-      // Not a menu item: the tray tooltip while the recording-finalize pulse
-      // runs (that pulse is native-initiated, so it cannot ride a channel arg).
-      'processingRecording': l.trayProcessingRecording,
-    }).catchError((_) {});
-    // Push the localized recording-strip / countdown labels to native for the
-    // same reason: the runner C++ is ASCII-only (cp950), so Dart owns l10n and
-    // the native chrome sizes its buttons to the longest label per language.
-    const MethodChannel('glimpr/record')
-        .invokeMethod('setRecordLabels', <String, String>{
-      'finish': l.recordStripFinish,
-      'pause': l.recordStripPause,
-      'resume': l.recordStripResume,
-      'abort': l.recordStripAbort,
-      'confirm': l.recordStripConfirm,
-      'frames': l.recordStripFrames,
-      'countdownCancel': l.recordCountdownCancel,
-    }).catchError((_) {});
     // The tray "Open Recent" list: this engine is the only resident one on
     // Windows (the editor engine lives in a per-open child process).
     unawaited(TrayRecents(store: Settings.instance.store).refresh());

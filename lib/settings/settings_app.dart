@@ -218,7 +218,6 @@ class _SettingsAppState extends State<SettingsApp>
   // App language choice + the value active since launch (restart-effective,
   // like the warm target): the restart hint shows while they differ.
   String _appLanguage = 'system';
-  String? _appLanguageInitial;
   // The warm target active SINCE launch (what OverlayManager actually built with).
   // When the user picks a different value, a restart is needed to apply it.
   int? _warmTargetInitial;
@@ -320,7 +319,7 @@ class _SettingsAppState extends State<SettingsApp>
   void _close() => _roleChannel.invokeMethod('closeSettings');
 
   /// The restart-effective hint + two-step Restart button, shown while a
-  /// restart-effective setting (app language, warm target) differs from its
+  /// restart-effective setting (warm target, GPU preference) differs from its
   /// launch value. One click instead of quit-from-the-tray + reopen: the
   /// native side re-opens the bundle after this process exits; two-step
   /// (arm -> confirm) because it kills the running app.
@@ -650,7 +649,6 @@ class _SettingsAppState extends State<SettingsApp>
       _snapElementMode = snapElementMode;
       _hdrScreenshot = hdrScreenshot;
       _appLanguage = appLanguage;
-      _appLanguageInitial = appLanguage;
       _recordFormat = rec.format;
       _recordFps = rec.fps;
       _recordVideoQuality = rec.videoQuality;
@@ -949,9 +947,23 @@ class _SettingsAppState extends State<SettingsApp>
     }
   }
 
-  void _setAppLanguage(String v) {
-    _s.setAppLanguage(v);
+  // Applies in place: this engine's MaterialApp rebuilds in the new language
+  // and the native menu / tray strings follow. The overlay and Image Editor
+  // engines pick the change up at their next settings reload.
+  Future<void> _setAppLanguage(String v) async {
     setState(() => _appLanguage = v);
+    await _s.setAppLanguage(v);
+    final changed = await loadAppLocaleOverride(_s);
+    if (!changed || !mounted) return;
+    setState(() {});
+    syncNativeLanguage(languageChanged: true);
+    // After the rebuild, so _l is the new language: the tray update label
+    // and the What's-new sections are composed from it.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _pushTrayUpdateStatus();
+      await _loadNotes(await _appVersionFuture);
+    });
   }
 
   @override
@@ -1596,11 +1608,6 @@ class _SettingsAppState extends State<SettingsApp>
               _l.settingsLanguage,
               style: GlimprType.sansStyle(14.5, 600, t.fg1),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _l.settingsLanguageAppliesAfterRestart,
-              style: GlimprType.sansStyle(12.5, 400, t.fg3),
-            ),
             const SizedBox(height: 16),
             // The option names are proper nouns, shown as-is in both
             // localizations.
@@ -1614,11 +1621,6 @@ class _SettingsAppState extends State<SettingsApp>
               ],
               onChanged: _setAppLanguage,
             ),
-            if (_appLanguageInitial != null &&
-                _appLanguage != _appLanguageInitial) ...[
-              const SizedBox(height: 12),
-              ..._restartNotice(),
-            ],
           ],
         ),
       ),

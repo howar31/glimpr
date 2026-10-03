@@ -246,10 +246,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Start Glimpr automatically when you log in';
 
   @override
-  String get settingsLanguageAppliesAfterRestart =>
-      'Applies after restarting Glimpr';
-
-  @override
   String get settingsRestartNotice => 'Restart Glimpr for this to take effect.';
 
   @override

@@ -7,6 +7,8 @@ import 'package:glimpr/channels.dart';
 import 'package:glimpr/output/flow.dart';
 import 'package:glimpr/overlay/crop_hud.dart';
 import 'package:glimpr/platform_gate.dart';
+import 'package:glimpr/l10n/gen/app_localizations.dart';
+import 'package:glimpr/settings/app_locale.dart';
 import 'package:glimpr/settings/settings.dart';
 import 'package:glimpr/settings/settings_app.dart';
 import 'package:glimpr/shortcuts/widgets/key_cap_chips.dart';
@@ -41,6 +43,12 @@ Finder _toggleInRow(String title) => find.descendant(
     );
 
 void main() {
+  // The language picker applies in place through process-global state.
+  tearDown(() {
+    appLocaleOverride = null;
+    appL10n = lookupAppLocalizations(const Locale('en'));
+  });
+
   testWidgets('shows the default hint when no folder is set', (tester) async {
     final settings = Settings(FakeStore());
     await tester.pumpWidget(SettingsApp(settings: settings));
@@ -76,9 +84,31 @@ void main() {
     await tester.tap(find.text('正體中文'));
     await tester.pumpAndSettle();
     expect(await settings.getAppLanguage(), 'zh');
-    // Changing from the launch value shows the restart hint.
-    expect(find.text('Restart Glimpr for this to take effect.'),
-        findsOneWidget);
+  });
+
+  testWidgets('picking a language applies it without a restart',
+      (tester) async {
+    // The native notification is platform-shaped; pin it.
+    debugPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugPlatformOverride = null);
+    final role = mockMethodChannel(kRoleChannel);
+    final settings = Settings(FakeStore());
+    await tester.pumpWidget(SettingsApp(settings: settings));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('正體中文'));
+    await tester.pumpAndSettle();
+    // The pane re-renders in the new language, with no restart prompt.
+    expect(find.text('語言'), findsWidgets);
+    expect(find.text('Language'), findsNothing);
+    expect(find.text('重新啟動 Glimpr 後此設定才會生效。'), findsNothing);
+    expect(appL10n.localeName, 'zh');
+    // The native menu strings are told to follow.
+    expect(role.map((c) => c.method), contains('languageChanged'));
+
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(find.text('Language'), findsWidgets);
+    expect(appL10n.localeName, 'en');
   });
 
   testWidgets('Advanced pane has the capture layers setting', (tester) async {

@@ -165,9 +165,10 @@ void RecordChannel::HandleMethodCall(
   }
 
   if (method == "setRecordLabels") {
-    // Localized strip / countdown labels pushed once from Dart at boot (the
-    // runner C++ is ASCII-only, so Dart owns l10n). Stored on the chrome; used
-    // (and the buttons sized) on the next Show.
+    // Localized strip / countdown labels pushed from Dart at boot and again
+    // when the language changes (the runner C++ is ASCII-only, so Dart owns
+    // l10n). Stored on the chrome; used (and the buttons sized) on the next
+    // Show.
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     if (args && chrome_) {
       RecordChrome::Labels lbl;  // English defaults

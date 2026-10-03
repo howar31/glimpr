@@ -325,6 +325,7 @@ class _OverlayAppState extends State<OverlayApp> {
         // loupe size/zoom, ...). No-op on macOS; runs AFTER overlayReady so the
         // freeze paint is never delayed. See reloadSettingsCache.
         await reloadSettingsCache();
+        _refreshLocale();
         // Prefetch settings off the hot path: the read completes during the
         // user's crop interaction, so _onExport reads _capture synchronously.
         Settings.instance.loadCapture().then((c) {
@@ -372,6 +373,15 @@ class _OverlayAppState extends State<OverlayApp> {
     );
   }
 
+  /// Follow a language change made in Settings: this resident engine
+  /// resolved the choice at boot, so re-resolve it at each settings-reload
+  /// point (after the reveal, never before it) and rebuild when it changed.
+  void _refreshLocale() {
+    loadAppLocaleOverride().then((changed) {
+      if (changed && mounted) setState(() {});
+    }).catchError((_) {});
+  }
+
   /// Hot-reload after a ⌘, Settings detour. RE-READS the WHOLE config bundle
   /// ([Settings.loadAppConfig]: loupe + HUD + capture/output + editor bindings)
   /// so everything applies live — a new config setting hot-reloads here for free
@@ -382,6 +392,7 @@ class _OverlayAppState extends State<OverlayApp> {
   /// seeded ONCE at record-select start, the toolbar IS their control) all stay
   /// as the session left them. A Settings change to those applies to the NEXT use.
   void _reloadSettings() {
+    _refreshLocale();
     Settings.instance.loadAppConfig().then((cfg) {
       if (mounted) {
         setState(() {
@@ -481,6 +492,7 @@ class _OverlayAppState extends State<OverlayApp> {
     // the picker must show the new value. No-op on macOS; runs AFTER overlayReady
     // so the reveal is never delayed. See reloadSettingsCache.
     await reloadSettingsCache();
+    _refreshLocale();
     if (!mounted || _recordOverrides != overrides) return;
     Settings.instance.loadRecording().then((r) {
       if (!mounted || _recordOverrides != overrides) return;

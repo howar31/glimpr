@@ -579,7 +579,7 @@ class _ImageEditorAppState extends State<ImageEditorApp>
   }
 
   /// Windows only: push the localized editor title to the native OS caption (no
-  /// Flutter title bar there). Sent once per locale; restart-effective anyway.
+  /// Flutter title bar there). Sent once per locale.
   void _syncWindowTitle() {
     if (!platformIsWindows) return;
     final title = _l.editorTitleBar;
@@ -601,6 +601,10 @@ class _ImageEditorAppState extends State<ImageEditorApp>
     // writes are invisible here until this engine reloads its cache, so do
     // that BEFORE reading or the change lands one focus cycle late.
     await reloadSettingsCache();
+    // A language change made in Settings applies here the same way.
+    try {
+      if (await loadAppLocaleOverride() && mounted) setState(() {});
+    } catch (_) {}
     try {
       final cfg = await Settings.instance.loadAppConfig();
       if (!mounted) return;

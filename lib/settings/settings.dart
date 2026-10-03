@@ -478,10 +478,10 @@ class Settings {
   // Getters clamp on read too, so a corrupt / out-of-range stored value stays
   // safe.
   // App language --------------------------------------------------------------
-  // 'system' (default) | 'en' | 'zh' (Traditional Chinese). Applies on
-  // restart; the native side reads the same NSUserDefaults key
-  // ("app_language", no prefix: SharedPreferencesAsync) at launch for its
-  // menu/alert strings.
+  // 'system' (default) | 'en' | 'zh' (Traditional Chinese). Applies without
+  // a restart (see loadAppLocaleOverride); the macOS native side reads the
+  // same NSUserDefaults key ("app_language", no prefix:
+  // SharedPreferencesAsync) for its menu/alert strings.
   Future<String> getAppLanguage() async {
     final v = await store.getString(_appLanguageKey);
     return (v == 'en' || v == 'zh') ? v! : 'system';
