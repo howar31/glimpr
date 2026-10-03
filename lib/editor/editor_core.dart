@@ -580,6 +580,27 @@ class _EditorCoreState extends State<EditorCore> {
   Rect get _fullDisplayRect =>
       Rect.fromLTWH(2, 2, _canvasSize.width - 4, _canvasSize.height - 4);
 
+  /// Window-snap target: the hovered window, or — Crop only — the whole display
+  /// over bare desktop; null when no snap tool is active or while dragging.
+  Rect? get _snapTarget => (_active && _snapEligible && !_dragging)
+      ? (_hoverWindow ??
+          // Whole-display crop fallback is an overlay affordance only; the
+          // editor's crop is a freeform drag (no window list to snap to).
+          (!_interactive && c.tool.value == ToolKind.crop
+              ? _fullDisplayRect
+              : null))
+      : null;
+
+  /// The size a tap on the current [_snapTarget] would commit, in logical
+  /// points: the hovered window / element rect, or the WHOLE display for the
+  /// bare-desktop crop fallback (its highlight frame is inset, the export is
+  /// not). Null when nothing is snapped.
+  Size? get _snapTargetSize {
+    final t = _snapTarget;
+    if (t == null) return null;
+    return _hoverWindow == null ? _canvasSize : t.size;
+  }
+
   /// Tools whose tap snaps to the hovered window / AX element (ShareX-style):
   /// crop captures it; blur/pixelate/rectangle/ellipse/spotlight add a drawable
   /// spanning it.
@@ -2624,7 +2645,12 @@ class _EditorCoreState extends State<EditorCore> {
     const gap = 24.0;
     final size = widget.loupe.box;
     final tall = size + _loupeBelowReserve();
-    final goRight = cur.dx + gap + size <= box.width;
+    // The coords + snap-size row can be wider than the glass; reserve its width
+    // so the row is not cut by the right screen edge.
+    final wide = _snapTarget != null && _loupeInfoMode != LoupeInfoMode.hidden
+        ? math.max(size, _kLoupeSnapRowReserve)
+        : size;
+    final goRight = cur.dx + gap + wide <= box.width;
     final goDown = cur.dy + gap + tall <= box.height;
     return (
       left: goRight ? cur.dx + gap : null,
@@ -2868,7 +2894,9 @@ class _EditorCoreState extends State<EditorCore> {
 
   /// The blocks under the loupe glass, per the CUMULATIVE [_loupeInfoMode] cycle
   /// (`?` / `/`): coordinates always (until hidden), then the element level (only
-  /// while element snap is active), then the shortcuts, then nothing.
+  /// while element snap is active), then the shortcuts, then nothing. The snap
+  /// candidate's W × H rides along, right of the coordinates, whenever a snap
+  /// frame is highlighted (not mode-gated: the frame and its size go together).
   List<Widget> _loupeBlocks() {
     if (_loupeInfoMode == LoupeInfoMode.hidden) return const [];
     final elementMode = _elementSnapOn && _snapEligible;
@@ -2877,8 +2905,21 @@ class _EditorCoreState extends State<EditorCore> {
     // Shortcuts are NOT snap-gated: nudge / angle always apply; only the element
     // WALK row needs snap (handled inside _shortcutsBlock).
     final showShortcuts = _loupeInfoMode.index >= LoupeInfoMode.shortcuts.index;
+    final snapSize = _snapTargetSize;
     return [
-      _loupeReadout(),
+      if (snapSize == null)
+        _loupeReadout()
+      else
+        // Coordinates, then the candidate's size to their right (one row, so
+        // the column's height — and the edge-flip reserve — is unchanged).
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _loupeReadout(),
+            const SizedBox(width: 6),
+            BoxSizeLabel(w: _toPx(snapSize.width), h: _toPx(snapSize.height)),
+          ],
+        ),
       if (showLevel) _levelBlock(),
       if (showShortcuts) _shortcutsBlock(snap: elementMode),
     ];
@@ -3013,6 +3054,10 @@ class _EditorCoreState extends State<EditorCore> {
   // Vertical space reserved below the loupe for the readout, so the loupe flips
   // above the cursor early enough that the readout stays on-screen too.
   static const double _kLoupeReadoutReserve = 64.0;
+
+  // Horizontal space reserved for the coordinates + snap-size row (two pills:
+  // up to "12345, 12345" and "12345 × 12345" at the HUD text size, plus the gap).
+  static const double _kLoupeSnapRowReserve = 220.0;
 
   /// The editor's two crop readouts, in SCREEN space (viewport-mapped) so their
   /// text stays a constant size under zoom (unlike the canvas-space scrim/handles).
@@ -3151,17 +3196,7 @@ class _EditorCoreState extends State<EditorCore> {
         (!_interactive || _overCanvas || _dragging || _cropAdjusting);
     final showCrosshairLines = aimVisible && _crosshairApplies && _effCrosshair;
     final showLoupe = aimVisible && _loupeApplies && _effLoupe;
-    // Window-snap target: the hovered window, or — Crop only — the whole display
-    // over bare desktop; null when no snap tool is active or while dragging.
-    final snapTarget =
-        (_active && _snapEligible && !_dragging)
-        ? (_hoverWindow ??
-              // Whole-display crop fallback is an overlay affordance only; the
-              // editor's crop is a freeform drag (no window list to snap to).
-              (!_interactive && c.tool.value == ToolKind.crop
-                  ? _fullDisplayRect
-                  : null))
-        : null;
+    final snapTarget = _snapTarget;
     // Marching ants run only while a dashed HUD element is shown AND the user has
     // not turned the animation off (then the dashes are static). A selection
     // highlight can also be visible without the crosshair, so include it.

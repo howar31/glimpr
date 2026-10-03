@@ -135,6 +135,114 @@ void main() {
     });
   });
 
+  group('snap size label', () {
+    // The loupe column shows the snap candidate's W x H (native px) whenever a
+    // snap target is highlighted; it goes with the frame (none while dragging,
+    // none without a snap tool) and never shows twice.
+    BoxSizeLabel? sizeLabel(WidgetTester tester) {
+      final found = find.byType(BoxSizeLabel);
+      expect(found.evaluate().length, lessThanOrEqualTo(1));
+      return found.evaluate().isEmpty ? null : tester.widget(found);
+    }
+
+    testWidgets('hovering a window shows its size in native pixels',
+        (tester) async {
+      final host = FakeEditorHost(
+          baseImage: baseImage, snapWindows: windows, pixelScale: 2.0);
+      await pumpEditorCore(tester, host);
+
+      final mouse = await mousePointer(tester);
+      await mouse.moveTo(const Offset(250, 150)); // A on top
+      await tester.pumpAndSettle();
+      final label = sizeLabel(tester);
+      expect(label, isNotNull);
+      expect(label!.w, (winARect.width * 2).round());
+      expect(label.h, (winARect.height * 2).round());
+      // It sits on the coordinates' row, to their right.
+      final coords = tester.getRect(find.byType(LoupeReadout));
+      final size = tester.getRect(find.byType(BoxSizeLabel));
+      expect(size.left, greaterThan(coords.right));
+      expect(size.center.dy, moreOrLessEquals(coords.center.dy, epsilon: 0.5));
+
+      await mouse.moveTo(const Offset(500, 400)); // B only
+      await tester.pumpAndSettle();
+      expect(sizeLabel(tester)!.w, (winBRect.width * 2).round());
+      expect(sizeLabel(tester)!.h, (winBRect.height * 2).round());
+    });
+
+    testWidgets('crop over bare desktop shows the whole display size',
+        (tester) async {
+      final host = FakeEditorHost(baseImage: baseImage, snapWindows: windows);
+      await pumpEditorCore(tester, host);
+
+      final mouse = await mousePointer(tester);
+      await mouse.moveTo(const Offset(10, 550)); // outside both windows
+      await tester.pumpAndSettle();
+      final label = sizeLabel(tester);
+      expect(label, isNotNull);
+      // A bare-desktop tap exports the WHOLE display (null rect), so the label
+      // is the display size, not the inset highlight frame.
+      expect(label!.w, 800);
+      expect(label.h, 600);
+    });
+
+    testWidgets('near the right edge the loupe flips left so the row stays '
+        'on-screen', (tester) async {
+      final host = FakeEditorHost(baseImage: baseImage, snapWindows: windows);
+      await pumpEditorCore(tester, host);
+
+      final mouse = await mousePointer(tester);
+      // Bare desktop, where the glass alone would still fit to the right of the
+      // cursor but the coordinates + size row would not.
+      await mouse.moveTo(const Offset(650, 30));
+      await tester.pumpAndSettle();
+      final coords = tester.getRect(find.byType(LoupeReadout));
+      final size = tester.getRect(find.byType(BoxSizeLabel));
+      expect(size.right, lessThanOrEqualTo(800));
+      expect(coords.left, greaterThanOrEqualTo(0));
+      expect(size.left, greaterThan(coords.right)); // order kept when flipped
+    });
+
+    testWidgets('the snap label goes with a non-snap tool and yields to the '
+        'drag readout', (tester) async {
+      final host = FakeEditorHost(baseImage: baseImage, snapWindows: windows);
+      final c = await pumpEditorCore(tester, host);
+
+      final mouse = await mousePointer(tester);
+      await mouse.moveTo(const Offset(250, 150));
+      await tester.pumpAndSettle();
+      expect(sizeLabel(tester), isNotNull);
+
+      // A non-snap tool: no frame, no label.
+      c.selectTool(ToolKind.pen);
+      await mouse.moveTo(const Offset(252, 152));
+      await tester.pumpAndSettle();
+      expect(highlightRect(tester), isNull);
+      expect(sizeLabel(tester), isNull);
+
+      // Back on a snap tool the label returns with the frame.
+      c.selectTool(ToolKind.crop);
+      await mouse.moveTo(const Offset(250, 150));
+      await tester.pumpAndSettle();
+      expect(highlightRect(tester), winARect);
+      expect(sizeLabel(tester), isNotNull);
+
+      // Mid-drag the snap frame is gone and so is its label; the ONE label left
+      // is the drag readout's own W x H (the ~50x70 drag box, pixel-inclusive,
+      // not window A's 350x250).
+      final g = await tester.startGesture(const Offset(250, 150));
+      await g.moveTo(const Offset(300, 220));
+      await tester.pump();
+      expect(highlightRect(tester), isNull);
+      final dragLabel = sizeLabel(tester);
+      expect(dragLabel, isNotNull);
+      expect(dragLabel!.w, inInclusiveRange(50, 51));
+      expect(dragLabel.h, inInclusiveRange(70, 71));
+      await g.up();
+      await tester.pump();
+    });
+  });
+
   group('element snap plumbing', () {
     // A configurable element-snap host: [calls] records every (point, walk)
     // query; [reply] builds the response (null = fall back to window snap).
