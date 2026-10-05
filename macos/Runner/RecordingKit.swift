@@ -40,7 +40,8 @@ final class LiveFrameSource: NSObject, SCStreamOutput, SCStreamDelegate {
         cfg.pixelFormat = kCVPixelFormatType_32BGRA
         cfg.showsCursor = false
         cfg.colorSpaceName = CGColorSpace.sRGB
-        let filter = SCContentFilter(display: d, excludingWindows: excluded)
+        let filter = ExcludedApps.displayFilter(
+          d, content: content, surface: .recording, alsoHiding: excluded)
         let s = SCStream(filter: filter, configuration: cfg, delegate: self)
         try s.addStreamOutput(self, type: .screen,
                               sampleHandlerQueue: DispatchQueue(label: "glimpr.loupe"))
@@ -1745,7 +1746,8 @@ final class RecordingController: NSObject, SCStreamDelegate {
         let excluded = scc.windows.filter {
           excludedNumbers.contains(Int($0.windowID))
         }
-        filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
+        filter = ExcludedApps.displayFilter(
+          scDisplay, content: scc, surface: .recording, alsoHiding: excluded)
       }
 
       // Countdown start delay: the frame + scrim stay visible (region) but the

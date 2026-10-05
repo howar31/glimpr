@@ -53,7 +53,8 @@ class RecordController {
     DateTime Function()? now,
   })  : _bridge = bridge ?? RecordBridge(),
         _settings = settings ?? Settings.instance,
-        _focusedWindow = focusedWindow ?? CaptureBridge().focusedWindow,
+        _focusedWindow = focusedWindow ??
+            (() => CaptureBridge().focusedWindow(recording: true)),
         _regionStore = regionStore ??
             LastRegionStore(Settings.instance.store, key: 'record_last_region'),
         _showError = showError ?? ((m) => CaptureBridge().showError(m)),

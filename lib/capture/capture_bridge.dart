@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import '../settings/app_locale.dart';
 import 'captured_display.dart';
 import 'element_snap.dart';
+import 'excluded_app.dart';
 
 /// Dart-side facade over the native `glimpr/capture` MethodChannel.
 class CaptureBridge {
@@ -144,9 +145,48 @@ class CaptureBridge {
     }
   }
 
+  /// Running applications that own an on-screen window, for the excluded
+  /// applications picker. Empty when the native side has no answer.
+  Future<List<ExcludedApp>> listRunningApps() async {
+    try {
+      return _apps(await _channel.invokeMethod('listRunningApps'));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Name + icon for stored application ids; ids the native side cannot
+  /// resolve come back with the id as their name.
+  Future<List<ExcludedApp>> resolveApps(List<String> ids) async {
+    try {
+      return _apps(await _channel.invokeMethod('resolveApps', {'ids': ids}));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Tell the native side the own-window exclusion setting changed, for the
+  /// platform where it is a property of the already open windows.
+  Future<void> ownWindowExclusionChanged() async {
+    try {
+      await _channel.invokeMethod('ownWindowExclusionChanged');
+    } catch (_) {
+      // Absent in tests / on platforms that read the setting per capture.
+    }
+  }
+
+  static List<ExcludedApp> _apps(Object? res) => [
+        if (res is List)
+          for (final raw in res)
+            ?ExcludedApp.fromMap(raw),
+      ];
+
   /// The frontmost focused window's display-local rect + names, or null if none.
-  Future<FocusedWindowInfo?> focusedWindow() async {
-    final res = await _channel.invokeMethod('focusedWindow');
+  /// [recording]: the window is wanted for a recording, which decides which
+  /// excluded applications are skipped.
+  Future<FocusedWindowInfo?> focusedWindow({bool recording = false}) async {
+    final res = await _channel
+        .invokeMethod('focusedWindow', {'recording': recording});
     if (res == null) return null;
     return FocusedWindowInfo.fromMap((res as Map).cast<dynamic, dynamic>());
   }

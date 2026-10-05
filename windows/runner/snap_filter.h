@@ -4,8 +4,8 @@
 #include <cstring>
 
 // The snappable-window ACCEPT decision as pure data, so the filter rules (own
-// overlay, tool window, near-zero layered alpha, the NVIDIA overlay class, the
-// 40px floor) are unit-testable without live Win32 windows. window_enum.cpp
+// overlay, excluded application, tool window, near-zero layered alpha, the
+// NVIDIA overlay class, the 40px floor) are unit-testable without live Win32 windows. window_enum.cpp
 // fetches these fields then calls Passes(); the result is identical to the
 // former inline logic. See [element snap] memory before changing any rule.
 namespace snapfilter {
@@ -15,6 +15,7 @@ struct Candidate {
   bool iconic = false;
   bool cloaked = false;
   bool is_own_overlay = false;
+  bool listed = false;             // owned by an excluded application
   bool tool_window = false;        // ex-style WS_EX_TOOLWINDOW
   bool layered = false;            // ex-style WS_EX_LAYERED
   bool has_layered_alpha = false;  // GetLayeredWindowAttributes gave LWA_ALPHA
@@ -28,6 +29,8 @@ inline bool Passes(const Candidate& c) {
   if (!c.visible || c.iconic) return false;
   if (c.cloaked) return false;
   if (c.is_own_overlay) return false;
+  // An excluded application is blacked out in the capture: not a target.
+  if (c.listed) return false;
   if (c.tool_window) return false;
   // A layered window faded to (near-)zero alpha is invisible on screen but
   // still enumerable and high in z -- it would swallow every snap beneath it

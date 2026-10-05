@@ -402,6 +402,66 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionSounds => 'Sounds';
 
   @override
+  String get settingsPanePrivacy => 'Privacy';
+
+  @override
+  String get settingsPrivacyEnable => 'Exclude listed applications';
+
+  @override
+  String get settingsPrivacyEnableHintHide =>
+      'Their windows are left out of screenshots and recordings, so private content is not captured by accident';
+
+  @override
+  String get settingsPrivacyEnableHintMask =>
+      'Their windows are blacked out or blurred in screenshots, so private content is not captured by accident; recordings are not affected';
+
+  @override
+  String get settingsPrivacyOwnWindows => 'Exclude Glimpr windows';
+
+  @override
+  String get settingsPrivacyOwnWindowsHint =>
+      'Settings, the Image Editor and pinned images do not appear in screenshots and recordings';
+
+  @override
+  String get settingsPrivacyModeAll => 'All';
+
+  @override
+  String get settingsPrivacyModeScreenshots => 'Screenshots';
+
+  @override
+  String get settingsPrivacyModeRecordings => 'Recordings';
+
+  @override
+  String get settingsPrivacyModeBlack => 'Black out';
+
+  @override
+  String get settingsPrivacyModeBlur => 'Blur';
+
+  @override
+  String get settingsPrivacyAdd => 'Exclude';
+
+  @override
+  String get settingsPrivacyRemove => 'Stop excluding';
+
+  @override
+  String get settingsPrivacyFilterHint => 'Filter by name';
+
+  @override
+  String get settingsPrivacyRefresh => 'Refresh';
+
+  @override
+  String get settingsPrivacyExcluded => 'Excluded';
+
+  @override
+  String get settingsPrivacyRunning => 'Running applications';
+
+  @override
+  String get settingsPrivacyNoneExcluded => 'No applications excluded';
+
+  @override
+  String get settingsPrivacyNoMatch => 'No matching applications';
+
+  @override
   String get settingsFlowCopyToClipboard => 'Copy to clipboard';
 
   @override

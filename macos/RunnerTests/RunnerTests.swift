@@ -659,3 +659,59 @@ final class UpdateInstallerTests: XCTestCase {
     XCTAssertNil(UpdateInstaller.mountPoint(fromHdiutilPlist: ""))
   }
 }
+
+// MARK: - ExcludedApps.parse (OverlayKit.swift)
+
+final class ExcludedAppsParseTests: XCTestCase {
+  func testSplitsIdsInOrder() {
+    XCTAssertEqual(
+      ExcludedApps.parse("com.example.chat|com.example.widget"),
+      ["com.example.chat", "com.example.widget"])
+  }
+
+  func testDropsBlanksAndDuplicates() {
+    XCTAssertEqual(ExcludedApps.parse("a||b| a |"), ["a", "b"])
+  }
+
+  func testUnsetIsEmpty() {
+    XCTAssertEqual(ExcludedApps.parse(nil), [])
+    XCTAssertEqual(ExcludedApps.parse(""), [])
+  }
+
+  func testModeLimitsAnEntryToOneSurface() {
+    let raw = "both|shots?shot|recs?rec|odd?later"
+    XCTAssertEqual(ExcludedApps.parse(raw), ["both", "shots", "recs", "odd"])
+    XCTAssertEqual(
+      ExcludedApps.parse(raw, for: .screenshot), ["both", "shots", "odd"])
+    XCTAssertEqual(
+      ExcludedApps.parse(raw, for: .recording), ["both", "recs", "odd"])
+  }
+}
+
+// MARK: - ExcludedApps.resolve / runningApps (OverlayKit.swift)
+
+final class ExcludedAppsResolveTests: XCTestCase {
+  func testResolvesAnInstalledApplication() {
+    let rows = ExcludedApps.resolve(["com.apple.finder"])
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(rows.first?["id"] as? String, "com.apple.finder")
+    XCTAssertNotEqual(rows.first?["name"] as? String, "com.apple.finder")
+    XCTAssertNotNil(rows.first?["icon"])
+  }
+
+  func testUnknownIdKeepsItsRowWithoutAnIcon() {
+    let id = "com.example.glimpr-tests.not-installed"
+    let rows = ExcludedApps.resolve([id])
+    XCTAssertEqual(rows.first?["id"] as? String, id)
+    XCTAssertEqual(rows.first?["name"] as? String, id)
+    XCTAssertNil(rows.first?["icon"])
+  }
+
+  func testRunningAppsHaveUniqueNonEmptyIds() {
+    let rows = ExcludedApps.runningApps()
+    let ids = rows.compactMap { $0["id"] as? String }
+    XCTAssertEqual(ids.count, rows.count)
+    XCTAssertEqual(ids.count, Set(ids).count)
+    XCTAssertFalse(ids.contains(""))
+  }
+}

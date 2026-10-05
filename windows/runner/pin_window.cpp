@@ -14,6 +14,7 @@
 #include "clipboard_channel.h"
 #include "decoration.h"
 #include "dpi_util.h"
+#include "excluded_apps.h"
 #include "hdr_util.h"
 #include "image_codec.h"
 #include "utils.h"
@@ -171,6 +172,7 @@ bool PinWindow::Create(const std::string& image_path,
       kPinClassName, L"", WS_POPUP, win_x_, win_y_, win_w_, win_h_, nullptr,
       nullptr, GetModuleHandle(nullptr), this);
   if (!hwnd_) return false;
+  excluded::ApplyOwnWindowAffinity(hwnd_);
 
   Render();
   ShowWindow(hwnd_, SW_SHOWNA);  // show without stealing focus

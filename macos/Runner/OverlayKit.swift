@@ -54,6 +54,10 @@ final class ScreenCapturer {
       ?? (cachedContent?.displays.first?.displayID ?? CGMainDisplayID())
   }
 
+  /// Excluded-application PIDs the last refetch still could not find, so a
+  /// process the content never lists does not force a refetch per capture.
+  private var unresolvedExcludedPIDs: Set<pid_t> = []
+
   /// The cached shareable content, trusted only while its display SET still
   /// matches the attached screens; otherwise refetched fresh (the cache goes
   /// stale across a display add/remove, which would drop a hot-plugged
@@ -65,6 +69,19 @@ final class ScreenCapturer {
     if shareable == nil || shareable!.displays.isEmpty || cachedIDs != currentIDs {
       shareable = try await SCShareableContent.current
       cachedContent = shareable
+    }
+    // The cache predates any application launched since it was taken; an
+    // excluded one can only be filtered through an entry in the content.
+    let listed = ExcludedApps.listedPIDs()
+    if !listed.isEmpty, let cached = shareable {
+      let missing = listed.subtracting(cached.applications.map { $0.processID })
+      if !missing.isEmpty, missing != unresolvedExcludedPIDs {
+        let fresh = try await SCShareableContent.current
+        shareable = fresh
+        cachedContent = fresh
+        unresolvedExcludedPIDs =
+          listed.subtracting(fresh.applications.map { $0.processID })
+      }
     }
     guard let content = shareable, !content.displays.isEmpty else {
       throw CaptureError.noDisplays
@@ -92,7 +109,8 @@ final class ScreenCapturer {
       ?? CGRect(x: 0, y: 0, width: CGFloat(d.width), height: CGFloat(d.height))
     let outW = max(1, Int((r.width * scale).rounded()))
     let outH = max(1, Int((r.height * scale).rounded()))
-    let filter = SCContentFilter(display: d, excludingWindows: [])
+    let filter = ExcludedApps.displayFilter(
+      d, content: content, surface: .screenshot)
     // Dual-output HDR (macOS 26+): ONE capture yields the SDR image (converted
     // to sRGB for the classic pipeline) + the HDR image encoded to HEIC. Any
     // failure falls through to the classic SDR-only capture.
@@ -253,7 +271,7 @@ final class ScreenCapturer {
         "width": Double(bounds.width), "height": Double(bounds.height),
         "scaleFactor": Double(s.backingScaleFactor),
         "isCursorDisplay": isCursor,
-        "windows": Self.snappableWindows(displayID: id),
+        "windows": Self.snappableWindows(displayID: id, surface: .recording),
       ]
       if isCursor {
         // Crosshair seed at the real cursor (display-local, top-left origin) —
@@ -344,7 +362,8 @@ final class ScreenCapturer {
           let d = job.display
           let pixelW = Int(CGFloat(d.width) * job.scale)
           let pixelH = Int(CGFloat(d.height) * job.scale)
-          let filter = SCContentFilter(display: d, excludingWindows: [])
+          let filter = ExcludedApps.displayFilter(
+      d, content: content, surface: .screenshot)
           var hdrGen: Int? = nil
           var dualSdr: CGImage? = nil
           // Freeze-time dual capture (macOS 26+, HDR display, setting on): ONE
@@ -578,14 +597,21 @@ final class ScreenCapturer {
     return CGRect(x: x, y: y, width: ww, height: hh)
   }
 
-  static func snappableWindows(displayID: CGDirectDisplayID) -> [[String: Any]] {
+  static func snappableWindows(
+    displayID: CGDirectDisplayID, surface: ExcludedApps.Surface = .screenshot
+  ) -> [[String: Any]] {
     let dispBounds = CGDisplayBounds(displayID)
     guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
       as? [[String: Any]] else { return [] }
     var out: [[String: Any]] = []
+    let hidden = ExcludedApps.hiddenPIDs(for: surface)
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             snappableWindowLevels.contains(layer) else { continue }
+      // An excluded process's windows are absent from the capture.
+      if !hidden.isEmpty,
+         let owner = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+         hidden.contains(owner) { continue }
       // Skip effectively-invisible windows (e.g. our own warm control window at
       // alpha 0) so they don't become phantom snap targets.
       guard let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
@@ -629,7 +655,9 @@ final class ScreenCapturer {
   /// The frontmost FOCUSED window (frontmost app's front on-screen window) as a
   /// display-local logical rect, mirroring snappableWindows' mapping. Returns the
   /// dict { displayId, x, y, w, h, title, app } or nil if there is no such window.
-  static func focusedWindow() -> [String: Any]? {
+  static func focusedWindow(
+    surface: ExcludedApps.Surface = .screenshot
+  ) -> [String: Any]? {
     guard let frontPid =
             NSWorkspace.shared.frontmostApplication?.processIdentifier,
           let infos = CGWindowListCopyWindowInfo(
@@ -643,12 +671,16 @@ final class ScreenCapturer {
     // own windows sit behind it or are alpha-0 warm windows — so the
     // previously focused window still wins.
     let myPid = ProcessInfo.processInfo.processIdentifier
-    let matchFrontApp = frontPid != myPid
+    // An excluded frontmost application has no window in the capture; fall
+    // through to the topmost window of any other owner, like the Glimpr case.
+    let hidden = ExcludedApps.hiddenPIDs(for: surface)
+    let matchFrontApp = frontPid != myPid && !hidden.contains(frontPid)
     for w in infos { // front-to-back
       guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
             layer == 0,
             let owner = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
             !matchFrontApp || owner == frontPid,
+            !hidden.contains(owner),
             let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05,
             let r = windowBounds(w)
@@ -1154,9 +1186,13 @@ final class OverlayManager {
             let walk = (a["walk"] as? Int) ?? 0
             let origin = CGDisplayBounds(CGDirectDisplayID(id)).origin
             let global = CGPoint(x: origin.x + x, y: origin.y + y)
+            // A live-select session picks a recording region.
+            let surface: ExcludedApps.Surface =
+              self.liveSelectActive ? .recording : .screenshot
             DispatchQueue.global(qos: .userInteractive).async {
               let out = ElementSnap.query(
-                globalTopLeft: global, walk: walk, displayOrigin: origin)
+                globalTopLeft: global, walk: walk, displayOrigin: origin,
+                surface: surface)
               DispatchQueue.main.async { result(out) }
             }
           } else {
@@ -1947,5 +1983,207 @@ enum HdrCompositor {
 
   private static func m0MaskData(_ args: [String: Any]) -> FlutterStandardTypedData? {
     args["mask"] as? FlutterStandardTypedData
+  }
+}
+
+/// The applications the user keeps out of captures (Settings > Privacy).
+/// `excluded_apps` holds entries joined by `|`, each a bundle id with an
+/// optional `?shot` / `?rec` suffix limiting it to screenshots or recordings.
+/// `excluded_apps_enabled` (absent = on) switches the list off without
+/// clearing it; `exclude_own_windows` adds Glimpr's own windows.
+enum ExcludedApps {
+  static let prefKey = "excluded_apps"
+  static let enabledKey = "excluded_apps_enabled"
+  static let ownWindowsKey = "exclude_own_windows"
+
+  enum Surface { case screenshot, recording }
+
+  /// Window levels that never make an application a picker candidate: Dock
+  /// (20), Notification Center (21), menu bar (24), status items (25).
+  private static let systemLevels: Set<Int> = [20, 21, 24, 25]
+
+  /// The ids in [raw] that apply to [surface] (nil = any surface). An entry
+  /// with an unknown suffix applies everywhere.
+  static func parse(_ raw: String?, for surface: Surface? = nil) -> [String] {
+    var out: [String] = []
+    for part in (raw ?? "").split(separator: "|") {
+      let pieces = part.split(separator: "?", maxSplits: 1,
+                              omittingEmptySubsequences: false)
+      let id = (pieces.first ?? "").trimmingCharacters(in: .whitespaces)
+      if id.isEmpty || out.contains(id) { continue }
+      let mode = pieces.count > 1
+        ? pieces[1].trimmingCharacters(in: .whitespaces) : ""
+      switch (mode, surface) {
+      case ("shot", .recording?), ("rec", .screenshot?): continue
+      default: out.append(id)
+      }
+    }
+    return out
+  }
+
+  /// The stored list, or "" while the master switch is off.
+  private static func activeRaw() -> String {
+    let d = UserDefaults.standard
+    if (d.object(forKey: enabledKey) as? Bool) == false { return "" }
+    return d.string(forKey: prefKey) ?? ""
+  }
+
+  static func ids(for surface: Surface? = nil) -> [String] {
+    parse(activeRaw(), for: surface)
+  }
+
+  /// Whether Glimpr's own windows (Settings, Image Editor, pins) stay out of
+  /// captures. The capture overlay itself is never affected.
+  static var hidesOwnWindows: Bool {
+    UserDefaults.standard.bool(forKey: ownWindowsKey)
+  }
+
+  private static let lock = NSLock()
+  private static var pidCache:
+    [String: (raw: String, at: TimeInterval, pids: Set<pid_t>)] = [:]
+
+  /// PIDs of the running applications excluded on [surface] (nil = any).
+  /// Cached briefly: the snap paths ask on every hover query.
+  static func listedPIDs(for surface: Surface? = nil) -> Set<pid_t> {
+    let raw = activeRaw()
+    if raw.isEmpty { return [] }
+    let slot = surface.map { $0 == .screenshot ? "s" : "r" } ?? "*"
+    let now = ProcessInfo.processInfo.systemUptime
+    lock.lock()
+    defer { lock.unlock() }
+    if let c = pidCache[slot], c.raw == raw, now - c.at < 1 { return c.pids }
+    var pids = Set<pid_t>()
+    for id in parse(raw, for: surface) {
+      for app in NSRunningApplication.runningApplications(withBundleIdentifier: id) {
+        pids.insert(app.processIdentifier)
+      }
+    }
+    pidCache[slot] = (raw, now, pids)
+    return pids
+  }
+
+  /// Every process whose windows are absent from a capture on [surface], so
+  /// the snap paths never target them.
+  static func hiddenPIDs(for surface: Surface) -> Set<pid_t> {
+    var pids = listedPIDs(for: surface)
+    if hidesOwnWindows { pids.insert(getpid()) }
+    return pids
+  }
+
+  /// The display filter every display capture and recording uses: the
+  /// applications excluded on [surface] removed, plus [own] (Glimpr windows
+  /// that must not appear, e.g. recording chrome), plus the rest of Glimpr's
+  /// windows when that setting is on. With nothing to exclude this is the
+  /// plain window filter.
+  static func displayFilter(
+    _ display: SCDisplay, content: SCShareableContent, surface: Surface,
+    alsoHiding own: [SCWindow] = []
+  ) -> SCContentFilter {
+    let listed = Set(ids(for: surface))
+    let apps = listed.isEmpty
+      ? []
+      : content.applications.filter { listed.contains($0.bundleIdentifier) }
+    let hideOwn = hidesOwnWindows
+    if apps.isEmpty && !hideOwn {
+      return SCContentFilter(display: display, excludingWindows: own)
+    }
+    if own.isEmpty && !hideOwn {
+      return SCContentFilter(
+        display: display, excludingApplications: apps, exceptingWindows: [])
+    }
+    // No initializer takes both an application list and a window list, so
+    // Glimpr joins the excluded applications and the windows it keeps come
+    // back as exceptions. Excluding by application also covers windows the
+    // listed applications open later.
+    let me = getpid()
+    let ownIDs = Set(own.map { $0.windowID })
+    // The capture overlay sits at the shielding level; it stays in the
+    // picture (a capture taken over a frozen layer includes that layer).
+    let shield = Int(CGShieldingWindowLevel())
+    let mine = content.windows.filter {
+      $0.owningApplication?.processID == me && !ownIDs.contains($0.windowID)
+    }
+    let keep = hideOwn ? mine.filter { $0.windowLayer == shield } : mine
+    if let selfApp = content.applications.first(where: { $0.processID == me }) {
+      return SCContentFilter(
+        display: display, excludingApplications: apps + [selfApp],
+        exceptingWindows: keep)
+    }
+    let pids = Set(apps.map { $0.processID })
+    let theirs = content.windows.filter {
+      guard let pid = $0.owningApplication?.processID else { return false }
+      return pids.contains(pid)
+    }
+    let keepIDs = Set(keep.map { $0.windowID })
+    let dropped = hideOwn ? mine.filter { !keepIDs.contains($0.windowID) } : []
+    return SCContentFilter(
+      display: display, excludingWindows: own + theirs + dropped)
+  }
+
+  /// Running applications that own a visible window, for the Privacy pane.
+  static func runningApps() -> [[String: Any]] {
+    guard let infos = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
+    else { return [] }
+    let me = getpid()
+    var seen = Set<String>()
+    var out: [[String: Any]] = []
+    for w in infos {
+      guard let layer = (w[kCGWindowLayer as String] as? NSNumber)?.intValue,
+            layer >= 0, !systemLevels.contains(layer),
+            let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
+            alpha > 0.05,
+            let r = ScreenCapturer.windowBounds(w), r.width >= 8, r.height >= 8,
+            let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+            pid != me,
+            let app = NSRunningApplication(processIdentifier: pid),
+            let id = app.bundleIdentifier, !id.isEmpty,
+            seen.insert(id).inserted
+      else { continue }
+      out.append(entry(id: id, name: app.localizedName, icon: app.icon))
+    }
+    return out
+  }
+
+  /// Name + icon for stored ids. An application that is neither running nor
+  /// installed comes back with its id as the name and no icon.
+  static func resolve(_ ids: [String]) -> [[String: Any]] {
+    ids.map { id in
+      if let app = NSRunningApplication.runningApplications(
+        withBundleIdentifier: id).first {
+        return entry(id: id, name: app.localizedName, icon: app.icon)
+      }
+      if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+        let bundle = Bundle(url: url)
+        let name = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+          ?? bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
+          ?? url.deletingPathExtension().lastPathComponent
+        return entry(id: id, name: name,
+                     icon: NSWorkspace.shared.icon(forFile: url.path))
+      }
+      return entry(id: id, name: nil, icon: nil)
+    }
+  }
+
+  private static func entry(id: String, name: String?, icon: NSImage?) -> [String: Any] {
+    var e: [String: Any] = ["id": id, "name": (name?.isEmpty == false) ? name! : id]
+    if let icon, let png = png(icon, side: 64) {
+      e["icon"] = FlutterStandardTypedData(bytes: png)
+    }
+    return e
+  }
+
+  private static func png(_ image: NSImage, side: Int) -> Data? {
+    guard let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+    else { return nil }
+    rep.size = NSSize(width: side, height: side)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    image.draw(in: NSRect(x: 0, y: 0, width: side, height: side))
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])
   }
 }

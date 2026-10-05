@@ -7,6 +7,7 @@
 #include <string>
 
 #include "dpi_util.h"
+#include "excluded_apps.h"
 #include "snap_filter.h"
 #include "utils.h"
 
@@ -30,11 +31,16 @@ bool IsCloaked(HWND hwnd) {
 
 // Whether [hwnd] passes the shared snappable-window filters (visible,
 // non-minimized, non-cloaked, not a tool window, not an invisible overlay,
-// at least 40 px on a side), excluding our own freeze [overlays]. Shared by
+// at least 40 px on a side), excluding our own freeze [overlays] and the
+// applications in [excluded_list]. Shared by
 // SnappableWindows' collector and TopWindowAt's hit test; [bounds] receives
 // the DWM visible bounds.
 bool SnappableWindow(HWND hwnd, const std::vector<HWND>& overlays,
+                     const std::vector<capmask::Entry>& excluded_list,
                      RECT* bounds) {
+  // A window its owner keeps out of screen captures is absent from the
+  // frozen image and from recordings alike.
+  if (excluded::LeftOutOfCapture(hwnd)) return false;
   snapfilter::Candidate c;
   c.visible = IsWindowVisible(hwnd) != FALSE;
   c.iconic = IsIconic(hwnd) != FALSE;
@@ -62,6 +68,10 @@ bool SnappableWindow(HWND hwnd, const std::vector<HWND>& overlays,
   c.width = r.right - r.left;
   c.height = r.bottom - r.top;
   if (!snapfilter::Passes(c)) return false;
+  // Resolved last: it opens the owning process, and most windows are already
+  // rejected above.
+  c.listed = excluded::IsListed(hwnd, excluded_list);
+  if (!snapfilter::Passes(c)) return false;
   *bounds = r;
   return true;
 }
@@ -70,6 +80,7 @@ struct EnumCtx {
   RECT monitor;        // physical
   double scale;
   const std::vector<HWND>* overlays;
+  const std::vector<capmask::Entry>* excluded_list;
   EncodableList* out;  // front-to-back (EnumWindows order)
 };
 
@@ -101,7 +112,9 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
   // Only our own freeze overlays are excluded; glimpr's normal windows
   // (Settings / editor) are snappable, matching macOS.
   RECT r{};
-  if (!SnappableWindow(hwnd, *ctx->overlays, &r)) return TRUE;
+  if (!SnappableWindow(hwnd, *ctx->overlays, *ctx->excluded_list, &r)) {
+    return TRUE;
+  }
 
   const std::string title = WindowTitle(hwnd);
   const std::string app = ProcessName(hwnd);
@@ -223,16 +236,20 @@ RECT VisibleWindowBounds(HWND hwnd) {
 }
 
 HWND TopWindowAt(POINT pt, const std::vector<HWND>& overlays) {
+  const std::vector<capmask::Entry> excluded_list = excluded::SnapList();
   struct Ctx {
     POINT pt;
     const std::vector<HWND>* overlays;
+    const std::vector<capmask::Entry>* excluded_list;
     HWND out;
-  } ctx{pt, &overlays, nullptr};
+  } ctx{pt, &overlays, &excluded_list, nullptr};
   EnumWindows(
       [](HWND hwnd, LPARAM lp) -> BOOL {
         auto* c = reinterpret_cast<Ctx*>(lp);
         RECT r{};
-        if (!SnappableWindow(hwnd, *c->overlays, &r)) return TRUE;
+        if (!SnappableWindow(hwnd, *c->overlays, *c->excluded_list, &r)) {
+          return TRUE;
+        }
         if (!PtInRect(&r, c->pt)) return TRUE;
         c->out = hwnd;  // front-to-back: the first hit is the visual top
         return FALSE;
@@ -247,7 +264,9 @@ EncodableList SnappableWindows(HMONITOR mon,
   mi.cbSize = sizeof(MONITORINFO);
   if (!GetMonitorInfo(mon, &mi)) return {};
   EncodableList out;
-  EnumCtx ctx{mi.rcMonitor, MonitorScale(mon), &overlays, &out};
+  const std::vector<capmask::Entry> excluded_list = excluded::SnapList();
+  EnumCtx ctx{mi.rcMonitor, MonitorScale(mon), &overlays, &excluded_list,
+              &out};
   EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
   return out;
 }

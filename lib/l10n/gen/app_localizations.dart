@@ -773,6 +773,120 @@ abstract class AppLocalizations {
   /// **'Sounds'**
   String get settingsSectionSounds;
 
+  /// Settings sidebar + pane title: Privacy
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get settingsPanePrivacy;
+
+  /// Settings > Privacy: master switch title
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude listed applications'**
+  String get settingsPrivacyEnable;
+
+  /// Settings > Privacy (macOS): master switch hint
+  ///
+  /// In en, this message translates to:
+  /// **'Their windows are left out of screenshots and recordings, so private content is not captured by accident'**
+  String get settingsPrivacyEnableHintHide;
+
+  /// Settings > Privacy (Windows): master switch hint
+  ///
+  /// In en, this message translates to:
+  /// **'Their windows are blacked out or blurred in screenshots, so private content is not captured by accident; recordings are not affected'**
+  String get settingsPrivacyEnableHintMask;
+
+  /// Settings > Privacy: toggle keeping Glimpr's own windows out of captures
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude Glimpr windows'**
+  String get settingsPrivacyOwnWindows;
+
+  /// Settings > Privacy: hint of the Glimpr windows toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Settings, the Image Editor and pinned images do not appear in screenshots and recordings'**
+  String get settingsPrivacyOwnWindowsHint;
+
+  /// Settings > Privacy (macOS): per-application scope, screenshots and recordings
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get settingsPrivacyModeAll;
+
+  /// Settings > Privacy (macOS): per-application scope, screenshots only
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshots'**
+  String get settingsPrivacyModeScreenshots;
+
+  /// Settings > Privacy (macOS): per-application scope, recordings only
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings'**
+  String get settingsPrivacyModeRecordings;
+
+  /// Settings > Privacy (Windows): per-application cover style, solid black
+  ///
+  /// In en, this message translates to:
+  /// **'Black out'**
+  String get settingsPrivacyModeBlack;
+
+  /// Settings > Privacy (Windows): per-application cover style, blurred
+  ///
+  /// In en, this message translates to:
+  /// **'Blur'**
+  String get settingsPrivacyModeBlur;
+
+  /// Settings > Privacy: tooltip of the button adding a running application to the excluded group
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude'**
+  String get settingsPrivacyAdd;
+
+  /// Settings > Privacy: tooltip of the button removing an application from the excluded group
+  ///
+  /// In en, this message translates to:
+  /// **'Stop excluding'**
+  String get settingsPrivacyRemove;
+
+  /// Settings > Privacy: placeholder of the application name filter field
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by name'**
+  String get settingsPrivacyFilterHint;
+
+  /// Settings > Privacy: tooltip of the button reloading the running applications
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get settingsPrivacyRefresh;
+
+  /// Settings > Privacy: label of the excluded applications group
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded'**
+  String get settingsPrivacyExcluded;
+
+  /// Settings > Privacy: label of the group of running applications that are not excluded
+  ///
+  /// In en, this message translates to:
+  /// **'Running applications'**
+  String get settingsPrivacyRunning;
+
+  /// Settings > Privacy: empty state of the excluded group
+  ///
+  /// In en, this message translates to:
+  /// **'No applications excluded'**
+  String get settingsPrivacyNoneExcluded;
+
+  /// Settings > Privacy: empty state of a group with nothing to show
+  ///
+  /// In en, this message translates to:
+  /// **'No matching applications'**
+  String get settingsPrivacyNoMatch;
+
   /// Settings > Workflow: copy-to-clipboard flow action row title
   ///
   /// In en, this message translates to:

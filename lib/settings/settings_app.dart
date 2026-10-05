@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:simple_icons/simple_icons.dart';
 
 import 'diagnostics.dart';
+import 'excluded_apps.dart';
 import 'licenses_page.dart';
 import 'report_issue_page.dart';
 import 'whats_new_page.dart';
@@ -118,13 +119,14 @@ const _kSections = <IconData>[
   Icons.brush_outlined, // Image Editor
   Icons.center_focus_strong_outlined, // Selection & HUD
   Icons.folder_outlined, // Output
+  Icons.shield_outlined, // Privacy
   Icons.keyboard, // Shortcuts
   Icons.memory, // Advanced
   Icons.info_outline, // About
 ];
 
 // The About pane's section index (last entry of [_kSections]).
-const int _kAboutSection = 8;
+const int _kAboutSection = 9;
 
 class _SettingsAppState extends State<SettingsApp>
     with WidgetsBindingObserver {
@@ -1040,9 +1042,10 @@ class _SettingsAppState extends State<SettingsApp>
       case 3: return _l.settingsPaneImageEditor;
       case 4: return _l.settingsPaneSelectionHud;
       case 5: return _l.settingsPaneOutput;
-      case 6: return _l.settingsPaneShortcuts;
-      case 7: return _l.settingsPaneAdvanced;
-      case 8: return _l.settingsPaneAbout;
+      case 6: return _l.settingsPanePrivacy;
+      case 7: return _l.settingsPaneShortcuts;
+      case 8: return _l.settingsPaneAdvanced;
+      case 9: return _l.settingsPaneAbout;
       default: return _l.settingsPaneGeneral;
     }
   }
@@ -1113,7 +1116,7 @@ class _SettingsAppState extends State<SettingsApp>
     );
     // The Shortcuts pane is long; pin its Apply/Revert bar to the bottom so it's
     // always reachable without scrolling to the end of the list.
-    if (_section == 6) {
+    if (_section == 7) {
       return Column(
         children: [Expanded(child: list), _shortcutsFooter(t)],
       );
@@ -1140,10 +1143,12 @@ class _SettingsAppState extends State<SettingsApp>
       case 5:
         return _outputPane(t);
       case 6:
-        return _shortcutsPane(t);
+        return [_h1(_l.settingsPanePrivacy, t), PrivacyPane(settings: _s)];
       case 7:
-        return _advancedPane(t);
+        return _shortcutsPane(t);
       case 8:
+        return _advancedPane(t);
+      case 9:
         return _aboutPane(t);
       default:
         return _generalPane(t);

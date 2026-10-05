@@ -23,6 +23,7 @@
 #include "dpi_util.h"
 #include "decoration.h"
 #include "editor_host_client.h"
+#include "excluded_apps.h"
 #include "image_codec.h"
 #include "overlay_host_client.h"
 #include "perf_log.h"
@@ -43,8 +44,11 @@ using win_enum::WindowTitle;
 // The topmost real, foreign top-level window (skip our own windows + tool
 // windows + invisible/tiny), so the in-app test button captures the window
 // behind the Settings window rather than glimpr itself.
-HWND PickForegroundWindow() {
+HWND PickForegroundWindow(bool recording) {
   DWORD self = GetCurrentProcessId();
+  // Recordings do not cover excluded applications, so they stay eligible.
+  const std::vector<capmask::Entry> excluded_list =
+      recording ? std::vector<capmask::Entry>() : excluded::List();
   HWND start = GetForegroundWindow();
   for (HWND w = start ? start : GetTopWindow(nullptr); w;
        w = GetWindow(w, GW_HWNDNEXT)) {
@@ -57,6 +61,9 @@ HWND PickForegroundWindow() {
     GetWindowThreadProcessId(w, &pid);
     // Ours = this process or any other glimpr process (the editor host).
     if (pid == self || procid::IsOurProcess(pid)) continue;
+    // An excluded application is covered in screenshots: not a target.
+    if (excluded::IsListed(w, excluded_list)) continue;
+    if (excluded::LeftOutOfCapture(w)) continue;
     return w;
   }
   return nullptr;
@@ -152,6 +159,31 @@ void CaptureChannel::HandleMethodCall(
     // engines so the picker resurfaces / cancels (mirrors macOS).
     if (overlay_host_) overlay_host_->RelayRecordSelectHotkey();
     result->Success();
+    return;
+  }
+  if (call.method_name() == "ownWindowExclusionChanged") {
+    excluded::ReapplyOwnWindowAffinity();
+    result->Success();
+    return;
+  }
+  if (call.method_name() == "listRunningApps") {
+    result->Success(EncodableValue(excluded::RunningApps()));
+    return;
+  }
+  if (call.method_name() == "resolveApps") {
+    std::vector<std::string> ids;
+    if (const auto* args = std::get_if<EncodableMap>(call.arguments())) {
+      if (const auto* v = Find(*args, "ids")) {
+        if (const auto* list = std::get_if<flutter::EncodableList>(v)) {
+          for (const EncodableValue& item : *list) {
+            if (const auto* id = std::get_if<std::string>(&item)) {
+              ids.push_back(*id);
+            }
+          }
+        }
+      }
+    }
+    result->Success(EncodableValue(excluded::Resolve(ids)));
     return;
   }
   if (call.method_name() == "accessibilityTrusted") {
@@ -329,8 +361,11 @@ EncodableValue CaptureChannel::ComputeRegionCapture(const EncodableMap& map) {
   GetMonitorInfo(mon, &mi);
   const double scale = MonitorScale(mon);
 
+  excluded::Mask mask(/*own_windows_cover=*/true);
   auto frame = wgc::CaptureMonitor(mon, show_cursor, want_hdr);
   if (!frame) return EncodableValue();
+  mask.Resample();
+  mask.Apply(&*frame, mi.rcMonitor);
   perf::Mark("regionWgcFrame w=" + std::to_string(frame->width) +
              " h=" + std::to_string(frame->height));
 
@@ -433,7 +468,11 @@ EncodableValue CaptureChannel::ComputeRegionCapture(const EncodableMap& map) {
 void CaptureChannel::HandleFocusedWindow(
     const flutter::MethodCall<EncodableValue>& call,
     std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
-  HWND hwnd = PickForegroundWindow();
+  bool recording = false;
+  if (const auto* args = std::get_if<EncodableMap>(call.arguments())) {
+    recording = GetBool(*args, "recording", false);
+  }
+  HWND hwnd = PickForegroundWindow(recording);
   if (!hwnd) {
     result->Success(EncodableValue());
     return;
@@ -484,8 +523,13 @@ EncodableValue CaptureChannel::ComputeWindowDelivered(
   // size equals DWMWA_EXTENDED_FRAME_BOUNDS), with the real rounded corners
   // transparent (faithful capture) -- so it is used as-is. The extended frame
   // bounds are only needed by the rect-crop fallback below.
-  std::optional<CaptureFrame> frame =
-      wgc::CaptureWindow(hwnd, show_cursor, want_hdr);
+  // An excluded application's own surface is never captured: it takes the
+  // monitor-crop path below, where its area is covered.
+  excluded::Mask mask(/*own_windows_cover=*/true);
+  std::optional<CaptureFrame> frame;
+  if (!excluded::IsListed(hwnd, excluded::List())) {
+    frame = wgc::CaptureWindow(hwnd, show_cursor, want_hdr);
+  }
   if (!frame) {
     RECT efb{};
     if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb,
@@ -498,6 +542,8 @@ EncodableValue CaptureChannel::ComputeWindowDelivered(
       MONITORINFO mi{};
       mi.cbSize = sizeof(MONITORINFO);
       GetMonitorInfo(mon, &mi);
+      mask.Resample();
+      mask.Apply(&*monframe, mi.rcMonitor);
       CaptureFrame cropped = CropFrame(
           *monframe, efb.left - mi.rcMonitor.left, efb.top - mi.rcMonitor.top,
           efb.right - efb.left, efb.bottom - efb.top);

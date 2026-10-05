@@ -385,6 +385,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionSounds => '音效';
 
   @override
+  String get settingsPanePrivacy => '隱私';
+
+  @override
+  String get settingsPrivacyEnable => '排除清單內的應用程式';
+
+  @override
+  String get settingsPrivacyEnableHintHide => '視窗不會出現在截圖和錄影中，避免私人內容意外入鏡';
+
+  @override
+  String get settingsPrivacyEnableHintMask => '視窗在截圖中會被塗黑或模糊，避免私人內容意外入鏡；錄影不受影響';
+
+  @override
+  String get settingsPrivacyOwnWindows => '排除 Glimpr 的視窗';
+
+  @override
+  String get settingsPrivacyOwnWindowsHint => '設定、圖片編輯器和釘選的圖片不會出現在截圖和錄影中';
+
+  @override
+  String get settingsPrivacyModeAll => '全部';
+
+  @override
+  String get settingsPrivacyModeScreenshots => '截圖';
+
+  @override
+  String get settingsPrivacyModeRecordings => '錄影';
+
+  @override
+  String get settingsPrivacyModeBlack => '塗黑';
+
+  @override
+  String get settingsPrivacyModeBlur => '模糊';
+
+  @override
+  String get settingsPrivacyAdd => '排除';
+
+  @override
+  String get settingsPrivacyRemove => '取消排除';
+
+  @override
+  String get settingsPrivacyFilterHint => '依名稱篩選';
+
+  @override
+  String get settingsPrivacyRefresh => '重新整理';
+
+  @override
+  String get settingsPrivacyExcluded => '已排除';
+
+  @override
+  String get settingsPrivacyRunning => '執行中的應用程式';
+
+  @override
+  String get settingsPrivacyNoneExcluded => '尚未排除任何應用程式';
+
+  @override
+  String get settingsPrivacyNoMatch => '沒有符合的應用程式';
+
+  @override
   String get settingsFlowCopyToClipboard => '複製到剪貼簿';
 
   @override

@@ -113,6 +113,12 @@ final class CaptureChannel {
       case "requestAccessibility":
         ElementSnap.requestTrust()
         result(nil)
+      // Settings > Privacy: the running applications and the list rows.
+      case "listRunningApps":
+        result(ExcludedApps.runningApps())
+      case "resolveApps":
+        let ids = (call.arguments as? [String: Any])?["ids"] as? [String] ?? []
+        result(ExcludedApps.resolve(ids))
       case "captureRegion":
         // Main actor like triggerCapture: the capture reaches NSScreen and the
         // channel reply must land on the platform (main) thread.
@@ -146,7 +152,10 @@ final class CaptureChannel {
           }
         }
       case "focusedWindow":
-        result(ScreenCapturer.focusedWindow())
+        let recording =
+          ((call.arguments as? [String: Any])?["recording"] as? Bool) ?? false
+        result(ScreenCapturer.focusedWindow(
+          surface: recording ? .recording : .screenshot))
       // (captureWindowImage lives on the OVERLAY engine's channel only — the
       // window-snap leg; no control-engine Dart ever called the copy here.)
       case "captureWindowDelivered":

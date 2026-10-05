@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "drop_filter.h"
+#include "excluded_apps.h"
 #include "font_enum.h"
 #include "perf_log.h"
 #include "utils.h"
@@ -137,6 +138,7 @@ void EditorWindow::EnsureCreated() {
   Win32Window::Point origin(80, 60);
   Win32Window::Size size(kDefaultW, kDefaultH);
   Create(L"Image Editor", origin, size);  // -> OnCreate builds the engine
+  excluded::ApplyOwnWindowAffinity(GetHandle());
   SetQuitOnClose(false);  // close hides; the host's exit gate ends the process
 }
 

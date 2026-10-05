@@ -474,6 +474,82 @@
   "@settingsSectionSounds": {
     "description": "Settings > Workflow: Sounds section label"
   },
+  "settingsPanePrivacy": "Privacy",
+  "@settingsPanePrivacy": {
+    "description": "Settings sidebar + pane title: Privacy"
+  },
+  "settingsPrivacyEnable": "Exclude listed applications",
+  "@settingsPrivacyEnable": {
+    "description": "Settings > Privacy: master switch title"
+  },
+  "settingsPrivacyEnableHintHide": "Their windows are left out of screenshots and recordings, so private content is not captured by accident",
+  "@settingsPrivacyEnableHintHide": {
+    "description": "Settings > Privacy (macOS): master switch hint"
+  },
+  "settingsPrivacyEnableHintMask": "Their windows are blacked out or blurred in screenshots, so private content is not captured by accident; recordings are not affected",
+  "@settingsPrivacyEnableHintMask": {
+    "description": "Settings > Privacy (Windows): master switch hint"
+  },
+  "settingsPrivacyOwnWindows": "Exclude Glimpr windows",
+  "@settingsPrivacyOwnWindows": {
+    "description": "Settings > Privacy: toggle keeping Glimpr's own windows out of captures"
+  },
+  "settingsPrivacyOwnWindowsHint": "Settings, the Image Editor and pinned images do not appear in screenshots and recordings",
+  "@settingsPrivacyOwnWindowsHint": {
+    "description": "Settings > Privacy: hint of the Glimpr windows toggle"
+  },
+  "settingsPrivacyModeAll": "All",
+  "@settingsPrivacyModeAll": {
+    "description": "Settings > Privacy (macOS): per-application scope, screenshots and recordings"
+  },
+  "settingsPrivacyModeScreenshots": "Screenshots",
+  "@settingsPrivacyModeScreenshots": {
+    "description": "Settings > Privacy (macOS): per-application scope, screenshots only"
+  },
+  "settingsPrivacyModeRecordings": "Recordings",
+  "@settingsPrivacyModeRecordings": {
+    "description": "Settings > Privacy (macOS): per-application scope, recordings only"
+  },
+  "settingsPrivacyModeBlack": "Black out",
+  "@settingsPrivacyModeBlack": {
+    "description": "Settings > Privacy (Windows): per-application cover style, solid black"
+  },
+  "settingsPrivacyModeBlur": "Blur",
+  "@settingsPrivacyModeBlur": {
+    "description": "Settings > Privacy (Windows): per-application cover style, blurred"
+  },
+  "settingsPrivacyAdd": "Exclude",
+  "@settingsPrivacyAdd": {
+    "description": "Settings > Privacy: tooltip of the button adding a running application to the excluded group"
+  },
+  "settingsPrivacyRemove": "Stop excluding",
+  "@settingsPrivacyRemove": {
+    "description": "Settings > Privacy: tooltip of the button removing an application from the excluded group"
+  },
+  "settingsPrivacyFilterHint": "Filter by name",
+  "@settingsPrivacyFilterHint": {
+    "description": "Settings > Privacy: placeholder of the application name filter field"
+  },
+  "settingsPrivacyRefresh": "Refresh",
+  "@settingsPrivacyRefresh": {
+    "description": "Settings > Privacy: tooltip of the button reloading the running applications"
+  },
+  "settingsPrivacyExcluded": "Excluded",
+  "@settingsPrivacyExcluded": {
+    "description": "Settings > Privacy: label of the excluded applications group"
+  },
+  "settingsPrivacyRunning": "Running applications",
+  "@settingsPrivacyRunning": {
+    "description": "Settings > Privacy: label of the group of running applications that are not excluded"
+  },
+  "settingsPrivacyNoneExcluded": "No applications excluded",
+  "@settingsPrivacyNoneExcluded": {
+    "description": "Settings > Privacy: empty state of the excluded group"
+  },
+  "settingsPrivacyNoMatch": "No matching applications",
+  "@settingsPrivacyNoMatch": {
+    "description": "Settings > Privacy: empty state of a group with nothing to show"
+  },
   "settingsFlowCopyToClipboard": "Copy to clipboard",
   "@settingsFlowCopyToClipboard": {
     "description": "Settings > Workflow: copy-to-clipboard flow action row title"

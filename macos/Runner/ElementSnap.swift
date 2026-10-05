@@ -35,7 +35,9 @@ enum ElementSnap {
   /// (top-left). Returns the channel dict or nil (not trusted / timed out / no
   /// element / no frame / nothing but our own overlay under the point).
   static func query(globalTopLeft pt: CGPoint, walk: Int,
-                    displayOrigin: CGPoint) -> [String: Any]? {
+                    displayOrigin: CGPoint,
+                    surface: ExcludedApps.Surface = .screenshot
+  ) -> [String: Any]? {
     let t0 = DispatchTime.now()
 
     // CRITICAL: the freeze overlay is a full-screen TOPMOST window, so a
@@ -43,7 +45,7 @@ enum ElementSnap {
     // element) would always return OUR OWN overlay element (a full-screen rect).
     // Instead, resolve the frontmost NON-Glimpr window under the point and query
     // THAT app's AX element directly — it ignores whatever is layered on top.
-    guard let pid = targetPID(at: pt) else { return nil }
+    guard let pid = targetPID(at: pt, surface: surface) else { return nil }
     let app = AXUIElementCreateApplication(pid)
     // Bound every AX message to this app so a hung target can't stall us.
     AXUIElementSetMessagingTimeout(app, 0.12)
@@ -121,11 +123,14 @@ enum ElementSnap {
   /// (shielding level), the warm control window by the alpha filter. AX-only:
   /// without the permission the query returns nil and falls back to window snap,
   /// so this is inert until granted.
-  private static func targetPID(at pt: CGPoint) -> pid_t? {
+  private static func targetPID(
+    at pt: CGPoint, surface: ExcludedApps.Surface
+  ) -> pid_t? {
     guard let infos = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
     let selfPID = getpid()
+    let hidden = ExcludedApps.hiddenPIDs(for: surface)
     for w in infos { // front-to-back
       guard let alpha = (w[kCGWindowAlpha as String] as? NSNumber)?.doubleValue,
             alpha > 0.05,
@@ -135,6 +140,8 @@ enum ElementSnap {
             let pid = (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value
       else { continue }
       guard r.contains(pt) else { continue }
+      // An excluded process is absent from the capture: look beneath it.
+      if hidden.contains(pid) { continue }
       // First snappable window under the point = the visual top. If it's ours,
       // nil -> Dart whole-window snap; otherwise AX-query that app.
       return pid == selfPID ? nil : pid

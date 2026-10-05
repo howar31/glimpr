@@ -11,11 +11,13 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
 #include "base64.h"
 #include "capture_key_rule.h"
+#include "capture_mask.h"
 #include "clipboard_dib.h"
 #include "clipboard_hdrop.h"
 #include "crash_dump_path.h"
@@ -541,6 +543,10 @@ void TestSnapFilter() {
   own.is_own_overlay = true;
   CHECK(!snapfilter::Passes(own));
 
+  auto listed = GoodWindow();
+  listed.listed = true;
+  CHECK(!snapfilter::Passes(listed));
+
   auto tool = GoodWindow();
   tool.tool_window = true;
   CHECK(!snapfilter::Passes(tool));
@@ -569,6 +575,215 @@ void TestSnapFilter() {
   tiny.width = 40;
   tiny.height = 39;
   CHECK(!snapfilter::Passes(tiny));
+}
+
+// --- excluded-application mask ---------------------------------------------
+
+long long AreaOf(const std::vector<capmask::MaskRect>& rects) {
+  long long total = 0;
+  for (const capmask::MaskRect& m : rects) {
+    const RECT& r = m.rect;
+    total += static_cast<long long>(r.right - r.left) * (r.bottom - r.top);
+  }
+  return total;
+}
+
+bool Covers(const std::vector<capmask::MaskRect>& rects, LONG x, LONG y) {
+  for (const capmask::MaskRect& m : rects) {
+    const RECT& r = m.rect;
+    if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return true;
+  }
+  return false;
+}
+
+capmask::Window MaskWindow(LONG l, LONG t, LONG r, LONG b, bool listed,
+                           bool opaque = true, bool blur = false) {
+  capmask::Window w;
+  w.rect = RECT{l, t, r, b};
+  w.listed = listed;
+  w.opaque = opaque;
+  w.blur = blur;
+  return w;
+}
+
+void TestCaptureMask() {
+  g_case = "capture-mask";
+  const RECT screen{0, 0, 1000, 800};
+
+  // List parsing: normalized, blanks and duplicate paths dropped, the mode
+  // suffix read (only "blur" changes anything here).
+  const auto list = capmask::ParseList(
+      L"C:\\Apps\\Chat\\Chat.exe| |c:/apps/chat/chat.exe?blur|"
+      L"D:/Tools/Widget.exe?blur|e:/x/player.exe?rec");
+  CHECK(list.size() == 3);
+  CHECK(list[0].path == L"c:/apps/chat/chat.exe" && !list[0].blur);
+  CHECK(list[1].path == L"d:/tools/widget.exe" && list[1].blur);
+  CHECK(list[2].path == L"e:/x/player.exe" && !list[2].blur);
+  const capmask::Entry* found = capmask::Find(list, L"D:\\TOOLS\\widget.EXE");
+  CHECK(found != nullptr && found->blur);
+  CHECK(capmask::Find(list, L"D:\\Tools\\Other.exe") == nullptr);
+  CHECK(capmask::ParseList(L"").empty());
+  CHECK(capmask::IsListed(list, L"C:\\APPS\\CHAT\\chat.EXE"));
+  CHECK(!capmask::IsListed(list, L"C:\\Apps\\Chat\\Other.exe"));
+  CHECK(!capmask::IsListed(list, L""));
+  CHECK(!capmask::IsListed({}, L"C:\\Apps\\Chat\\Chat.exe"));
+
+  // No listed window: nothing to fill.
+  CHECK(capmask::MaskRects({MaskWindow(0, 0, 500, 500, false)}, screen).empty());
+
+  // A listed window on top: its whole rect.
+  auto top = capmask::MaskRects({MaskWindow(100, 100, 300, 200, true)}, screen);
+  CHECK(AreaOf(top) == 200 * 100);
+
+  // An opaque window in front removes the overlap, and only the overlap.
+  auto under = capmask::MaskRects(
+      {MaskWindow(200, 150, 600, 600, false),
+       MaskWindow(100, 100, 300, 200, true)},
+      screen);
+  CHECK(AreaOf(under) == 200 * 100 - 100 * 50);
+  CHECK(Covers(under, 150, 120));
+  CHECK(!Covers(under, 250, 170));
+
+  // A window BEHIND the listed one never removes anything.
+  auto behind = capmask::MaskRects(
+      {MaskWindow(100, 100, 300, 200, true),
+       MaskWindow(0, 0, 1000, 800, false)},
+      screen);
+  CHECK(AreaOf(behind) == 200 * 100);
+
+  // A see-through window in front does not hide the listed one.
+  auto veil = capmask::MaskRects(
+      {MaskWindow(0, 0, 1000, 800, false, /*opaque=*/false),
+       MaskWindow(100, 100, 300, 200, true)},
+      screen);
+  CHECK(AreaOf(veil) == 200 * 100);
+
+  // Fully covered: nothing left.
+  auto hidden = capmask::MaskRects(
+      {MaskWindow(0, 0, 1000, 800, false),
+       MaskWindow(100, 100, 300, 200, true)},
+      screen);
+  CHECK(hidden.empty());
+
+  // A cover strictly inside leaves a ring of four pieces.
+  auto ring = capmask::MaskRects(
+      {MaskWindow(150, 120, 250, 180, false),
+       MaskWindow(100, 100, 300, 200, true)},
+      screen);
+  CHECK(AreaOf(ring) == 200 * 100 - 100 * 60);
+  CHECK(!Covers(ring, 200, 150));
+  CHECK(Covers(ring, 110, 150) && Covers(ring, 290, 150));
+
+  // Clipped to the monitor: a window spanning two monitors contributes only
+  // its part on each.
+  const RECT right_monitor{1000, 0, 2000, 800};
+  const std::vector<capmask::Window> spanning{
+      MaskWindow(900, 100, 1100, 200, true)};
+  CHECK(AreaOf(capmask::MaskRects(spanning, screen)) == 100 * 100);
+  auto on_right = capmask::MaskRects(spanning, right_monitor);
+  CHECK(AreaOf(on_right) == 100 * 100);
+  CHECK(on_right.size() == 1 && on_right[0].rect.left == 1000);
+
+  // Two listed windows overlapping each other both stay filled.
+  auto both = capmask::MaskRects(
+      {MaskWindow(100, 100, 300, 200, true),
+       MaskWindow(200, 150, 400, 250, true)},
+      screen);
+  CHECK(Covers(both, 110, 110) && Covers(both, 390, 240));
+
+  // Each area carries its window's cover style.
+  auto styled = capmask::MaskRects(
+      {MaskWindow(0, 0, 100, 100, true, true, /*blur=*/true),
+       MaskWindow(200, 0, 300, 100, true)},
+      screen);
+  CHECK(styled.size() == 2 && styled[0].blur && !styled[1].blur);
+
+  // BGRA fill: opaque black inside, untouched outside, clamped to the frame.
+  const uint32_t w = 4, h = 3, stride = 20;  // padded stride
+  std::vector<uint8_t> bgra(static_cast<size_t>(stride) * h, 0x7F);
+  capmask::FillBgra(bgra.data(), w, h, stride, RECT{1, 1, 99, 99});
+  auto at = [&bgra, stride](uint32_t x, uint32_t y) {
+    return bgra.data() + y * stride + x * 4;
+  };
+  CHECK(at(0, 0)[0] == 0x7F && at(3, 0)[3] == 0x7F && at(0, 2)[2] == 0x7F);
+  CHECK(at(1, 1)[0] == 0 && at(1, 1)[1] == 0 && at(1, 1)[2] == 0);
+  CHECK(at(1, 1)[3] == 255 && at(3, 2)[3] == 255 && at(3, 2)[0] == 0);
+  CHECK(bgra[16] == 0x7F && bgra[stride + 16] == 0x7F);  // row padding
+
+  // A rect outside the frame is a no-op.
+  std::vector<uint8_t> untouched(static_cast<size_t>(stride) * h, 0x11);
+  capmask::FillBgra(untouched.data(), w, h, stride, RECT{-9, -9, 0, 0});
+  capmask::FillBgra(untouched.data(), w, h, stride, RECT{4, 0, 8, 3});
+  bool same = true;
+  for (uint8_t v : untouched) same = same && v == 0x11;
+  CHECK(same);
+
+  // RGBA16F fill: colour 0.0, alpha 1.0 (0x3C00 little-endian).
+  std::vector<uint8_t> f16(static_cast<size_t>(w) * 8 * h, 0x55);
+  capmask::FillF16(f16.data(), w, h, RECT{2, 0, 3, 1});
+  const uint8_t* px = f16.data() + 2 * 8;
+  CHECK(px[0] == 0 && px[1] == 0 && px[2] == 0 && px[3] == 0);
+  CHECK(px[4] == 0 && px[5] == 0 && px[6] == 0x00 && px[7] == 0x3C);
+  CHECK(f16[8] == 0x55 && f16[3 * 8] == 0x55);
+
+  // Half <-> float round trips for representative capture values.
+  const float halves[] = {0.0f, 0.25f, 1.0f, 2.5f, 100.0f};
+  for (float v : halves) {
+    CHECK(Near(capmask::HalfToFloat(capmask::FloatToHalf(v)), v, v * 0.001));
+  }
+  CHECK(capmask::FloatToHalf(1.0f) == 0x3C00);
+  CHECK(capmask::FloatToHalf(-1.0f) == 0);
+
+  // Blur: a one-pixel checkerboard inside the rect turns into mid grey (no
+  // pixel keeps its original value), alpha goes opaque, outside is untouched.
+  const uint32_t bw = 96, bh = 72, bstride = bw * 4;
+  std::vector<uint8_t> img(static_cast<size_t>(bstride) * bh);
+  for (uint32_t y = 0; y < bh; ++y) {
+    for (uint32_t x = 0; x < bw; ++x) {
+      const uint8_t v = ((x + y) % 2 == 0) ? 255 : 0;
+      uint8_t* p = img.data() + y * bstride + x * 4;
+      p[0] = v; p[1] = v; p[2] = v; p[3] = 200;
+    }
+  }
+  capmask::BlurBgra(img.data(), bw, bh, bstride, RECT{8, 8, 80, 56});
+  bool grey = true, opaque_inside = true;
+  for (uint32_t y = 8; y < 56; ++y) {
+    for (uint32_t x = 8; x < 80; ++x) {
+      const uint8_t* p = img.data() + y * bstride + x * 4;
+      grey = grey && p[0] > 110 && p[0] < 145 && p[0] == p[1] && p[1] == p[2];
+      opaque_inside = opaque_inside && p[3] == 255;
+    }
+  }
+  CHECK(grey);
+  CHECK(opaque_inside);
+  CHECK(img[0] == 255 && img[3] == 200);                     // (0,0) outside
+  CHECK((img.data() + 7 * bstride + 8 * 4)[0] == 0);         // row above
+  CHECK((img.data() + 8 * bstride + 80 * 4)[3] == 200);      // column right
+
+  // Blur keeps a flat colour flat, and a region smaller than one block works.
+  std::vector<uint8_t> flat(static_cast<size_t>(bstride) * bh, 90);
+  capmask::BlurBgra(flat.data(), bw, bh, bstride, RECT{0, 0, 96, 72});
+  CHECK(flat[0] == 90 && flat[(40 * bstride) + 50 * 4 + 2] == 90);
+  capmask::BlurBgra(flat.data(), bw, bh, bstride, RECT{3, 3, 9, 5});
+  CHECK(flat[3 * bstride + 3 * 4] == 90);
+
+  // RGBA16F blur: averages in float, alpha 1.0, values above 1.0 survive.
+  const uint32_t fw = 48, fh = 24;
+  std::vector<uint8_t> hdr(static_cast<size_t>(fw) * 8 * fh);
+  for (uint32_t y = 0; y < fh; ++y) {
+    for (uint32_t x = 0; x < fw; ++x) {
+      const uint16_t half =
+          capmask::FloatToHalf(((x + y) % 2 == 0) ? 4.0f : 0.0f);
+      uint8_t* p = hdr.data() + (static_cast<size_t>(y) * fw + x) * 8;
+      for (int k = 0; k < 4; ++k) std::memcpy(p + k * 2, &half, sizeof(half));
+    }
+  }
+  capmask::BlurF16(hdr.data(), fw, fh, RECT{0, 0, 48, 24});
+  uint16_t hv = 0, ha = 0;
+  std::memcpy(&hv, hdr.data() + (12 * fw + 20) * 8, sizeof(hv));
+  std::memcpy(&ha, hdr.data() + (12 * fw + 20) * 8 + 6, sizeof(ha));
+  CHECK(Near(capmask::HalfToFloat(hv), 2.0, 0.05));
+  CHECK(ha == 0x3C00);
 }
 
 // --- clipboard opaque DIB ----------------------------------------------------
@@ -771,6 +986,14 @@ void TestPrefsProbe() {
       "\"c\":true}";
   CHECK(prefs::JsonStringValue(j, "gpu_preference") == "low_power");
   CHECK(prefs::JsonStringValue(j, "missing").empty());
+  const std::string b =
+      "{\"excluded_apps_enabled\":false,\"on\": true,\"text\":\"true\"}";
+  CHECK(!prefs::JsonBoolValue(b, "excluded_apps_enabled", true));
+  CHECK(prefs::JsonBoolValue(b, "on", false));
+  CHECK(prefs::JsonBoolValue(b, "missing", true));
+  CHECK(!prefs::JsonBoolValue(b, "missing", false));
+  CHECK(prefs::JsonBoolValue(b, "text", true));   // a string, not a boolean
+  CHECK(!prefs::JsonBoolValue(b, "text", false));
   CHECK(prefs::JsonStringValue("{\"gpu_preference\":true}",
                                "gpu_preference").empty());
   CHECK(prefs::JsonStringValue("{\"gpu_preference\": \"system\"}",
@@ -1025,6 +1248,7 @@ int main() {
       {"install-scope", TestInstallScope},
       {"crash-dump-path", TestCrashDumpPath},
       {"version-string", TestVersionString},
+      {"capture-mask", TestCaptureMask},
   };
   for (const Case& c : cases) {
     std::printf("run %s\n", c.name);

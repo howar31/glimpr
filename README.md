@@ -34,6 +34,11 @@ Screenshot, annotation and screen-recording tool for macOS and Windows. Website:
 - **Pin**: float any screenshot as an always-on-top pin with drag and zoom.
 - **Flows**: configurable after-capture and after-edit actions: save, copy,
   open editor, pin, share; filename templates and date subfolders.
+- **Excluded applications**: keep chosen applications out of what you
+  capture. On macOS their windows are left out of screenshots and
+  recordings, with a per-application scope; on Windows their windows are
+  blacked out or blurred in screenshots. Glimpr's own windows can be
+  excluded as well.
 - Rebindable global hotkeys (including PrintScreen and bare keys), light and
   dark themes, English and Traditional Chinese.
 - **Private by design**: no telemetry, no account; captures never leave your

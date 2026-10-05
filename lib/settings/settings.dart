@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../capture/capture_kind.dart';
+import '../capture/excluded_app.dart';
 import '../platform_gate.dart';
 import '../editor/crop_confirm_mode.dart';
 import '../editor/hud_config.dart';
@@ -177,6 +178,9 @@ class Settings {
   static const _cropConfirmEditorKey = 'crop_confirm_editor';
   static const _captureLayerCapKey = 'capture_layer_cap';
   static const _appLanguageKey = 'app_language';
+  static const _excludedAppsKey = 'excluded_apps';
+  static const _excludedAppsEnabledKey = 'excluded_apps_enabled';
+  static const _excludeOwnWindowsKey = 'exclude_own_windows';
 
   // Save folder ------------------------------------------------------------
   Future<String?> getSaveDirectory() => store.getString(_saveDirKey);
@@ -489,6 +493,29 @@ class Settings {
 
   Future<void> setAppLanguage(String v) =>
       store.setString(_appLanguageKey, (v == 'en' || v == 'zh') ? v : 'system');
+
+  // Excluded applications ----------------------------------------------------
+  // Applications kept out of captures, as platform identifiers. The native
+  // capture code reads the stored string itself at each capture.
+  Future<List<ExcludedEntry>> getExcludedApps() async =>
+      decodeExcludedApps(await store.getString(_excludedAppsKey));
+
+  Future<void> setExcludedApps(List<ExcludedEntry> entries) =>
+      store.setString(_excludedAppsKey, encodeExcludedApps(entries));
+
+  // Master switch: off keeps the list but nothing is excluded.
+  Future<bool> getExcludedAppsEnabled() async =>
+      await store.getBool(_excludedAppsEnabledKey) ?? true;
+
+  Future<void> setExcludedAppsEnabled(bool v) =>
+      store.setBool(_excludedAppsEnabledKey, v);
+
+  // Keep Glimpr's own windows (Settings, Image Editor, pins) out of captures.
+  Future<bool> getExcludeOwnWindows() async =>
+      await store.getBool(_excludeOwnWindowsKey) ?? false;
+
+  Future<void> setExcludeOwnWindows(bool v) =>
+      store.setBool(_excludeOwnWindowsKey, v);
 
   // Capture layer stack ------------------------------------------------------
   // How many freeze layers one overlay session may hold (1-5, default 3).

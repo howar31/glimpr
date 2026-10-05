@@ -19,6 +19,7 @@
 #include "cursor_image.h"
 #include "dpi_util.h"
 #include "utils.h"
+#include "excluded_apps.h"
 #include "hdr_compose.h"
 #include "hdr_util.h"
 #include "image_codec.h"
@@ -247,6 +248,7 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   // WGC feed captures our own crosshair/veil (the "crosshair in the loupe" bug).
   if (live_select) EndLiveSelect();
   live_select_ = live_select;
+  excluded::SetSnapCoversScreenshot(!live_select);
 
   // The overlay window is ALWAYS DWM-glass (a frozen screenshot still reads
   // opaque); only capture-EXCLUSION flips: exclude while a live loupe feed is/will
@@ -314,6 +316,9 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
   const bool keep_f16 = hdr::ReadHdrScreenshotSetting();
   ++hdr_gen_;
   hdr_bases_.clear();
+  // The overlay windows show the screen beneath them, so they never count
+  // as covering an excluded application.
+  excluded::Mask excluded_mask(/*own_windows_cover=*/false);
   std::vector<std::optional<CaptureFrame>> frames(mons.size());
   {
     std::vector<std::thread> workers;
@@ -334,6 +339,18 @@ void OverlayManager::BeginCapture(bool pin_only, bool live_select) {
     for (auto& t : workers) t.join();
   }
   perf::Mark("captureAllJoined n=" + std::to_string(mons.size()));
+  if (excluded_mask.active()) {
+    excluded_mask.Resample();
+    for (size_t i = 0; i < mons.size(); ++i) {
+      if (!frames[i]) continue;
+      MONITORINFO mask_mi{};
+      mask_mi.cbSize = sizeof(MONITORINFO);
+      if (GetMonitorInfo(mons[i], &mask_mi)) {
+        excluded_mask.Apply(&*frames[i], mask_mi.rcMonitor);
+      }
+    }
+    perf::Mark("captureMaskApplied");
+  }
   if (unexclude_for_grab) {
     // Restore the resting exclusion so the RS loupe feed is clean when RS
     // resurfaces (record hotkey while suspended, or the freeze layer draining).

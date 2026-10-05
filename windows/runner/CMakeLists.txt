@@ -19,6 +19,7 @@ add_executable(${BINARY_NAME} WIN32
   "element_snap.cpp"
   "diagnostics.cpp"
   "encode_channel.cpp"
+  "excluded_apps.cpp"
   "flutter_window.cpp"
   "hdr_compose.cpp"
   "hdr_convert_gpu.cpp"

@@ -8,6 +8,7 @@
 #include "instance_mutex.h"
 #include "crash_dump.h"
 #include "editor_host.h"
+#include "excluded_apps.h"
 #include "flutter_window.h"
 #include "gpu_preference.h"
 #include "overlay_host.h"
@@ -110,6 +111,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.Create(L"Glimpr", origin, size)) {
     return EXIT_FAILURE;
   }
+  excluded::ApplyOwnWindowAffinity(window.GetHandle());
   // Resident shell: closing the Settings window hides it to the tray; only the
   // tray "Quit" (FlutterWindow::Quit -> ExitProcess) ends the app.
   window.SetQuitOnClose(false);

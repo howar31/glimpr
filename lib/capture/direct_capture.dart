@@ -93,7 +93,7 @@ class DirectCapture {
     void Function(String)? showError,
     void Function(String)? perfMark,
   })  : _captureRegion = captureRegion ?? CaptureBridge().captureRegion,
-        _focusedWindow = focusedWindow ?? CaptureBridge().focusedWindow,
+        _focusedWindow = focusedWindow ?? (() => CaptureBridge().focusedWindow()),
         _captureWindowDelivered =
             captureWindowDelivered ?? CaptureBridge().captureWindowDelivered,
         _settings = settings ?? Settings.instance,

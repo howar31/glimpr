@@ -43,6 +43,27 @@ inline std::string JsonStringValue(const std::string& json, const char* key) {
   return std::string();
 }
 
+// The boolean value of `key` in a flat compact JSON object, or [dflt] when the
+// key is absent or its value is not a boolean. Same key matching as above.
+inline bool JsonBoolValue(const std::string& json, const char* key, bool dflt) {
+  const std::string quoted = std::string("\"") + key + "\"";
+  size_t pos = 0;
+  while ((pos = json.find(quoted, pos)) != std::string::npos) {
+    size_t p = pos + quoted.size();
+    while (p < json.size() && (json[p] == ' ' || json[p] == '\t')) ++p;
+    if (p >= json.size() || json[p] != ':') {
+      pos = p;
+      continue;
+    }
+    ++p;
+    while (p < json.size() && (json[p] == ' ' || json[p] == '\t')) ++p;
+    if (json.compare(p, 4, "true") == 0) return true;
+    if (json.compare(p, 5, "false") == 0) return false;
+    return dflt;
+  }
+  return dflt;
+}
+
 // Mirrors lib/settings/gpu_preference.dart. kSystem = no preference, which
 // must stay the fallback for anything unknown (the Dart default is `system`).
 enum class GpuChoice { kSystem, kLowPower, kHighPerformance };
@@ -67,8 +88,8 @@ inline std::wstring PrefsDir() {
   return dir;
 }
 
-// The persisted string for `key`, or "" (missing file / key / non-string).
-inline std::string ReadPrefsString(const char* key) {
+// The whole settings file, or "" when it cannot be read.
+inline std::string ReadPrefsJson() {
   const std::wstring dir = PrefsDir();
   if (dir.empty()) return std::string();
   const std::wstring path = dir + L"\\shared_preferences.json";
@@ -79,7 +100,12 @@ inline std::string ReadPrefsString(const char* key) {
   size_t n;
   while ((n = fread(buf, 1, sizeof(buf), f)) > 0) json.append(buf, n);
   fclose(f);
-  return JsonStringValue(json, key);
+  return json;
+}
+
+// The persisted string for `key`, or "" (missing file / key / non-string).
+inline std::string ReadPrefsString(const char* key) {
+  return JsonStringValue(ReadPrefsJson(), key);
 }
 
 }  // namespace prefs
