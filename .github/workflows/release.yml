@@ -64,6 +64,7 @@ jobs:
         run: |
           codesign --verify --deep --strict build/macos/Build/Products/Release/Glimpr.app
           codesign -dv build/macos/Build/Products/Release/Glimpr.app 2>&1 | grep 'flags=0x10000(runtime)'
+          codesign -d --entitlements - build/macos/Build/Products/Release/Glimpr.app 2>&1 | grep 'com.apple.security.device.audio-input'
       # Asset names carry the version (Glimpr-macOS-1.2.0.dmg) so a download
       # identifies its release; the updater matches by prefix + suffix and the
       # landing page resolves names via the GitHub API at page load.
