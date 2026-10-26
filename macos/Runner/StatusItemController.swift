@@ -231,7 +231,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     updateItem = update
     menu.addItem(update)
     menu.addItem(menuItem(title: L.s("About \(kAppNameVersion)", "關於 \(kAppNameVersion)"), action: #selector(about), key: ""))
-    menu.addItem(menuItem(title: L.s("Settings…", "設定…"), action: #selector(settings), key: ","))
+    menu.addItem(menuItem(title: L.s("Settings...", "設定..."), action: #selector(settings), key: ","))
     menu.addItem(.separator())
     menu.addItem(menuItem(title: L.s("Quit \(kAppName)", "結束 \(kAppName)"), action: #selector(quit), key: "q"))
   }
@@ -439,7 +439,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   /// pulses until the work completes, with a minimum of one full pulse so even
   /// an instant capture is visible. [active] = false requests a stop (ends at
   /// the next pulse low after ≥ 1 cycle). Reduced motion holds a static fill.
-  /// [label] (localized, e.g. "Processing screenshot…") becomes the icon's
+  /// [label] (localized, e.g. "Processing screenshot...") becomes the icon's
   /// hover tooltip while the pulse runs, so hovering says WHAT is processing.
   /// [unbounded] exempts the pulse from the 10s safety ceiling: the recording
   /// finalize legitimately runs longer (a long GIF encodes for tens of
@@ -458,7 +458,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
       processingUnbounded = processingUnbounded || unbounded
       // Set on every activation so an overlapping source updates the tooltip;
       // cleared when the pulse ends.
-      item.button?.toolTip = label ?? L.s("Processing…", "正在處理…")
+      item.button?.toolTip = label ?? L.s("Processing...", "正在處理...")
       if processingTimer != nil { return } // already pulsing — keep it alive
       processingPhase = 0
       processingLastCycle = 0

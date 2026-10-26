@@ -227,7 +227,7 @@ abstract class AppLocalizations {
   /// Report-an-issue page: placeholder while the diagnostics are gathered
   ///
   /// In en, this message translates to:
-  /// **'Collecting…'**
+  /// **'Collecting...'**
   String get reportIssueCollecting;
 
   /// Report-an-issue page: dim caption under the diagnostics block
@@ -269,19 +269,19 @@ abstract class AppLocalizations {
   /// About pane: status while the self-update downloads the new release
   ///
   /// In en, this message translates to:
-  /// **'Downloading the update…'**
+  /// **'Downloading the update...'**
   String get settingsAboutUpdateDownloading;
 
   /// About pane: status while the self-update installs; the app restarts on its own
   ///
   /// In en, this message translates to:
-  /// **'Installing, the app will restart…'**
+  /// **'Installing, the app will restart...'**
   String get settingsAboutUpdateInstalling;
 
   /// About pane: download status once the size is known; sizes are pre-formatted with one decimal
   ///
   /// In en, this message translates to:
-  /// **'Downloading the update… {percent}% ({received} / {total} MB)'**
+  /// **'Downloading the update... {percent}% ({received} / {total} MB)'**
   String settingsAboutUpdateDownloadProgress(
     int percent,
     String received,
@@ -297,7 +297,7 @@ abstract class AppLocalizations {
   /// About pane: download status with the time estimate appended; remaining is one of the settingsAboutUpdateRemaining strings
   ///
   /// In en, this message translates to:
-  /// **'Downloading the update… {percent}% ({received} / {total} MB), {remaining}'**
+  /// **'Downloading the update... {percent}% ({received} / {total} MB), {remaining}'**
   String settingsAboutUpdateDownloadProgressEta(
     int percent,
     String received,
@@ -542,19 +542,19 @@ abstract class AppLocalizations {
   /// Menu-bar / tray icon tooltip while the processing pulse runs for a screenshot
   ///
   /// In en, this message translates to:
-  /// **'Processing screenshot…'**
+  /// **'Processing screenshot...'**
   String get trayProcessingScreenshot;
 
   /// Menu-bar / tray icon tooltip while the processing pulse runs for a recording finalize
   ///
   /// In en, this message translates to:
-  /// **'Processing recording…'**
+  /// **'Processing recording...'**
   String get trayProcessingRecording;
 
   /// Menu-bar / tray icon tooltip while the processing pulse runs for an editor Done export
   ///
   /// In en, this message translates to:
-  /// **'Processing image…'**
+  /// **'Processing image...'**
   String get trayProcessingImage;
 
   /// Settings > Capture: Behaviour section label
@@ -980,7 +980,7 @@ abstract class AppLocalizations {
   /// Settings > Workflow: share-sheet flow action row hint
   ///
   /// In en, this message translates to:
-  /// **'Open the macOS share menu (AirDrop, Messages, …)'**
+  /// **'Open the macOS share menu (AirDrop, Messages, ...)'**
   String get settingsFlowShareSheetHint;
 
   /// Settings > Workflow: pin-to-screen flow action row title
@@ -1088,7 +1088,7 @@ abstract class AppLocalizations {
   /// Settings > Output > Save location: choose directory button label
   ///
   /// In en, this message translates to:
-  /// **'Choose…'**
+  /// **'Choose...'**
   String get settingsSaveFolderChoose;
 
   /// Settings > Output > Save location: shown when no custom folder is set
@@ -1796,7 +1796,7 @@ abstract class AppLocalizations {
   /// Settings > Advanced > Element snap: button that opens the Accessibility permission prompt
   ///
   /// In en, this message translates to:
-  /// **'Grant…'**
+  /// **'Grant...'**
   String get settingsElementSnapGrant;
 
   /// Capture loupe element-snap level block: the current level
@@ -2828,13 +2828,13 @@ abstract class AppLocalizations {
   /// Toolbar > Stamp options: button label when no stamp image is set
   ///
   /// In en, this message translates to:
-  /// **'Choose image…'**
+  /// **'Choose image...'**
   String get toolbarChooseImage;
 
   /// Toolbar > Stamp options: button label when a stamp image is already set
   ///
   /// In en, this message translates to:
-  /// **'Change image…'**
+  /// **'Change image...'**
   String get toolbarChangeImage;
 
   /// Toolbar > Stamp options: tooltip for the stamp image picker button
@@ -3044,7 +3044,7 @@ abstract class AppLocalizations {
   /// Font picker popover: search field hint text
   ///
   /// In en, this message translates to:
-  /// **'Search fonts…'**
+  /// **'Search fonts...'**
   String get popoverSearchFonts;
 
   /// Font picker popover: pinned row label for the system default font
@@ -3224,7 +3224,7 @@ abstract class AppLocalizations {
   /// Image Editor: Open button label (landing card and open bar)
   ///
   /// In en, this message translates to:
-  /// **'Open Image…'**
+  /// **'Open Image...'**
   String get editorOpenImageButton;
 
   /// Image Editor: drag/paste hint below the Open button
@@ -3260,7 +3260,7 @@ abstract class AppLocalizations {
   /// Image Editor gallery: caption on the trailing More tile
   ///
   /// In en, this message translates to:
-  /// **'More…'**
+  /// **'More...'**
   String get editorGalleryMoreCaption;
 
   /// Image Editor title bar: tooltip on the back-to-gallery home button
@@ -3290,7 +3290,7 @@ abstract class AppLocalizations {
   /// Image Editor gallery context menu: share via the macOS share sheet
   ///
   /// In en, this message translates to:
-  /// **'Share…'**
+  /// **'Share...'**
   String get editorContextShare;
 
   /// Image Editor gallery context menu: pin the image as a floating window
@@ -3506,7 +3506,7 @@ abstract class AppLocalizations {
   /// Image Editor toolbar chevron menu: share one-off action
   ///
   /// In en, this message translates to:
-  /// **'Share…'**
+  /// **'Share...'**
   String get editorMenuShare;
 
   /// Image Editor toolbar chevron menu: pin to screen one-off action
@@ -3608,7 +3608,7 @@ abstract class AppLocalizations {
   /// 3e batch: masks/confirm/recorder/overlay
   ///
   /// In en, this message translates to:
-  /// **'Press keys…'**
+  /// **'Press keys...'**
   String get recorderPressKeys;
 
   /// 3e batch: masks/confirm/recorder/overlay

@@ -127,10 +127,10 @@ void main() {
     phase.value = UpdatePhase.downloading;
     await tester.pump();
     expect(find.text('Switch to all accounts'), findsNothing);
-    expect(find.text('Downloading the update…'), findsOneWidget);
+    expect(find.text('Downloading the update...'), findsOneWidget);
     phase.value = UpdatePhase.installing;
     await tester.pump();
-    expect(find.text('Installing, the app will restart…'), findsOneWidget);
+    expect(find.text('Installing, the app will restart...'), findsOneWidget);
   });
 
   testWidgets('a slow download adds the estimate and the hint line',
@@ -150,7 +150,7 @@ void main() {
     await tester.pump();
     expect(
         find.text(
-            'Downloading the update… 12% (3.0 / 24.0 MB), about 2 min left'),
+            'Downloading the update... 12% (3.0 / 24.0 MB), about 2 min left'),
         findsOneWidget);
     expect(find.text(hint), findsNothing);
     progress.value = const DownloadProgress(3 * mb, 24 * mb,

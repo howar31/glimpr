@@ -91,7 +91,7 @@
   "@reportIssueDiagnostics": {
     "description": "Report-an-issue page: heading over the environment snapshot block"
   },
-  "reportIssueCollecting": "Collecting…",
+  "reportIssueCollecting": "Collecting...",
   "@reportIssueCollecting": {
     "description": "Report-an-issue page: placeholder while the diagnostics are gathered"
   },
@@ -125,15 +125,15 @@
   "@settingsAboutUpToDate": {
     "description": "About pane: update row label right after a manual check found no newer release"
   },
-  "settingsAboutUpdateDownloading": "Downloading the update…",
+  "settingsAboutUpdateDownloading": "Downloading the update...",
   "@settingsAboutUpdateDownloading": {
     "description": "About pane: status while the self-update downloads the new release"
   },
-  "settingsAboutUpdateInstalling": "Installing, the app will restart…",
+  "settingsAboutUpdateInstalling": "Installing, the app will restart...",
   "@settingsAboutUpdateInstalling": {
     "description": "About pane: status while the self-update installs; the app restarts on its own"
   },
-  "settingsAboutUpdateDownloadProgress": "Downloading the update… {percent}% ({received} / {total} MB)",
+  "settingsAboutUpdateDownloadProgress": "Downloading the update... {percent}% ({received} / {total} MB)",
   "@settingsAboutUpdateDownloadProgress": {
     "description": "About pane: download status once the size is known; sizes are pre-formatted with one decimal",
     "placeholders": {
@@ -146,7 +146,7 @@
   "@settingsAboutUpdateFailed": {
     "description": "About pane: transient status after a self-update could not download or was refused at install; the browser fallback already opened"
   },
-  "settingsAboutUpdateDownloadProgressEta": "Downloading the update… {percent}% ({received} / {total} MB), {remaining}",
+  "settingsAboutUpdateDownloadProgressEta": "Downloading the update... {percent}% ({received} / {total} MB), {remaining}",
   "@settingsAboutUpdateDownloadProgressEta": {
     "description": "About pane: download status with the time estimate appended; remaining is one of the settingsAboutUpdateRemaining strings",
     "placeholders": {
@@ -318,15 +318,15 @@
   "@trayQuit": {
     "description": "Windows system-tray menu: Quit item"
   },
-  "trayProcessingScreenshot": "Processing screenshot…",
+  "trayProcessingScreenshot": "Processing screenshot...",
   "@trayProcessingScreenshot": {
     "description": "Menu-bar / tray icon tooltip while the processing pulse runs for a screenshot"
   },
-  "trayProcessingRecording": "Processing recording…",
+  "trayProcessingRecording": "Processing recording...",
   "@trayProcessingRecording": {
     "description": "Menu-bar / tray icon tooltip while the processing pulse runs for a recording finalize"
   },
-  "trayProcessingImage": "Processing image…",
+  "trayProcessingImage": "Processing image...",
   "@trayProcessingImage": {
     "description": "Menu-bar / tray icon tooltip while the processing pulse runs for an editor Done export"
   },
@@ -610,7 +610,7 @@
   "@settingsFlowShareSheet": {
     "description": "Settings > Workflow: share-sheet flow action row title"
   },
-  "settingsFlowShareSheetHint": "Open the macOS share menu (AirDrop, Messages, …)",
+  "settingsFlowShareSheetHint": "Open the macOS share menu (AirDrop, Messages, ...)",
   "@settingsFlowShareSheetHint": {
     "description": "Settings > Workflow: share-sheet flow action row hint"
   },
@@ -682,7 +682,7 @@
   "@settingsSaveFolder": {
     "description": "Settings > Output > Save location: save folder card title"
   },
-  "settingsSaveFolderChoose": "Choose…",
+  "settingsSaveFolderChoose": "Choose...",
   "@settingsSaveFolderChoose": {
     "description": "Settings > Output > Save location: choose directory button label"
   },
@@ -1031,7 +1031,7 @@
   "@settingsElementSnapNeedsPermission": {
     "description": "Settings > Advanced > Element snap: permission-missing notice"
   },
-  "settingsElementSnapGrant": "Grant…",
+  "settingsElementSnapGrant": "Grant...",
   "@settingsElementSnapGrant": {
     "description": "Settings > Advanced > Element snap: button that opens the Accessibility permission prompt"
   },
@@ -1728,11 +1728,11 @@
   "@toolbarMousePointerHidden": {
     "description": "Toolbar: cursor-toggle tooltip when the captured cursor layer is hidden"
   },
-  "toolbarChooseImage": "Choose image…",
+  "toolbarChooseImage": "Choose image...",
   "@toolbarChooseImage": {
     "description": "Toolbar > Stamp options: button label when no stamp image is set"
   },
-  "toolbarChangeImage": "Change image…",
+  "toolbarChangeImage": "Change image...",
   "@toolbarChangeImage": {
     "description": "Toolbar > Stamp options: button label when a stamp image is already set"
   },
@@ -1882,7 +1882,7 @@
   "@toolbarSendToBack": {
     "description": "Toolbar: selection action tooltip for send-to-back"
   },
-  "popoverSearchFonts": "Search fonts…",
+  "popoverSearchFonts": "Search fonts...",
   "@popoverSearchFonts": {
     "description": "Font picker popover: search field hint text"
   },
@@ -2002,7 +2002,7 @@
   "@editorOpenImageSubtitle": {
     "description": "Image Editor landing card: subtitle copy below the headline"
   },
-  "editorOpenImageButton": "Open Image…",
+  "editorOpenImageButton": "Open Image...",
   "@editorOpenImageButton": {
     "description": "Image Editor: Open button label (landing card and open bar)"
   },
@@ -2026,7 +2026,7 @@
   "@editorGalleryMoreTooltipWin": {
     "description": "Windows variant of editorGalleryMoreTooltip"
   },
-  "editorGalleryMoreCaption": "More…",
+  "editorGalleryMoreCaption": "More...",
   "@editorGalleryMoreCaption": {
     "description": "Image Editor gallery: caption on the trailing More tile"
   },
@@ -2046,7 +2046,7 @@
   "@editorContextCopyPath": {
     "description": "Image Editor gallery context menu: copy the file path to clipboard"
   },
-  "editorContextShare": "Share…",
+  "editorContextShare": "Share...",
   "@editorContextShare": {
     "description": "Image Editor gallery context menu: share via the macOS share sheet"
   },
@@ -2210,7 +2210,7 @@
   "@editorMenuShowInFinderWin": {
     "description": "Windows variant of editorMenuShowInFinder"
   },
-  "editorMenuShare": "Share…",
+  "editorMenuShare": "Share...",
   "@editorMenuShare": {
     "description": "Image Editor toolbar chevron menu: share one-off action"
   },
@@ -2278,7 +2278,7 @@
   "@recorderDisable": {
     "description": "Shortcut recorder: tooltip on the prohibition glyph that clears the binding (sets it to no shortcut)"
   },
-  "recorderPressKeys": "Press keys…",
+  "recorderPressKeys": "Press keys...",
   "@recorderPressKeys": {
     "description": "3e batch: masks/confirm/recorder/overlay"
   },

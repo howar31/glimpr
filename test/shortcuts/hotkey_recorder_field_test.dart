@@ -178,10 +178,10 @@ void main() {
     ));
     await tester.tap(find.byType(HotkeyRecorderField));
     await tester.pump();
-    expect(find.text('Press keys…'), findsOneWidget); // now recording
+    expect(find.text('Press keys...'), findsOneWidget); // now recording
     // External clear (like the ✕ button).
     setOuter(() => value = null);
     await tester.pump();
-    expect(find.text('Press keys…'), findsNothing); // recording cancelled
+    expect(find.text('Press keys...'), findsNothing); // recording cancelled
   });
 }

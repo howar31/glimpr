@@ -381,7 +381,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     recordingChannel?.onRecordingProcessingChange = { [weak self] active in
       self?.statusItem?.setProcessing(
-        active, label: L.s("Processing recording…", "正在處理錄影…"),
+        active, label: L.s("Processing recording...", "正在處理錄影..."),
         unbounded: true)
     }
     captureChannel?.onCaptureProcessingChange = { [weak self] active, label in
@@ -1487,7 +1487,7 @@ final class PinPanel: NSPanel {
       menu.addItem(mi)
     }
     add(L.s("Reset Size", "重設大小"), #selector(resetSize))
-    add(L.s("Save As…", "另存新檔…"), #selector(saveAs))
+    add(L.s("Save As...", "另存新檔..."), #selector(saveAs))
     add(L.s("Copy to Clipboard", "複製到剪貼簿"), #selector(copyImage))
     menu.addItem(.separator())
     add(L.s("Close Pin", "關閉釘選"), #selector(closePin))

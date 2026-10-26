@@ -77,7 +77,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reportIssueDiagnostics => '診斷資訊';
 
   @override
-  String get reportIssueCollecting => '蒐集中…';
+  String get reportIssueCollecting => '蒐集中...';
 
   @override
   String get reportIssuePrivacyNote => '這些資訊不會主動傳送，也不含可識別的個人資料。';
@@ -86,7 +86,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutCheckUpdates => '檢查更新';
 
   @override
-  String get settingsAboutChecking => '檢查中…';
+  String get settingsAboutChecking => '檢查中...';
 
   @override
   String settingsAboutUpdateAvailable(String version) {
@@ -102,10 +102,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAboutUpToDate => '目前已是最新版本';
 
   @override
-  String get settingsAboutUpdateDownloading => '正在下載更新…';
+  String get settingsAboutUpdateDownloading => '正在下載更新...';
 
   @override
-  String get settingsAboutUpdateInstalling => '安裝中，即將重新啟動…';
+  String get settingsAboutUpdateInstalling => '安裝中，即將重新啟動...';
 
   @override
   String settingsAboutUpdateDownloadProgress(
@@ -113,7 +113,7 @@ class AppLocalizationsZh extends AppLocalizations {
     String received,
     String total,
   ) {
-    return '正在下載更新… $percent%（$received / $total MB）';
+    return '正在下載更新... $percent%（$received / $total MB）';
   }
 
   @override
@@ -126,7 +126,7 @@ class AppLocalizationsZh extends AppLocalizations {
     String total,
     String remaining,
   ) {
-    return '正在下載更新… $percent%（$received / $total MB），$remaining';
+    return '正在下載更新... $percent%（$received / $total MB），$remaining';
   }
 
   @override
@@ -252,19 +252,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayAbout => '關於 Glimpr';
 
   @override
-  String get traySettings => '設定…';
+  String get traySettings => '設定...';
 
   @override
   String get trayQuit => '結束 Glimpr';
 
   @override
-  String get trayProcessingScreenshot => '正在處理截圖…';
+  String get trayProcessingScreenshot => '正在處理截圖...';
 
   @override
-  String get trayProcessingRecording => '正在處理錄影…';
+  String get trayProcessingRecording => '正在處理錄影...';
 
   @override
-  String get trayProcessingImage => '正在處理圖片…';
+  String get trayProcessingImage => '正在處理圖片...';
 
   @override
   String get settingsSectionBehaviour => '行為';
@@ -545,7 +545,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSaveFolder => '儲存資料夾';
 
   @override
-  String get settingsSaveFolderChoose => '選擇…';
+  String get settingsSaveFolderChoose => '選擇...';
 
   @override
   String get settingsSaveFolderDefault => '預設 · ~/Pictures/Glimpr';
@@ -914,7 +914,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsElementSnapNeedsPermission => '尚未取得輔助使用權限';
 
   @override
-  String get settingsElementSnapGrant => '前往授權…';
+  String get settingsElementSnapGrant => '前往授權...';
 
   @override
   String elementSnapLevelLabel(String lvl) {
@@ -1447,10 +1447,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolbarMousePointerHidden => '滑鼠指標：隱藏';
 
   @override
-  String get toolbarChooseImage => '選擇圖片…';
+  String get toolbarChooseImage => '選擇圖片...';
 
   @override
-  String get toolbarChangeImage => '更換圖片…';
+  String get toolbarChangeImage => '更換圖片...';
 
   @override
   String get toolbarChooseStampImage => '選擇印章圖片';
@@ -1559,7 +1559,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolbarSendToBack => '移至最後';
 
   @override
-  String get popoverSearchFonts => '搜尋字體…';
+  String get popoverSearchFonts => '搜尋字體...';
 
   @override
   String get popoverFontSystem => '系統';
@@ -1650,7 +1650,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '以截圖時使用的同一套工具為任何圖片加上標註、裁切並重新輸出，或逐幀編輯 GIF。';
 
   @override
-  String get editorOpenImageButton => '開啟圖片…';
+  String get editorOpenImageButton => '開啟圖片...';
 
   @override
   String get editorOpenImageHint => '或將圖片拖曳至此 · 以 ⌘V 貼上';
@@ -1668,7 +1668,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorGalleryMoreTooltipWin => '在檔案總管中開啟儲存資料夾';
 
   @override
-  String get editorGalleryMoreCaption => '更多…';
+  String get editorGalleryMoreCaption => '更多...';
 
   @override
   String get editorGalleryHome => '首頁';
@@ -1683,7 +1683,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorContextCopyPath => '複製路徑';
 
   @override
-  String get editorContextShare => '分享…';
+  String get editorContextShare => '分享...';
 
   @override
   String get editorContextPinToScreen => '釘選到螢幕';
@@ -1799,7 +1799,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorMenuShowInFinderWin => '顯示於檔案總管';
 
   @override
-  String get editorMenuShare => '分享…';
+  String get editorMenuShare => '分享...';
 
   @override
   String get editorMenuPinToScreen => '釘選到螢幕';
@@ -1850,7 +1850,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recorderDisable => '停用';
 
   @override
-  String get recorderPressKeys => '請按下按鍵…';
+  String get recorderPressKeys => '請按下按鍵...';
 
   @override
   String get recorderEscToCancel => '按 Esc 取消';

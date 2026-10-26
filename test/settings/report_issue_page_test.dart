@@ -41,11 +41,11 @@ void main() {
     final c = Completer<String>();
     await pump(tester, report: c.future, opened: [], copied: []);
     expect(find.text('Report an issue'), findsOneWidget);
-    expect(find.text('Collecting…'), findsOneWidget);
+    expect(find.text('Collecting...'), findsOneWidget);
     c.complete('Glimpr 1.0.0, macOS');
     await tester.pump(); // completion microtask
     await tester.pump(); // FutureBuilder rebuild
-    expect(find.text('Collecting…'), findsNothing);
+    expect(find.text('Collecting...'), findsNothing);
     expect(find.text('Glimpr 1.0.0, macOS'), findsOneWidget);
     expect(
         find.text(

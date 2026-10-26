@@ -77,7 +77,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportIssueDiagnostics => 'Diagnostics';
 
   @override
-  String get reportIssueCollecting => 'Collecting…';
+  String get reportIssueCollecting => 'Collecting...';
 
   @override
   String get reportIssuePrivacyNote =>
@@ -103,11 +103,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAboutUpToDate => 'You are up to date';
 
   @override
-  String get settingsAboutUpdateDownloading => 'Downloading the update…';
+  String get settingsAboutUpdateDownloading => 'Downloading the update...';
 
   @override
   String get settingsAboutUpdateInstalling =>
-      'Installing, the app will restart…';
+      'Installing, the app will restart...';
 
   @override
   String settingsAboutUpdateDownloadProgress(
@@ -115,7 +115,7 @@ class AppLocalizationsEn extends AppLocalizations {
     String received,
     String total,
   ) {
-    return 'Downloading the update… $percent% ($received / $total MB)';
+    return 'Downloading the update... $percent% ($received / $total MB)';
   }
 
   @override
@@ -129,7 +129,7 @@ class AppLocalizationsEn extends AppLocalizations {
     String total,
     String remaining,
   ) {
-    return 'Downloading the update… $percent% ($received / $total MB), $remaining';
+    return 'Downloading the update... $percent% ($received / $total MB), $remaining';
   }
 
   @override
@@ -273,13 +273,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trayQuit => 'Quit Glimpr';
 
   @override
-  String get trayProcessingScreenshot => 'Processing screenshot…';
+  String get trayProcessingScreenshot => 'Processing screenshot...';
 
   @override
-  String get trayProcessingRecording => 'Processing recording…';
+  String get trayProcessingRecording => 'Processing recording...';
 
   @override
-  String get trayProcessingImage => 'Processing image…';
+  String get trayProcessingImage => 'Processing image...';
 
   @override
   String get settingsSectionBehaviour => 'Behaviour';
@@ -513,7 +513,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFlowShareSheetHint =>
-      'Open the macOS share menu (AirDrop, Messages, …)';
+      'Open the macOS share menu (AirDrop, Messages, ...)';
 
   @override
   String get settingsFlowPinToScreen => 'Pin to screen';
@@ -574,7 +574,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSaveFolder => 'Save folder';
 
   @override
-  String get settingsSaveFolderChoose => 'Choose…';
+  String get settingsSaveFolderChoose => 'Choose...';
 
   @override
   String get settingsSaveFolderDefault => 'Default · ~/Pictures/Glimpr';
@@ -963,7 +963,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Accessibility permission not granted';
 
   @override
-  String get settingsElementSnapGrant => 'Grant…';
+  String get settingsElementSnapGrant => 'Grant...';
 
   @override
   String elementSnapLevelLabel(String lvl) {
@@ -1517,10 +1517,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolbarMousePointerHidden => 'Mouse pointer: hidden';
 
   @override
-  String get toolbarChooseImage => 'Choose image…';
+  String get toolbarChooseImage => 'Choose image...';
 
   @override
-  String get toolbarChangeImage => 'Change image…';
+  String get toolbarChangeImage => 'Change image...';
 
   @override
   String get toolbarChooseStampImage => 'Choose a stamp image';
@@ -1629,7 +1629,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolbarSendToBack => 'Send to back';
 
   @override
-  String get popoverSearchFonts => 'Search fonts…';
+  String get popoverSearchFonts => 'Search fonts...';
 
   @override
   String get popoverFontSystem => 'System';
@@ -1721,7 +1721,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Annotate, crop and re-export any image, or edit a GIF frame by frame, in the same toolkit you use to screenshot.';
 
   @override
-  String get editorOpenImageButton => 'Open Image…';
+  String get editorOpenImageButton => 'Open Image...';
 
   @override
   String get editorOpenImageHint => 'or drag an image here · paste with ⌘V';
@@ -1740,7 +1740,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorGalleryMoreTooltipWin => 'Open the save folder in Explorer';
 
   @override
-  String get editorGalleryMoreCaption => 'More…';
+  String get editorGalleryMoreCaption => 'More...';
 
   @override
   String get editorGalleryHome => 'Home';
@@ -1755,7 +1755,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorContextCopyPath => 'Copy Path';
 
   @override
-  String get editorContextShare => 'Share…';
+  String get editorContextShare => 'Share...';
 
   @override
   String get editorContextPinToScreen => 'Pin to Screen';
@@ -1874,7 +1874,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorMenuShowInFinderWin => 'Show in Explorer';
 
   @override
-  String get editorMenuShare => 'Share…';
+  String get editorMenuShare => 'Share...';
 
   @override
   String get editorMenuPinToScreen => 'Pin to screen';
@@ -1926,7 +1926,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recorderDisable => 'Disable';
 
   @override
-  String get recorderPressKeys => 'Press keys…';
+  String get recorderPressKeys => 'Press keys...';
 
   @override
   String get recorderEscToCancel => 'Press Esc to cancel';

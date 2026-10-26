@@ -2702,7 +2702,7 @@ class _SettingsAppState extends State<SettingsApp>
     final segs =
         basePath.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).toList();
     final baseName = segs.isEmpty ? 'Glimpr' : segs.last;
-    final folder = '${['…', baseName, if (sub.isNotEmpty) sub].join('/')}/';
+    final folder = '${['...', baseName, if (sub.isNotEmpty) sub].join('/')}/';
 
     final windowName = nameFor('Inbox', 'Safari');
     final collided = uniqueName(windowName, exists: (n) => n == windowName);

@@ -288,12 +288,12 @@ void main() {
     // Re-enter recording, then click Reset (↻) mid-record.
     await tester.tap(_globalRecorder);
     await tester.pump();
-    expect(find.text('Press keys…'), findsOneWidget);
+    expect(find.text('Press keys...'), findsOneWidget);
     await tester.tap(_inGlobal(find.byTooltip('Reset to default')));
     await tester.pumpAndSettle();
 
     // Recording is cancelled and the default ⌘⌥1 is shown again.
-    expect(find.text('Press keys…'), findsNothing);
+    expect(find.text('Press keys...'), findsNothing);
     expect(_inGlobal(find.widgetWithText(KeyCap, '1')), findsOneWidget);
   });
 

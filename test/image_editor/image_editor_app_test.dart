@@ -101,7 +101,7 @@ void main() {
   testWidgets('empty recents -> the open-card landing', (tester) async {
     await pumpApp(tester);
     expect(find.text('Open an image to edit'), findsOneWidget);
-    expect(find.text('Open Image…'), findsOneWidget);
+    expect(find.text('Open Image...'), findsOneWidget);
     // No gallery tiles.
     expect(find.text('Recent'), findsNothing);
   });
@@ -155,7 +155,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GifEditorSurface), findsNothing);
     // Temp-dir files are not recorded as recents, so the open card shows.
-    expect(find.text('Open Image…'), findsOneWidget);
+    expect(find.text('Open Image...'), findsOneWidget);
   }, timeout: const Timeout(Duration(seconds: 60)));
 
   testWidgets('a dirty GIF confirms on requestClose; cancel keeps it',
@@ -229,7 +229,7 @@ void main() {
     await seedRecents();
     await pumpApp(tester);
     expect(find.text('Recent'), findsOneWidget);
-    expect(find.text('Open Image…'), findsOneWidget); // the slim open bar
+    expect(find.text('Open Image...'), findsOneWidget); // the slim open bar
     // Both recents appear as tile captions (basenames).
     expect(find.text('shot1.png'), findsOneWidget);
     expect(find.text('shot2.png'), findsOneWidget);
