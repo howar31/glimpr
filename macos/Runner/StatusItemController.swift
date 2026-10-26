@@ -549,3 +549,86 @@ final class StatusItemController: NSObject, NSMenuDelegate {
   @objc private func checkUpdates() { onCheckUpdates?(updateAvailable) }
   @objc private func quit() { NSApp.terminate(nil) }
 }
+
+/// The app's main menu, shown in the menu bar while Settings or the Image
+/// Editor is frontmost. Kept minimal on purpose: app actions live in the
+/// status menu above (the Windows tray mirrors it), so this holds only the
+/// standard items whose key equivalents would otherwise stop working. Built in
+/// code so the titles follow the in-app language like the status menu.
+final class MainMenuController: NSObject {
+  let menu = NSMenu()
+  private(set) var windowMenu = NSMenu()
+  private let onAbout: () -> Void
+  private let onSettings: () -> Void
+  // Every titled item with its title source, re-applied by relocalize().
+  private var titled: [(NSMenuItem, () -> String)] = []
+
+  init(onAbout: @escaping () -> Void, onSettings: @escaping () -> Void) {
+    self.onAbout = onAbout
+    self.onSettings = onSettings
+    super.init()
+    let appMenu = submenu { kAppName }
+    appMenu.addItem(item({ L.s("About \(kAppName)", "關於 \(kAppName)") },
+                         #selector(about), "", target: self))
+    appMenu.addItem(.separator())
+    appMenu.addItem(item({ L.s("Settings...", "設定...") }, #selector(settings), ",",
+                         target: self))
+    appMenu.addItem(.separator())
+    appMenu.addItem(item({ L.s("Hide \(kAppName)", "隱藏 \(kAppName)") },
+                         #selector(NSApplication.hide(_:)), "h"))
+    appMenu.addItem(.separator())
+    appMenu.addItem(item({ L.s("Quit \(kAppName)", "結束 \(kAppName)") },
+                         #selector(NSApplication.terminate(_:)), "q"))
+
+    // Text editing in Settings fields and the editor's text tool; the system
+    // appends its own entries (dictation, emoji) to this menu.
+    let edit = submenu { L.s("Edit", "編輯") }
+    edit.addItem(item({ L.s("Undo", "復原") }, Selector(("undo:")), "z"))
+    edit.addItem(item({ L.s("Redo", "重做") }, Selector(("redo:")), "Z"))
+    edit.addItem(.separator())
+    edit.addItem(item({ L.s("Cut", "剪下") }, #selector(NSText.cut(_:)), "x"))
+    edit.addItem(item({ L.s("Copy", "拷貝") }, #selector(NSText.copy(_:)), "c"))
+    edit.addItem(item({ L.s("Paste", "貼上") }, #selector(NSText.paste(_:)), "v"))
+    edit.addItem(item({ L.s("Select All", "全選") }, #selector(NSText.selectAll(_:)), "a"))
+
+    // The system lists the open windows below Minimize.
+    windowMenu = submenu { L.s("Window", "視窗") }
+    windowMenu.addItem(item({ L.s("Minimize", "縮到最小") },
+                            #selector(NSWindow.performMiniaturize(_:)), "m"))
+  }
+
+  /// Make this the app's main menu (and its Window menu the system one).
+  func install() {
+    NSApp.mainMenu = menu
+    NSApp.windowsMenu = windowMenu
+  }
+
+  /// Re-title every item after Settings changed the app language.
+  func relocalize() {
+    for (mi, title) in titled {
+      mi.title = title()
+      mi.submenu?.title = mi.title
+    }
+  }
+
+  private func submenu(_ title: @escaping () -> String) -> NSMenu {
+    let top = NSMenuItem(title: title(), action: nil, keyEquivalent: "")
+    let sub = NSMenu(title: title())
+    top.submenu = sub
+    menu.addItem(top)
+    titled.append((top, title))
+    return sub
+  }
+
+  // A nil target sends the action up the responder chain (standard items).
+  private func item(_ title: @escaping () -> String, _ action: Selector, _ key: String,
+                    target: AnyObject? = nil) -> NSMenuItem {
+    let mi = NSMenuItem(title: title(), action: action, keyEquivalent: key)
+    mi.target = target
+    titled.append((mi, title))
+    return mi
+  }
+
+  @objc private func about() { onAbout() }
+  @objc private func settings() { onSettings() }
+}

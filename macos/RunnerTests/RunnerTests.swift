@@ -715,3 +715,42 @@ final class ExcludedAppsResolveTests: XCTestCase {
     XCTAssertFalse(ids.contains(""))
   }
 }
+
+// MARK: - MainMenuController (StatusItemController.swift)
+
+final class MainMenuControllerTests: XCTestCase {
+  func testMenuKeepsOnlyAppEditAndWindow() {
+    let c = MainMenuController(onAbout: {}, onSettings: {})
+    XCTAssertEqual(c.menu.items.count, 3)
+    let keys = c.menu.items.prefix(2).map { top in
+      (top.submenu?.items ?? []).filter { !$0.isSeparatorItem }.map { $0.keyEquivalent }
+    }
+    XCTAssertEqual(keys, [["", ",", "h", "q"], ["z", "Z", "x", "c", "v", "a"]])
+    // Minimize's key follows the user's App Shortcuts when one is set, so only
+    // the action is fixed.
+    XCTAssertEqual(c.menu.items[2].submenu?.items.map { $0.action },
+                   [#selector(NSWindow.performMiniaturize(_:))])
+    XCTAssertTrue(c.windowMenu === c.menu.items[2].submenu)
+  }
+
+  func testAboutAndSettingsRunTheirCallbacks() {
+    var about = 0, settings = 0
+    let c = MainMenuController(onAbout: { about += 1 }, onSettings: { settings += 1 })
+    let app = c.menu.items[0].submenu!.items.filter { !$0.isSeparatorItem }
+    for mi in app.prefix(2) {
+      _ = (mi.target as? NSObject)?.perform(mi.action)
+    }
+    XCTAssertEqual(about, 1)
+    XCTAssertEqual(settings, 1)
+  }
+
+  func testStandardItemsUseTheResponderChain() {
+    let c = MainMenuController(onAbout: {}, onSettings: {})
+    let edit = c.menu.items[1].submenu!.items.filter { !$0.isSeparatorItem }
+    XCTAssertTrue(edit.allSatisfy { $0.target == nil })
+    XCTAssertEqual(edit.map { $0.action },
+                   [Selector(("undo:")), Selector(("redo:")), #selector(NSText.cut(_:)),
+                    #selector(NSText.copy(_:)), #selector(NSText.paste(_:)),
+                    #selector(NSText.selectAll(_:))])
+  }
+}

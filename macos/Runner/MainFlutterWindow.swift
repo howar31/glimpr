@@ -61,6 +61,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private var captureController: CaptureController?
   private var recordingChannel: RecordingChannel?
   private var statusItem: StatusItemController?
+  private var mainMenu: MainMenuController?
   private var roleChannel: FlutterMethodChannel?
   private var updateChannel: FlutterMethodChannel?
   private var loginChannel: FlutterMethodChannel?
@@ -199,6 +200,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         self?.title = L.s("Glimpr Settings", "Glimpr 設定")
         self?.imageEditorWindow?.title = L.s("Image Editor", "圖片編輯器")
         self?.statusItem?.relocalize()
+        self?.mainMenu?.relocalize()
         result(nil)
       // Update-check state for the menu-bar item (label + availability);
       // pushed by Dart whenever the About row's state changes.
@@ -363,11 +365,17 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     statusItem?.onRecordStop = { [weak self] in self?.recordingChannel?.stopActive() }
     statusItem?.onRecordAbort = { [weak self] in self?.recordingChannel?.abortActive() }
-    // About Glimpr: reveal Settings, then deep-link the UI to the About pane.
-    statusItem?.onAbout = { [weak self] in
+    // About Glimpr (status menu and main menu): reveal Settings, then
+    // deep-link the UI to the About pane.
+    let showAbout = { [weak self] in
       self?.revealSettings()
       self?.roleChannel?.invokeMethod("showAbout", arguments: nil)
     }
+    statusItem?.onAbout = showAbout
+    let mainMenu = MainMenuController(
+      onAbout: showAbout, onSettings: { [weak self] in self?.revealSettings() })
+    mainMenu.install()
+    self.mainMenu = mainMenu
     // Check for updates: always reveal Settings first. Dart then lands on
     // About and either runs the check there (the row is the feedback) or,
     // with a known update, opens the What's-new page so the user reads what
